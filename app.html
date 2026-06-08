@@ -1231,13 +1231,13 @@
       </svg>
       <span style="font-family:'Syne',sans-serif;font-weight:800;font-size:2rem;"><span style="color:#fff">Rave</span><span style="color:#39FF14">FAM</span></span>
     </div>
-    <h1 class="landing-headline">Your Festival Season,<br>Organized.</h1>
-    <p class="landing-sub">Bring your crew together — plan lineups, share memories, and never lose your tribe in the crowd.</p>
+    <h1 class="landing-headline">Your crew's home base.</h1>
+    <p class="landing-sub">Build your crew, collect your ravers, and never lose your tribe in the crowd.</p>
     <div class="landing-features">
       <div class="lf-item">🎪 Manage Crews</div>
       <div class="lf-item">🎟️ Track Festivals</div>
       <div class="lf-item">👥 Build Your Squad</div>
-      <div class="lf-item">📸 Share Memories</div>
+      <div class="lf-item">📸 Capture Memories</div>
     </div>
   </div>
 
@@ -1271,10 +1271,16 @@
         <input class="form-input" id="login-email" type="email" placeholder="you@example.com" autocomplete="email">
       </div>
       <div class="form-group">
-        <label class="form-label">Password</label>
+        <label class="form-label" style="display:flex;justify-content:space-between;align-items:center;">
+          Password
+          <a href="mailto:bump@myravefam.com?subject=Password Reset Request" style="font-size:0.75rem;color:var(--neon-pink);text-decoration:none;font-weight:600;">Forgot password?</a>
+        </label>
         <input class="form-input" id="login-password" type="password" placeholder="••••••••" autocomplete="current-password">
       </div>
       <button class="auth-btn" id="login-btn" onclick="doLogin()">Log In 🔥</button>
+      <p style="text-align:center;margin-top:16px;font-size:0.82rem;color:var(--muted);">
+        Don't have an account? <a href="#" onclick="showAuthTab('signup');return false;" style="color:var(--neon-pink);text-decoration:none;font-weight:600;">Sign up free →</a>
+      </p>
     </div>
 
     <div id="auth-signup-form" style="display:none;">
@@ -1283,7 +1289,11 @@
         <input class="form-input" id="signup-name" type="text" placeholder="e.g. Jamie D." autocomplete="name">
       </div>
       <div class="form-group">
-        <label class="form-label">Email</label>
+        <label class="form-label">Phone Number <span style="color:var(--muted);font-weight:400;">— so your crew can reach you</span></label>
+        <input class="form-input" id="signup-phone" type="tel" placeholder="+1 (555) 000-0000" autocomplete="tel">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email <span style="color:var(--muted);font-weight:400;">(backup)</span></label>
         <input class="form-input" id="signup-email" type="email" placeholder="you@example.com" autocomplete="email">
       </div>
       <div class="form-group">
@@ -1291,6 +1301,12 @@
         <input class="form-input" id="signup-password" type="password" placeholder="min 6 characters" autocomplete="new-password">
       </div>
       <button class="auth-btn" id="signup-btn" onclick="doSignup()">Create Account 🎉</button>
+      <p style="text-align:center;margin-top:16px;font-size:0.82rem;color:var(--muted);">
+        Already have an account? <a href="#" onclick="showAuthTab('login');return false;" style="color:var(--neon-pink);text-decoration:none;font-weight:600;">Log in →</a>
+      </p>
+      <p style="text-align:center;margin-top:10px;font-size:0.75rem;color:var(--muted);">
+        By signing up you agree to our <a href="/terms.html" style="color:var(--muted);text-decoration:underline;">Terms</a> and <a href="/privacy.html" style="color:var(--muted);text-decoration:underline;">Privacy Policy</a>
+      </p>
     </div>
   </div>
   </div><!-- /auth-inner -->
@@ -1627,6 +1643,7 @@
 
   async function doSignup() {
     const name     = document.getElementById('signup-name').value.trim();
+    const phone    = document.getElementById('signup-phone').value.trim();
     const email    = document.getElementById('signup-email').value.trim();
     const password = document.getElementById('signup-password').value;
     if (!name)     { authError('Please enter your name.'); return; }
@@ -1635,7 +1652,7 @@
     setAuthBusy(true); clearAuthMessages();
     const { data, error } = await sb.auth.signUp({
       email, password,
-      options: { data: { full_name: name } }
+      options: { data: { full_name: name, phone } }
     });
     setAuthBusy(false);
     if (error) { authError(error.message); return; }
