@@ -917,6 +917,40 @@
   }
   .add-member-row .form-input { flex: 1; }
 
+  /* ===== MOBILE BOTTOM NAV ===== */
+  @media (max-width: 768px) {
+    nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      top: auto;
+      z-index: 100;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      border-bottom: none;
+      background: rgba(10,10,18,0.97);
+      backdrop-filter: blur(20px);
+      padding: 0;
+      justify-content: space-around;
+      gap: 0;
+    }
+    .nav-tab {
+      border-radius: 0;
+      flex: 1;
+      padding: 12px 4px 18px;
+      font-size: 0.78rem;
+      text-align: center;
+    }
+    .nav-tab.active::after {
+      bottom: auto;
+      top: 0;
+      border-radius: 0 0 2px 2px;
+    }
+    main {
+      padding-bottom: 90px;
+    }
+  }
+
   /* Scrollbar */
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -1264,7 +1298,7 @@
 
 <div class="app" id="main-app" style="display:none;">
   <header>
-    <div class="logo">
+    <a href="index.html" class="logo" style="text-decoration:none;">
       <svg class="logo-mark" viewBox="0 0 44 44" width="34" height="34" aria-hidden="true">
         <defs>
           <linearGradient id="logoGrad" x1="0" y1="0" x2="1" y2="1">
@@ -1280,7 +1314,7 @@
         </g>
       </svg>
       <span class="logo-text"><span>Rave</span><span>FAM</span></span>
-    </div>
+    </a>
     <div class="header-actions">
       <button class="btn btn-ghost" onclick="openModal()">+ New Crew</button>
       <button class="btn btn-ghost" id="logout-btn" onclick="doLogout()" style="font-size:0.75rem;padding:9px 14px;" title="Log out">⏻</button>
@@ -1469,6 +1503,18 @@
 <div class="modal-overlay" id="festival-edit-overlay" onclick="closeFestivalEditorOutside(event)">
   <div class="modal" id="festival-edit-modal">
     <!-- filled by JS -->
+  </div>
+</div>
+
+<!-- Status Change Confirmation Modal -->
+<div class="modal-overlay" id="status-confirm-overlay" onclick="closeStatusConfirm(event)">
+  <div class="modal" id="status-confirm-modal">
+    <div class="modal-title" id="status-confirm-title"></div>
+    <p id="status-confirm-body" style="font-size:0.9rem;color:var(--muted);line-height:1.6;margin-bottom:24px;"></p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="dismissStatusConfirm()">Cancel</button>
+      <button class="btn btn-primary" id="status-confirm-btn" onclick="confirmStatusChange()">Confirm</button>
+    </div>
   </div>
 </div>
 
@@ -1716,29 +1762,50 @@
     }
 
     // --- Crews ---
-    const { data: dbCrews, error: cErr } = await sb
+    // Fetch crews where user is leader
+    const { data: leaderCrews } = await sb
       .from('crews')
       .select('*, crew_members(raver_id)')
-      .or(`leader_id.eq.${uid},crew_members.added_by.eq.${uid}`);
-    if (!cErr && dbCrews) {
-      dbCrews.forEach(c => {
-        const squadIds = (c.crew_members || []).map(cm => cm.raver_id);
-        const members = squadIds
-          .map(sid => squad.find(r => r.id === sid))
-          .filter(Boolean)
-          .map(r => ({ i: initials(r.name), c: c.color || '#FF2D78', t: '#fff' }));
-        crews.push({
-          id: c.id,
-          name: c.name,
-          color: c.color || '#FF2D78',
-          gradient: c.gradient || `linear-gradient(90deg,${c.color},${c.color})`,
-          status: c.status || 'recruiting',
-          isLead: c.leader_id === uid,
-          squadIds,
-          members: members.length ? members : []
-        });
-      });
+      .eq('leader_id', uid);
+
+    // Fetch crews where any of the user's ravers are members
+    const myRaverIds = (dbRavers || []).map(r => r.id);
+    let memberCrews = [];
+    if (myRaverIds.length) {
+      const { data: memberRows } = await sb
+        .from('crew_members')
+        .select('crew_id')
+        .in('raver_id', myRaverIds);
+      const memberCrewIds = [...new Set((memberRows || []).map(m => m.crew_id))];
+      const leaderCrewIds = (leaderCrews || []).map(c => c.id);
+      const extraIds = memberCrewIds.filter(id => !leaderCrewIds.includes(id));
+      if (extraIds.length) {
+        const { data: mc } = await sb
+          .from('crews')
+          .select('*, crew_members(raver_id)')
+          .in('id', extraIds);
+        memberCrews = mc || [];
+      }
     }
+
+    const allDbCrews = [...(leaderCrews || []), ...memberCrews];
+    allDbCrews.forEach(c => {
+      const squadIds = (c.crew_members || []).map(cm => cm.raver_id);
+      const members = squadIds
+        .map(sid => squad.find(r => r.id === sid))
+        .filter(Boolean)
+        .map(r => ({ i: initials(r.name), c: c.color || '#FF2D78', t: '#fff' }));
+      crews.push({
+        id: c.id,
+        name: c.name,
+        color: c.color || '#FF2D78',
+        gradient: c.gradient || `linear-gradient(90deg,${c.color || '#FF2D78'},${c.color || '#FF2D78'})`,
+        status: c.status || 'locked-in',
+        isLead: c.leader_id === uid,
+        squadIds,
+        members: members.length ? members : []
+      });
+    });
   }
 
   // ===== SUPABASE WRITE HELPERS =====
@@ -2059,7 +2126,7 @@
         <div class="crew-card-head">
           <div class="crew-name">${crew.name}</div>
           <span class="crew-status ${s.cls}${crew.isLead ? ' tappable' : ''}"
-                onclick="event.stopPropagation(); toggleStatus(${crew.id})"
+                onclick="event.stopPropagation(); toggleStatus('${crew.id}')"
                 title="${crew.isLead ? 'Tap to change status' : 'Only the Crew Lead can change status'}">${s.label}</span>
         </div>
         ${festBlock}
@@ -2075,20 +2142,66 @@
     if (countEl) countEl.textContent = crews.length ? crews.length + ' active' : '';
   }
 
-  // Quick tap: flip status (Lead only)
+  // ===== Status change confirmation modal =====
+  let _pendingStatusId = null;
+  let _pendingStatusValue = null;
+
+  function requestStatusChange(id, newStatus) {
+    const crew = getCrew(id);
+    if (!crew || !crew.isLead) { showToast('🔒 Only the Crew Lead can change the status'); return; }
+    if (crew.status === newStatus) return;
+    _pendingStatusId = id;
+    _pendingStatusValue = newStatus;
+    const title = document.getElementById('status-confirm-title');
+    const body  = document.getElementById('status-confirm-body');
+    const btn   = document.getElementById('status-confirm-btn');
+    if (newStatus === 'recruiting') {
+      title.textContent = '🟢 Set to Recruiting?';
+      body.textContent  = 'Setting this crew to Recruiting means anyone can find and join via QR code. Are you sure?';
+      btn.textContent   = 'Yes, set Recruiting';
+    } else {
+      title.textContent = '🔒 Lock this crew?';
+      body.textContent  = 'Locking this crew means only you can add members manually. Existing members won\'t be removed.';
+      btn.textContent   = 'Yes, Lock In';
+    }
+    document.getElementById('status-confirm-overlay').classList.add('open');
+  }
+
+  function confirmStatusChange() {
+    if (!_pendingStatusId || !_pendingStatusValue) return;
+    const id = _pendingStatusId, status = _pendingStatusValue;
+    _pendingStatusId = null; _pendingStatusValue = null;
+    dismissStatusConfirm();
+    applyStatusChange(id, status);
+  }
+
+  function dismissStatusConfirm() {
+    document.getElementById('status-confirm-overlay').classList.remove('open');
+  }
+
+  function closeStatusConfirm(e) {
+    if (e.target === document.getElementById('status-confirm-overlay')) dismissStatusConfirm();
+  }
+
+  function applyStatusChange(id, status) {
+    const crew = getCrew(id);
+    if (!crew) return;
+    crew.status = status;
+    renderCrews();
+    if (document.getElementById('detail-overlay').classList.contains('open')) renderDetail(id);
+    if (activeCrewPageId === id) renderCrewPage(id);
+    showToast(status === 'recruiting'
+      ? `🟢 ${crew.name} is now Recruiting — anyone can join`
+      : `🔒 ${crew.name} is Locked In — invite only`);
+    if (currentUser) dbSaveCrew({ name: crew.name, color: crew.color, gradient: crew.gradient, status }, id);
+  }
+
+  // Quick tap: flip status (Lead only) — now goes through modal
   function toggleStatus(id) {
     const crew = getCrew(id);
     if (!crew) return;
-    if (!crew.isLead) {
-      showToast('🔒 Only the Crew Lead can change the status');
-      return;
-    }
-    crew.status = crew.status === 'recruiting' ? 'locked-in' : 'recruiting';
-    renderCrews();
-    if (document.getElementById('detail-overlay').classList.contains('open')) renderDetail(id);
-    showToast(crew.status === 'recruiting'
-      ? `🟢 ${crew.name} is now Recruiting — anyone can join`
-      : `🔒 ${crew.name} is Locked In — invite only`);
+    if (!crew.isLead) { showToast('🔒 Only the Crew Lead can change the status'); return; }
+    requestStatusChange(id, crew.status === 'recruiting' ? 'locked-in' : 'recruiting');
   }
 
   // ===== Crew detail view =====
@@ -2126,7 +2239,7 @@
     const people = crewSquad(crew);
     const memberList = people.length
       ? people.map(p => `
-          <div class="detail-member detail-member-link" onclick="goToProfileFromDetail(${p.id})" title="View ${p.name}'s profile">
+          <div class="detail-member detail-member-link" onclick="goToProfileFromDetail('${p.id}')" title="View ${p.name}'s profile">
             <div class="avatar" style="background:${p.gradient};margin:0">${initials(p.name).toUpperCase()}</div>
             <span>${p.name.split(' ')[0]}${p.isYou ? ' (You)' : ''}</span>
             <span class="detail-member-arrow">›</span>
@@ -2142,15 +2255,15 @@
         <div class="form-group">
           <label class="form-label">Status (you're the Crew Lead 👑)</label>
           <div class="status-toggle">
-            <button class="status-opt ${crew.status==='recruiting'?'active':''}" onclick="setStatus(${crew.id},'recruiting')">🟢 Recruiting</button>
-            <button class="status-opt ${crew.status==='locked-in'?'active':''}" onclick="setStatus(${crew.id},'locked-in')">🔒 Locked In</button>
+            <button class="status-opt ${crew.status==='recruiting'?'active':''}" onclick="setStatus('${crew.id}','recruiting')">🟢 Recruiting</button>
+            <button class="status-opt ${crew.status==='locked-in'?'active':''}" onclick="setStatus('${crew.id}','locked-in')">🔒 Locked In</button>
           </div>
         </div>
         <div class="form-group">
           <label class="form-label">Add Member</label>
           <div style="display:flex;gap:8px;">
             <input class="form-input" id="add-member-input" placeholder="Name or @handle" style="flex:1">
-            <button class="btn btn-primary" onclick="addMember(${crew.id})" style="padding:11px 16px;">Add</button>
+            <button class="btn btn-primary" onclick="addMember('${crew.id}')" style="padding:11px 16px;">Add</button>
           </div>
         </div>`;
     } else {
@@ -2161,7 +2274,7 @@
           <div style="font-size:0.85rem;color:var(--muted);">Set by the Crew Lead — you can't change this.</div>
         </div>
         <button class="btn ${canJoin?'btn-primary':'btn-ghost'}" style="width:100%;padding:12px;"
-          onclick="${canJoin ? `joinCrew(${crew.id})` : `showToast('🔒 This crew is Locked In — ask the Lead for an invite')`}">
+          onclick="${canJoin ? `joinCrew('${crew.id}')` : `showToast('🔒 This crew is Locked In — ask the Lead for an invite')`}">
           ${canJoin ? '➕ Join this crew' : '🔒 Locked — invite only'}
         </button>`;
     }
@@ -2174,7 +2287,6 @@
         <span class="crew-status ${s.cls}">${s.label}</span>
         <span style="font-size:0.8rem;color:var(--muted);">${crew.members.length} member${crew.members.length!==1?'s':''}</span>
       </div>
-      <div class="status-meaning">${meaning}</div>
       ${controls}
       <div class="form-group">
         <label class="form-label">Crew Members</label>
@@ -2186,17 +2298,9 @@
     `;
   }
 
-  // Full-view status set (Lead only)
+  // Full-view status set (Lead only) — routes through confirmation modal
   function setStatus(id, status) {
-    const crew = getCrew(id);
-    if (!crew || !crew.isLead) { showToast('🔒 Only the Crew Lead can change the status'); return; }
-    if (crew.status === status) return;
-    crew.status = status;
-    renderCrews();
-    renderDetail(id);
-    showToast(status === 'recruiting'
-      ? `🟢 ${crew.name} is now Recruiting`
-      : `🔒 ${crew.name} is Locked In`);
+    requestStatusChange(id, status);
   }
 
   function addMember(crewId) {
@@ -2301,16 +2405,43 @@
         </div>`;
     }
 
+    // If crew leader has no raver profile in the member list, prepend a placeholder
+    const youProfile = squad.find(r => r.isYou);
+    const leaderInMembers = people.some(p => p.isYou);
+    let leaderRow = '';
+    if (crew.isLead && !leaderInMembers) {
+      const leaderName = currentUser?.user_metadata?.full_name || 'You';
+      const leaderInitials = initials(leaderName) || '👑';
+      leaderRow = `
+        <div class="crew-member-row" style="border-color:rgba(255,230,0,0.25);">
+          <div class="avatar" style="background:linear-gradient(135deg,#FF2D78,#BF00FF);width:36px;height:36px;font-size:0.8rem;border:none;margin:0;">${leaderInitials.toUpperCase()}</div>
+          <div class="crew-member-name">${leaderName} <span style="color:var(--neon-yellow);font-size:0.78rem;">👑 You (Lead)</span></div>
+          <div style="font-size:0.75rem;color:var(--muted);margin-right:6px;font-style:italic;">No profile yet</div>
+        </div>`;
+    }
+
     // Member list
-    const memberRows = people.length
-      ? people.map(p => `
-          <div class="crew-member-row" onclick="goToProfileFromCrew(${p.id})">
+    const memberRows = (leaderRow || people.length)
+      ? leaderRow + people.map(p => `
+          <div class="crew-member-row" onclick="goToProfileFromCrew('${p.id}')">
             <div class="avatar" style="background:${p.gradient};width:36px;height:36px;font-size:0.8rem;border:none;margin:0;">${initials(p.name).toUpperCase()}</div>
-            <div class="crew-member-name">${p.name}${p.isYou ? ' <span style="color:var(--muted);font-size:0.78rem;">(You)</span>' : ''}</div>
+            <div class="crew-member-name">${p.name}${p.isYou ? ' <span style="color:var(--neon-yellow);font-size:0.78rem;">👑 You (Lead)</span>' : ''}</div>
             <div style="font-size:0.75rem;color:var(--muted);margin-right:6px;">${p.base || ''}</div>
             <div class="crew-member-arrow">›</div>
           </div>`).join('')
       : '<div class="fest-empty">No members yet — add some below</div>';
+
+    // QR code block — only shown when Recruiting
+    const inviteUrl = `${window.location.origin}${window.location.pathname}?join=${crew.id}`;
+    const qrBlock = crew.status === 'recruiting' ? `
+      <div class="crew-page-section">
+        <h3>📲 QR Invite Link</h3>
+        <p style="font-size:0.82rem;color:var(--muted);margin-bottom:14px;">Anyone who scans this can request to join your crew.</p>
+        <div style="display:flex;justify-content:center;">
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&bgcolor=0E0E16&color=FF2D78&data=${encodeURIComponent(inviteUrl)}"
+               style="border-radius:12px;border:2px solid rgba(255,45,120,0.3);" width="180" height="180" alt="QR invite code">
+        </div>
+      </div>` : '';
 
     // Status toggle (lead only)
     const statusBlock = crew.isLead ? `
@@ -2322,8 +2453,8 @@
             : '🔒 <strong style="color:var(--text)">Locked In</strong> — invite only, you add members manually'}
         </div>
         <div class="status-toggle">
-          <button class="status-opt ${crew.status==='recruiting'?'active':''}" onclick="setCrewPageStatus(${crew.id},'recruiting')">🟢 Recruiting</button>
-          <button class="status-opt ${crew.status==='locked-in'?'active':''}" onclick="setCrewPageStatus(${crew.id},'locked-in')">🔒 Locked In</button>
+          <button class="status-opt ${crew.status==='recruiting'?'active':''}" onclick="setCrewPageStatus('${crew.id}','recruiting')">🟢 Recruiting</button>
+          <button class="status-opt ${crew.status==='locked-in'?'active':''}" onclick="setCrewPageStatus('${crew.id}','locked-in')">🔒 Locked In</button>
         </div>
       </div>` : `
       <div class="crew-page-section">
@@ -2334,8 +2465,8 @@
     // Add member (lead only)
     const addMemberBlock = crew.isLead ? `
       <div class="add-member-row">
-        <input class="form-input" id="add-member-input" placeholder="Name or @handle" onkeydown="if(event.key==='Enter')addMember(${crew.id})">
-        <button class="btn btn-primary" onclick="addMember(${crew.id})" style="padding:11px 18px;white-space:nowrap;">Add</button>
+        <input class="form-input" id="add-member-input" placeholder="Name or @handle" onkeydown="if(event.key==='Enter')addMember('${crew.id}')">
+        <button class="btn btn-primary" onclick="addMember('${crew.id}')" style="padding:11px 18px;white-space:nowrap;">Add</button>
       </div>` : '';
 
     document.getElementById('page-crew').innerHTML = `
@@ -2354,6 +2485,8 @@
 
       ${statusBlock}
 
+      ${qrBlock}
+
       <div class="crew-page-section">
         <h3>👥 Members</h3>
         ${memberRows}
@@ -2367,16 +2500,7 @@
   }
 
   function setCrewPageStatus(id, status) {
-    const crew = getCrew(id);
-    if (!crew || !crew.isLead) return;
-    if (crew.status === status) return;
-    crew.status = status;
-    renderCrews();
-    renderCrewPage(id);
-    showToast(status === 'recruiting'
-      ? `🟢 ${crew.name} is now Recruiting`
-      : `🔒 ${crew.name} is Locked In`);
-    if (currentUser) dbSaveCrew({ name: crew.name, color: crew.color, gradient: crew.gradient, status }, id);
+    requestStatusChange(id, status);
   }
 
   function joinCrew(id) {
@@ -2635,7 +2759,7 @@
       ${nextBanner}
 
       <div class="profile-actions">
-        <button class="btn btn-primary" style="flex:1;padding:11px;" onclick="openProfileEditor(${r.id})">✏️ Edit Profile</button>
+        <button class="btn btn-primary" style="flex:1;padding:14px;font-size:0.95rem;letter-spacing:0.3px;box-shadow:0 0 24px rgba(255,45,120,0.35);" onclick="openProfileEditor('${r.id}')">✏️ Edit Profile</button>
       </div>
 
       ${connectBlock}
@@ -2761,7 +2885,7 @@
       const when = f._d ? `${f._d.getDate()} ${MON_SHORT[f._d.getMonth()]} ${f._d.getFullYear()}` : '';
       return `
         <label class="fest-check">
-          <input type="checkbox" ${checked} onchange="toggleFestPick(${f.id}, this.checked)">
+          <input type="checkbox" ${checked} onchange="toggleFestPick('${f.id}', this.checked)">
           <span class="fest-check-name">${f.name}</span>
           <span class="fest-check-meta">${when}${f.location ? ' · ' + f.location : ''}</span>
         </label>`;
@@ -2906,11 +3030,11 @@
       const isUpcoming = f._d && f._d >= TODAY;
       const metaLine = `📍 ${f.location || 'Location TBD'}` + (isUpcoming ? ` · ⏳ ${countdownLabel(f._d)}` : (f._d ? ` · ${f._d.getFullYear()}` : ''));
       const chips = goers.length
-        ? goers.map(w => `<span class="going-chip" onclick="event.stopPropagation(); openProfile(${w.id})" title="View ${w.name}'s profile">${w.name.split(' ')[0]}</span>`).join('')
+        ? goers.map(w => `<span class="going-chip" onclick="event.stopPropagation(); openProfile('${w.id}')" title="View ${w.name}'s profile">${w.name.split(' ')[0]}</span>`).join('')
         : '<span class="fest-empty" style="font-size:0.74rem;">Nobody from the tribe yet</span>';
 
       return `
-        <div class="event-item event-item-clickable" onclick="openFestivalEditor(${f.id})" title="Tap to edit ${f.name}">
+        <div class="event-item event-item-clickable" onclick="openFestivalEditor('${f.id}')" title="Tap to edit ${f.name}">
           <div class="event-date">
             <div class="event-day" style="color:${color}">${day}</div>
             <div class="event-month">${mon}</div>
@@ -2952,7 +3076,7 @@
       ${fieldRow('Location','fe-loc', f?.location, 'e.g. Amsterdam, NL')}
       ${f ? `<div class="fest-goers-note">${goers.length ? goers.length + ' tribe member' + (goers.length!==1?'s':'') + ' linked: ' + goers.map(g=>g.name.split(' ')[0]).join(', ') : 'No tribe members linked yet'}</div>` : ''}
       <div class="modal-actions">
-        ${f ? `<button class="btn btn-ghost" style="color:var(--neon-pink);" onclick="deleteFestival(${f.id})">Delete</button>` : ''}
+        ${f ? `<button class="btn btn-ghost" style="color:var(--neon-pink);" onclick="deleteFestival('${f.id}')">Delete</button>` : ''}
         <button class="btn btn-ghost" onclick="closeFestivalEditor()">Cancel</button>
         <button class="btn btn-primary" onclick="saveFestival()">${f ? 'Save' : 'Add 🔥'}</button>
       </div>
