@@ -1,0 +1,2564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RaveFam 🎉</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --neon-pink: #FF2D78;
+    --neon-cyan: #00F5FF;
+    --neon-yellow: #FFE600;
+    --neon-purple: #BF00FF;
+    --neon-green: #39FF14;
+    --bg: #050509;
+    --surface: #0E0E16;
+    --surface2: #16161F;
+    --text: #F0EEFF;
+    --muted: #6A6A8A;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated background blobs */
+  .bg-blobs {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+  }
+  .blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.06;
+    animation: blobFloat 8s ease-in-out infinite;
+  }
+  .blob-1 { width: 500px; height: 500px; background: var(--neon-pink); top: -100px; left: -100px; animation-delay: 0s; }
+  .blob-2 { width: 400px; height: 400px; background: var(--neon-cyan); top: 30%; right: -80px; animation-delay: 2s; }
+  .blob-3 { width: 350px; height: 350px; background: var(--neon-purple); bottom: 10%; left: 20%; animation-delay: 4s; }
+
+  @keyframes blobFloat {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(20px, -30px) scale(1.05); }
+    66% { transform: translate(-15px, 20px) scale(0.95); }
+  }
+
+  /* Layout */
+  .app { position: relative; z-index: 1; display: flex; flex-direction: column; min-height: 100vh; }
+
+  /* Header */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 28px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    backdrop-filter: blur(20px);
+    background: rgba(10,10,18,0.7);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .logo-mark {
+    flex-shrink: 0;
+    filter: drop-shadow(0 0 10px rgba(255,45,120,0.4));
+  }
+  .eq-bar {
+    transform-origin: center bottom;
+    animation: eqPulse 1.1s ease-in-out infinite;
+  }
+  .eq-bar:nth-child(1) { animation-delay: 0s; }
+  .eq-bar:nth-child(2) { animation-delay: 0.18s; }
+  .eq-bar:nth-child(3) { animation-delay: 0.36s; }
+  @keyframes eqPulse {
+    0%, 100% { transform: scaleY(0.55); }
+    50% { transform: scaleY(1); }
+  }
+  .logo-text {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 1.6rem;
+    letter-spacing: -0.5px;
+  }
+  .logo-text span:first-child { color: #FFFFFF; }
+  .logo-text span:last-child { color: var(--neon-green); }
+
+  .header-actions { display: flex; gap: 10px; align-items: center; }
+
+  .btn {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+    padding: 9px 18px;
+    border-radius: 100px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .btn-primary {
+    background: var(--neon-pink);
+    color: #fff;
+    box-shadow: 0 0 20px rgba(255,45,120,0.4);
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 0 30px rgba(255,45,120,0.6); }
+  .btn-ghost {
+    background: rgba(255,255,255,0.07);
+    color: var(--text);
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .btn-ghost:hover { background: rgba(255,255,255,0.12); }
+
+  /* Nav tabs */
+  nav {
+    display: flex;
+    gap: 4px;
+    padding: 16px 28px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .nav-tab {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.85rem;
+    padding: 10px 18px;
+    border-radius: 10px 10px 0 0;
+    border: none;
+    cursor: pointer;
+    background: transparent;
+    color: var(--muted);
+    transition: all 0.2s;
+    position: relative;
+  }
+  .nav-tab.active { color: var(--neon-pink); background: rgba(20,20,32,0.95); }
+  .nav-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px; left: 0; right: 0;
+    height: 2px;
+    background: var(--neon-pink);
+    border-radius: 2px 2px 0 0;
+  }
+  .nav-tab:hover:not(.active) { color: var(--text); }
+
+  /* Main */
+  main { flex: 1; padding: 28px; max-width: 900px; width: 100%; margin: 0 auto; }
+
+  /* Pages */
+  .page { display: none; animation: fadeIn 0.3s ease; }
+  .page.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* Section header */
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .section-title {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 1.4rem;
+    color: #FFFFFF;
+    text-shadow: 0 1px 12px rgba(10,10,18,0.8);
+  }
+
+  /* Crew cards */
+  .crew-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+
+  .crew-card {
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 18px;
+    padding: 22px;
+    transition: all 0.25s ease;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+  }
+  .crew-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, var(--accent-a) 0%, transparent 70%);
+    opacity: 0.05;
+    transition: opacity 0.25s;
+  }
+  .crew-card > * { position: relative; z-index: 1; }
+  .crew-card:hover { transform: translateY(-3px); border-color: rgba(255,255,255,0.15); }
+  .crew-card:hover::before { opacity: 0.08; }
+
+  .crew-color-bar {
+    height: 4px;
+    border-radius: 100px;
+    margin-bottom: 16px;
+  }
+
+  .crew-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .crew-name {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 800;
+    font-size: 1.05rem;
+    color: #FFFFFF;
+  }
+
+  /* Next-fest block — visually distinct card-within-card */
+  .crew-fest {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-left: 3px solid var(--accent-a, var(--neon-pink));
+    border-radius: 10px;
+    padding: 11px 13px;
+    margin-bottom: 16px;
+  }
+  .crew-fest-label {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--neon-green);
+    margin-bottom: 4px;
+  }
+  .crew-fest-past .crew-fest-label { color: var(--muted); }
+  .crew-fest-empty { border-left-color: rgba(255,255,255,0.1); }
+  .crew-fest-empty .crew-fest-label { color: var(--muted); margin-bottom: 0; }
+  .crew-fest-name {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #fff;
+  }
+  .crew-fest-date { font-size: 0.74rem; color: var(--muted); margin-top: 1px; }
+  .crew-fest-going {
+    font-size: 0.74rem;
+    color: var(--text);
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+
+  /* Tribe roster section */
+  .crew-tribe {
+    border-top: 1px solid rgba(255,255,255,0.06);
+    padding-top: 13px;
+  }
+  .crew-tribe-label {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin-bottom: 9px;
+  }
+
+  .crew-members { display: flex; align-items: center; gap: -6px; }
+  .avatar {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    border: 2px solid var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+    margin-left: -6px;
+    font-family: 'Outfit', sans-serif;
+  }
+  .avatar:first-child { margin-left: 0; }
+  .avatar-count {
+    background: rgba(255,255,255,0.1);
+    color: var(--muted);
+    font-size: 0.65rem;
+  }
+
+  .crew-status {
+    font-size: 0.72rem;
+    padding: 4px 10px;
+    border-radius: 100px;
+    font-weight: 600;
+    font-family: 'Outfit', sans-serif;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .crew-status.tappable { cursor: pointer; }
+  .crew-status.tappable:hover { filter: brightness(1.25); border-color: currentColor; }
+  .status-recruiting { background: rgba(57,255,20,0.12); color: var(--neon-green); }
+  .status-locked-in { background: rgba(255,230,0,0.15); color: var(--neon-yellow); }
+
+  /* Add crew card */
+  .crew-add-card {
+    background: transparent;
+    border: 2px dashed rgba(255,255,255,0.12);
+    border-radius: 18px;
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-height: 170px;
+    color: var(--muted);
+  }
+  .crew-add-card:hover { border-color: var(--neon-pink); color: var(--neon-pink); }
+  .add-icon { font-size: 2rem; }
+  .add-label { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.85rem; }
+
+  /* Upcoming Events */
+  .events-list { display: flex; flex-direction: column; gap: 12px; }
+
+  .event-item {
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 16px;
+    padding: 18px 22px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    transition: all 0.2s;
+    cursor: pointer;
+  }
+  .event-item:hover { border-color: rgba(255,255,255,0.14); transform: translateX(3px); }
+
+  .event-date {
+    text-align: center;
+    min-width: 46px;
+  }
+  .event-day {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 1.5rem;
+    line-height: 1;
+  }
+  .event-month {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+  }
+
+  .event-divider {
+    width: 3px;
+    height: 44px;
+    border-radius: 100px;
+    flex-shrink: 0;
+  }
+
+  .event-info { flex: 1; }
+  .event-name {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 1rem;
+    margin-bottom: 3px;
+  }
+  .event-meta { font-size: 0.78rem; color: var(--muted); }
+  .going-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+  .going-chip {
+    font-size: 0.72rem;
+    font-weight: 600;
+    font-family: 'Outfit', sans-serif;
+    padding: 3px 10px;
+    border-radius: 100px;
+    background: rgba(57,255,20,0.1);
+    color: var(--neon-green);
+    border: 1px solid rgba(57,255,20,0.2);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .going-chip:hover { background: rgba(57,255,20,0.22); border-color: var(--neon-green); }
+
+  .event-crew-going {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+  }
+  .going-count {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 800;
+    font-size: 1.1rem;
+  }
+  .going-label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* Members page */
+  .members-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+
+  .member-card {
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 16px;
+    padding: 20px;
+    text-align: center;
+    transition: all 0.2s;
+    cursor: pointer;
+  }
+  .member-card:hover { transform: translateY(-3px); border-color: rgba(255,255,255,0.15); }
+
+  .member-avatar {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    margin: 0 auto 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 800;
+    font-size: 1.3rem;
+    border: 3px solid rgba(255,255,255,0.1);
+  }
+  .member-name {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+  }
+  .member-handle { font-size: 0.75rem; color: var(--muted); margin-bottom: 12px; }
+
+  .member-tags { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; }
+  .tag {
+    font-size: 0.65rem;
+    padding: 3px 8px;
+    border-radius: 100px;
+    font-weight: 600;
+    font-family: 'Outfit', sans-serif;
+  }
+  .member-base { font-size: 0.7rem; color: var(--muted); margin-bottom: 10px; }
+
+  /* Profile page */
+  .profile-back {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: none; border: none; cursor: pointer;
+    color: var(--muted); font-family: 'Outfit', sans-serif; font-weight: 600;
+    font-size: 0.85rem; margin-bottom: 20px; padding: 0;
+    transition: color 0.2s;
+  }
+  .profile-back:hover { color: var(--neon-pink); }
+
+  .profile-hero {
+    display: flex; align-items: center; gap: 20px;
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 20px;
+    padding: 24px;
+    margin-bottom: 18px;
+    position: relative;
+    overflow: hidden;
+  }
+  .profile-hero-bar { position: absolute; top: 0; left: 0; right: 0; height: 5px; }
+  .profile-avatar {
+    width: 84px; height: 84px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 2rem;
+    flex-shrink: 0; border: 3px solid rgba(255,255,255,0.12);
+  }
+  .profile-id h2 {
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 1.5rem; color: #fff;
+  }
+  .profile-handle { color: var(--muted); font-size: 0.9rem; margin: 2px 0 8px; }
+  .profile-base-line { font-size: 0.85rem; color: var(--text); }
+
+  .profile-section {
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 14px;
+  }
+  .profile-section h3 {
+    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.78rem;
+    text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted);
+    margin-bottom: 14px; display: flex; align-items: center; gap: 7px;
+  }
+  .fest-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
+    font-size: 0.9rem;
+  }
+  .fest-row:last-child { border-bottom: none; }
+  .fest-row .fest-when { color: var(--muted); font-size: 0.78rem; }
+  .fest-empty { color: var(--muted); font-size: 0.85rem; font-style: italic; }
+  .profile-note { font-size: 0.9rem; line-height: 1.6; color: var(--text); white-space: pre-wrap; }
+  .fav-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .fav-chip {
+    font-size: 0.8rem; padding: 5px 12px; border-radius: 100px;
+    background: rgba(255,45,120,0.12); color: var(--neon-pink); font-weight: 500;
+  }
+  .profile-actions { display: flex; gap: 10px; margin: 4px 0 12px; }
+
+  /* Connect row (IG / Call / Text) */
+  .connect-row { display: flex; gap: 10px; margin-bottom: 20px; }
+  .connect-btn {
+    flex: 1;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 11px 8px;
+    border-radius: 100px;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.82rem;
+    text-decoration: none;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.18s;
+  }
+  .connect-ig {
+    background: linear-gradient(135deg, rgba(255,45,120,0.18), rgba(191,0,255,0.18));
+    color: #fff; border-color: rgba(255,45,120,0.35);
+  }
+  .connect-ig:hover { background: linear-gradient(135deg, rgba(255,45,120,0.32), rgba(191,0,255,0.32)); }
+  .connect-call {
+    background: rgba(57,255,20,0.12); color: var(--neon-green); border-color: rgba(57,255,20,0.3);
+  }
+  .connect-call:hover { background: rgba(57,255,20,0.24); }
+  .connect-text {
+    background: rgba(0,245,255,0.12); color: var(--neon-cyan); border-color: rgba(0,245,255,0.3);
+  }
+  .connect-text:hover { background: rgba(0,245,255,0.24); }
+  .connect-empty { font-size: 0.8rem; color: var(--muted); margin-bottom: 20px; font-style: italic; }
+
+  /* Countdown banner on profile */
+  .countdown-banner {
+    border-radius: 16px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
+    color: #fff;
+    position: relative;
+    overflow: hidden;
+    text-shadow: 0 1px 6px rgba(0,0,0,0.35);
+  }
+  .countdown-banner .cd-label {
+    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.72rem;
+    text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.9;
+  }
+  .countdown-banner .cd-fest { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 1.15rem; margin: 2px 0; }
+  .countdown-banner .cd-days { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.8rem; line-height: 1.1; }
+  .countdown-banner .cd-date { font-size: 0.82rem; opacity: 0.9; margin-top: 2px; }
+
+  .fest-cd {
+    color: var(--neon-green);
+    font-weight: 600;
+    margin-left: 4px;
+  }
+
+  /* Festival editor rows */
+  .fest-edit-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+  .fest-edit-row .fest-name { flex: 2; }
+  .fest-edit-row .fest-date { flex: 1.3; color-scheme: dark; }
+  .fest-remove {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--muted);
+    border-radius: 8px; width: 36px; height: 38px; flex-shrink: 0;
+    cursor: pointer; font-size: 0.85rem; transition: all 0.15s;
+  }
+  .fest-remove:hover { color: var(--neon-pink); border-color: var(--neon-pink); }
+  .add-fest-btn {
+    background: rgba(255,45,120,0.1);
+    border: 1px dashed rgba(255,45,120,0.4);
+    color: var(--neon-pink);
+    border-radius: 10px; padding: 8px 14px; width: 100%;
+    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.8rem;
+    cursor: pointer; transition: all 0.15s; margin-top: 4px;
+  }
+  .add-fest-btn:hover { background: rgba(255,45,120,0.18); }
+
+  /* Festival picker (checkboxes) in profile editor */
+  .fest-picker-hint { font-size: 0.74rem; color: var(--muted); margin-bottom: 10px; line-height: 1.45; }
+  .fest-group-label {
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.66rem;
+    text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted);
+    margin: 12px 0 7px;
+  }
+  .fest-check {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border-radius: 9px; cursor: pointer;
+    background: rgba(255,255,255,0.03); margin-bottom: 6px;
+    transition: background 0.15s;
+  }
+  .fest-check:hover { background: rgba(255,255,255,0.06); }
+  .fest-check input { width: 17px; height: 17px; accent-color: var(--neon-green); flex-shrink: 0; cursor: pointer; }
+  .fest-check-name { font-size: 0.86rem; font-weight: 500; }
+  .fest-check-meta { font-size: 0.72rem; color: var(--muted); margin-left: auto; text-align: right; }
+
+  /* Location line on profile fest rows */
+  .fest-loc { display: block; font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
+
+  /* Festival edit hint on Festivals tab */
+  .event-item-clickable { cursor: pointer; }
+  .fest-edit-hint {
+    font-size: 0.72rem; opacity: 0; margin-left: 4px; transition: opacity 0.15s;
+  }
+  .event-item-clickable:hover .fest-edit-hint { opacity: 0.7; }
+  .fest-goers-note {
+    font-size: 0.78rem; color: var(--muted);
+    background: rgba(255,255,255,0.04); border-radius: 9px;
+    padding: 9px 11px; margin-bottom: 4px; line-height: 1.4;
+  }
+
+  /* Editable textarea in modal */
+  textarea.form-input { resize: vertical; min-height: 70px; font-family: 'DM Sans', sans-serif; }
+
+  /* Checklist page */
+  .checklist-section { margin-bottom: 28px; }
+  .checklist-section-title {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+  .checklist { display: flex; flex-direction: column; gap: 8px; }
+  .check-item {
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 12px;
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+  }
+  .check-item:hover { border-color: rgba(255,255,255,0.12); }
+  .check-item.checked { opacity: 0.5; }
+  .check-item.checked .check-text { text-decoration: line-through; }
+
+  .check-box {
+    width: 22px; height: 22px;
+    border-radius: 6px;
+    border: 2px solid rgba(255,255,255,0.2);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s;
+    font-size: 0.75rem;
+  }
+  .check-item.checked .check-box {
+    background: var(--neon-green);
+    border-color: var(--neon-green);
+    color: #000;
+  }
+  .check-text { font-size: 0.88rem; flex: 1; }
+  .check-who {
+    font-size: 0.72rem;
+    color: var(--muted);
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+  }
+
+  /* Progress bar */
+  .progress-bar-wrap {
+    background: rgba(255,255,255,0.06);
+    border-radius: 100px;
+    height: 6px;
+    margin-bottom: 28px;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    border-radius: 100px;
+    background: linear-gradient(90deg, var(--neon-pink), var(--neon-cyan));
+    transition: width 0.5s ease;
+  }
+  .progress-label {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-bottom: 8px;
+    font-family: 'Outfit', sans-serif;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(8px);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+
+  .modal {
+    background: var(--surface2);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 24px;
+    padding: 32px;
+    width: 100%;
+    max-width: 440px;
+    transform: scale(0.95);
+    transition: transform 0.25s;
+  }
+  .modal-overlay.open .modal { transform: scale(1); }
+
+  .modal-title {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 1.3rem;
+    margin-bottom: 22px;
+  }
+
+  /* Crew detail modal */
+  .detail-bar { height: 5px; border-radius: 100px; margin-bottom: 18px; }
+  .detail-status-line { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .status-meaning {
+    font-size: 0.82rem;
+    color: var(--muted);
+    background: rgba(255,255,255,0.04);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 20px;
+    line-height: 1.5;
+  }
+  .status-toggle { display: flex; gap: 8px; }
+  .status-opt {
+    flex: 1;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.04);
+    color: var(--muted);
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: all 0.18s;
+  }
+  .status-opt:hover { border-color: rgba(255,255,255,0.25); color: var(--text); }
+  .status-opt.active {
+    background: rgba(255,45,120,0.15);
+    border-color: var(--neon-pink);
+    color: #fff;
+  }
+  .detail-members { display: flex; flex-direction: column; gap: 8px; max-height: 180px; overflow-y: auto; }
+  .detail-member {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 0.88rem;
+    background: rgba(255,255,255,0.03);
+    padding: 7px 10px; border-radius: 10px;
+  }
+  .detail-member-link {
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+  }
+  .detail-member-link:hover {
+    background: rgba(255,255,255,0.07);
+    border-color: rgba(255,255,255,0.12);
+  }
+  .detail-member-arrow {
+    margin-left: auto;
+    color: var(--muted);
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+  .detail-member-link:hover .detail-member-arrow { color: var(--neon-green); }
+
+  .form-group { margin-bottom: 16px; }
+  .form-label {
+    display: block;
+    font-size: 0.75rem;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin-bottom: 7px;
+  }
+  .form-input {
+    width: 100%;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 11px 14px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .form-input:focus { border-color: var(--neon-pink); }
+  .form-input::placeholder { color: var(--muted); }
+
+  .color-swatches { display: flex; gap: 10px; flex-wrap: wrap; }
+  .color-swatch {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.15s;
+    border: 2px solid transparent;
+  }
+  .color-swatch:hover { transform: scale(1.15); }
+  .color-swatch.selected { border-color: #fff; transform: scale(1.15); }
+
+  .modal-actions { display: flex; gap: 10px; margin-top: 24px; }
+  .modal-actions .btn { flex: 1; padding: 12px; font-size: 0.85rem; }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--surface2);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 100px;
+    padding: 12px 22px;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.85rem;
+    z-index: 300;
+    transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+    white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* Pulse dot */
+  .pulse-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 6px;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+
+  /* ===== AUTH SCREEN ===== */
+  #auth-screen {
+    position: fixed; inset: 0; z-index: 1000;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  #auth-screen.hidden { display: none; }
+
+  .auth-card {
+    width: 100%; max-width: 400px;
+    background: var(--surface2);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 28px;
+    padding: 40px 36px;
+    position: relative;
+    z-index: 1;
+  }
+  .auth-logo {
+    display: flex; align-items: center; gap: 10px;
+    justify-content: center; margin-bottom: 8px;
+  }
+  .auth-tagline {
+    text-align: center; color: var(--muted);
+    font-size: 0.88rem; margin-bottom: 32px;
+  }
+  .auth-tabs {
+    display: flex; gap: 0;
+    background: rgba(255,255,255,0.05);
+    border-radius: 12px; padding: 4px;
+    margin-bottom: 24px;
+  }
+  .auth-tab {
+    flex: 1; padding: 9px;
+    border: none; background: transparent; cursor: pointer;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.85rem;
+    color: var(--muted); border-radius: 9px; transition: all 0.2s;
+  }
+  .auth-tab.active { background: var(--neon-pink); color: #fff; }
+  .auth-error {
+    background: rgba(255,45,120,0.12);
+    border: 1px solid rgba(255,45,120,0.3);
+    color: var(--neon-pink);
+    border-radius: 10px; padding: 10px 14px;
+    font-size: 0.82rem; margin-bottom: 16px; display: none;
+  }
+  .auth-error.show { display: block; }
+  .auth-success {
+    background: rgba(57,255,20,0.1);
+    border: 1px solid rgba(57,255,20,0.3);
+    color: var(--neon-green);
+    border-radius: 10px; padding: 10px 14px;
+    font-size: 0.82rem; margin-bottom: 16px; display: none;
+    text-align: center; line-height: 1.5;
+  }
+  .auth-success.show { display: block; }
+  .auth-btn {
+    width: 100%; padding: 13px;
+    background: var(--neon-pink); color: #fff;
+    border: none; border-radius: 100px; cursor: pointer;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.9rem;
+    box-shadow: 0 0 24px rgba(255,45,120,0.4);
+    transition: all 0.2s; margin-top: 8px;
+  }
+  .auth-btn:hover { transform: translateY(-1px); box-shadow: 0 0 36px rgba(255,45,120,0.6); }
+  .auth-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+  /* Loading spinner overlay */
+  #app-loading {
+    position: fixed; inset: 0; z-index: 999;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 16px;
+  }
+  #app-loading.hidden { display: none; }
+  .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid rgba(255,45,120,0.2);
+    border-top-color: var(--neon-pink);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="bg-blobs">
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+  <div class="blob blob-3"></div>
+</div>
+
+<!-- Loading overlay (shown while checking session) -->
+<div id="app-loading">
+  <div class="spinner"></div>
+  <div style="font-family:'Outfit',sans-serif;font-weight:600;color:var(--muted);font-size:0.85rem;">Loading RaveFam…</div>
+</div>
+
+<!-- Auth screen -->
+<div id="auth-screen" class="hidden">
+  <div class="bg-blobs">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+  </div>
+  <div class="auth-card">
+    <div class="auth-logo">
+      <svg viewBox="0 0 44 44" width="34" height="34">
+        <defs><linearGradient id="ag" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#FF2D78"/><stop offset="100%" stop-color="#00F5FF"/>
+        </linearGradient></defs>
+        <rect x="2" y="2" width="40" height="40" rx="12" fill="url(#ag)"/>
+        <g fill="#050509">
+          <rect x="11" y="22" width="4.5" height="10" rx="2" style="transform-origin:center bottom;animation:eqPulse 1.1s ease-in-out infinite;animation-delay:0s"/>
+          <rect x="19.75" y="15" width="4.5" height="17" rx="2" style="transform-origin:center bottom;animation:eqPulse 1.1s ease-in-out infinite;animation-delay:0.18s"/>
+          <rect x="28.5" y="19" width="4.5" height="13" rx="2" style="transform-origin:center bottom;animation:eqPulse 1.1s ease-in-out infinite;animation-delay:0.36s"/>
+        </g>
+      </svg>
+      <span style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.8rem;"><span style="color:#fff">Rave</span><span style="color:#39FF14">Fam</span></span>
+    </div>
+    <div class="auth-tagline">Your crew. Your tribe. Your season. 🎉</div>
+
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tab-login" onclick="showAuthTab('login')">Log In</button>
+      <button class="auth-tab" id="tab-signup" onclick="showAuthTab('signup')">Sign Up</button>
+    </div>
+
+    <div class="auth-error" id="auth-error"></div>
+    <div class="auth-success" id="auth-success"></div>
+
+    <div id="auth-login-form">
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input class="form-input" id="login-email" type="email" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input class="form-input" id="login-password" type="password" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button class="auth-btn" id="login-btn" onclick="doLogin()">Log In 🔥</button>
+    </div>
+
+    <div id="auth-signup-form" style="display:none;">
+      <div class="form-group">
+        <label class="form-label">Your Name</label>
+        <input class="form-input" id="signup-name" type="text" placeholder="e.g. Jamie D." autocomplete="name">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input class="form-input" id="signup-email" type="email" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input class="form-input" id="signup-password" type="password" placeholder="min 6 characters" autocomplete="new-password">
+      </div>
+      <button class="auth-btn" id="signup-btn" onclick="doSignup()">Create Account 🎉</button>
+    </div>
+  </div>
+</div>
+
+<div class="app" id="main-app" style="display:none;">
+  <header>
+    <div class="logo">
+      <svg class="logo-mark" viewBox="0 0 44 44" width="34" height="34" aria-hidden="true">
+        <defs>
+          <linearGradient id="logoGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#FF2D78"/>
+            <stop offset="100%" stop-color="#00F5FF"/>
+          </linearGradient>
+        </defs>
+        <rect x="2" y="2" width="40" height="40" rx="12" fill="url(#logoGrad)"/>
+        <g fill="#050509">
+          <rect class="eq-bar" x="11" y="22" width="4.5" height="10" rx="2"/>
+          <rect class="eq-bar" x="19.75" y="15" width="4.5" height="17" rx="2"/>
+          <rect class="eq-bar" x="28.5" y="19" width="4.5" height="13" rx="2"/>
+        </g>
+      </svg>
+      <span class="logo-text"><span>Rave</span><span>Fam</span></span>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-ghost" onclick="openModal()">+ New Crew</button>
+      <button class="btn btn-primary">🎉 Find Events</button>
+      <button class="btn btn-ghost" id="logout-btn" onclick="doLogout()" style="font-size:0.75rem;padding:9px 14px;" title="Log out">⏻</button>
+    </div>
+  </header>
+
+  <nav>
+    <button class="nav-tab active" onclick="switchTab('crews', this)">My Crews</button>
+    <button class="nav-tab" onclick="switchTab('events', this)">Festivals</button>
+    <button class="nav-tab" onclick="switchTab('members', this)">Squad</button>
+    <button class="nav-tab" onclick="switchTab('checklist', this)">Checklist</button>
+  </nav>
+
+  <main>
+
+    <!-- CREWS PAGE -->
+    <div class="page active" id="page-crews">
+      <div class="section-header" style="margin-bottom:20px;">
+        <div class="section-title">Your Crews <span style="color:var(--muted);font-size:1rem;font-weight:400">3 active</span></div>
+      </div>
+      <div class="crew-grid" id="crew-grid">
+        <!-- Crew cards rendered by JS -->
+        <div class="crew-add-card" onclick="openModal()">
+          <div class="add-icon">＋</div>
+          <div class="add-label">Create New Crew</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- EVENTS PAGE -->
+    <div class="page" id="page-events">
+      <div class="section-header">
+        <div class="section-title">Festivals</div>
+        <button class="btn btn-ghost" style="font-size:0.78rem;" onclick="openFestivalEditor()">+ Add Festival</button>
+      </div>
+      <div class="events-list" id="events-list">
+        <!-- rendered by JS from the festivals catalog -->
+      </div>
+    </div>
+
+    <!-- MEMBERS PAGE -->
+    <div class="page" id="page-members">
+      <div class="section-header">
+        <div class="section-title">Your Squad</div>
+        <button class="btn btn-ghost" style="font-size:0.78rem;" onclick="openProfileEditor()">+ Add Raver</button>
+      </div>
+      <div class="members-grid" id="members-grid">
+        <!-- rendered by JS -->
+      </div>
+    </div>
+
+    <!-- PROFILE PAGE (dedicated, full-view) -->
+    <div class="page" id="page-profile">
+      <!-- rendered by JS -->
+    </div>
+
+    <!-- CHECKLIST PAGE -->
+    <div class="page" id="page-checklist">
+      <div class="section-header">
+        <div class="section-title">Rave Checklist</div>
+        <span style="font-size:0.8rem;color:var(--muted);font-family:'Outfit',sans-serif;font-weight:600;">Bass Syndicate · Awakenings</span>
+      </div>
+      <div class="progress-label" id="progress-label">4 of 10 complete</div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill" id="progress-bar" style="width:40%"></div>
+      </div>
+
+      <div class="checklist-section">
+        <div class="checklist-section-title">Logistics</div>
+        <div class="checklist" id="checklist">
+          <div class="check-item checked" onclick="toggleCheck(this)">
+            <div class="check-box">✓</div>
+            <div class="check-text">Buy tickets</div>
+            <div class="check-who">Jamie</div>
+          </div>
+          <div class="check-item checked" onclick="toggleCheck(this)">
+            <div class="check-box">✓</div>
+            <div class="check-text">Book accommodation</div>
+            <div class="check-who">Rosa</div>
+          </div>
+          <div class="check-item" onclick="toggleCheck(this)">
+            <div class="check-box"></div>
+            <div class="check-text">Arrange transport to venue</div>
+            <div class="check-who">Maya</div>
+          </div>
+          <div class="check-item" onclick="toggleCheck(this)">
+            <div class="check-box"></div>
+            <div class="check-text">Sort out airport pickups</div>
+            <div class="check-who">Alex</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="checklist-section">
+        <div class="checklist-section-title">Essentials</div>
+        <div class="checklist">
+          <div class="check-item checked" onclick="toggleCheck(this)">
+            <div class="check-box">✓</div>
+            <div class="check-text">Download offline maps</div>
+            <div class="check-who">All</div>
+          </div>
+          <div class="check-item checked" onclick="toggleCheck(this)">
+            <div class="check-box">✓</div>
+            <div class="check-text">Set up group WhatsApp</div>
+            <div class="check-who">Jamie</div>
+          </div>
+          <div class="check-item" onclick="toggleCheck(this)">
+            <div class="check-box"></div>
+            <div class="check-text">Pack earplugs (quality ones!)</div>
+            <div class="check-who">Each</div>
+          </div>
+          <div class="check-item" onclick="toggleCheck(this)">
+            <div class="check-box"></div>
+            <div class="check-text">Portable chargers charged</div>
+            <div class="check-who">Each</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="checklist-section">
+        <div class="checklist-section-title">Day Of</div>
+        <div class="checklist">
+          <div class="check-item" onclick="toggleCheck(this)">
+            <div class="check-box"></div>
+            <div class="check-text">Set a crew meetup point</div>
+            <div class="check-who">All</div>
+          </div>
+          <div class="check-item" onclick="toggleCheck(this)">
+            <div class="check-box"></div>
+            <div class="check-text">Share event schedule with crew</div>
+            <div class="check-who">Tom</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModalOutside(event)">
+  <div class="modal">
+    <div class="modal-title">🎉 Create New Crew</div>
+    <div class="form-group">
+      <label class="form-label">Crew Name</label>
+      <input class="form-input" type="text" placeholder="e.g. The Underground" id="crew-name-input">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Event / Festival</label>
+      <input class="form-input" type="text" placeholder="e.g. Berghain · Berlin">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Crew Color</label>
+      <div class="color-swatches">
+        <div class="color-swatch selected" style="background:#FF2D78" onclick="selectSwatch(this)"></div>
+        <div class="color-swatch" style="background:#00F5FF" onclick="selectSwatch(this)"></div>
+        <div class="color-swatch" style="background:#FFE600" onclick="selectSwatch(this)"></div>
+        <div class="color-swatch" style="background:#BF00FF" onclick="selectSwatch(this)"></div>
+        <div class="color-swatch" style="background:#39FF14" onclick="selectSwatch(this)"></div>
+        <div class="color-swatch" style="background:#FF6B35" onclick="selectSwatch(this)"></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="createCrew()">Create Crew 🔥</button>
+    </div>
+  </div>
+</div>
+
+<!-- Crew Detail Modal -->
+<div class="modal-overlay" id="detail-overlay" onclick="closeDetailOutside(event)">
+  <div class="modal" id="detail-modal">
+    <!-- filled by JS -->
+  </div>
+</div>
+
+<!-- Profile Editor Modal -->
+<div class="modal-overlay" id="profile-edit-overlay" onclick="closeProfileEditorOutside(event)">
+  <div class="modal" id="profile-edit-modal" style="max-height:88vh;overflow-y:auto;">
+    <!-- filled by JS -->
+  </div>
+</div>
+
+<!-- Festival Editor Modal -->
+<div class="modal-overlay" id="festival-edit-overlay" onclick="closeFestivalEditorOutside(event)">
+  <div class="modal" id="festival-edit-modal">
+    <!-- filled by JS -->
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+</div><!-- /#main-app -->
+
+<script>
+  // ===== SUPABASE INIT =====
+  const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
+  const SUPA_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2cGdvcGNpaW9xYnFtampqaWdoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3NTY2OTUsImV4cCI6MjA5NjMzMjY5NX0.DAgcx2UsGV1gUCQzHdGmv1Pu0rXlJdQxhn-bf1wGsiI';
+  const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+  let currentUser = null;  // holds the logged-in Supabase user object
+
+  // ===== AUTH UI helpers =====
+  function showAuthTab(tab) {
+    document.getElementById('auth-login-form').style.display  = tab === 'login'  ? 'block' : 'none';
+    document.getElementById('auth-signup-form').style.display = tab === 'signup' ? 'block' : 'none';
+    document.getElementById('tab-login').classList.toggle('active',  tab === 'login');
+    document.getElementById('tab-signup').classList.toggle('active', tab === 'signup');
+    clearAuthMessages();
+  }
+  function authError(msg) {
+    const el = document.getElementById('auth-error');
+    el.textContent = msg; el.classList.add('show');
+    document.getElementById('auth-success').classList.remove('show');
+  }
+  function authSuccess(msg) {
+    const el = document.getElementById('auth-success');
+    el.textContent = msg; el.classList.add('show');
+    document.getElementById('auth-error').classList.remove('show');
+  }
+  function clearAuthMessages() {
+    document.getElementById('auth-error').classList.remove('show');
+    document.getElementById('auth-success').classList.remove('show');
+  }
+  function setAuthBusy(busy) {
+    ['login-btn','signup-btn'].forEach(id => {
+      const b = document.getElementById(id);
+      if (b) b.disabled = busy;
+    });
+  }
+
+  async function doLogin() {
+    const email    = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    if (!email || !password) { authError('Please enter your email and password.'); return; }
+    setAuthBusy(true); clearAuthMessages();
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    setAuthBusy(false);
+    if (error) { authError(error.message); return; }
+    // onAuthStateChange will fire and handle the rest
+  }
+
+  async function doSignup() {
+    const name     = document.getElementById('signup-name').value.trim();
+    const email    = document.getElementById('signup-email').value.trim();
+    const password = document.getElementById('signup-password').value;
+    if (!name)     { authError('Please enter your name.'); return; }
+    if (!email)    { authError('Please enter your email.'); return; }
+    if (password.length < 6) { authError('Password must be at least 6 characters.'); return; }
+    setAuthBusy(true); clearAuthMessages();
+    const { data, error } = await sb.auth.signUp({
+      email, password,
+      options: { data: { full_name: name } }
+    });
+    setAuthBusy(false);
+    if (error) { authError(error.message); return; }
+    // If email confirmation is disabled in Supabase, session fires immediately.
+    // If enabled, prompt the user to check their inbox.
+    if (data.session) {
+      // session ready — onAuthStateChange handles transition
+    } else {
+      authSuccess('✅ Almost there! Check your email for a confirmation link, then log in.');
+      showAuthTab('login');
+    }
+  }
+
+  async function doLogout() {
+    await sb.auth.signOut();
+    // onAuthStateChange will fire SIGNED_OUT and flip back to auth screen
+  }
+
+  // ===== APP SHOW / HIDE =====
+  function showApp(user) {
+    currentUser = user;
+    document.getElementById('app-loading').classList.add('hidden');
+    document.getElementById('auth-screen').classList.add('hidden');
+    document.getElementById('main-app').style.display = 'flex';
+    // Boot data load
+    bootApp();
+  }
+
+  function showAuthScreen() {
+    currentUser = null;
+    document.getElementById('app-loading').classList.add('hidden');
+    document.getElementById('auth-screen').classList.remove('hidden');
+    document.getElementById('main-app').style.display = 'none';
+  }
+
+  // ===== AUTH STATE LISTENER =====
+  // Runs once on page load to restore session, then on every auth change.
+  sb.auth.onAuthStateChange((event, session) => {
+    if (session?.user) {
+      showApp(session.user);
+    } else {
+      showAuthScreen();
+    }
+  });
+
+  // Keyboard: submit on Enter in auth forms
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    const loginVisible  = document.getElementById('auth-login-form').style.display  !== 'none';
+    const signupVisible = document.getElementById('auth-signup-form').style.display !== 'none';
+    const authOpen = !document.getElementById('auth-screen').classList.contains('hidden');
+    if (!authOpen) return;
+    if (loginVisible)  doLogin();
+    if (signupVisible) doSignup();
+  });
+
+  // ===== SUPABASE DATA HELPERS =====
+  // Called once the user is authenticated. Loads all data from Supabase,
+  // falls back to the hardcoded demo data if the DB is empty (first run).
+
+  async function bootApp() {
+    try {
+      await loadAllData();
+    } catch(err) {
+      console.warn('DB load failed, using demo data:', err);
+      // Demo data already in place — just render
+    }
+    renderSquad();
+    renderCrews();
+    renderEvents();
+    countChecks();
+  }
+
+  async function loadAllData() {
+    const uid = currentUser.id;
+
+    // --- Festivals ---
+    const { data: dbFests, error: fErr } = await sb
+      .from('festivals')
+      .select('*')
+      .order('date', { ascending: true });
+    if (!fErr && dbFests && dbFests.length) {
+      festivals.length = 0;
+      festSeq = 0;
+      dbFests.forEach(f => {
+        festivals.push({ id: f.id, name: f.name, date: f.date, location: f.location || '' });
+      });
+    }
+
+    // --- Ravers ---
+    const { data: dbRavers, error: rErr } = await sb
+      .from('ravers')
+      .select('*, raver_festivals(festival_id)')
+      .eq('created_by', uid);
+    if (!rErr && dbRavers && dbRavers.length) {
+      squad.length = 0;
+      squadSeq = 0;
+      dbRavers.forEach(r => {
+        squad.push({
+          id: r.id,
+          name: r.name,
+          handle: r.handle || '',
+          isYou: r.is_you || false,
+          base: r.base || '',
+          gradient: r.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)',
+          genres: r.genres || [],
+          favArtists: r.fav_artists || [],
+          festIds: (r.raver_festivals || []).map(rf => rf.festival_id),
+          crew: r.crew_name || '',
+          instagram: r.instagram || '',
+          phone: r.phone || '',
+          metStory: r.met_story || '',
+          notes: r.notes || ''
+        });
+      });
+    }
+
+    // --- Crews ---
+    const { data: dbCrews, error: cErr } = await sb
+      .from('crews')
+      .select('*, crew_members(raver_id)')
+      .or(`leader_id.eq.${uid},crew_members.added_by.eq.${uid}`);
+    if (!cErr && dbCrews && dbCrews.length) {
+      crews.length = 0;
+      crewSeq = 0;
+      dbCrews.forEach(c => {
+        const squadIds = (c.crew_members || []).map(cm => cm.raver_id);
+        const members = squadIds
+          .map(sid => squad.find(r => r.id === sid))
+          .filter(Boolean)
+          .map(r => ({ i: initials(r.name), c: c.color || '#FF2D78', t: '#fff' }));
+        crews.push({
+          id: c.id,
+          name: c.name,
+          color: c.color || '#FF2D78',
+          gradient: c.gradient || `linear-gradient(90deg,${c.color},${c.color})`,
+          status: c.status || 'recruiting',
+          isLead: c.leader_id === uid,
+          squadIds,
+          members: members.length ? members : []
+        });
+      });
+    }
+  }
+
+  // ===== SUPABASE WRITE HELPERS =====
+
+  async function dbSaveRaver(data, id) {
+    const uid = currentUser?.id;
+    if (!uid) return null;
+    const row = {
+      name: data.name,
+      handle: data.handle,
+      base: data.base,
+      gradient: data.gradient,
+      genres: data.genres,
+      fav_artists: data.favArtists,
+      crew_name: data.crew,
+      instagram: data.instagram,
+      phone: data.phone,
+      met_story: data.metStory,
+      notes: data.notes,
+      is_you: data.isYou || false,
+      updated_at: new Date().toISOString()
+    };
+    if (id) {
+      const { error } = await sb.from('ravers').update(row).eq('id', id);
+      if (error) console.error('raver update error', error);
+      return id;
+    } else {
+      row.created_by = uid;
+      const { data: inserted, error } = await sb.from('ravers').insert(row).select().single();
+      if (error) console.error('raver insert error', error);
+      return inserted?.id;
+    }
+  }
+
+  async function dbSaveRaverFestivals(raverId, festIds) {
+    // Delete existing links then re-insert
+    await sb.from('raver_festivals').delete().eq('raver_id', raverId);
+    if (festIds.length) {
+      const rows = festIds.map(fid => ({ raver_id: raverId, festival_id: fid }));
+      const { error } = await sb.from('raver_festivals').insert(rows);
+      if (error) console.error('raver_festivals insert error', error);
+    }
+  }
+
+  async function dbSaveFestival(data, id) {
+    const uid = currentUser?.id;
+    if (!uid) return null;
+    const row = { name: data.name, date: data.date, location: data.location };
+    if (id) {
+      const { error } = await sb.from('festivals').update(row).eq('id', id);
+      if (error) console.error('festival update error', error);
+      return id;
+    } else {
+      row.created_by = uid;
+      const { data: inserted, error } = await sb.from('festivals').insert(row).select().single();
+      if (error) console.error('festival insert error', error);
+      return inserted?.id;
+    }
+  }
+
+  async function dbDeleteFestival(id) {
+    await sb.from('raver_festivals').delete().eq('festival_id', id);
+    await sb.from('festivals').delete().eq('id', id);
+  }
+
+  async function dbSaveCrew(data, id) {
+    const uid = currentUser?.id;
+    if (!uid) return null;
+    const row = { name: data.name, color: data.color, gradient: data.gradient, status: data.status };
+    if (id) {
+      const { error } = await sb.from('crews').update(row).eq('id', id);
+      if (error) console.error('crew update error', error);
+      return id;
+    } else {
+      row.leader_id = uid;
+      const { data: inserted, error } = await sb.from('crews').insert(row).select().single();
+      if (error) console.error('crew insert error', error);
+      return inserted?.id;
+    }
+  }
+
+  async function dbSaveCrewMembers(crewId, raverIds) {
+    await sb.from('crew_members').delete().eq('crew_id', crewId);
+    if (raverIds.length) {
+      const uid = currentUser?.id;
+      const rows = raverIds.map(rid => ({ crew_id: crewId, raver_id: rid, added_by: uid }));
+      await sb.from('crew_members').insert(rows);
+    }
+  }
+
+
+  function switchTab(page, el) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('page-' + page).classList.add('active');
+    el.classList.add('active');
+  }
+
+  // Modal
+  function openModal() {
+    document.getElementById('modal-overlay').classList.add('open');
+  }
+  function closeModal() {
+    document.getElementById('modal-overlay').classList.remove('open');
+  }
+  function closeModalOutside(e) {
+    if (e.target === document.getElementById('modal-overlay')) closeModal();
+  }
+
+  function selectSwatch(el) {
+    document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+    el.classList.add('selected');
+  }
+
+  // ===== Crew data model =====
+  // Each crew has: id, name, event, color, gradient, status, members[], isLead
+  // isLead = true means the current user (you) created/leads this crew.
+  // Statuses: 'recruiting' (anyone can self-join) and 'locked-in' (Lead adds members only)
+  const STATUS = {
+    'recruiting': { cls: 'status-recruiting', label: '🟢 Recruiting' },
+    'locked-in':  { cls: 'status-locked-in',  label: '🔒 Locked In' }
+  };
+
+  let crewSeq = 0;
+  const crews = [
+    {
+      id: ++crewSeq, name: 'Bass Syndicate',
+      color: '#FF2D78', gradient: 'linear-gradient(90deg,#FF2D78,#BF00FF)',
+      status: 'locked-in', isLead: true,
+      squadIds: [1, 2, 3, 4, 5],
+      members: [
+        {i:'JD',c:'#FF2D78',t:'#fff'},{i:'MK',c:'#BF00FF',t:'#fff'},
+        {i:'AL',c:'#FF6B35',t:'#fff'},{i:'RS',c:'#00B4D8',t:'#fff'},
+        {i:'TK',c:'#39FF14',t:'#000'}
+      ]
+    },
+    {
+      id: ++crewSeq, name: 'Deep Waters',
+      color: '#00F5FF', gradient: 'linear-gradient(90deg,#00F5FF,#39FF14)',
+      status: 'recruiting', isLead: false,
+      squadIds: [5],
+      members: [{i:'TK',c:'#00F5FF',t:'#000'}]
+    },
+    {
+      id: ++crewSeq, name: 'Voltage',
+      color: '#FFE600', gradient: 'linear-gradient(90deg,#FFE600,#FF6B35)',
+      status: 'recruiting', isLead: true,
+      squadIds: [1],
+      members: [{i:'JD',c:'#FFE600',t:'#000'}]
+    }
+  ];
+
+  function getCrew(id) { return crews.find(c => c.id === id); }
+
+  // ===== Festival date parsing & "next up" computation =====
+  // App's current date — live, not pinned
+  const TODAY = new Date(); TODAY.setHours(0,0,0,0);
+  const MONTHS = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+
+  // Resolve a festival object to a Date. Prefers ISO `date` (YYYY-MM-DD);
+  // falls back to parsing a loose `when` string for any legacy entries.
+  function festDate(f) {
+    if (f && f.date) {
+      const [y,m,d] = f.date.split('-').map(Number);
+      return new Date(y, (m||1)-1, d||1);
+    }
+    return parseFestDate(f && f.when);
+  }
+
+  function parseFestDate(when) {
+    if (!when) return null;
+    const s = when.toLowerCase().trim();
+    const monMatch = s.match(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/);
+    const dayMatch = s.match(/\b(\d{1,2})\b/);
+    const yearMatch = s.match(/\b(20\d{2})\b/);
+    if (monMatch) {
+      const month = MONTHS[monMatch[1]];
+      const day = dayMatch ? parseInt(dayMatch[1]) : 1;
+      let year = yearMatch ? parseInt(yearMatch[1]) : TODAY.getFullYear();
+      let d = new Date(year, month, day);
+      if (!yearMatch && d < TODAY) d = new Date(year + 1, month, day);
+      return d;
+    }
+    if (yearMatch) return new Date(parseInt(yearMatch[1]), 11, 31);
+    return null;
+  }
+
+  // Pretty display for a festival date, e.g. "21 Jun 2026".
+  const MON_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function festWhenLabel(f) {
+    const d = festDate(f);
+    if (!d) return f.when || '';
+    return `${d.getDate()} ${MON_SHORT[d.getMonth()]} ${d.getFullYear()}`;
+  }
+
+  // Days from TODAY to a date (whole days, rounded).
+  function daysUntil(d) {
+    if (!d) return null;
+    const ms = new Date(d.getFullYear(),d.getMonth(),d.getDate()) - TODAY;
+    return Math.round(ms / 86400000);
+  }
+
+  // Countdown phrase for an upcoming festival.
+  function countdownLabel(d) {
+    const n = daysUntil(d);
+    if (n === null) return '';
+    if (n < 0) return 'past';
+    if (n === 0) return 'TODAY 🔥';
+    if (n === 1) return 'tomorrow';
+    if (n < 7) return `${n} days`;
+    if (n < 14) return '1 week';
+    if (n < 60) return `${Math.round(n/7)} weeks`;
+    return `${Math.round(n/30)} months`;
+  }
+
+  // Members of a crew that exist as real squad profiles.
+  function crewSquad(crew) {
+    return (crew.squadIds || []).map(id => getRaver(id)).filter(Boolean);
+  }
+
+  // Compute the crew's headline festival line from its members' profiles.
+  function crewNextUp(crew) {
+    const people = crewSquad(crew);
+    const upcoming = {}; // festName -> { date, name, who: [] }
+    const past = [];     // { date, name, who }
+
+    people.forEach(p => {
+      raverUpcoming(p).forEach(f => {
+        const key = f.name.toLowerCase();
+        if (!upcoming[key]) upcoming[key] = { date: f._d, name: f.name, who: [] };
+        if (f._d < upcoming[key].date) upcoming[key].date = f._d;
+        upcoming[key].who.push(p.name.split(' ')[0]);
+      });
+      raverPast(p).forEach(f => {
+        past.push({ date: f._d, name: f.name, who: p.name.split(' ')[0] });
+      });
+    });
+
+    const upList = Object.values(upcoming).sort((a,b) => a.date - b.date);
+    if (upList.length) {
+      const next = upList[0];
+      return { kind: 'upcoming', name: next.name, date: next.date, who: next.who };
+    }
+    if (past.length) {
+      past.sort((a,b) => b.date - a.date);
+      const last = past[0];
+      return { kind: 'past', name: last.name, date: last.date, who: [last.who] };
+    }
+    return { kind: 'none' };
+  }
+
+  // Build the display string for a crew's festival line.
+  function crewEventLine(crew) {
+    const n = crewNextUp(crew);
+    if (n.kind === 'upcoming') {
+      const who = n.who.length ? ` · ${n.who.length} going: ${n.who.join(', ')}` : '';
+      const cd = countdownLabel(n.date);
+      const when = `${n.date.getDate()} ${MON_SHORT[n.date.getMonth()]}`;
+      return `🎵 ${n.name} · ${when} · ⏳ ${cd}${who}`;
+    }
+    if (n.kind === 'past') {
+      return `📍 Last seen at ${n.name} · ${n.date.getFullYear()}`;
+    }
+    return `🎵 No upcoming fests planned`;
+  }
+
+  function avatarsHTML(members) {
+    const shown = members.slice(0, 4);
+    let html = shown.map(m =>
+      `<div class="avatar" style="background:${m.c};color:${m.t}">${m.i.slice(0,2).toUpperCase()}</div>`
+    ).join('');
+    if (members.length > 4) html += `<div class="avatar avatar-count">+${members.length - 4}</div>`;
+    return html;
+  }
+
+  function renderCrews() {
+    const grid = document.getElementById('crew-grid');
+    const addCard = grid.querySelector('.crew-add-card');
+    grid.querySelectorAll('.crew-card').forEach(c => c.remove());
+
+    crews.forEach(crew => {
+      const s = STATUS[crew.status];
+      const card = document.createElement('div');
+      card.className = 'crew-card';
+      card.style.setProperty('--accent-a', crew.color);
+      card.onclick = () => openDetail(crew.id);
+      const leadBadge = crew.isLead ? '👑 You lead' : '';
+      const n = crewNextUp(crew);
+
+      // Build the "next fest" block
+      let festBlock;
+      if (n.kind === 'upcoming') {
+        const when = `${n.date.getDate()} ${MON_SHORT[n.date.getMonth()]}`;
+        const goingNames = n.who.length ? n.who.join(', ') : 'Nobody yet';
+        festBlock = `
+          <div class="crew-fest">
+            <div class="crew-fest-label">⏳ Next up · ${countdownLabel(n.date)}</div>
+            <div class="crew-fest-name">${n.name}</div>
+            <div class="crew-fest-date">${when}</div>
+            <div class="crew-fest-going">🎟️ ${n.who.length} going: ${goingNames}</div>
+          </div>`;
+      } else if (n.kind === 'past') {
+        festBlock = `
+          <div class="crew-fest crew-fest-past">
+            <div class="crew-fest-label">📍 Last seen at</div>
+            <div class="crew-fest-name">${n.name}</div>
+            <div class="crew-fest-date">${n.date.getFullYear()}</div>
+          </div>`;
+      } else {
+        festBlock = `
+          <div class="crew-fest crew-fest-empty">
+            <div class="crew-fest-label">🎵 No upcoming fests planned</div>
+          </div>`;
+      }
+
+      card.innerHTML = `
+        <div class="crew-color-bar" style="background:${crew.gradient}"></div>
+        <div class="crew-card-head">
+          <div class="crew-name">${crew.name}</div>
+          <span class="crew-status ${s.cls}${crew.isLead ? ' tappable' : ''}"
+                onclick="event.stopPropagation(); toggleStatus(${crew.id})"
+                title="${crew.isLead ? 'Tap to change status' : 'Only the Crew Lead can change status'}">${s.label}</span>
+        </div>
+        ${festBlock}
+        <div class="crew-tribe">
+          <div class="crew-tribe-label">👥 The Tribe · ${crew.members.length} ${crew.members.length!==1?'members':'member'}${leadBadge ? ` · ${leadBadge}` : ''}</div>
+          <div class="crew-members">${avatarsHTML(crew.members)}</div>
+        </div>
+      `;
+      grid.insertBefore(card, addCard);
+    });
+  }
+
+  // Quick tap: flip status (Lead only)
+  function toggleStatus(id) {
+    const crew = getCrew(id);
+    if (!crew) return;
+    if (!crew.isLead) {
+      showToast('🔒 Only the Crew Lead can change the status');
+      return;
+    }
+    crew.status = crew.status === 'recruiting' ? 'locked-in' : 'recruiting';
+    renderCrews();
+    if (document.getElementById('detail-overlay').classList.contains('open')) renderDetail(id);
+    showToast(crew.status === 'recruiting'
+      ? `🟢 ${crew.name} is now Recruiting — anyone can join`
+      : `🔒 ${crew.name} is Locked In — invite only`);
+  }
+
+  // ===== Crew detail view =====
+  let activeDetailId = null;
+
+  function openDetail(id) {
+    activeDetailId = id;
+    renderDetail(id);
+    document.getElementById('detail-overlay').classList.add('open');
+  }
+  function closeDetail() {
+    document.getElementById('detail-overlay').classList.remove('open');
+    activeDetailId = null;
+  }
+  function closeDetailOutside(e) {
+    if (e.target === document.getElementById('detail-overlay')) closeDetail();
+  }
+
+  // Jump from a crew's member list straight to that raver's profile page
+  function goToProfileFromDetail(raverId) {
+    closeDetail();
+    openProfile(raverId);
+  }
+
+  function renderDetail(id) {
+    const crew = getCrew(id);
+    if (!crew) return;
+    const s = STATUS[crew.status];
+    const meaning = crew.status === 'recruiting'
+      ? 'New members can find this crew and join freely.'
+      : 'Roster is locked — only you (the Crew Lead) can add members.';
+
+    // Build member list from linked squad profiles → first names, clickable
+    const people = crewSquad(crew);
+    const memberList = people.length
+      ? people.map(p => `
+          <div class="detail-member detail-member-link" onclick="goToProfileFromDetail(${p.id})" title="View ${p.name}'s profile">
+            <div class="avatar" style="background:${p.gradient};margin:0">${initials(p.name).toUpperCase()}</div>
+            <span>${p.name.split(' ')[0]}${p.isYou ? ' (You)' : ''}</span>
+            <span class="detail-member-arrow">›</span>
+          </div>
+        `).join('')
+      : '<div class="fest-empty">No linked tribe members yet</div>';
+
+    // Lead controls vs read-only
+    let controls;
+    if (crew.isLead) {
+      const otherStatus = crew.status === 'recruiting' ? 'locked-in' : 'recruiting';
+      controls = `
+        <div class="form-group">
+          <label class="form-label">Status (you're the Crew Lead 👑)</label>
+          <div class="status-toggle">
+            <button class="status-opt ${crew.status==='recruiting'?'active':''}" onclick="setStatus(${crew.id},'recruiting')">🟢 Recruiting</button>
+            <button class="status-opt ${crew.status==='locked-in'?'active':''}" onclick="setStatus(${crew.id},'locked-in')">🔒 Locked In</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Add Member</label>
+          <div style="display:flex;gap:8px;">
+            <input class="form-input" id="add-member-input" placeholder="Name or @handle" style="flex:1">
+            <button class="btn btn-primary" onclick="addMember(${crew.id})" style="padding:11px 16px;">Add</button>
+          </div>
+        </div>`;
+    } else {
+      const canJoin = crew.status === 'recruiting';
+      controls = `
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <div style="font-size:0.85rem;color:var(--muted);">Set by the Crew Lead — you can't change this.</div>
+        </div>
+        <button class="btn ${canJoin?'btn-primary':'btn-ghost'}" style="width:100%;padding:12px;"
+          onclick="${canJoin ? `joinCrew(${crew.id})` : `showToast('🔒 This crew is Locked In — ask the Lead for an invite')`}">
+          ${canJoin ? '➕ Join this crew' : '🔒 Locked — invite only'}
+        </button>`;
+    }
+
+    document.getElementById('detail-modal').innerHTML = `
+      <div class="detail-bar" style="background:${crew.gradient}"></div>
+      <div class="modal-title" style="margin-bottom:6px;">${crew.name}</div>
+      <div style="color:var(--muted);font-size:0.85rem;margin-bottom:18px;">${crewEventLine(crew)}</div>
+      <div class="detail-status-line">
+        <span class="crew-status ${s.cls}">${s.label}</span>
+        <span style="font-size:0.8rem;color:var(--muted);">${crew.members.length} member${crew.members.length!==1?'s':''}</span>
+      </div>
+      <div class="status-meaning">${meaning}</div>
+      ${controls}
+      <div class="form-group">
+        <label class="form-label">Crew Members</label>
+        <div class="detail-members">${memberList}</div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeDetail()" style="flex:1;padding:12px;">Close</button>
+      </div>
+    `;
+  }
+
+  // Full-view status set (Lead only)
+  function setStatus(id, status) {
+    const crew = getCrew(id);
+    if (!crew || !crew.isLead) { showToast('🔒 Only the Crew Lead can change the status'); return; }
+    if (crew.status === status) return;
+    crew.status = status;
+    renderCrews();
+    renderDetail(id);
+    showToast(status === 'recruiting'
+      ? `🟢 ${crew.name} is now Recruiting`
+      : `🔒 ${crew.name} is Locked In`);
+  }
+
+  function addMember(id) {
+    const crew = getCrew(id);
+    if (!crew || !crew.isLead) return;
+    const input = document.getElementById('add-member-input');
+    const name = input.value.trim();
+    if (!name) { showToast('Enter a name first ✍️'); return; }
+    crew.members.push({ i: name.replace('@',''), c: crew.color, t: '#000' });
+    renderCrews();
+    renderDetail(id);
+    showToast(`✅ Added ${name} to ${crew.name}`);
+  }
+
+  function joinCrew(id) {
+    const crew = getCrew(id);
+    if (!crew || crew.status !== 'recruiting') return;
+    crew.members.push({ i: 'ME', c: crew.color, t: '#000' });
+    renderCrews();
+    renderDetail(id);
+    showToast(`🎉 You joined ${crew.name}!`);
+  }
+
+  function createCrew() {
+    const name = document.getElementById('crew-name-input').value.trim() || 'New Crew';
+    const selected = document.querySelector('.color-swatch.selected');
+    const color = selected ? rgbToHex(selected.style.background) : '#FF2D78';
+    const you = squad.find(r => r.isYou);
+
+    const newCrew = {
+      id: 'temp_' + Date.now(), name, color,
+      gradient: `linear-gradient(90deg,${color},${color})`,
+      status: 'recruiting', isLead: true,
+      squadIds: you ? [you.id] : [],
+      members: [{ i: you ? initials(you.name) : 'ME', c: color, t: '#000' }]
+    };
+    crews.push(newCrew);
+    renderCrews();
+    closeModal();
+    document.getElementById('crew-name-input').value = '';
+    showToast(`🔥 ${name} created — you're the Crew Lead 👑`);
+
+    // Persist async
+    if (currentUser) {
+      dbSaveCrew({ name, color, gradient: newCrew.gradient, status: 'recruiting' }, null).then(dbId => {
+        if (dbId) {
+          newCrew.id = dbId;
+          if (you) dbSaveCrewMembers(dbId, [you.id]);
+        }
+      });
+    }
+  }
+
+  // Convert "rgb(...)" from style.background to hex; pass through if already hex
+  function rgbToHex(c) {
+    if (!c) return '#FF2D78';
+    if (c.startsWith('#')) return c;
+    const m = c.match(/\d+/g);
+    if (!m) return '#FF2D78';
+    return '#' + m.slice(0,3).map(n => parseInt(n).toString(16).padStart(2,'0')).join('');
+  }
+
+  // ===== Squad / Raver profiles =====
+  // ===== Festivals catalog — single source of truth =====
+  // Each festival is one record; profiles reference these by id.
+  let festSeq = 0;
+  const festivals = [
+    { id: ++festSeq, name: 'Awakenings Festival', date: '2026-06-21', location: 'Amsterdam, NL' },
+    { id: ++festSeq, name: 'Berghain Sunday',     date: '2026-07-12', location: 'Berlin, DE' },
+    { id: ++festSeq, name: 'Sónar Barcelona',     date: '2026-08-18', location: 'Barcelona, ES' },
+    { id: ++festSeq, name: 'Time Warp',           date: '2024-04-06', location: 'Mannheim, DE' },
+    { id: ++festSeq, name: 'Dekmantel',           date: '2023-08-02', location: 'Amsterdam, NL' },
+    { id: ++festSeq, name: 'Glastonbury',         date: '2024-06-26', location: 'Somerset, UK' },
+    { id: ++festSeq, name: 'Lost Village',        date: '2023-08-24', location: 'Lincolnshire, UK' },
+    { id: ++festSeq, name: 'Boomtown',            date: '2024-08-07', location: 'Hampshire, UK' },
+    { id: ++festSeq, name: 'CTM Festival',        date: '2024-01-26', location: 'Berlin, DE' },
+    { id: ++festSeq, name: 'Atonal',              date: '2024-08-21', location: 'Berlin, DE' }
+  ];
+
+  function getFestival(id) { return festivals.find(f => f.id === id); }
+  // Find an existing festival by name (case-insensitive), for de-duping
+  function findFestivalByName(name) {
+    const n = (name||'').trim().toLowerCase();
+    return festivals.find(f => f.name.toLowerCase() === n);
+  }
+
+  let squadSeq = 0;
+  const squad = [
+    {
+      id: ++squadSeq, name: 'Jamie D.', handle: '@jamied', isYou: true,
+      base: 'Manchester, UK', gradient: 'linear-gradient(135deg,#FF2D78,#BF00FF)',
+      genres: ['Techno','Industrial'],
+      favArtists: ['Amelie Lens','I Hate Models','Charlotte de Witte'],
+      festIds: [1, 3, 4, 5],
+      crew: 'Bass Syndicate',
+      instagram: '@jamied', phone: '+44 7700 900111',
+      metStory: "This is you — the one keeping the tribe together.",
+      notes: 'Always first on the dancefloor, last to leave.'
+    },
+    {
+      id: ++squadSeq, name: 'Maya K.', handle: '@mayabeats', isYou: false,
+      base: 'London, UK', gradient: 'linear-gradient(135deg,#BF00FF,#00F5FF)',
+      genres: ['House','Disco'],
+      favArtists: ['Peggy Gou','HAAi'],
+      festIds: [1, 6, 7],
+      crew: 'Bass Syndicate',
+      instagram: '@mayabeats', phone: '+44 7700 900222',
+      metStory: "Met in the queue at Fabric in 2022 — bonded over a shared poncho in the rain.",
+      notes: 'The designated driver and group mum. Keeps everyone hydrated.'
+    },
+    {
+      id: ++squadSeq, name: 'Alex L.', handle: '@alex_raves', isYou: false,
+      base: 'Bristol, UK', gradient: 'linear-gradient(135deg,#FF6B35,#FFE600)',
+      genres: ['Drum & Bass'],
+      favArtists: ['Sub Focus','Chase & Status'],
+      festIds: [1, 8],
+      crew: 'Bass Syndicate',
+      instagram: '@alex_raves', phone: '+44 7700 900333',
+      metStory: "Alex's brother knows Jamie from uni. Joined the tribe in 2023.",
+      notes: 'Will find the afterparty no matter what city you are in.'
+    },
+    {
+      id: ++squadSeq, name: 'Rosa S.', handle: '@rosa_bass', isYou: false,
+      base: 'Berlin, DE', gradient: 'linear-gradient(135deg,#00B4D8,#39FF14)',
+      genres: ['Minimal','Techno'],
+      favArtists: ['Ricardo Villalobos','Zip'],
+      festIds: [1, 2, 4, 9],
+      crew: 'Bass Syndicate',
+      instagram: '@rosa_bass', phone: '+49 151 23456789',
+      metStory: "Our Berlin local. Met at Panorama Bar at 6am — became the crew's hotel-booker.",
+      notes: 'Books the best Airbnbs. Knows every doorman in Berlin.'
+    },
+    {
+      id: ++squadSeq, name: 'Tom K.', handle: '@tk_berlin', isYou: false,
+      base: 'Berlin, DE', gradient: 'linear-gradient(135deg,#00F5FF,#39FF14)',
+      genres: ['Industrial','Hard Techno'],
+      favArtists: ['Perc','SPFDJ'],
+      festIds: [1, 10],
+      crew: 'Deep Waters',
+      instagram: '@tk_berlin', phone: '+49 151 98765432',
+      metStory: "Rosa's flatmate. Tagged along to Awakenings 2023 and never left.",
+      notes: 'Encyclopaedic knowledge of the harder end of the spectrum.'
+    }
+  ];
+
+  function getRaver(id) { return squad.find(r => r.id === id); }
+  function initials(name) {
+    const parts = name.trim().split(/\s+/);
+    return ((parts[0]||'')[0] || '' ) + ((parts[1]||'')[0] || '');
+  }
+
+  // Resolve a raver's festIds into festival records, sorted by date.
+  function raverFestivals(r) {
+    return (r.festIds || [])
+      .map(getFestival)
+      .filter(Boolean)
+      .map(f => ({ ...f, _d: festDate(f) }))
+      .filter(f => f._d);
+  }
+  function raverUpcoming(r) {
+    return raverFestivals(r).filter(f => f._d >= TODAY).sort((a,b) => a._d - b._d);
+  }
+  function raverPast(r) {
+    return raverFestivals(r).filter(f => f._d < TODAY).sort((a,b) => b._d - a._d);
+  }
+
+  function renderSquad() {
+    const grid = document.getElementById('members-grid');
+    grid.innerHTML = '';
+    squad.forEach(r => {
+      const card = document.createElement('div');
+      card.className = 'member-card';
+      card.onclick = () => openProfile(r.id);
+      const tags = r.genres.slice(0,2).map(g =>
+        `<span class="tag" style="background:rgba(255,45,120,0.12);color:var(--neon-pink)">${g}</span>`
+      ).join('');
+      card.innerHTML = `
+        <div class="member-avatar" style="background:${r.gradient}">${initials(r.name).toUpperCase()}</div>
+        <div class="member-name">${r.name}</div>
+        <div class="member-handle">${r.handle}${r.isYou ? ' · You' : ''}</div>
+        <div class="member-base">📍 ${r.base}</div>
+        <div class="member-tags">${tags}</div>
+      `;
+      grid.appendChild(card);
+    });
+    // Add-raver card
+    const add = document.createElement('div');
+    add.className = 'member-card';
+    add.style.cssText = 'border:2px dashed rgba(255,255,255,0.1);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--muted);';
+    add.onclick = () => openProfileEditor();
+    add.innerHTML = `<div style="font-size:1.8rem">+</div><div style="font-family:'Outfit',sans-serif;font-weight:700;font-size:0.82rem;">Add Raver</div>`;
+    grid.appendChild(add);
+  }
+
+  // ===== Dedicated profile page =====
+  function openProfile(id) {
+    const r = getRaver(id);
+    if (!r) return;
+
+    // Upcoming: sorted soonest-first, with date + countdown
+    const upcomingFests = raverUpcoming(r);
+    const festListUpcoming = upcomingFests.length
+      ? upcomingFests.map(f => `
+          <div class="fest-row">
+            <span>${f.name}<span class="fest-loc">📍 ${f.location || 'TBD'}</span></span>
+            <span class="fest-when">${festWhenLabel(f)} <span class="fest-cd">⏳ ${countdownLabel(f._d)}</span></span>
+          </div>`).join('')
+      : '<div class="fest-empty">Nothing logged yet</div>';
+
+    // Past: most recent first, year shown
+    const pastFests = raverPast(r);
+    const festListPast = pastFests.length
+      ? pastFests.map(f => `
+          <div class="fest-row">
+            <span>${f.name}<span class="fest-loc">📍 ${f.location || 'TBD'}</span></span>
+            <span class="fest-when">${f._d.getFullYear()}</span>
+          </div>`).join('')
+      : '<div class="fest-empty">Nothing logged yet</div>';
+
+    // Personal next-fest countdown banner
+    let nextBanner = '';
+    if (upcomingFests.length) {
+      const f = upcomingFests[0];
+      const n = daysUntil(f._d);
+      nextBanner = `
+        <div class="countdown-banner" style="background:${r.gradient}">
+          <div class="cd-label">⏳ Next festival</div>
+          <div class="cd-fest">${f.name}</div>
+          <div class="cd-days">${n === 0 ? "It's TODAY! 🔥" : n === 1 ? '1 day to go' : n + ' days to go'}</div>
+          <div class="cd-date">${festWhenLabel(f)} · 📍 ${f.location || 'TBD'}</div>
+        </div>`;
+    }
+
+    const favs = r.favArtists.length
+      ? r.favArtists.map(a => `<span class="fav-chip">${a}</span>`).join('')
+      : '<div class="fest-empty">No favorites logged yet</div>';
+    const genreChips = r.genres.map(g => `<span class="fav-chip">${g}</span>`).join('');
+
+    // Connect buttons — only show what exists
+    const connectBtns = [];
+    if (r.instagram) {
+      const ig = r.instagram.replace('@','');
+      connectBtns.push(`<a class="connect-btn connect-ig" href="https://instagram.com/${ig}" target="_blank" rel="noopener">📷 Instagram</a>`);
+    }
+    if (r.phone) {
+      const tel = r.phone.replace(/[^+\d]/g,'');
+      connectBtns.push(`<a class="connect-btn connect-call" href="tel:${tel}">📞 Call</a>`);
+      connectBtns.push(`<a class="connect-btn connect-text" href="sms:${tel}">💬 Text</a>`);
+    }
+    const connectBlock = connectBtns.length
+      ? `<div class="connect-row">${connectBtns.join('')}</div>`
+      : (r.isYou ? '' : `<div class="connect-empty">No contact info yet — add it in Edit Profile.</div>`);
+
+    document.getElementById('page-profile').innerHTML = `
+      <button class="profile-back" onclick="backToSquad()">← Back to Squad</button>
+      <div class="profile-hero">
+        <div class="profile-hero-bar" style="background:${r.gradient}"></div>
+        <div class="profile-avatar" style="background:${r.gradient}">${initials(r.name).toUpperCase()}</div>
+        <div class="profile-id">
+          <h2>${r.name}${r.isYou ? ' <span style="font-size:0.9rem;color:var(--muted)">(You)</span>' : ''}</h2>
+          <div class="profile-handle">${r.handle}</div>
+          <div class="profile-base-line">📍 Based in ${r.base}</div>
+        </div>
+      </div>
+
+      ${nextBanner}
+
+      <div class="profile-actions">
+        <button class="btn btn-primary" style="flex:1;padding:11px;" onclick="openProfileEditor(${r.id})">✏️ Edit Profile</button>
+      </div>
+
+      ${connectBlock}
+
+      <div class="profile-section">
+        <h3>🎶 Genres & Favorite Artists</h3>
+        <div style="margin-bottom:14px;"><div class="fav-chips">${genreChips}</div></div>
+        <div class="fav-chips">${favs}</div>
+      </div>
+
+      <div class="profile-section">
+        <h3>🎟️ Festivals — Going To</h3>
+        ${festListUpcoming}
+      </div>
+
+      <div class="profile-section">
+        <h3>✅ Festivals — Been To</h3>
+        ${festListPast}
+      </div>
+
+      <div class="profile-section">
+        <h3>👥 Go-To Crew</h3>
+        <div class="profile-note">${r.crew || '<span class="fest-empty">Not set</span>'}</div>
+      </div>
+
+      <div class="profile-section">
+        <h3>🤝 How We Met</h3>
+        <div class="profile-note">${r.metStory || '<span class="fest-empty">No story logged yet</span>'}</div>
+      </div>
+
+      <div class="profile-section">
+        <h3>📝 Notes</h3>
+        <div class="profile-note">${r.notes || '<span class="fest-empty">No notes yet</span>'}</div>
+      </div>
+    `;
+    // Swap to profile page (hide nav active states; this is a sub-page)
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-profile').classList.add('active');
+    window.scrollTo(0,0);
+  }
+
+  function backToSquad() {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-members').classList.add('active');
+    // keep the Squad nav tab highlighted
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.nav-tab').forEach(t => { if (t.textContent.trim()==='Squad') t.classList.add('active'); });
+  }
+
+  // ===== Profile editor (add / edit) =====
+  let editingId = null;
+
+  function fieldRow(label, id, value, placeholder, textarea) {
+    const v = (value || '').replace(/"/g,'&quot;');
+    const input = textarea
+      ? `<textarea class="form-input" id="${id}" placeholder="${placeholder}">${value || ''}</textarea>`
+      : `<input class="form-input" id="${id}" value="${v}" placeholder="${placeholder}">`;
+    return `<div class="form-group"><label class="form-label">${label}</label>${input}</div>`;
+  }
+
+  function openProfileEditor(id) {
+    editingId = id || null;
+    const r = id ? getRaver(id) : null;
+
+    document.getElementById('profile-edit-modal').innerHTML = `
+      <div class="modal-title">${r ? '✏️ Edit ' + r.name : '🎉 Add a Raver'}</div>
+      ${fieldRow('Name','pf-name', r?.name, 'e.g. Sam P.')}
+      ${fieldRow('Handle','pf-handle', r?.handle, 'e.g. @samraves')}
+      ${fieldRow('Home Base','pf-base', r?.base, 'e.g. Berlin, DE')}
+      ${fieldRow('Genres (comma separated)','pf-genres', r?.genres?.join(', '), 'Techno, House')}
+      ${fieldRow('Favorite Artists (comma separated)','pf-favs', r?.favArtists?.join(', '), 'Amelie Lens, Peggy Gou')}
+
+      <div class="form-group">
+        <label class="form-label">🎟️ Festivals</label>
+        <div class="fest-picker-hint">Tick the festivals they're going to or have been to. Going vs. been is set automatically by each festival's date.</div>
+        <div id="fest-picker"></div>
+        <div id="new-fest-form" style="display:none;">
+          <div class="fest-edit-row" style="margin-top:8px;">
+            <input class="form-input" id="nf-name" placeholder="Festival name" style="flex:2;">
+            <input class="form-input" id="nf-date" type="date" style="flex:1.3;color-scheme:dark;">
+          </div>
+          <input class="form-input" id="nf-loc" placeholder="Location (e.g. Berlin, DE)" style="margin-top:8px;">
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <button type="button" class="btn btn-ghost" style="flex:1;padding:9px;font-size:0.8rem;" onclick="hideNewFest()">Cancel</button>
+            <button type="button" class="btn btn-primary" style="flex:1;padding:9px;font-size:0.8rem;" onclick="createFestivalInline()">Add Festival</button>
+          </div>
+        </div>
+        <button type="button" class="add-fest-btn" id="show-new-fest-btn" onclick="showNewFest()">+ Create new festival</button>
+      </div>
+
+      ${fieldRow('Go-To Crew','pf-crew', r?.crew, 'e.g. Bass Syndicate')}
+      ${fieldRow('Instagram','pf-instagram', r?.instagram, 'e.g. @samraves')}
+      ${fieldRow('Phone Number','pf-phone', r?.phone, 'e.g. +44 7700 900000')}
+      ${fieldRow('How We Met','pf-met', r?.metStory, 'Where did your paths cross?', true)}
+      ${fieldRow('Notes','pf-notes', r?.notes, "What's their vibe?", true)}
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeProfileEditor()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveProfile()">${r ? 'Save Changes' : 'Add Raver 🔥'}</button>
+      </div>
+    `;
+
+    // Render the festival checklist, pre-ticking this raver's festivals
+    editingFestIds = new Set(r?.festIds || []);
+    renderFestPicker();
+
+    document.getElementById('profile-edit-overlay').classList.add('open');
+    document.getElementById('profile-edit-modal').scrollTop = 0;
+  }
+
+  // Tracks which festivals are ticked in the open editor
+  let editingFestIds = new Set();
+
+  // Render the festival picker (sorted: upcoming first, then past)
+  function renderFestPicker() {
+    const box = document.getElementById('fest-picker');
+    if (!box) return;
+    const withDates = festivals.map(f => ({ ...f, _d: festDate(f) }));
+    const up = withDates.filter(f => f._d && f._d >= TODAY).sort((a,b) => a._d - b._d);
+    const past = withDates.filter(f => !f._d || f._d < TODAY).sort((a,b) => (b._d||0) - (a._d||0));
+
+    const row = (f) => {
+      const checked = editingFestIds.has(f.id) ? 'checked' : '';
+      const when = f._d ? `${f._d.getDate()} ${MON_SHORT[f._d.getMonth()]} ${f._d.getFullYear()}` : '';
+      return `
+        <label class="fest-check">
+          <input type="checkbox" ${checked} onchange="toggleFestPick(${f.id}, this.checked)">
+          <span class="fest-check-name">${f.name}</span>
+          <span class="fest-check-meta">${when}${f.location ? ' · ' + f.location : ''}</span>
+        </label>`;
+    };
+
+    let html = '';
+    if (up.length) html += `<div class="fest-group-label">Upcoming</div>` + up.map(row).join('');
+    if (past.length) html += `<div class="fest-group-label">Past</div>` + past.map(row).join('');
+    if (!up.length && !past.length) html = '<div class="fest-empty">No festivals yet — create one below.</div>';
+    box.innerHTML = html;
+  }
+
+  function toggleFestPick(id, on) {
+    if (on) editingFestIds.add(id); else editingFestIds.delete(id);
+  }
+
+  function showNewFest() {
+    document.getElementById('new-fest-form').style.display = 'block';
+    document.getElementById('show-new-fest-btn').style.display = 'none';
+  }
+  function hideNewFest() {
+    document.getElementById('new-fest-form').style.display = 'none';
+    document.getElementById('show-new-fest-btn').style.display = 'block';
+    document.getElementById('nf-name').value = '';
+    document.getElementById('nf-date').value = '';
+    document.getElementById('nf-loc').value = '';
+  }
+
+  function createFestivalInline() {
+    const name = val('nf-name');
+    const date = document.getElementById('nf-date').value;
+    const loc = val('nf-loc');
+    if (!name) { showToast('Festival needs a name ✍️'); return; }
+    if (!date) { showToast('Pick a date for the festival 📅'); return; }
+
+    // De-dupe: if a festival with this name exists, reuse it
+    let fest = findFestivalByName(name);
+    if (fest) {
+      showToast(`"${fest.name}" already exists — ticked it for you`);
+    } else {
+      fest = { id: ++festSeq, name, date, location: loc };
+      festivals.push(fest);
+      showToast(`🎉 Created ${name}`);
+    }
+    editingFestIds.add(fest.id);
+    hideNewFest();
+    renderFestPicker();
+  }
+
+  function closeProfileEditor() {
+    document.getElementById('profile-edit-overlay').classList.remove('open');
+    editingId = null;
+  }
+  function closeProfileEditorOutside(e) {
+    if (e.target === document.getElementById('profile-edit-overlay')) closeProfileEditor();
+  }
+
+  function parseList(text) {
+    return (text || '').split(',').map(s => s.trim()).filter(Boolean);
+  }
+  const val = (id) => (document.getElementById(id)?.value || '').trim();
+
+  const gradientPool = [
+    'linear-gradient(135deg,#FF2D78,#BF00FF)','linear-gradient(135deg,#00F5FF,#39FF14)',
+    'linear-gradient(135deg,#FF6B35,#FFE600)','linear-gradient(135deg,#BF00FF,#00F5FF)',
+    'linear-gradient(135deg,#00B4D8,#39FF14)'
+  ];
+
+  function saveProfile() {
+    const name = val('pf-name');
+    if (!name) { showToast('Give them a name first ✍️'); return; }
+    const data = {
+      name,
+      handle: val('pf-handle') || '@newraver',
+      base: val('pf-base') || 'Unknown',
+      genres: parseList(val('pf-genres')),
+      favArtists: parseList(val('pf-favs')),
+      festIds: Array.from(editingFestIds),
+      crew: val('pf-crew'),
+      instagram: val('pf-instagram'),
+      phone: val('pf-phone'),
+      metStory: val('pf-met'),
+      notes: val('pf-notes')
+    };
+
+    if (editingId) {
+      const r = getRaver(editingId);
+      Object.assign(r, data);
+      closeProfileEditor();
+      renderSquad(); renderCrews(); renderEvents();
+      openProfile(r.id);
+      showToast(`✅ Updated ${r.name}`);
+      if (currentUser) {
+        dbSaveRaver(data, r.id).then(() => dbSaveRaverFestivals(r.id, data.festIds));
+      }
+    } else {
+      const newId = 'temp_' + Date.now();
+      const r = { id: newId, isYou: false, gradient: gradientPool[squad.length % gradientPool.length], ...data };
+      squad.push(r);
+      closeProfileEditor();
+      renderSquad(); renderCrews(); renderEvents();
+      openProfile(r.id);
+      showToast(`🎉 Added ${r.name} to the tribe`);
+      if (currentUser) {
+        dbSaveRaver({ ...data, gradient: r.gradient }, null).then(dbId => {
+          if (dbId) {
+            r.id = dbId;
+            dbSaveRaverFestivals(dbId, data.festIds);
+          }
+        });
+      }
+    }
+  }
+
+  // ===== Festivals tab — browse & manage the catalog =====
+  const FALLBACK_COLORS = ['#FF2D78','#00F5FF','#FFE600','#BF00FF','#39FF14','#FF6B35'];
+
+  // Who from the tribe references a given festival id
+  function festivalGoers(festId) {
+    return squad.filter(p => (p.festIds || []).includes(festId));
+  }
+
+  function renderEvents() {
+    const list = document.getElementById('events-list');
+    if (!list) return;
+
+    const withDates = festivals.map((f, idx) => ({ ...f, _d: festDate(f), _idx: idx }));
+    const up = withDates.filter(f => f._d && f._d >= TODAY).sort((a,b) => a._d - b._d);
+    const past = withDates.filter(f => !f._d || f._d < TODAY).sort((a,b) => (b._d||0) - (a._d||0));
+
+    const card = (f) => {
+      const color = FALLBACK_COLORS[(f.id - 1) % FALLBACK_COLORS.length];
+      const day = f._d ? f._d.getDate() : '—';
+      const mon = f._d ? MON_SHORT[f._d.getMonth()].toUpperCase() : '';
+      const goers = festivalGoers(f.id);
+      const isUpcoming = f._d && f._d >= TODAY;
+      const metaLine = `📍 ${f.location || 'Location TBD'}` + (isUpcoming ? ` · ⏳ ${countdownLabel(f._d)}` : (f._d ? ` · ${f._d.getFullYear()}` : ''));
+      const chips = goers.length
+        ? goers.map(w => `<span class="going-chip" onclick="event.stopPropagation(); openProfile(${w.id})" title="View ${w.name}'s profile">${w.name.split(' ')[0]}</span>`).join('')
+        : '<span class="fest-empty" style="font-size:0.74rem;">Nobody from the tribe yet</span>';
+
+      return `
+        <div class="event-item event-item-clickable" onclick="openFestivalEditor(${f.id})" title="Tap to edit ${f.name}">
+          <div class="event-date">
+            <div class="event-day" style="color:${color}">${day}</div>
+            <div class="event-month">${mon}</div>
+          </div>
+          <div class="event-divider" style="background:${color}"></div>
+          <div class="event-info">
+            <div class="event-name">${f.name} <span class="fest-edit-hint">✏️</span></div>
+            <div class="event-meta">${metaLine}</div>
+            <div class="going-chips">${chips}</div>
+          </div>
+          <div class="event-crew-going">
+            <div class="going-count" style="color:${color}">${goers.length}</div>
+            <div class="going-label">going</div>
+          </div>
+        </div>`;
+    };
+
+    let html = '';
+    if (up.length) html += `<div class="fest-group-label" style="margin:4px 0 10px;">🔜 Upcoming</div>` + up.map(card).join('');
+    if (past.length) html += `<div class="fest-group-label" style="margin:22px 0 10px;">📼 Past</div>` + past.map(card).join('');
+    if (!up.length && !past.length) html = '<div class="fest-empty" style="padding:20px;text-align:center;">No festivals yet. Hit "+ Add Festival" to create one.</div>';
+    list.innerHTML = html;
+  }
+
+  // ===== Festival editor (create / edit / delete a catalog item) =====
+  let editingFestivalId = null;
+
+  function openFestivalEditor(id) {
+    editingFestivalId = id || null;
+    const f = id ? getFestival(id) : null;
+    const goers = id ? festivalGoers(id) : [];
+    document.getElementById('festival-edit-modal').innerHTML = `
+      <div class="modal-title">${f ? '✏️ Edit Festival' : '🎉 Add Festival'}</div>
+      ${fieldRow('Festival Name','fe-name', f?.name, 'e.g. Awakenings Festival')}
+      <div class="form-group">
+        <label class="form-label">Date</label>
+        <input class="form-input" id="fe-date" type="date" value="${f?.date || ''}" style="color-scheme:dark;">
+      </div>
+      ${fieldRow('Location','fe-loc', f?.location, 'e.g. Amsterdam, NL')}
+      ${f ? `<div class="fest-goers-note">${goers.length ? goers.length + ' tribe member' + (goers.length!==1?'s':'') + ' linked: ' + goers.map(g=>g.name.split(' ')[0]).join(', ') : 'No tribe members linked yet'}</div>` : ''}
+      <div class="modal-actions">
+        ${f ? `<button class="btn btn-ghost" style="color:var(--neon-pink);" onclick="deleteFestival(${f.id})">Delete</button>` : ''}
+        <button class="btn btn-ghost" onclick="closeFestivalEditor()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveFestival()">${f ? 'Save' : 'Add 🔥'}</button>
+      </div>
+    `;
+    document.getElementById('festival-edit-overlay').classList.add('open');
+  }
+  function closeFestivalEditor() {
+    document.getElementById('festival-edit-overlay').classList.remove('open');
+    editingFestivalId = null;
+  }
+  function closeFestivalEditorOutside(e) {
+    if (e.target === document.getElementById('festival-edit-overlay')) closeFestivalEditor();
+  }
+  function saveFestival() {
+    const name = val('fe-name');
+    const date = document.getElementById('fe-date').value;
+    const location = val('fe-loc');
+    if (!name) { showToast('Festival needs a name ✍️'); return; }
+    if (!date) { showToast('Pick a date 📅'); return; }
+
+    if (editingFestivalId) {
+      const f = getFestival(editingFestivalId);
+      Object.assign(f, { name, date, location });
+      showToast(`✅ Updated ${name}`);
+      if (currentUser) dbSaveFestival({ name, date, location }, editingFestivalId);
+    } else {
+      const dupe = findFestivalByName(name);
+      if (dupe) { showToast(`"${dupe.name}" already exists`); return; }
+      const tempId = 'temp_' + Date.now();
+      const newFest = { id: tempId, name, date, location };
+      festivals.push(newFest);
+      showToast(`🎉 Added ${name}`);
+      if (currentUser) {
+        dbSaveFestival({ name, date, location }, null).then(dbId => {
+          if (dbId) newFest.id = dbId;
+        });
+      }
+    }
+    closeFestivalEditor();
+    renderEvents(); renderCrews();
+  }
+
+  function deleteFestival(id) {
+    const f = getFestival(id);
+    if (!f) return;
+    const goers = festivalGoers(id);
+    if (goers.length && !confirm(`${f.name} is linked to ${goers.length} tribe member(s). Delete it and remove from their profiles?`)) return;
+    const i = festivals.findIndex(x => x.id === id);
+    if (i >= 0) festivals.splice(i, 1);
+    squad.forEach(p => { if (p.festIds) p.festIds = p.festIds.filter(fid => fid !== id); });
+    closeFestivalEditor();
+    renderEvents(); renderCrews(); renderSquad();
+    showToast(`🗑️ Deleted ${f.name}`);
+    if (currentUser) dbDeleteFestival(id);
+  }
+
+  let checked = 0;
+
+  function countChecks() {
+    const all = document.querySelectorAll('.check-item');
+    total = all.length;
+    checked = document.querySelectorAll('.check-item.checked').length;
+    document.getElementById('progress-label').textContent = `${checked} of ${total} complete`;
+    document.getElementById('progress-bar').style.width = `${(checked/total)*100}%`;
+  }
+
+  function toggleCheck(el) {
+    el.classList.toggle('checked');
+    if (el.classList.contains('checked')) {
+      el.querySelector('.check-box').textContent = '✓';
+    } else {
+      el.querySelector('.check-box').textContent = '';
+    }
+    countChecks();
+  }
+
+  countChecks();
+
+  // Toast
+  let toastTimer;
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+  }
+</script>
+</body>
+</html>
