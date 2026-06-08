@@ -864,10 +864,29 @@
   #auth-screen {
     position: fixed; inset: 0; z-index: 1000;
     background: var(--bg);
-    display: flex; align-items: center; justify-content: center;
-    padding: 24px;
+    overflow-y: auto; overflow-x: hidden;
   }
   #auth-screen.hidden { display: none; }
+  .auth-inner {
+    min-height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    flex-wrap: wrap; gap: 32px;
+    padding: 40px 24px;
+  }
+  @media (max-width: 680px) {
+    .auth-inner {
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 28px;
+      padding: 36px 20px 60px;
+    }
+    .landing-hero { max-width: 100%; margin-bottom: 0; }
+    .landing-headline { font-size: 1.5rem !important; }
+    .landing-sub { font-size: 0.85rem !important; }
+    .lf-item { font-size: 0.75rem !important; padding: 5px 12px !important; }
+    .auth-card { max-width: 100%; padding: 28px 20px; }
+  }
 
   .auth-card {
     width: 100%; max-width: 400px;
@@ -1100,6 +1119,7 @@
     <div class="blob blob-2"></div>
     <div class="blob blob-3"></div>
   </div>
+  <div class="auth-inner">
   <div class="landing-hero">
     <div class="auth-logo" style="justify-content:center;margin-bottom:16px;">
       <svg viewBox="0 0 44 44" width="38" height="38">
@@ -1115,13 +1135,13 @@
       </svg>
       <span style="font-family:'Syne',sans-serif;font-weight:800;font-size:2rem;"><span style="color:#fff">Rave</span><span style="color:#39FF14">FAM</span></span>
     </div>
-    <h1 class="landing-headline">Your Festival Season,<br>Organized.</h1>
-    <p class="landing-sub">Bring your crew together — plan lineups, share memories, and never lose your tribe in the crowd.</p>
+    <h1 class="landing-headline">Your crew's home base.</h1>
+    <p class="landing-sub">Build your crew, collect your ravers, and never lose your tribe in the crowd.</p>
     <div class="landing-features">
       <div class="lf-item">🎪 Manage Crews</div>
       <div class="lf-item">🎟️ Track Festivals</div>
       <div class="lf-item">👥 Build Your Squad</div>
-      <div class="lf-item">📸 Share Memories</div>
+      <div class="lf-item">📸 Capture Memories</div>
     </div>
   </div>
 
@@ -1155,10 +1175,16 @@
         <input class="form-input" id="login-email" type="email" placeholder="you@example.com" autocomplete="email">
       </div>
       <div class="form-group">
-        <label class="form-label">Password</label>
+        <label class="form-label" style="display:flex;justify-content:space-between;align-items:center;">
+          Password
+          <a href="mailto:bump@myravefam.com?subject=Password Reset Request" style="font-size:0.75rem;color:var(--neon-pink);text-decoration:none;font-weight:600;">Forgot password?</a>
+        </label>
         <input class="form-input" id="login-password" type="password" placeholder="••••••••" autocomplete="current-password">
       </div>
       <button class="auth-btn" id="login-btn" onclick="doLogin()">Log In 🔥</button>
+      <p style="text-align:center;margin-top:16px;font-size:0.82rem;color:var(--muted);">
+        Don't have an account? <a href="#" onclick="showAuthTab('signup');return false;" style="color:var(--neon-pink);text-decoration:none;font-weight:600;">Sign up free →</a>
+      </p>
     </div>
 
     <div id="auth-signup-form" style="display:none;">
@@ -1167,7 +1193,11 @@
         <input class="form-input" id="signup-name" type="text" placeholder="e.g. Jamie D." autocomplete="name">
       </div>
       <div class="form-group">
-        <label class="form-label">Email</label>
+        <label class="form-label">Phone Number <span style="color:var(--muted);font-weight:400;">— so your crew can reach you</span></label>
+        <input class="form-input" id="signup-phone" type="tel" placeholder="+1 (555) 000-0000" autocomplete="tel">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email <span style="color:var(--muted);font-weight:400;">(backup)</span></label>
         <input class="form-input" id="signup-email" type="email" placeholder="you@example.com" autocomplete="email">
       </div>
       <div class="form-group">
@@ -1175,8 +1205,15 @@
         <input class="form-input" id="signup-password" type="password" placeholder="min 6 characters" autocomplete="new-password">
       </div>
       <button class="auth-btn" id="signup-btn" onclick="doSignup()">Create Account 🎉</button>
+      <p style="text-align:center;margin-top:16px;font-size:0.82rem;color:var(--muted);">
+        Already have an account? <a href="#" onclick="showAuthTab('login');return false;" style="color:var(--neon-pink);text-decoration:none;font-weight:600;">Log in →</a>
+      </p>
+      <p style="text-align:center;margin-top:10px;font-size:0.75rem;color:var(--muted);">
+        By signing up you agree to our <a href="/terms.html" style="color:var(--muted);text-decoration:underline;">Terms</a> and <a href="/privacy.html" style="color:var(--muted);text-decoration:underline;">Privacy Policy</a>
+      </p>
     </div>
   </div>
+  </div><!-- /auth-inner -->
 </div>
 
 <div class="app" id="main-app" style="display:none;">
@@ -1199,16 +1236,15 @@
       <span class="logo-text"><span>Rave</span><span>FAM</span></span>
     </div>
     <div class="header-actions">
-      <button class="btn btn-ghost" onclick="openModal()">+ New Crew</button>
-      <button class="btn btn-ghost" id="logout-btn" onclick="doLogout()" style="font-size:0.75rem;padding:9px 14px;" title="Log out">⏻</button>
+      <button class="btn btn-ghost" id="logout-btn" onclick="doLogout()" style="font-size:0.75rem;padding:9px 14px;">Log out</button>
     </div>
   </header>
 
   <nav>
     <button class="nav-tab active" onclick="switchTab('crews', this)">My Crews</button>
     <button class="nav-tab" onclick="switchTab('events', this)">Festivals</button>
-    <button class="nav-tab" onclick="switchTab('members', this)">Squad</button>
-    <button class="nav-tab" style="display:none;" onclick="switchTab('checklist', this)">Checklist</button>
+    <button class="nav-tab" onclick="switchTab('members', this)">Ravers</button>
+    <button class="nav-tab" onclick="switchTab('checklist', this)">✨ Coming Soon</button>
   </nav>
 
   <main>
@@ -1231,7 +1267,7 @@
     <div class="page" id="page-events">
       <div class="section-header">
         <div class="section-title">Festivals</div>
-        <button class="btn btn-ghost" style="font-size:0.78rem;" onclick="openFestivalEditor()">+ Add Festival</button>
+        <button class="btn btn-ghost" style="font-size:0.78rem;" onclick="openFestivalEditor()">+ Track Festival</button>
       </div>
       <div class="events-list" id="events-list">
         <!-- rendered by JS from the festivals catalog -->
@@ -1241,7 +1277,7 @@
     <!-- MEMBERS PAGE -->
     <div class="page" id="page-members">
       <div class="section-header">
-        <div class="section-title">Your Squad</div>
+        <div class="section-title">Your Ravers</div>
         <button class="btn btn-ghost" style="font-size:0.78rem;" onclick="openProfileEditor()">+ Add Raver</button>
       </div>
       <div class="members-grid" id="members-grid">
@@ -1256,80 +1292,13 @@
 
     <!-- CHECKLIST PAGE -->
     <div class="page" id="page-checklist">
-      <div class="section-header">
-        <div class="section-title">Rave Checklist</div>
-        <span style="font-size:0.8rem;color:var(--muted);font-family:'Outfit',sans-serif;font-weight:600;">Bass Syndicate · Awakenings</span>
-      </div>
-      <div class="progress-label" id="progress-label">4 of 10 complete</div>
-      <div class="progress-bar-wrap">
-        <div class="progress-bar-fill" id="progress-bar" style="width:40%"></div>
-      </div>
-
-      <div class="checklist-section">
-        <div class="checklist-section-title">Logistics</div>
-        <div class="checklist" id="checklist">
-          <div class="check-item checked" onclick="toggleCheck(this)">
-            <div class="check-box">✓</div>
-            <div class="check-text">Buy tickets</div>
-            <div class="check-who">Jamie</div>
-          </div>
-          <div class="check-item checked" onclick="toggleCheck(this)">
-            <div class="check-box">✓</div>
-            <div class="check-text">Book accommodation</div>
-            <div class="check-who">Rosa</div>
-          </div>
-          <div class="check-item" onclick="toggleCheck(this)">
-            <div class="check-box"></div>
-            <div class="check-text">Arrange transport to venue</div>
-            <div class="check-who">Maya</div>
-          </div>
-          <div class="check-item" onclick="toggleCheck(this)">
-            <div class="check-box"></div>
-            <div class="check-text">Sort out airport pickups</div>
-            <div class="check-who">Alex</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="checklist-section">
-        <div class="checklist-section-title">Essentials</div>
-        <div class="checklist">
-          <div class="check-item checked" onclick="toggleCheck(this)">
-            <div class="check-box">✓</div>
-            <div class="check-text">Download offline maps</div>
-            <div class="check-who">All</div>
-          </div>
-          <div class="check-item checked" onclick="toggleCheck(this)">
-            <div class="check-box">✓</div>
-            <div class="check-text">Set up group WhatsApp</div>
-            <div class="check-who">Jamie</div>
-          </div>
-          <div class="check-item" onclick="toggleCheck(this)">
-            <div class="check-box"></div>
-            <div class="check-text">Pack earplugs (quality ones!)</div>
-            <div class="check-who">Each</div>
-          </div>
-          <div class="check-item" onclick="toggleCheck(this)">
-            <div class="check-box"></div>
-            <div class="check-text">Portable chargers charged</div>
-            <div class="check-who">Each</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="checklist-section">
-        <div class="checklist-section-title">Day Of</div>
-        <div class="checklist">
-          <div class="check-item" onclick="toggleCheck(this)">
-            <div class="check-box"></div>
-            <div class="check-text">Set a crew meetup point</div>
-            <div class="check-who">All</div>
-          </div>
-          <div class="check-item" onclick="toggleCheck(this)">
-            <div class="check-box"></div>
-            <div class="check-text">Share event schedule with crew</div>
-            <div class="check-who">Tom</div>
-          </div>
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:60px 24px;gap:20px;">
+        <div style="font-size:3.5rem;">✨</div>
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.6rem;color:#fff;letter-spacing:-0.5px;">Something good<br>is coming</div>
+        <div style="font-size:0.9rem;color:var(--muted);max-width:300px;line-height:1.65;">We're working on crew checklists — assign tasks, track who's sorted what, and make sure nothing gets missed before the gates open.</div>
+        <div style="margin-top:8px;display:inline-flex;align-items:center;gap:8px;background:rgba(255,45,120,0.08);border:1px solid rgba(255,45,120,0.2);border-radius:100px;padding:8px 18px;font-family:'Outfit',sans-serif;font-weight:700;font-size:0.78rem;color:var(--neon-pink);letter-spacing:1px;text-transform:uppercase;">
+          <span style="width:6px;height:6px;border-radius:50%;background:var(--neon-pink);animation:pulse 2s infinite;display:inline-block;"></span>
+          In development
         </div>
       </div>
     </div>
@@ -1403,10 +1372,17 @@
   <!-- Step 1: Complete Profile -->
   <div id="onboard-step1" class="onboard-card">
     <div class="onboard-step-indicator">
-      <div class="onboard-dot active" id="ob-dot1">1</div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+        <div class="onboard-dot active" id="ob-dot1">1</div>
+        <div style="font-size:0.65rem;color:#fff;font-family:'Outfit',sans-serif;font-weight:600;">Profile</div>
+      </div>
       <div class="onboard-line" id="ob-line1"></div>
-      <div class="onboard-dot" id="ob-dot2">2</div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+        <div class="onboard-dot" id="ob-dot2">2</div>
+        <div style="font-size:0.65rem;color:var(--muted);font-family:'Outfit',sans-serif;font-weight:600;">Crew</div>
+      </div>
     </div>
+    <div style="font-family:'Outfit',sans-serif;font-size:0.75rem;font-weight:700;color:var(--neon-pink);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">Step 1 of 2</div>
     <div class="onboard-title">Welcome to RaveFAM! 🎉</div>
     <div class="onboard-sub">Let's set up your raver identity so your crew can find and recognise you.</div>
     <div class="onboard-features">
@@ -1420,15 +1396,22 @@
   <!-- Step 2: Create / Join a Crew -->
   <div id="onboard-step2" class="onboard-card" style="display:none;">
     <div class="onboard-step-indicator">
-      <div class="onboard-dot done" id="ob-dot1b">✓</div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+        <div class="onboard-dot done" id="ob-dot1b">✓</div>
+        <div style="font-size:0.65rem;color:var(--neon-green);font-family:'Outfit',sans-serif;font-weight:600;">Profile</div>
+      </div>
       <div class="onboard-line done" id="ob-line1b"></div>
-      <div class="onboard-dot active" id="ob-dot2b">2</div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+        <div class="onboard-dot active" id="ob-dot2b">2</div>
+        <div style="font-size:0.65rem;color:#fff;font-family:'Outfit',sans-serif;font-weight:600;">Crew</div>
+      </div>
     </div>
+    <div style="font-family:'Outfit',sans-serif;font-size:0.75rem;font-weight:700;color:var(--neon-pink);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">Step 2 of 2</div>
     <div class="onboard-title">Build your crew 🔥</div>
     <div class="onboard-sub">Create your first crew to start organising your festival season together — or skip and do it later.</div>
     <div class="onboard-features">
       <div class="onboard-feat"><span class="onboard-feat-icon">👑</span><span>You'll be the Crew Lead — invite your tribe</span></div>
-      <div class="onboard-feat"><span class="onboard-feat-icon">🔗</span><span>Share a QR code for members to self-join</span></div>
+      <div class="onboard-feat"><span class="onboard-feat-icon">🔗</span><span>Share your QR code — ravers scan to join the crew and create their account in one step</span></div>
       <div class="onboard-feat"><span class="onboard-feat-icon">🗓️</span><span>Plan lineups and track who's going to what</span></div>
     </div>
     <button class="auth-btn" onclick="createCrewOnboarding()">Create My First Crew →</button>
@@ -1445,6 +1428,7 @@
     const tab = new URLSearchParams(window.location.search).get('tab');
     if (tab === 'signup' || tab === 'login') {
       window._pendingAuthTab = tab;
+      document.title = tab === 'signup' ? 'Sign Up · RaveFAM 🎉' : 'Log In · RaveFAM 🔥';
     }
   })();
 
@@ -1539,10 +1523,9 @@
     document.getElementById('app-loading').classList.add('hidden');
     document.getElementById('auth-screen').classList.remove('hidden');
     document.getElementById('main-app').style.display = 'none';
-    if (window._pendingAuthTab) {
-      showAuthTab(window._pendingAuthTab);
-      window._pendingAuthTab = null;
-    }
+    const tab = window._pendingAuthTab || 'login';
+    window._pendingAuthTab = null;
+    showAuthTab(tab);
   }
 
   // ===== AUTH STATE LISTENER =====
@@ -1934,6 +1917,24 @@
     const grid = document.getElementById('crew-grid');
     const addCard = grid.querySelector('.crew-add-card');
     grid.querySelectorAll('.crew-card').forEach(c => c.remove());
+
+    // Empty state
+    let emptyMsg = document.getElementById('crews-empty-state');
+    if (crews.length === 0) {
+      if (!emptyMsg) {
+        emptyMsg = document.createElement('div');
+        emptyMsg.id = 'crews-empty-state';
+        emptyMsg.style.cssText = 'grid-column:1/-1;text-align:center;padding:40px 24px 20px;';
+        emptyMsg.innerHTML = `
+          <div style="font-size:2.5rem;margin-bottom:12px;">👑</div>
+          <div style="font-family:'Outfit',sans-serif;font-weight:800;font-size:1.1rem;color:#fff;margin-bottom:8px;">You haven't built your first crew yet</div>
+          <div style="font-size:0.85rem;color:var(--muted);line-height:1.6;max-width:260px;margin:0 auto;">Let's change that — tap below to create your crew and start collecting your ravers.</div>
+        `;
+        grid.insertBefore(emptyMsg, addCard);
+      }
+    } else {
+      if (emptyMsg) emptyMsg.remove();
+    }
 
     crews.forEach(crew => {
       const s = STATUS[crew.status];
@@ -2758,11 +2759,14 @@
   let checked = 0;
 
   function countChecks() {
+    const progressLabel = document.getElementById('progress-label');
+    const progressBar = document.getElementById('progress-bar');
+    if (!progressLabel || !progressBar) return;
     const all = document.querySelectorAll('.check-item');
     total = all.length;
     checked = document.querySelectorAll('.check-item.checked').length;
-    document.getElementById('progress-label').textContent = `${checked} of ${total} complete`;
-    document.getElementById('progress-bar').style.width = `${(checked/total)*100}%`;
+    progressLabel.textContent = `${checked} of ${total} complete`;
+    progressBar.style.width = `${(checked/total)*100}%`;
   }
 
   function toggleCheck(el) {
