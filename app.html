@@ -6,6 +6,7 @@
 <title>RaveFAM 🎉</title>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <style>
   :root {
     --neon-pink: #FF2D78;
@@ -737,6 +738,21 @@
   }
   .modal-overlay.open { opacity: 1; pointer-events: all; }
 
+  /* QR modal */
+  .qr-color-bar { height: 6px; border-radius: 6px 6px 0 0; margin: -24px -24px 20px; }
+  .qr-canvas-wrap { display: inline-block; padding: 12px; background: #fff; border-radius: 12px; margin: 4px 0 16px; }
+  .qr-canvas-wrap canvas { display: block; border-radius: 4px; }
+  .qr-raver-name { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.1rem; margin-bottom: 4px; }
+  .qr-hint { font-size: 0.78rem; color: var(--muted); margin-bottom: 18px; line-height: 1.5; }
+  .qr-copy-btn { font-size: 0.8rem; font-family: 'Outfit', sans-serif; font-weight: 700; padding: 8px 18px;
+    border: 1.5px solid var(--border); border-radius: 20px; background: transparent; color: var(--muted); cursor: pointer; }
+  .qr-copy-btn:active { color: #39FF14; border-color: #39FF14; }
+
+  /* Unclaimed badge on crew member rows */
+  .unclaimed-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--muted); margin-left: 5px; vertical-align: middle; flex-shrink: 0; }
+  .claimed-dot { background: #39FF14; }
+
   .modal {
     background: var(--surface2);
     border: 1px solid rgba(255,255,255,0.1);
@@ -1355,7 +1371,7 @@
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:60px 24px;gap:20px;">
         <div style="font-size:3.5rem;">✨</div>
         <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.6rem;color:#fff;letter-spacing:-0.5px;">Something good<br>is coming</div>
-        <div style="font-size:0.9rem;color:var(--muted);max-width:300px;line-height:1.65;">We're working on crew checklists — assign tasks, track who's sorted what, and make sure nothing gets missed before the gates open.</div>
+        <div style="font-size:0.9rem;color:var(--muted);max-width:300px;line-height:1.65;">More features are on the way. We're building things that'll make the whole festival experience smoother — stay tuned.</div>
         <div style="margin-top:8px;display:inline-flex;align-items:center;gap:8px;background:rgba(255,45,120,0.08);border:1px solid rgba(255,45,120,0.2);border-radius:100px;padding:8px 18px;font-family:'Outfit',sans-serif;font-weight:700;font-size:0.78rem;color:var(--neon-pink);letter-spacing:1px;text-transform:uppercase;">
           <span style="width:6px;height:6px;border-radius:50%;background:var(--neon-pink);animation:pulse 2s infinite;display:inline-block;"></span>
           In development
@@ -1408,6 +1424,13 @@
 <!-- Profile Editor Modal -->
 <div class="modal-overlay" id="profile-edit-overlay" onclick="closeProfileEditorOutside(event)">
   <div class="modal" id="profile-edit-modal" style="max-height:88vh;overflow-y:auto;">
+    <!-- filled by JS -->
+  </div>
+</div>
+
+<!-- QR Claim Modal -->
+<div class="modal-overlay" id="qr-overlay" onclick="if(event.target===this)closeQRModal()">
+  <div class="modal" id="qr-modal" style="text-align:center;padding-bottom:24px;">
     <!-- filled by JS -->
   </div>
 </div>
@@ -1627,12 +1650,95 @@
   // Called once the user is authenticated. Loads all data from Supabase,
   // falls back to the hardcoded demo data if the DB is empty (first run).
 
+  // ===== QR Claim flow =====
+
+  // On page load: stash any ?claim= token so it survives the auth redirect
+  (function checkClaimParam() {
+    const token = new URLSearchParams(window.location.search).get('claim');
+    if (token) {
+      sessionStorage.setItem('pendingClaim', token);
+      // Clean the URL so it doesn't re-trigger on refresh
+      const clean = window.location.pathname + window.location.hash;
+      history.replaceState(null, '', clean);
+    }
+  })();
+
+  async function processPendingClaim() {
+    const token = sessionStorage.getItem('pendingClaim');
+    if (!token || !currentUser) return;
+    sessionStorage.removeItem('pendingClaim');
+
+    // If the user already has their own raver profile, pass its ID so crew
+    // memberships migrate to it rather than the stub becoming their profile.
+    const existingRaver = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
+    const params = { p_token: token };
+    if (existingRaver) params.p_existing_raver_id = existingRaver.id;
+
+    const { data: result, error } = await sb.rpc('claim_and_merge_raver', params);
+    if (error) { console.error('claim error', error); showToast('⚠️ Could not claim profile — link may be expired'); return; }
+
+    if (result?.error) {
+      showToast('⚠️ This invite has already been used or is invalid.');
+      return;
+    }
+
+    if (result?.merged_into) {
+      showToast("🎉 You've been added to the crew! Your existing profile was linked.");
+    } else {
+      showToast('🎉 Profile claimed! Welcome to the crew.');
+    }
+    await loadAllData();
+    renderSquad(); renderCrews(); renderEvents();
+  }
+
+  function showQRModal(raverId) {
+    const r = getRaver(raverId);
+    if (!r || !r.qrToken) { showToast('⚠️ No QR token for this raver'); return; }
+    const crew = crews.find(c => (c.squadIds || []).some(id => String(id) === String(raverId)));
+    const color = crew?.color || '#FF2D78';
+    const gradient = crew?.gradient || `linear-gradient(135deg,${color},${color})`;
+    const claimUrl = `${window.location.origin}${window.location.pathname}?claim=${r.qrToken}`;
+
+    document.getElementById('qr-modal').innerHTML = `
+      <div class="qr-color-bar" style="background:${gradient}"></div>
+      <div class="modal-title" style="margin-bottom:4px;">Share with ${r.name.split(' ')[0]}</div>
+      <div class="qr-hint">They scan this, sign up, and get added to the crew.</div>
+      <div class="qr-canvas-wrap"><canvas id="qr-canvas"></canvas></div>
+      <div class="qr-hint" style="margin-bottom:12px;">${r.name} · <span style="color:var(--muted);font-size:0.72rem;word-break:break-all;">${claimUrl}</span></div>
+      <div style="display:flex;gap:10px;justify-content:center;">
+        <button class="qr-copy-btn" onclick="copyClaimLink('${claimUrl}')">📋 Copy link</button>
+        <button class="btn btn-ghost" style="padding:8px 18px;font-size:0.8rem;" onclick="closeQRModal()">Close</button>
+      </div>`;
+    document.getElementById('qr-overlay').classList.add('open');
+
+    // Render QR after DOM update
+    setTimeout(() => {
+      const canvas = document.getElementById('qr-canvas');
+      if (canvas && typeof QRCode !== 'undefined') {
+        QRCode.toCanvas(canvas, claimUrl, {
+          width: 200, margin: 1,
+          color: { dark: '#050509', light: '#ffffff' }
+        });
+      }
+    }, 50);
+  }
+
+  function closeQRModal() {
+    document.getElementById('qr-overlay').classList.remove('open');
+  }
+
+  function copyClaimLink(url) {
+    navigator.clipboard.writeText(url).then(() => showToast('📋 Link copied!')).catch(() => showToast('⚠️ Copy failed'));
+  }
+
   async function bootApp() {
     try {
       await loadAllData();
     } catch(err) {
       console.warn('DB load failed, starting fresh:', err);
     }
+    // Process any pending claim token from a QR scan
+    await processPendingClaim();
     renderSquad();
     renderCrews();
     renderEvents();
@@ -1673,7 +1779,7 @@
           id: r.id,
           name: r.name,
           handle: r.handle || '',
-          isYou: r.is_you || false,
+          isYou: r.is_you || r.claimed_by === uid,
           base: r.base || '',
           gradient: r.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)',
           genres: r.genres || [],
@@ -1683,7 +1789,10 @@
           instagram: r.instagram || '',
           phone: r.phone || '',
           metStory: r.met_story || '',
-          notes: r.notes || ''
+          notes: r.notes || '',
+          qrToken: r.qr_token || '',
+          claimedBy: r.claimed_by || null,
+          status: r.status || 'unclaimed'
         });
       });
     }
@@ -1761,9 +1870,10 @@
       return id;
     } else {
       row.created_by = uid;
+      row.qr_token = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : (Math.random().toString(36).slice(2) + Date.now().toString(36));
       const { data: inserted, error } = await sb.from('ravers').insert(row).select().single();
       if (error) console.error('raver insert error', error);
-      return inserted?.id;
+      return inserted || null;
     }
   }
 
@@ -2139,14 +2249,21 @@
     const isAdmin = isAdminUser();
     const memberList = people.length
       ? people.map(p => {
+          const isClaimed = p.claimedBy || p.isYou || p.status === 'claimed';
+          const statusDot = `<span class="${isClaimed ? 'claimed-dot' : 'unclaimed-dot'}" title="${isClaimed ? 'Claimed' : 'Unclaimed — share QR to invite'}"></span>`;
           const canRemove = (crew.isLead || isAdmin) && !p.isYou;
-          const right = canRemove
-            ? `<button class="remove-member-btn" data-crew="${crew.id}" data-raver="${p.id}" onclick="event.stopPropagation(); removeMemberFromCrew(this.dataset.crew, this.dataset.raver)" title="Remove from crew">×</button>`
-            : `<span class="detail-member-arrow">›</span>`;
+          let right;
+          if (!isClaimed && (crew.isLead || isAdmin) && p.qrToken) {
+            right = `<button class="remove-member-btn" style="background:none;border:1.5px solid rgba(255,255,255,0.15);border-radius:8px;padding:2px 7px;font-size:0.8rem;" data-raver-id="${p.id}" onclick="event.stopPropagation(); showQRModal(this.dataset.raverId)" title="Show QR to invite">📲</button>`;
+          } else if (canRemove) {
+            right = `<button class="remove-member-btn" data-crew="${crew.id}" data-raver="${p.id}" onclick="event.stopPropagation(); removeMemberFromCrew(this.dataset.crew, this.dataset.raver)" title="Remove from crew">×</button>`;
+          } else {
+            right = `<span class="detail-member-arrow">›</span>`;
+          }
           return `
             <div class="detail-member detail-member-link" data-raver-id="${p.id}" onclick="goToProfileFromDetail(this.dataset.raverId)" title="View ${p.name}'s profile">
               <div class="avatar" style="background:${p.gradient};margin:0">${initials(p.name).toUpperCase()}</div>
-              <span>${p.name.split(' ')[0]}${p.isYou ? ' (You)' : ''}</span>
+              <span>${p.name.split(' ')[0]}${p.isYou ? ' (You)' : ''} ${statusDot}</span>
               ${right}
             </div>`;
         }).join('')
@@ -2922,10 +3039,11 @@
       }
 
       if (currentUser) {
-        dbSaveRaver({ ...data, gradient: r.gradient, isYou: r.isYou }, null).then(dbId => {
-          if (dbId) {
-            r.id = dbId;
-            dbSaveRaverFestivals(dbId, data.festIds);
+        dbSaveRaver({ ...data, gradient: r.gradient, isYou: r.isYou }, null).then(inserted => {
+          if (inserted?.id) {
+            r.id = inserted.id;
+            if (inserted.qr_token) r.qrToken = inserted.qr_token;
+            dbSaveRaverFestivals(inserted.id, data.festIds);
           }
         });
       }
