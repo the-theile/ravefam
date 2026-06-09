@@ -128,7 +128,7 @@
   }
   .btn-ghost:hover { background: rgba(255,255,255,0.12); }
 
-  /* Nav tabs */
+  /* Nav tabs — desktop (top) */
   nav {
     display: flex;
     gap: 4px;
@@ -158,9 +158,48 @@
     border-radius: 2px 2px 0 0;
   }
   .nav-tab:hover:not(.active) { color: var(--text); }
+  .nav-tab .tab-icon { display: none; }
 
   /* Main */
   main { flex: 1; padding: 28px; max-width: 900px; width: 100%; margin: 0 auto; }
+
+  /* ===== Mobile bottom nav ===== */
+  @media (max-width: 640px) {
+    nav {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      z-index: 100;
+      padding: 0;
+      gap: 0;
+      border-bottom: none;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      background: rgba(10,10,18,0.92);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+    .nav-tab {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 10px 4px 12px;
+      border-radius: 0;
+      font-size: 0.62rem;
+      letter-spacing: 0.3px;
+    }
+    .nav-tab .tab-icon { display: block; font-size: 1.25rem; line-height: 1; }
+    .nav-tab.active { background: transparent; }
+    .nav-tab.active::after {
+      bottom: auto;
+      top: 0; left: 10%; right: 10%;
+      height: 2px;
+      border-radius: 0 0 2px 2px;
+    }
+    /* Extra bottom padding so content clears the nav bar */
+    main { padding: 20px 16px 90px; }
+  }
 
   /* Pages */
   .page { display: none; animation: fadeIn 0.3s ease; }
@@ -1317,10 +1356,10 @@
   </header>
 
   <nav>
-    <button class="nav-tab active" onclick="switchTab('crews', this)">My Crews</button>
-    <button class="nav-tab" onclick="switchTab('events', this)">Festivals</button>
-    <button class="nav-tab" onclick="switchTab('members', this)">Ravers</button>
-    <button class="nav-tab" onclick="switchTab('checklist', this)">✨ Coming Soon</button>
+    <button class="nav-tab active" onclick="switchTab('crews', this)"><span class="tab-icon">🎪</span>My Crews</button>
+    <button class="nav-tab" onclick="switchTab('events', this)"><span class="tab-icon">🎟️</span>Festivals</button>
+    <button class="nav-tab" onclick="switchTab('members', this)"><span class="tab-icon">👥</span>Ravers</button>
+    <button class="nav-tab" onclick="switchTab('checklist', this)"><span class="tab-icon">✨</span>Coming Soon</button>
   </nav>
 
   <main>
@@ -2473,11 +2512,9 @@
     document.getElementById('crew-name-input').value = '';
     showToast(`🔥 ${name} created — you're the Crew Lead 👑`);
 
-    // After onboarding crew creation, open the detail immediately
-    if (_openDetailAfterCreate) {
-      _openDetailAfterCreate = false;
-      openDetail(newCrew.id);
-    }
+    // Always open the crew detail so the leader can immediately add members
+    _openDetailAfterCreate = false;
+    openDetail(newCrew.id);
 
     // Persist async
     if (currentUser) {
