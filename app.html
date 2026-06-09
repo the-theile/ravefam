@@ -1500,6 +1500,8 @@
   const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
 
   let currentUser = null;  // holds the logged-in Supabase user object
+  const ADMIN_EMAIL = 'theile.secure@proton.me';
+  function isAdminUser() { return currentUser?.email === ADMIN_EMAIL; }
   let _bootedUserId = null; // guard: prevents bootApp() running more than once per session
 
   // ===== AUTH UI helpers =====
@@ -2134,7 +2136,7 @@
 
     // Build member list from linked squad profiles → first names, clickable
     const people = crewSquad(crew);
-    const isAdmin = !!squad.find(r => r.isYou);
+    const isAdmin = isAdminUser();
     const memberList = people.length
       ? people.map(p => {
           const canRemove = (crew.isLead || isAdmin) && !p.isYou;
@@ -2283,7 +2285,7 @@
     // dataset values are strings; use String() coercion for safe comparison
     const crew  = crews.find(c => String(c.id) === String(crewId));
     const raver = squad.find(r => String(r.id) === String(raverId));
-    const isAdmin = !!squad.find(r => r.isYou);
+    const isAdmin = isAdminUser();
     if (!crew || (!crew.isLead && !isAdmin)) return;
     crew.squadIds = crew.squadIds.filter(id => String(id) !== String(raverId));
     // Rebuild members array cleanly from remaining squadIds
@@ -2613,7 +2615,7 @@
 
       <div class="profile-actions" data-raver-id="${r.id}">
         <button class="btn btn-primary" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="openProfileEditor(this.closest('[data-raver-id]').dataset.raverId)">✏️ Edit Profile</button>
-        ${!r.isYou ? `<button class="btn btn-ghost" style="padding:11px;color:var(--neon-pink);border-color:rgba(255,45,120,0.3);" data-raver-id="${r.id}" onclick="showDeleteRaverConfirm(this.dataset.raverId)">🗑️</button>` : ''}
+        ${(!r.isYou && isAdminUser()) ? `<button class="btn btn-ghost" style="padding:11px;color:var(--neon-pink);border-color:rgba(255,45,120,0.3);" data-raver-id="${r.id}" onclick="showDeleteRaverConfirm(this.dataset.raverId)">🗑️</button>` : ''}
       </div>
 
       ${connectBlock}
@@ -2920,7 +2922,7 @@
       }
 
       if (currentUser) {
-        dbSaveRaver({ ...data, gradient: r.gradient }, null).then(dbId => {
+        dbSaveRaver({ ...data, gradient: r.gradient, isYou: r.isYou }, null).then(dbId => {
           if (dbId) {
             r.id = dbId;
             dbSaveRaverFestivals(dbId, data.festIds);
