@@ -1482,6 +1482,13 @@
   </div>
 </div>
 
+<!-- Status Change Warning Modal -->
+<div class="modal-overlay" id="status-warn-overlay" onclick="if(event.target===this)closeStatusWarn()">
+  <div class="modal" id="status-warn-modal" style="text-align:center;">
+    <!-- filled by JS -->
+  </div>
+</div>
+
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
@@ -2237,7 +2244,7 @@
     if (countEl) countEl.textContent = crews.length ? crews.length + ' active' : '';
   }
 
-  // Quick tap: flip status (Lead only)
+  // Quick tap: flip status (Lead only) — shows confirmation first
   function toggleStatus(id) {
     const crew = getCrew(id);
     if (!crew) return;
@@ -2245,12 +2252,8 @@
       showToast('🔒 Only the Crew Lead can change the status');
       return;
     }
-    crew.status = crew.status === 'recruiting' ? 'locked-in' : 'recruiting';
-    renderCrews();
-    if (document.getElementById('detail-overlay').classList.contains('open')) renderDetail(id);
-    showToast(crew.status === 'recruiting'
-      ? `🟢 ${crew.name} is now Recruiting — anyone can join`
-      : `🔒 ${crew.name} is Locked In — invite only`);
+    const newStatus = crew.status === 'recruiting' ? 'locked-in' : 'recruiting';
+    showStatusWarn(id, newStatus);
   }
 
   // ===== Crew detail view =====
@@ -2299,7 +2302,7 @@
           const statusDot = `<span class="${isClaimed ? 'claimed-dot' : 'unclaimed-dot'}" title="${isClaimed ? 'Claimed' : 'Unclaimed — share QR to invite'}"></span>`;
           const canRemove = (crew.isLead || isAdmin) && !p.isYou;
           let right;
-          if (!isClaimed && (crew.isLead || isAdmin) && p.qrToken) {
+          if (!isClaimed && (crew.isLead || isAdmin) && p.qrToken && isRecruiting) {
             right = `<button class="remove-member-btn" style="background:none;border:1.5px solid rgba(255,255,255,0.15);border-radius:8px;padding:2px 7px;font-size:0.8rem;" data-raver-id="${p.id}" onclick="event.stopPropagation(); showQRModal(this.dataset.raverId)" title="Show QR to invite">📲</button>`;
           } else if (canRemove) {
             right = `<button class="remove-member-btn" data-crew="${crew.id}" data-raver="${p.id}" onclick="event.stopPropagation(); removeMemberFromCrew(this.dataset.crew, this.dataset.raver)" title="Remove from crew">×</button>`;
@@ -2374,17 +2377,62 @@
     `;
   }
 
-  // Full-view status set (Lead only)
+  // Full-view status set (Lead only) — shows confirmation first
   function setStatus(id, status) {
     const crew = getCrew(id);
     if (!crew || !crew.isLead) { showToast('🔒 Only the Crew Lead can change the status'); return; }
     if (crew.status === status) return;
+    showStatusWarn(id, status);
+  }
+
+  // ── Status-change warning modal ──
+  let _statusWarnId = null;
+  let _statusWarnTarget = null;
+
+  function showStatusWarn(crewId, newStatus) {
+    const crew = getCrew(crewId);
+    if (!crew) return;
+    _statusWarnId = crewId;
+    _statusWarnTarget = newStatus;
+
+    const toLocked = newStatus === 'locked-in';
+    const icon = toLocked ? '🔒' : '🟢';
+    const title = toLocked ? `Lock in ${crew.name}?` : `Re-open ${crew.name} to Recruiting?`;
+    const body = toLocked
+      ? `The crew roster is set. <strong>QR invite links will be disabled</strong> and the crew won't appear to people looking to join. Only you can add members manually.`
+      : `Anyone with your crew QR code or browsing open crews will be able to join. <strong>QR invite links will be re-enabled</strong> for unclaimed members.`;
+    const confirmLabel = toLocked ? `🔒 Lock It In` : `🟢 Open Recruiting`;
+
+    document.getElementById('status-warn-modal').innerHTML = `
+      <div style="font-size:2.4rem;margin-bottom:14px;">${icon}</div>
+      <div class="modal-title" style="margin-bottom:12px;">${title}</div>
+      <p style="font-size:0.84rem;color:var(--muted);line-height:1.65;margin-bottom:22px;">${body}</p>
+      <div class="modal-actions" style="margin-top:0;">
+        <button class="btn btn-ghost" style="flex:1;padding:12px;" onclick="closeStatusWarn()">Cancel</button>
+        <button class="btn btn-primary" style="flex:1;padding:12px;" onclick="confirmStatusChange()">${confirmLabel}</button>
+      </div>`;
+    document.getElementById('status-warn-overlay').classList.add('open');
+  }
+
+  function closeStatusWarn() {
+    document.getElementById('status-warn-overlay').classList.remove('open');
+    _statusWarnId = null;
+    _statusWarnTarget = null;
+  }
+
+  function confirmStatusChange() {
+    const crew = getCrew(_statusWarnId);
+    const status = _statusWarnTarget;
+    closeStatusWarn();
+    if (!crew || !status) return;
     crew.status = status;
     renderCrews();
-    renderDetail(id);
+    if (document.getElementById('detail-overlay').classList.contains('open')) renderDetail(crew.id);
     showToast(status === 'recruiting'
-      ? `🟢 ${crew.name} is now Recruiting`
-      : `🔒 ${crew.name} is Locked In`);
+      ? `🟢 ${crew.name} is now Recruiting — QR invites enabled`
+      : `🔒 ${crew.name} is Locked In — QR invites disabled`);
+    // Persist to DB
+    if (currentUser) dbSaveCrew({ name: crew.name, color: crew.color, gradient: crew.gradient, status }, crew.id);
   }
 
   function searchMembersDropdown(query) {
