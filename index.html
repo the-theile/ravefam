@@ -3,1114 +3,3207 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RaveFAM — Your Crew. Your Festivals. Your Tribe.</title>
-
-<!-- SEO -->
-<meta name="description" content="RaveFAM keeps your festival tribe organised — crews, countdowns, checklists and invite codes. Create your crew, share a QR code, and never lose your tribe in the crowd.">
-<meta name="theme-color" content="#050509">
-<link rel="canonical" href="https://myravefam.com/">
-
-<!-- Open Graph (Facebook, WhatsApp, iMessage) -->
-<meta property="og:type" content="website">
-<meta property="og:url" content="https://myravefam.com/">
-<meta property="og:title" content="RaveFAM — Your Crew. Your Festivals. Your Tribe.">
-<meta property="og:description" content="Keep your festival tribe organised — crews, countdowns, checklists and invite codes. Free to start. No credit card.">
-<meta property="og:image" content="https://myravefam.com/og-image.png">
-
-<!-- Twitter / X Card -->
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:url" content="https://myravefam.com/">
-<meta name="twitter:title" content="RaveFAM — Your Crew. Your Festivals. Your Tribe.">
-<meta name="twitter:description" content="Keep your festival tribe organised — crews, countdowns, checklists and invite codes. Free to start.">
-<meta name="twitter:image" content="https://myravefam.com/og-image.png">
-<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@800;900&family=Outfit:wght@400;500;600;700;800;900&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
+<title>RaveFAM 🎉</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root {
-    --pink:      #FF2D78;
     --neon-pink: #FF2D78;
-    --cyan:      #00F5FF;
     --neon-cyan: #00F5FF;
-    --yellow:    #FFE600;
-    --purple:    #BF00FF;
-    --green:     #39FF14;
-    --orange:    #FF6B35;
-    --bg:        #050509;
-    --surf:      #0E0E16;
-    --surf2:     #16161F;
-    --text:      #F0EEFF;
-    --muted:     #6A6A8A;
+    --neon-yellow: #FFE600;
+    --neon-purple: #BF00FF;
+    --neon-green: #39FF14;
+    --bg: #050509;
+    --surface: #0E0E16;
+    --surface2: #16161F;
+    --text: #F0EEFF;
+    --muted: #6A6A8A;
   }
 
-  html, body { background-color: #050509 !important; }
-  *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-
-  html { scroll-behavior: smooth; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
     font-family: 'DM Sans', sans-serif;
-    background: var(--bg); color: var(--text);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
     overflow-x: hidden;
   }
 
-  /* ── Scanlines ── */
-  body::before {
-    content:''; position:fixed; inset:0; z-index:1000; pointer-events:none;
-    background-image: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.025) 2px, rgba(0,0,0,0.025) 4px);
+  /* Animated background blobs */
+  .bg-blobs {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
   }
+  .blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.06;
+    animation: blobFloat 8s ease-in-out infinite;
+  }
+  .blob-1 { width: 500px; height: 500px; background: var(--neon-pink); top: -100px; left: -100px; animation-delay: 0s; }
+  .blob-2 { width: 400px; height: 400px; background: var(--neon-cyan); top: 30%; right: -80px; animation-delay: 2s; }
+  .blob-3 { width: 350px; height: 350px; background: var(--neon-purple); bottom: 10%; left: 20%; animation-delay: 4s; }
 
-  /* ── Blobs ── */
-  .blobs { position:fixed; inset:0; pointer-events:none; z-index:0; overflow:hidden; }
-  .blob  { position:absolute; border-radius:50%; filter:blur(100px); animation:blobFloat 12s ease-in-out infinite; opacity:0; } /* hidden on mobile — hero bg handles atmosphere */
-  @media(min-width:681px) { .blob { opacity:1; } } /* only show on desktop */
-  .b1 { width:600px; height:600px; background:var(--pink);   top:-200px; left:-100px; opacity:0; animation-delay:0s; }
-  .b2 { width:500px; height:500px; background:var(--cyan);   top:40%;    right:-150px; opacity:0; animation-delay:3s; }
-  .b3 { width:450px; height:450px; background:var(--purple); bottom:-100px; left:20%;  opacity:0; animation-delay:6s; }
-  .b4 { width:300px; height:300px; background:var(--green);  bottom:30%; right:5%;    opacity:0; animation-delay:4s; }
-  @media(min-width:681px) {
-    .b1 { opacity:0.06; }
-    .b2 { opacity:0.05; }
-    .b3 { opacity:0.06; }
-    .b4 { opacity:0.04; }
-  }
   @keyframes blobFloat {
-    0%,100% { transform:translate(0,0) scale(1); }
-    33%      { transform:translate(24px,-32px) scale(1.05); }
-    66%      { transform:translate(-18px,22px) scale(0.95); }
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(20px, -30px) scale(1.05); }
+    66% { transform: translate(-15px, 20px) scale(0.95); }
   }
 
-  /* ── Shared ── */
-  .z { position:relative; z-index:1; }
+  /* Layout */
+  .app { position: relative; z-index: 1; display: flex; flex-direction: column; min-height: 100vh; }
 
-  /* ── NAV ── */
+  /* Header */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 28px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    backdrop-filter: blur(20px);
+    background: rgba(10,10,18,0.7);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .logo-mark {
+    flex-shrink: 0;
+    filter: drop-shadow(0 0 10px rgba(255,45,120,0.4));
+  }
+  .eq-bar {
+    transform-origin: center bottom;
+    animation: eqPulse 1.1s ease-in-out infinite;
+  }
+  .eq-bar:nth-child(1) { animation-delay: 0s; }
+  .eq-bar:nth-child(2) { animation-delay: 0.18s; }
+  .eq-bar:nth-child(3) { animation-delay: 0.36s; }
+  @keyframes eqPulse {
+    0%, 100% { transform: scaleY(0.55); }
+    50% { transform: scaleY(1); }
+  }
+  .logo-text {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 1.6rem;
+    letter-spacing: -0.5px;
+  }
+  .logo-text span:first-child { color: #FFFFFF; }
+  .logo-text span:last-child { color: var(--neon-green); }
+
+  .header-actions { display: flex; gap: 10px; align-items: center; }
+
+  .btn {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+    padding: 9px 18px;
+    border-radius: 100px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .btn-primary {
+    background: var(--neon-pink);
+    color: #fff;
+    box-shadow: 0 0 20px rgba(255,45,120,0.4);
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 0 30px rgba(255,45,120,0.6); }
+  .btn-ghost {
+    background: rgba(255,255,255,0.07);
+    color: var(--text);
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .btn-ghost:hover { background: rgba(255,255,255,0.12); }
+
+  /* Nav tabs */
   nav {
-    position:fixed; top:0; left:0; right:0; z-index:100;
-    display:flex; align-items:center; justify-content:space-between;
-    padding:18px 40px;
-    backdrop-filter:blur(24px) saturate(180%);
-    background:rgba(5,5,9,0.75);
-    border-bottom:1px solid rgba(255,255,255,0.05);
-    transition:padding 0.3s;
+    display: flex;
+    gap: 4px;
+    padding: 16px 28px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
   }
-  .nav-logo { display:flex; align-items:center; gap:10px; text-decoration:none; }
-  .eq-bar { transform-origin:center bottom; animation:eqPulse 1.1s ease-in-out infinite; }
-  .eq-bar:nth-child(1){animation-delay:0s}
-  .eq-bar:nth-child(2){animation-delay:.18s}
-  .eq-bar:nth-child(3){animation-delay:.36s}
-  @keyframes eqPulse { 0%,100%{transform:scaleY(0.5)} 50%{transform:scaleY(1)} }
+  .nav-tab {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.85rem;
+    padding: 10px 18px;
+    border-radius: 10px 10px 0 0;
+    border: none;
+    cursor: pointer;
+    background: transparent;
+    color: var(--muted);
+    transition: all 0.2s;
+    position: relative;
+  }
+  .nav-tab.active { color: var(--neon-pink); background: rgba(20,20,32,0.95); }
+  .nav-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px; left: 0; right: 0;
+    height: 2px;
+    background: var(--neon-pink);
+    border-radius: 2px 2px 0 0;
+  }
+  .nav-tab:hover:not(.active) { color: var(--text); }
 
-  .nav-wordmark {
-    font-family:'Urbanist',sans-serif; font-weight:800; font-size:1.5rem; letter-spacing:-0.5px;
-  }
-  .nav-wordmark .r { color:#fff; }
-  .nav-wordmark .g { color:var(--green); }
+  /* Main */
+  main { flex: 1; padding: 28px; max-width: 900px; width: 100%; margin: 0 auto; }
 
-  .nav-links { display:flex; align-items:center; gap:32px; }
-  .nav-link {
-    font-family:'Outfit',sans-serif; font-weight:600; font-size:0.85rem;
-    color:var(--muted); text-decoration:none; transition:color 0.2s;
-  }
-  .nav-link:hover { color:#fff; }
+  /* Pages */
+  .page { display: none; animation: fadeIn 0.3s ease; }
+  .page.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
-  .nav-actions { display:flex; align-items:center; gap:10px; }
-
-  .btn-nav-login {
-    font-family:'Outfit',sans-serif; font-weight:700; font-size:0.82rem;
-    padding:9px 20px; border-radius:100px;
-    background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.12);
-    color:var(--text); text-decoration:none; cursor:pointer;
-    transition:all 0.2s;
-  }
-  .btn-nav-login:hover { background:rgba(255,255,255,0.13); border-color:rgba(255,255,255,0.22); }
-
-  .btn-nav-signup {
-    font-family:'Outfit',sans-serif; font-weight:700; font-size:0.82rem;
-    padding:9px 20px; border-radius:100px;
-    background:linear-gradient(135deg,var(--pink),var(--purple));
-    border:none; color:#fff; text-decoration:none; cursor:pointer;
-    box-shadow:0 0 20px rgba(255,45,120,0.4);
-    transition:all 0.2s;
-  }
-  .btn-nav-signup:hover { transform:translateY(-1px); box-shadow:0 0 32px rgba(255,45,120,0.65); }
-
-  /* Mobile nav */
-  .nav-hamburger { display:none; background:none; border:none; cursor:pointer; color:var(--text); font-size:1.4rem; }
-  .mobile-menu {
-    display:none; position:fixed; inset:0; z-index:99;
-    background:rgba(5,5,9,0.97); flex-direction:column;
-    align-items:center; justify-content:center; gap:32px;
-  }
-  .mobile-menu.open { display:flex; }
-  .mobile-menu .nav-link { font-size:1.3rem; }
-  .mobile-menu-close { position:absolute; top:22px; right:28px; background:none; border:none; color:var(--muted); font-size:1.6rem; cursor:pointer; }
-
-  /* ── HERO ── */
-  .hero {
-    min-height:100vh;
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    text-align:center; padding:120px 24px 80px;
-  }
-
-  .hero-eyebrow {
-    display:inline-flex; align-items:center; gap:8px;
-    font-family:'Outfit',sans-serif; font-weight:700; font-size:0.72rem;
-    letter-spacing:3px; text-transform:uppercase; color:var(--green);
-    background:rgba(57,255,20,0.08); border:1px solid rgba(57,255,20,0.2);
-    padding:7px 16px; border-radius:100px; margin-bottom:28px;
-    animation:fadeUp 0.7s 0.1s both;
-  }
-  .hero-eyebrow-dot { width:6px; height:6px; border-radius:50%; background:var(--green); animation:pulse 2s infinite; }
-  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.7)} }
-
-  .hero-title {
-    font-family:'Urbanist',sans-serif; font-weight:900;
-    font-size:clamp(2.4rem,7.5vw,4.8rem); line-height:1.05; letter-spacing:-1px;
-    margin-bottom:22px; animation:fadeUp 0.7s 0.2s both;
-    text-shadow:0 4px 40px rgba(0,0,0,0.6);
-  }
-  .hero-title .line2 { display:block; }
-  .hero-grad {
-    background:linear-gradient(90deg,var(--pink) 0%,var(--cyan) 55%,var(--green) 100%);
-    -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
-    filter:drop-shadow(0 0 30px rgba(255,45,120,0.45));
-  }
-
-  .hero-sub {
-    font-size:clamp(1rem,2.5vw,1.2rem); color:var(--muted); max-width:520px;
-    line-height:1.65; margin-bottom:44px; animation:fadeUp 0.7s 0.3s both;
-  }
-
-  .hero-ctas {
-    display:flex; gap:14px; flex-wrap:wrap; justify-content:center;
-    animation:fadeUp 0.7s 0.4s both; margin-bottom:60px;
-  }
-
-  .btn-hero-primary {
-    font-family:'Outfit',sans-serif; font-weight:800; font-size:1rem;
-    padding:16px 36px; border-radius:100px; border:none; cursor:pointer;
-    background:linear-gradient(135deg,var(--pink),var(--purple));
-    color:#fff; text-decoration:none;
-    box-shadow:0 0 40px rgba(255,45,120,0.5), 0 8px 32px rgba(0,0,0,0.3);
-    transition:all 0.22s; position:relative; overflow:hidden;
-  }
-  .btn-hero-primary::after {
-    content:''; position:absolute; top:0; left:-100%; width:60%; height:100%;
-    background:linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent);
-    animation:shimmer 3s 1.5s infinite;
-  }
-  @keyframes shimmer { 0%{left:-60%} 60%,100%{left:130%} }
-  .btn-hero-primary:hover { transform:translateY(-3px) scale(1.02); box-shadow:0 0 60px rgba(255,45,120,0.7), 0 12px 40px rgba(0,0,0,0.4); }
-
-  .btn-hero-secondary {
-    font-family:'Outfit',sans-serif; font-weight:700; font-size:1rem;
-    padding:16px 36px; border-radius:100px; border:1px solid rgba(255,255,255,0.15);
-    background:rgba(255,255,255,0.06); color:var(--text); text-decoration:none; cursor:pointer;
-    transition:all 0.22s;
-  }
-  .btn-hero-secondary:hover { background:rgba(255,255,255,0.12); border-color:rgba(255,255,255,0.3); transform:translateY(-2px); }
-
-  /* Social proof strip */
-  .proof-strip {
-    display:flex; align-items:center; gap:18px; flex-wrap:wrap; justify-content:center;
-    animation:fadeUp 0.7s 0.55s both;
-  }
-  .proof-avatars { display:flex; }
-  .proof-av {
-    width:34px; height:34px; border-radius:50%; border:2px solid var(--bg);
-    margin-left:-8px; display:flex; align-items:center; justify-content:center;
-    font-family:'Outfit',sans-serif; font-weight:800; font-size:0.72rem;
-  }
-  .proof-av:first-child { margin-left:0; }
-  .proof-text { font-size:0.85rem; color:var(--muted); line-height:1.4; }
-  .proof-text strong { color:var(--text); }
-  .proof-divider { width:1px; height:28px; background:rgba(255,255,255,0.1); }
-  .proof-stat { text-align:center; }
-  .proof-stat-num { font-family:'Urbanist',sans-serif; font-weight:800; font-size:1.1rem; color:#fff; }
-  .proof-stat-label { font-size:0.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:1px; }
-
-  @keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
-
-  /* ── PHONE MOCKUP ── */
-  .mockup-wrap {
-    display:flex; justify-content:center; margin:-20px 0 0; padding:0 24px 80px;
-    animation:fadeUp 0.8s 0.5s both;
-  }
-  .phone {
-    width:260px; position:relative;
-    background:var(--surf); border-radius:38px; padding:14px;
-    border:1px solid rgba(255,255,255,0.1);
-    box-shadow:0 0 80px rgba(255,45,120,0.2), 0 0 160px rgba(0,245,255,0.08), 0 40px 80px rgba(0,0,0,0.6);
-  }
-  .phone-notch {
-    width:70px; height:20px; background:var(--bg); border-radius:0 0 14px 14px;
-    margin:0 auto 10px; position:relative; z-index:2;
-  }
-  .phone-screen { border-radius:28px; overflow:hidden; background:var(--bg); }
-  .phone-header {
-    background:rgba(14,14,22,0.9); padding:12px 14px;
-    border-bottom:1px solid rgba(255,255,255,0.05);
-    display:flex; align-items:center; justify-content:space-between;
-  }
-  .phone-logo { font-family:'Urbanist',sans-serif; font-weight:800; font-size:0.9rem; }
-  .phone-logo .g { color:var(--green); }
-  .phone-card {
-    margin:10px; border-radius:16px; padding:14px;
-    background:var(--surf);
-    border:1px solid rgba(255,255,255,0.07);
-  }
-  .phone-card-bar { height:3px; border-radius:100px; margin-bottom:10px; }
-  .phone-card-name { font-family:'Outfit',sans-serif; font-weight:800; font-size:0.85rem; color:#fff; margin-bottom:4px; }
-  .phone-card-meta { font-size:0.65rem; color:var(--muted); }
-  .phone-card-fest {
-    background:rgba(255,255,255,0.04); border-left:2px solid var(--green);
-    border-radius:8px; padding:7px 9px; margin:8px 0;
-  }
-  .phone-card-fest-label { font-size:0.55rem; color:var(--green); font-family:'Outfit',sans-serif; font-weight:700; letter-spacing:1px; text-transform:uppercase; margin-bottom:2px; }
-  .phone-card-fest-name { font-family:'Outfit',sans-serif; font-weight:700; font-size:0.75rem; color:#fff; }
-  .phone-card-fest-date { font-size:0.6rem; color:var(--muted); }
-  .phone-avatars { display:flex; }
-  .phone-av { width:22px; height:22px; border-radius:50%; border:2px solid var(--surf); margin-left:-5px; font-family:'Outfit',sans-serif; font-weight:800; font-size:0.52rem; display:flex; align-items:center; justify-content:center; }
-  .phone-av:first-child { margin-left:0; }
-
-  /* floating badge */
-  .phone-badge {
-    position:absolute; right:-18px; top:90px;
-    background:var(--surf2); border:1px solid rgba(255,255,255,0.12);
-    border-radius:14px; padding:10px 14px;
-    box-shadow:0 8px 24px rgba(0,0,0,0.5);
-    font-family:'Outfit',sans-serif; font-weight:700; font-size:0.7rem;
-    white-space:nowrap; animation:badgeFloat 3s ease-in-out infinite;
-  }
-  .phone-badge-2 {
-    position:absolute; left:-22px; bottom:110px;
-    background:var(--surf2); border:1px solid rgba(255,255,255,0.12);
-    border-radius:14px; padding:10px 14px;
-    box-shadow:0 8px 24px rgba(0,0,0,0.5);
-    font-family:'Outfit',sans-serif; font-weight:700; font-size:0.7rem;
-    white-space:nowrap; animation:badgeFloat 3.5s 0.8s ease-in-out infinite;
-  }
-  @keyframes badgeFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
-
-  /* ── SECTION CHROME ── */
-  section { padding:100px 24px; }
-  .section-inner { max-width:1080px; margin:0 auto; }
-
-  .section-eyebrow {
-    font-family:'Outfit',sans-serif; font-weight:700; font-size:0.68rem;
-    letter-spacing:3px; text-transform:uppercase; color:var(--pink);
-    margin-bottom:14px;
+  /* Section header */
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
   }
   .section-title {
-    font-family:'Urbanist',sans-serif; font-weight:800;
-    font-size:clamp(2rem,5vw,3rem); line-height:1.1;
-    margin-bottom:16px; letter-spacing:-1px;
-  }
-  .section-sub { font-size:1rem; color:var(--muted); line-height:1.65; max-width:520px; }
-
-  /* ── FEATURES GRID ── */
-  .features-grid {
-    display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px;
-    margin-top:56px;
-  }
-  .feat-card {
-    background:var(--surf); border:1px solid rgba(255,255,255,0.07);
-    border-radius:22px; padding:28px; position:relative; overflow:hidden;
-    transition:transform 0.25s, border-color 0.25s, box-shadow 0.25s;
-  }
-  .feat-card::before {
-    content:''; position:absolute; inset:0;
-    background:radial-gradient(ellipse at top left, var(--accent,transparent) 0%, transparent 65%);
-    opacity:0.07; transition:opacity 0.25s;
-  }
-  .feat-card:hover { transform:translateY(-4px); border-color:rgba(255,255,255,0.16); }
-  .feat-card:hover::before { opacity:0.13; }
-
-  .feat-icon {
-    width:52px; height:52px; border-radius:15px; margin-bottom:18px;
-    display:flex; align-items:center; justify-content:center; font-size:1.5rem;
-  }
-  .feat-title { font-family:'Outfit',sans-serif; font-weight:800; font-size:1.05rem; color:#fff; margin-bottom:8px; }
-  .feat-desc  { font-size:0.87rem; color:var(--muted); line-height:1.6; }
-
-  /* ── HOW IT WORKS ── */
-  #how { background:var(--surf); border-top:1px solid rgba(255,255,255,0.05); border-bottom:1px solid rgba(255,255,255,0.05); }
-  .steps-row {
-    display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:24px;
-    margin-top:56px; position:relative;
-  }
-  .how-step {
-    text-align:center; padding:0 12px;
-    display:flex; flex-direction:column; align-items:center;
-  }
-  .how-step-visual {
-    width:100%; max-width:200px;
-    background:var(--surf2); border:1px solid rgba(255,255,255,0.07);
-    border-radius:20px; padding:22px 16px;
-    margin-bottom:20px; position:relative;
-    display:flex; align-items:center; justify-content:center;
-    min-height:110px;
-  }
-  .how-step-num {
-    width:28px; height:28px; border-radius:50%;
-    display:flex; align-items:center; justify-content:center;
-    font-family:'Urbanist',sans-serif; font-weight:800; font-size:0.75rem; color:#fff;
-    position:absolute; top:-10px; left:50%; transform:translateX(-50%);
-    z-index:1; border:2px solid var(--surf);
-  }
-  .how-step-title { font-family:'Outfit',sans-serif; font-weight:800; font-size:1rem; margin-bottom:8px; }
-  .how-step-desc  { font-size:0.84rem; color:var(--muted); line-height:1.6; }
-
-  /* Step icon badge */
-  .step-icon-badge {
-    width:72px; height:72px; border-radius:50%;
-    display:flex; align-items:center; justify-content:center;
-    font-size:2rem; position:relative;
-    animation:badgePulse 3s ease-in-out infinite;
-  }
-  @keyframes badgePulse {
-    0%,100% { transform:scale(1); filter:brightness(1); }
-    50%      { transform:scale(1.06); filter:brightness(1.15); }
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 1.4rem;
+    color: #FFFFFF;
+    text-shadow: 0 1px 12px rgba(10,10,18,0.8);
   }
 
-  /* Step 3 scene — QR connect */
-  .step-qr-scene {
-    display:flex; align-items:center; gap:10px; width:100%;
-    justify-content:center;
-  }
-  .step-av {
-    width:38px; height:38px; border-radius:50%;
-    display:flex; align-items:center; justify-content:center;
-    font-family:'Outfit',sans-serif; font-weight:800; font-size:0.72rem; color:#fff;
-    flex-shrink:0;
-  }
-  .step-qr-box {
-    width:52px; height:52px; border-radius:10px;
-    background:var(--surf); border:1px solid rgba(255,255,255,0.12);
-    display:grid; grid-template-columns:1fr 1fr 1fr;
-    grid-template-rows:1fr 1fr 1fr; gap:3px; padding:6px;
-    flex-shrink:0;
-  }
-  .step-qr-cell {
-    border-radius:2px;
-  }
-  .step-qr-dot {
-    width:6px; height:6px; border-radius:50%;
-    background:var(--neon-pink); margin:0 2px;
-    animation:dotBlink 1.2s ease-in-out infinite;
-  }
-  .step-qr-dot:nth-child(2) { animation-delay:0.2s; background:var(--cyan); }
-  .step-qr-dot:nth-child(3) { animation-delay:0.4s; background:var(--green); }
-  @keyframes dotBlink { 0%,100%{opacity:0.3;transform:scale(0.8)} 50%{opacity:1;transform:scale(1)} }
-  .step-qr-lightning {
-    font-size:1.1rem; animation:zapFloat 1.5s ease-in-out infinite;
-  }
-  @keyframes zapFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
+  /* Crew cards */
+  .crew-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
 
-  /* Step 4 scene — tribe alive */
-  .step-tribe-scene {
-    display:flex; flex-direction:column; align-items:center; gap:12px; width:100%;
+  .crew-card {
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 18px;
+    padding: 22px;
+    transition: all 0.25s ease;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
   }
-  .step-tribe-avs {
-    display:flex; align-items:center;
+  .crew-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, var(--accent-a) 0%, transparent 70%);
+    opacity: 0.05;
+    transition: opacity 0.25s;
   }
-  .step-tribe-av {
-    width:32px; height:32px; border-radius:50%; border:2px solid var(--surf2);
-    display:flex; align-items:center; justify-content:center;
-    font-family:'Outfit',sans-serif; font-weight:800; font-size:0.62rem; color:#fff;
-    margin-left:-8px; flex-shrink:0;
-    animation:avPop 2.5s ease-in-out infinite;
-  }
-  .step-tribe-av:first-child { margin-left:0; }
-  .step-tribe-av:nth-child(2) { animation-delay:0.3s; }
-  .step-tribe-av:nth-child(3) { animation-delay:0.6s; }
-  .step-tribe-av:nth-child(4) { animation-delay:0.9s; }
-  .step-tribe-av:nth-child(5) { animation-delay:1.2s; }
-  @keyframes avPop { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
-  .step-fest-chip {
-    background:rgba(57,255,20,0.08); border:1px solid rgba(57,255,20,0.25);
-    border-radius:100px; padding:6px 14px;
-    font-family:'Outfit',sans-serif; font-weight:700; font-size:0.72rem;
-    color:var(--green); white-space:nowrap;
+  .crew-card > * { position: relative; z-index: 1; }
+  .crew-card:hover { transform: translateY(-3px); border-color: rgba(255,255,255,0.15); }
+  .crew-card:hover::before { opacity: 0.08; }
+
+  .crew-color-bar {
+    height: 4px;
+    border-radius: 100px;
+    margin-bottom: 16px;
   }
 
-  /* ── SOCIAL PROOF / TESTIMONIALS ── */
-  .testimonials { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px; margin-top:52px; }
-  .testi {
-    background:var(--surf); border:1px solid rgba(255,255,255,0.07);
-    border-radius:20px; padding:24px;
-    transition:transform 0.22s, border-color 0.22s;
+  .crew-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 14px;
   }
-  .testi:hover { transform:translateY(-3px); border-color:rgba(255,255,255,0.15); }
-  .testi-stars { color:var(--yellow); font-size:0.9rem; margin-bottom:12px; letter-spacing:2px; }
-  .testi-text  { font-size:0.9rem; line-height:1.65; color:var(--text); margin-bottom:18px; font-style:italic; }
-  .testi-author { display:flex; align-items:center; gap:10px; }
-  .testi-avatar {
-    width:38px; height:38px; border-radius:50%; flex-shrink:0;
-    display:flex; align-items:center; justify-content:center;
-    font-family:'Outfit',sans-serif; font-weight:800; font-size:0.85rem; color:#fff;
-  }
-  .testi-name  { font-family:'Outfit',sans-serif; font-weight:700; font-size:0.85rem; }
-  .testi-where { font-size:0.72rem; color:var(--muted); }
-
-  /* ── CTA BANNER ── */
-  .cta-section { text-align:center; padding:100px 24px; }
-  .cta-inner { max-width:640px; margin:0 auto; }
-  .cta-glow-ring {
-    width:120px; height:120px; border-radius:50%; margin:0 auto 32px;
-    background:linear-gradient(135deg,var(--pink),var(--cyan));
-    display:flex; align-items:center; justify-content:center; font-size:3rem;
-    box-shadow:0 0 60px rgba(255,45,120,0.5), 0 0 120px rgba(0,245,255,0.2);
-    animation:ringPulse 3s ease-in-out infinite;
-  }
-  @keyframes ringPulse { 0%,100%{box-shadow:0 0 60px rgba(255,45,120,0.5),0 0 120px rgba(0,245,255,0.2)} 50%{box-shadow:0 0 90px rgba(255,45,120,0.75),0 0 180px rgba(0,245,255,0.3)} }
-  .cta-title { font-family:'Urbanist',sans-serif; font-weight:800; font-size:clamp(2rem,6vw,3.2rem); letter-spacing:-1px; line-height:1.1; margin-bottom:16px; }
-  .cta-sub { font-size:1rem; color:var(--muted); line-height:1.6; margin-bottom:40px; }
-  .cta-btns { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; }
-
-  /* ── FOOTER ── */
-  footer {
-    border-top:1px solid rgba(255,255,255,0.06);
-    padding:40px 40px 32px;
-    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:20px;
-  }
-  .footer-logo { display:flex; align-items:center; gap:10px; }
-  .footer-wordmark { font-family:'Urbanist',sans-serif; font-weight:800; font-size:1.2rem; }
-  .footer-wordmark .g { color:var(--green); }
-  .footer-links { display:flex; gap:24px; }
-  .footer-link { font-size:0.78rem; color:var(--muted); text-decoration:none; transition:color 0.2s; }
-  .footer-link:hover { color:#fff; }
-  .footer-copy { font-size:0.74rem; color:var(--muted); }
-
-  /* ── Scroll-in animation ── */
-  .reveal { opacity:0; transform:translateY(28px); transition:opacity 0.65s ease, transform 0.65s ease; }
-  .reveal.in { opacity:1; transform:translateY(0); }
-  .reveal-d1 { transition-delay:0.1s; }
-  .reveal-d2 { transition-delay:0.2s; }
-  .reveal-d3 { transition-delay:0.3s; }
-  .reveal-d4 { transition-delay:0.4s; }
-
-  /* ── Hero photo background ── */
-  .hero {
-    position:relative; overflow:hidden;
-    background: radial-gradient(ellipse at 50% 0%, rgba(255,45,120,0.15) 0%, #050509 55%);
-  }
-  .hero-photo-bg {
-    position:absolute; inset:0; z-index:0;
-    background-color: #050509; /* solid dark fallback */
-    background-image: url('https://images.stockcake.com/public/b/6/c/b6c44ee5-f306-4c7e-8ade-07037d99ad7f_large/neon-rave-paradise-stockcake.jpg');
-    background-size: cover; background-position: center 35%;
-    filter: saturate(1.3) brightness(0.38);
-    transform: scale(1.03);
-    transition: transform 12s ease;
-    will-change: transform;
-    -webkit-transform: scale(1.03);
-  }
-  .hero:hover .hero-photo-bg { transform: scale(1.07); }
-  .hero-photo-tint {
-    position:absolute; inset:0; z-index:1;
-    background:
-      radial-gradient(ellipse at 50% 0%, rgba(255,45,120,0.20) 0%, transparent 55%),
-      linear-gradient(to bottom,
-        rgba(5,5,9,0.55) 0%,
-        rgba(5,5,9,0.2) 25%,
-        rgba(5,5,9,0.2) 65%,
-        rgba(5,5,9,0.98) 100%
-      );
-  }
-  .hero > * { position:relative; z-index:2; }
-
-  /* ── Photo feature strips ── */
-  .photo-strip-wrap { padding: 0 24px; max-width:1120px; margin:0 auto 24px; }
-
-  /* On mobile the strip stacks: image on top, content below */
-  .photo-strip {
-    position:relative; border-radius:28px; overflow:hidden;
-    display:flex; align-items:stretch; flex-direction:column;
-    border:1px solid rgba(255,255,255,0.08);
+  .crew-name {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 800;
+    font-size: 1.05rem;
+    color: #FFFFFF;
   }
 
-  /* The image lives in its own block element so it always has real height */
-  .strip-img-block {
-    width:100%; height:280px; flex-shrink:0;
-    background-size:cover; background-position:center;
-    filter:saturate(1.3) brightness(0.55);
+  /* Next-fest block — visually distinct card-within-card */
+  .crew-fest {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-left: 3px solid var(--accent-a, var(--neon-pink));
+    border-radius: 10px;
+    padding: 11px 13px;
+    margin-bottom: 16px;
   }
-  .strip-a .strip-img-block {
-    background-image:url('https://images.stockcake.com/public/b/7/3/b73d5c81-41d3-47eb-8577-ad82679c7803/electric-dance-paradise-stockcake.jpg');
-    background-position:center 40%;
+  .crew-fest-label {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--neon-green);
+    margin-bottom: 4px;
   }
-  .strip-b .strip-img-block {
-    background-image:url('https://images.stockcake.com/public/e/e/b/eebb0ac4-e7d5-4bc2-9386-5d5adefbcf8b/neon-rave-paradise-stockcake.jpg');
-    background-position:center 55%;
+  .crew-fest-past .crew-fest-label { color: var(--muted); }
+  .crew-fest-empty { border-left-color: rgba(255,255,255,0.1); }
+  .crew-fest-empty .crew-fest-label { color: var(--muted); margin-bottom: 0; }
+  .crew-fest-name {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #fff;
   }
-
-  /* Content block sits below image on mobile */
-  .strip-content {
-    position:relative; z-index:2;
-    padding:32px 28px 36px; flex:1;
-    background: linear-gradient(to bottom, rgba(5,5,9,0.97), rgba(5,5,9,1));
-  }
-
-  .strip-tag {
-    display:inline-flex; align-items:center; gap:7px;
-    font-family:'Outfit',sans-serif; font-weight:700; font-size:0.68rem;
-    letter-spacing:2.5px; text-transform:uppercase;
-    padding:6px 14px; border-radius:100px; margin-bottom:18px;
-  }
-  .strip-tag-dot { width:5px; height:5px; border-radius:50%; }
-  .strip-title {
-    font-family:'Urbanist',sans-serif; font-weight:800;
-    font-size:clamp(1.7rem,5vw,2.6rem); line-height:1.08;
-    letter-spacing:-1px; margin-bottom:14px; color:#fff;
-  }
-  .strip-sub { font-size:0.93rem; color:rgba(240,238,255,0.7); line-height:1.65; margin-bottom:22px; }
-  .strip-pills { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:24px; }
-  .strip-pill {
-    font-family:'Outfit',sans-serif; font-weight:700; font-size:0.74rem;
-    padding:6px 13px; border-radius:100px;
-    background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14);
-    color:rgba(255,255,255,0.75);
+  .crew-fest-date { font-size: 0.74rem; color: var(--muted); margin-top: 1px; }
+  .crew-fest-going {
+    font-size: 0.74rem;
+    color: var(--text);
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.06);
   }
 
-  /* Desktop: side-by-side layout */
-  @media(min-width:681px) {
-    .photo-strip {
-      flex-direction:row;
-      min-height:440px;
-      align-items:center;
+  /* Tribe roster section */
+  .crew-tribe {
+    border-top: 1px solid rgba(255,255,255,0.06);
+    padding-top: 13px;
+  }
+  .crew-tribe-label {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin-bottom: 9px;
+  }
+
+  .crew-members { display: flex; align-items: center; gap: -6px; }
+  .avatar {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    border: 2px solid var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+    margin-left: -6px;
+    font-family: 'Outfit', sans-serif;
+  }
+  .avatar:first-child { margin-left: 0; }
+  .avatar-count {
+    background: rgba(255,255,255,0.1);
+    color: var(--muted);
+    font-size: 0.65rem;
+  }
+
+  .crew-status {
+    font-size: 0.72rem;
+    padding: 4px 10px;
+    border-radius: 100px;
+    font-weight: 600;
+    font-family: 'Outfit', sans-serif;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .crew-status.tappable { cursor: pointer; }
+  .crew-status.tappable:hover { filter: brightness(1.25); border-color: currentColor; }
+  .status-recruiting { background: rgba(57,255,20,0.12); color: var(--neon-green); }
+  .status-locked-in { background: rgba(255,230,0,0.15); color: var(--neon-yellow); }
+
+  /* Add crew card */
+  .crew-add-card {
+    background: transparent;
+    border: 2px dashed rgba(255,255,255,0.12);
+    border-radius: 18px;
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-height: 170px;
+    color: var(--muted);
+  }
+  .crew-add-card:hover { border-color: var(--neon-pink); color: var(--neon-pink); }
+  .add-icon { font-size: 2rem; }
+  .add-label { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.85rem; }
+
+  /* Upcoming Events */
+  .events-list { display: flex; flex-direction: column; gap: 12px; }
+
+  .event-item {
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 16px;
+    padding: 18px 22px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    transition: all 0.2s;
+    cursor: pointer;
+  }
+  .event-item:hover { border-color: rgba(255,255,255,0.14); transform: translateX(3px); }
+
+  .event-date {
+    text-align: center;
+    min-width: 46px;
+  }
+  .event-day {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 1.5rem;
+    line-height: 1;
+  }
+  .event-month {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+  }
+
+  .event-divider {
+    width: 3px;
+    height: 44px;
+    border-radius: 100px;
+    flex-shrink: 0;
+  }
+
+  .event-info { flex: 1; }
+  .event-name {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 1rem;
+    margin-bottom: 3px;
+  }
+  .event-meta { font-size: 0.78rem; color: var(--muted); }
+  .going-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+  .going-chip {
+    font-size: 0.72rem;
+    font-weight: 600;
+    font-family: 'Outfit', sans-serif;
+    padding: 3px 10px;
+    border-radius: 100px;
+    background: rgba(57,255,20,0.1);
+    color: var(--neon-green);
+    border: 1px solid rgba(57,255,20,0.2);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .going-chip:hover { background: rgba(57,255,20,0.22); border-color: var(--neon-green); }
+
+  .event-crew-going {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+  }
+  .going-count {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 800;
+    font-size: 1.1rem;
+  }
+  .going-label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* Members page */
+  .members-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+
+  .member-card {
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 16px;
+    padding: 20px;
+    text-align: center;
+    transition: all 0.2s;
+    cursor: pointer;
+  }
+  .member-card:hover { transform: translateY(-3px); border-color: rgba(255,255,255,0.15); }
+
+  .member-avatar {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    margin: 0 auto 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 800;
+    font-size: 1.3rem;
+    border: 3px solid rgba(255,255,255,0.1);
+  }
+  .member-name {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+  }
+  .member-handle { font-size: 0.75rem; color: var(--muted); margin-bottom: 12px; }
+
+  .member-tags { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; }
+  .tag {
+    font-size: 0.65rem;
+    padding: 3px 8px;
+    border-radius: 100px;
+    font-weight: 600;
+    font-family: 'Outfit', sans-serif;
+  }
+  .member-base { font-size: 0.7rem; color: var(--muted); margin-bottom: 10px; }
+
+  /* Profile page */
+  .profile-back {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: none; border: none; cursor: pointer;
+    color: var(--muted); font-family: 'Outfit', sans-serif; font-weight: 600;
+    font-size: 0.85rem; margin-bottom: 20px; padding: 0;
+    transition: color 0.2s;
+  }
+  .profile-back:hover { color: var(--neon-pink); }
+
+  .profile-hero {
+    display: flex; align-items: center; gap: 20px;
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 20px;
+    padding: 24px;
+    margin-bottom: 18px;
+    position: relative;
+    overflow: hidden;
+  }
+  .profile-hero-bar { position: absolute; top: 0; left: 0; right: 0; height: 5px; }
+  .profile-avatar {
+    width: 84px; height: 84px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 2rem;
+    flex-shrink: 0; border: 3px solid rgba(255,255,255,0.12);
+  }
+  .profile-id h2 {
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 1.5rem; color: #fff;
+  }
+  .profile-handle { color: var(--muted); font-size: 0.9rem; margin: 2px 0 8px; }
+  .profile-base-line { font-size: 0.85rem; color: var(--text); }
+
+  .profile-section {
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 14px;
+  }
+  .profile-section h3 {
+    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.78rem;
+    text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted);
+    margin-bottom: 14px; display: flex; align-items: center; gap: 7px;
+  }
+  .fest-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
+    font-size: 0.9rem;
+  }
+  .fest-row:last-child { border-bottom: none; }
+  .fest-row .fest-when { color: var(--muted); font-size: 0.78rem; }
+  .fest-empty { color: var(--muted); font-size: 0.85rem; font-style: italic; }
+  .profile-note { font-size: 0.9rem; line-height: 1.6; color: var(--text); white-space: pre-wrap; }
+  .fav-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .fav-chip {
+    font-size: 0.8rem; padding: 5px 12px; border-radius: 100px;
+    background: rgba(255,45,120,0.12); color: var(--neon-pink); font-weight: 500;
+  }
+  .profile-actions { display: flex; gap: 10px; margin: 4px 0 12px; }
+
+  /* Connect row (IG / Call / Text) */
+  .connect-row { display: flex; gap: 10px; margin-bottom: 20px; }
+  .connect-btn {
+    flex: 1;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 11px 8px;
+    border-radius: 100px;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.82rem;
+    text-decoration: none;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.18s;
+  }
+  .connect-ig {
+    background: linear-gradient(135deg, rgba(255,45,120,0.18), rgba(191,0,255,0.18));
+    color: #fff; border-color: rgba(255,45,120,0.35);
+  }
+  .connect-ig:hover { background: linear-gradient(135deg, rgba(255,45,120,0.32), rgba(191,0,255,0.32)); }
+  .connect-call {
+    background: rgba(57,255,20,0.12); color: var(--neon-green); border-color: rgba(57,255,20,0.3);
+  }
+  .connect-call:hover { background: rgba(57,255,20,0.24); }
+  .connect-text {
+    background: rgba(0,245,255,0.12); color: var(--neon-cyan); border-color: rgba(0,245,255,0.3);
+  }
+  .connect-text:hover { background: rgba(0,245,255,0.24); }
+  .connect-empty { font-size: 0.8rem; color: var(--muted); margin-bottom: 20px; font-style: italic; }
+
+  /* Countdown banner on profile */
+  .countdown-banner {
+    border-radius: 16px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
+    color: #fff;
+    position: relative;
+    overflow: hidden;
+    text-shadow: 0 1px 6px rgba(0,0,0,0.35);
+  }
+  .countdown-banner .cd-label {
+    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.72rem;
+    text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.9;
+  }
+  .countdown-banner .cd-fest { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 1.15rem; margin: 2px 0; }
+  .countdown-banner .cd-days { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.8rem; line-height: 1.1; }
+  .countdown-banner .cd-date { font-size: 0.82rem; opacity: 0.9; margin-top: 2px; }
+
+  .fest-cd {
+    color: var(--neon-green);
+    font-weight: 600;
+    margin-left: 4px;
+  }
+
+  /* Festival editor rows */
+  .fest-edit-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+  .fest-edit-row .fest-name { flex: 2; }
+  .fest-edit-row .fest-date { flex: 1.3; color-scheme: dark; }
+  .fest-remove {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--muted);
+    border-radius: 8px; width: 36px; height: 38px; flex-shrink: 0;
+    cursor: pointer; font-size: 0.85rem; transition: all 0.15s;
+  }
+  .fest-remove:hover { color: var(--neon-pink); border-color: var(--neon-pink); }
+  .add-fest-btn {
+    background: rgba(255,45,120,0.1);
+    border: 1px dashed rgba(255,45,120,0.4);
+    color: var(--neon-pink);
+    border-radius: 10px; padding: 8px 14px; width: 100%;
+    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.8rem;
+    cursor: pointer; transition: all 0.15s; margin-top: 4px;
+  }
+  .add-fest-btn:hover { background: rgba(255,45,120,0.18); }
+
+  /* Festival picker (checkboxes) in profile editor */
+  .fest-picker-hint { font-size: 0.74rem; color: var(--muted); margin-bottom: 10px; line-height: 1.45; }
+  .fest-group-label {
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.66rem;
+    text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted);
+    margin: 12px 0 7px;
+  }
+  .fest-check {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border-radius: 9px; cursor: pointer;
+    background: rgba(255,255,255,0.03); margin-bottom: 6px;
+    transition: background 0.15s;
+  }
+  .fest-check:hover { background: rgba(255,255,255,0.06); }
+  .fest-check input { width: 17px; height: 17px; accent-color: var(--neon-green); flex-shrink: 0; cursor: pointer; }
+  .fest-check-name { font-size: 0.86rem; font-weight: 500; }
+  .fest-check-meta { font-size: 0.72rem; color: var(--muted); margin-left: auto; text-align: right; }
+
+  /* Location line on profile fest rows */
+  .fest-loc { display: block; font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
+
+  /* Festival edit hint on Festivals tab */
+  .event-item-clickable { cursor: pointer; }
+  .fest-edit-hint {
+    font-size: 0.72rem; opacity: 0; margin-left: 4px; transition: opacity 0.15s;
+  }
+  .event-item-clickable:hover .fest-edit-hint { opacity: 0.7; }
+  .fest-goers-note {
+    font-size: 0.78rem; color: var(--muted);
+    background: rgba(255,255,255,0.04); border-radius: 9px;
+    padding: 9px 11px; margin-bottom: 4px; line-height: 1.4;
+  }
+
+  /* Editable textarea in modal */
+  textarea.form-input { resize: vertical; min-height: 70px; font-family: 'DM Sans', sans-serif; }
+
+  /* Checklist page */
+  .checklist-section { margin-bottom: 28px; }
+  .checklist-section-title {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+  .checklist { display: flex; flex-direction: column; gap: 8px; }
+  .check-item {
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 12px;
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+  }
+  .check-item:hover { border-color: rgba(255,255,255,0.12); }
+  .check-item.checked { opacity: 0.5; }
+  .check-item.checked .check-text { text-decoration: line-through; }
+
+  .check-box {
+    width: 22px; height: 22px;
+    border-radius: 6px;
+    border: 2px solid rgba(255,255,255,0.2);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s;
+    font-size: 0.75rem;
+  }
+  .check-item.checked .check-box {
+    background: var(--neon-green);
+    border-color: var(--neon-green);
+    color: #000;
+  }
+  .check-text { font-size: 0.88rem; flex: 1; }
+  .check-who {
+    font-size: 0.72rem;
+    color: var(--muted);
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+  }
+
+  /* Progress bar */
+  .progress-bar-wrap {
+    background: rgba(255,255,255,0.06);
+    border-radius: 100px;
+    height: 6px;
+    margin-bottom: 28px;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    border-radius: 100px;
+    background: linear-gradient(90deg, var(--neon-pink), var(--neon-cyan));
+    transition: width 0.5s ease;
+  }
+  .progress-label {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-bottom: 8px;
+    font-family: 'Outfit', sans-serif;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(8px);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+
+  .modal {
+    background: var(--surface2);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 24px;
+    padding: 32px;
+    width: 100%;
+    max-width: 440px;
+    transform: scale(0.95);
+    transition: transform 0.25s;
+  }
+  .modal-overlay.open .modal { transform: scale(1); }
+
+  .modal-title {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 1.3rem;
+    margin-bottom: 22px;
+  }
+
+  /* Crew detail modal */
+  .detail-bar { height: 5px; border-radius: 100px; margin-bottom: 18px; }
+  .detail-status-line { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .status-meaning {
+    font-size: 0.82rem;
+    color: var(--muted);
+    background: rgba(255,255,255,0.04);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 20px;
+    line-height: 1.5;
+  }
+  .status-toggle { display: flex; gap: 8px; }
+  .status-opt {
+    flex: 1;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.04);
+    color: var(--muted);
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: all 0.18s;
+  }
+  .status-opt:hover { border-color: rgba(255,255,255,0.25); color: var(--text); }
+  .status-opt.active {
+    background: rgba(255,45,120,0.15);
+    border-color: var(--neon-pink);
+    color: #fff;
+  }
+  .detail-members { display: flex; flex-direction: column; gap: 8px; max-height: 180px; overflow-y: auto; }
+  .detail-member {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 0.88rem;
+    background: rgba(255,255,255,0.03);
+    padding: 7px 10px; border-radius: 10px;
+  }
+  .detail-member-link {
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+  }
+  .detail-member-link:hover {
+    background: rgba(255,255,255,0.07);
+    border-color: rgba(255,255,255,0.12);
+  }
+  .detail-member-arrow {
+    margin-left: auto;
+    color: var(--muted);
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+  .detail-member-link:hover .detail-member-arrow { color: var(--neon-green); }
+
+  .form-group { margin-bottom: 16px; }
+  .form-label {
+    display: block;
+    font-size: 0.75rem;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin-bottom: 7px;
+  }
+  .form-input {
+    width: 100%;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 11px 14px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .form-input:focus { border-color: var(--neon-pink); }
+  .form-input::placeholder { color: var(--muted); }
+
+  .color-swatches { display: flex; gap: 10px; flex-wrap: wrap; }
+  .color-swatch {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.15s;
+    border: 2px solid transparent;
+  }
+  .color-swatch:hover { transform: scale(1.15); }
+  .color-swatch.selected { border-color: #fff; transform: scale(1.15); }
+
+  .modal-actions { display: flex; gap: 10px; margin-top: 24px; }
+  .modal-actions .btn { flex: 1; padding: 12px; font-size: 0.85rem; }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--surface2);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 100px;
+    padding: 12px 22px;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.85rem;
+    z-index: 300;
+    transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+    white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* Pulse dot */
+  .pulse-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 6px;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  /* ===== CREW FULL PAGE ===== */
+  .crew-page-header {
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: 24px;
+  }
+  .crew-page-back {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: none; border: none; cursor: pointer;
+    color: var(--muted); font-family: 'Outfit', sans-serif; font-weight: 600;
+    font-size: 0.85rem; padding: 0; transition: color 0.2s;
+  }
+  .crew-page-back:hover { color: var(--neon-pink); }
+  .crew-page-hero {
+    border-radius: 20px;
+    padding: 24px;
+    margin-bottom: 20px;
+    position: relative;
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.07);
+  }
+  .crew-page-bar { height: 5px; border-radius: 100px; margin-bottom: 16px; }
+  .crew-page-name {
+    font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.6rem;
+    color: #fff; margin-bottom: 8px;
+  }
+  .crew-page-section {
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 14px;
+  }
+  .crew-page-section h3 {
+    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.78rem;
+    text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted);
+    margin-bottom: 14px; display: flex; align-items: center; gap: 7px;
+  }
+  .crew-member-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 12px; border-radius: 12px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid transparent;
+    margin-bottom: 8px; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .crew-member-row:hover {
+    background: rgba(255,255,255,0.07);
+    border-color: rgba(255,255,255,0.1);
+  }
+  .crew-member-row:last-child { margin-bottom: 0; }
+  .crew-member-name {
+    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.9rem;
+    flex: 1;
+  }
+  .crew-member-arrow { color: var(--muted); font-size: 1.1rem; }
+  .crew-member-row:hover .crew-member-arrow { color: var(--neon-green); }
+  .add-member-row {
+    display: flex; gap: 8px; margin-top: 14px;
+  }
+  .add-member-row .form-input { flex: 1; }
+
+  /* ===== MOBILE BOTTOM NAV ===== */
+  @media (max-width: 768px) {
+    nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      top: auto;
+      z-index: 100;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      border-bottom: none;
+      background: rgba(10,10,18,0.97);
+      backdrop-filter: blur(20px);
+      padding: 0;
+      justify-content: space-around;
+      gap: 0;
     }
-    .strip-img-block { display:none; } /* hidden — replaced by absolute bg on desktop */
-
-    /* Desktop uses the old absolute-positioned background approach */
-    .strip-photo-desk {
-      position:absolute; inset:0; background-size:cover;
-      background-position:center;
-      filter:saturate(1.3) brightness(0.5);
-      transition:transform 8s ease;
+    .nav-tab {
+      border-radius: 0;
+      flex: 1;
+      padding: 12px 4px 18px;
+      font-size: 0.78rem;
+      text-align: center;
     }
-    .photo-strip:hover .strip-photo-desk { transform:scale(1.05); }
-
-    .strip-a .strip-photo-desk {
-      background-image:url('https://images.stockcake.com/public/b/7/3/b73d5c81-41d3-47eb-8577-ad82679c7803/electric-dance-paradise-stockcake.jpg');
-      background-position:center 40%;
+    .nav-tab.active::after {
+      bottom: auto;
+      top: 0;
+      border-radius: 0 0 2px 2px;
     }
-    .strip-b .strip-photo-desk {
-      background-image:url('https://images.stockcake.com/public/e/e/b/eebb0ac4-e7d5-4bc2-9386-5d5adefbcf8b/neon-rave-paradise-stockcake.jpg');
-      background-position:center 55%;
+    main {
+      padding-bottom: 90px;
     }
-
-    /* Desktop tint overlays */
-    .strip-a .strip-tint {
-      position:absolute; inset:0;
-      background:linear-gradient(90deg,
-        rgba(5,5,9,0.0) 0%,
-        rgba(5,5,9,0.6) 46%,
-        rgba(5,5,9,0.97) 100%
-      );
-    }
-    .strip-b .strip-tint {
-      position:absolute; inset:0;
-      background:linear-gradient(90deg,
-        rgba(5,5,9,0.97) 0%,
-        rgba(5,5,9,0.6) 54%,
-        rgba(5,5,9,0.0) 100%
-      );
-    }
-
-    .strip-content {
-      padding:52px 48px;
-      max-width:500px;
-      background:transparent;
-    }
-    .strip-a .strip-content { margin-left:auto; }
-    .strip-b .strip-content { margin-right:auto; }
   }
 
-  /* ── Energy full-bleed band ── */
-  .energy-band {
-    position:relative; overflow:hidden;
-    display:flex; align-items:center; justify-content:center; text-align:center;
-    margin:80px 0 0;
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+
+  /* ===== AUTH SCREEN ===== */
+  #auth-screen {
+    position: fixed; inset: 0; z-index: 1000;
+    background: var(--bg);
+    overflow-y: auto; overflow-x: hidden;
   }
-  /* Image block — always visible, real DOM height */
-  .energy-img-block {
-    width:100%; min-height:420px;
-    background-image:url('https://images.stockcake.com/public/2/6/8/2681c3db-8377-4069-9220-e6ff2e24eaf2/neon-cyberpunk-rave-stockcake.jpg');
-    background-size:cover; background-position:center;
-    filter:saturate(1.5) brightness(0.45);
-    position:absolute; inset:0;
-    will-change:transform; transition:transform 10s ease;
+  #auth-screen.hidden { display: none; }
+  .auth-inner {
+    min-height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    flex-wrap: wrap; gap: 32px;
+    padding: 40px 24px;
   }
-  .energy-band:hover .energy-img-block { transform:scale(1.05); }
-  /* Force band to have height based on content, not background */
-  .energy-band { min-height:420px; }
-  .energy-tint {
-    position:absolute; inset:0;
-    background:
-      radial-gradient(ellipse at center, rgba(255,45,120,0.14) 0%, transparent 65%),
-      linear-gradient(to bottom,
-        rgba(5,5,9,0.65) 0%,
-        rgba(5,5,9,0.08) 35%,
-        rgba(5,5,9,0.08) 65%,
-        rgba(5,5,9,0.72) 100%
-      );
-  }
-  .energy-content { position:relative; z-index:2; padding:48px 24px; }
-  .energy-title {
-    font-family:'Urbanist',sans-serif; font-weight:900;
-    font-size:clamp(2.2rem,7vw,4.5rem); letter-spacing:-0.5px; line-height:1.05;
-    margin-bottom:16px; text-shadow:0 4px 40px rgba(0,0,0,0.6);
-  }
-  .energy-sub {
-    font-size:1rem; color:rgba(255,255,255,0.72); margin-bottom:32px;
-    max-width:460px; margin-left:auto; margin-right:auto; line-height:1.6;
+  @media (max-width: 680px) {
+    .auth-inner {
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 28px;
+      padding: 36px 20px 60px;
+    }
+    .landing-hero { max-width: 100%; margin-bottom: 0; }
+    .landing-headline { font-size: 1.5rem !important; }
+    .landing-sub { font-size: 0.85rem !important; }
+    .lf-item { font-size: 0.75rem !important; padding: 5px 12px !important; }
+    .auth-card { max-width: 100%; padding: 28px 20px; }
   }
 
-  /* ── Responsive ── */
-  @media(max-width:680px) {
-    nav { padding:14px 20px; }
-    .nav-links { display:none; }
-    .nav-hamburger { display:block; }
-    .proof-divider { display:none; }
-    .steps-row::before { display:none; }
-    .how-step { margin-bottom:36px; }
-    footer { flex-direction:column; align-items:center; text-align:center; }
-    .photo-strip-wrap { padding:0 16px; }
-    .photo-strip { border-radius:20px; }
-    .strip-img-block { height:240px; }
-    /* Proof strip wraps cleanly on small screens */
-    .proof-strip { gap:12px; }
+  .auth-card {
+    width: 100%; max-width: 400px;
+    background: var(--surface2);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 28px;
+    padding: 40px 36px;
+    position: relative;
+    z-index: 1;
   }
-  @media(min-width:681px) {
-    .mobile-menu { display:none !important; }
-    /* Hide mobile img blocks on desktop — background-image approach takes over */
-    .strip-img-block { display:none; }
+  .auth-logo {
+    display: flex; align-items: center; gap: 10px;
+    justify-content: center; margin-bottom: 8px;
   }
+  .auth-tagline {
+    text-align: center; color: var(--muted);
+    font-size: 0.88rem; margin-bottom: 32px;
+  }
+  .auth-tabs {
+    display: flex; gap: 0;
+    background: rgba(255,255,255,0.05);
+    border-radius: 12px; padding: 4px;
+    margin-bottom: 24px;
+  }
+  .auth-tab {
+    flex: 1; padding: 9px;
+    border: none; background: transparent; cursor: pointer;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.85rem;
+    color: var(--muted); border-radius: 9px; transition: all 0.2s;
+  }
+  .auth-tab.active { background: var(--neon-pink); color: #fff; }
+  .auth-error {
+    background: rgba(255,45,120,0.12);
+    border: 1px solid rgba(255,45,120,0.3);
+    color: var(--neon-pink);
+    border-radius: 10px; padding: 10px 14px;
+    font-size: 0.82rem; margin-bottom: 16px; display: none;
+  }
+  .auth-error.show { display: block; }
+  .auth-success {
+    background: rgba(57,255,20,0.1);
+    border: 1px solid rgba(57,255,20,0.3);
+    color: var(--neon-green);
+    border-radius: 10px; padding: 10px 14px;
+    font-size: 0.82rem; margin-bottom: 16px; display: none;
+    text-align: center; line-height: 1.5;
+  }
+  .auth-success.show { display: block; }
+  .auth-btn {
+    width: 100%; padding: 13px;
+    background: var(--neon-pink); color: #fff;
+    border: none; border-radius: 100px; cursor: pointer;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.9rem;
+    box-shadow: 0 0 24px rgba(255,45,120,0.4);
+    transition: all 0.2s; margin-top: 8px;
+  }
+  .auth-btn:hover { transform: translateY(-1px); box-shadow: 0 0 36px rgba(255,45,120,0.6); }
+  .auth-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+  /* Loading spinner overlay */
+  #app-loading {
+    position: fixed; inset: 0; z-index: 999;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 16px;
+  }
+  #app-loading.hidden { display: none; }
+  .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid rgba(255,45,120,0.2);
+    border-top-color: var(--neon-pink);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ===== LANDING HERO (shown inside auth screen for non-logged-in visitors) ===== */
+  .landing-hero {
+    text-align: center;
+    margin-bottom: 28px;
+    max-width: 420px;
+    width: 100%;
+  }
+  .landing-headline {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 2rem;
+    color: #fff;
+    margin-bottom: 10px;
+    line-height: 1.2;
+  }
+  .landing-sub {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.6;
+    margin-bottom: 18px;
+  }
+  .landing-features {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 4px;
+  }
+  .lf-item {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 100px;
+    padding: 6px 14px;
+    font-size: 0.8rem;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  /* ===== ONBOARDING SCREEN ===== */
+  #onboarding-screen {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: var(--bg);
+    overflow-y: auto;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    padding: 24px;
+  }
+  #onboarding-screen.show {
+    display: flex;
+  }
+  .onboard-card {
+    width: 100%;
+    max-width: 420px;
+    background: var(--surface2);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 28px;
+    padding: 40px 36px;
+    position: relative;
+    z-index: 1;
+  }
+  .onboard-step-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    margin-bottom: 28px;
+  }
+  .onboard-dot {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.82rem;
+    border: 2px solid rgba(255,255,255,0.15);
+    color: var(--muted);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  .onboard-dot.active {
+    background: var(--neon-pink);
+    border-color: var(--neon-pink);
+    color: #fff;
+    box-shadow: 0 0 14px rgba(255,45,120,0.5);
+  }
+  .onboard-dot.done {
+    background: var(--neon-green);
+    border-color: var(--neon-green);
+    color: #000;
+  }
+  .onboard-line {
+    height: 2px;
+    width: 48px;
+    background: rgba(255,255,255,0.12);
+    flex-shrink: 0;
+  }
+  .onboard-line.done { background: var(--neon-green); }
+  .onboard-title {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 800;
+    font-size: 1.5rem;
+    color: #fff;
+    margin-bottom: 10px;
+    text-align: center;
+  }
+  .onboard-sub {
+    color: var(--muted);
+    font-size: 0.88rem;
+    line-height: 1.6;
+    margin-bottom: 28px;
+    text-align: center;
+  }
+  .onboard-features {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 28px;
+  }
+  .onboard-feat {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 12px;
+    padding: 12px 16px;
+    font-size: 0.88rem;
+  }
+  .onboard-feat-icon { font-size: 1.3rem; flex-shrink: 0; }
+
 </style>
 </head>
 <body>
 
-<div class="blobs">
-  <div class="blob b1"></div>
-  <div class="blob b2"></div>
-  <div class="blob b3"></div>
-  <div class="blob b4"></div>
+<div class="bg-blobs">
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+  <div class="blob blob-3"></div>
 </div>
 
-<!-- ════════════════════════════════════════════
-     NAV
-════════════════════════════════════════════ -->
-<nav class="z">
-  <a href="#" class="nav-logo">
-    <svg viewBox="0 0 44 44" width="32" height="32">
-      <defs><linearGradient id="ng" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#FF2D78"/><stop offset="100%" stop-color="#00F5FF"/>
-      </linearGradient></defs>
-      <rect x="2" y="2" width="40" height="40" rx="12" fill="url(#ng)"/>
-      <g fill="#050509">
-        <rect class="eq-bar" x="11" y="22" width="4.5" height="10" rx="2"/>
-        <rect class="eq-bar" x="19.75" y="15" width="4.5" height="17" rx="2"/>
-        <rect class="eq-bar" x="28.5" y="19" width="4.5" height="13" rx="2"/>
-      </g>
-    </svg>
-    <span class="nav-wordmark"><span class="r">Rave</span><span class="g">FAM</span></span>
-  </a>
-
-  <div class="nav-links">
-    <a class="nav-link" href="#features">Features</a>
-    <a class="nav-link" href="#how">How it works</a>
-    <a class="nav-link" href="#leaders">For Crew Leaders</a>
-      </div>
-
-  <div class="nav-actions">
-    <a class="btn-nav-login" href="app.html?tab=login">Log in</a>
-    <a class="btn-nav-signup" href="app.html?tab=signup">Sign up free →</a>
-  </div>
-
-  <button class="nav-hamburger" onclick="document.getElementById('mobile-menu').classList.add('open')">☰</button>
-</nav>
-
-<!-- Mobile menu -->
-<div class="mobile-menu z" id="mobile-menu">
-  <button class="mobile-menu-close" onclick="document.getElementById('mobile-menu').classList.remove('open')">✕</button>
-  <a class="nav-link" href="#features" onclick="document.getElementById('mobile-menu').classList.remove('open')">Features</a>
-  <a class="nav-link" href="#how"      onclick="document.getElementById('mobile-menu').classList.remove('open')">How it works</a>
-  <a class="nav-link" href="#leaders"   onclick="document.getElementById('mobile-menu').classList.remove('open')">For Crew Leaders</a>
-    <a class="btn-nav-login"  href="app.html?tab=login"  style="margin-top:8px;">Log in</a>
-  <a class="btn-nav-signup" href="app.html?tab=signup">Sign up free →</a>
+<!-- Loading overlay (shown while checking session) -->
+<div id="app-loading">
+  <div class="spinner"></div>
+  <div style="font-family:'Outfit',sans-serif;font-weight:600;color:var(--muted);font-size:0.85rem;">Loading RaveFAM…</div>
 </div>
 
-<!-- ════════════════════════════════════════════
-     HERO
-════════════════════════════════════════════ -->
-<section class="hero z">
-  <div class="hero-photo-bg"></div>
-  <div class="hero-photo-tint"></div>
-  <div class="hero-eyebrow">
-    <div class="hero-eyebrow-dot"></div>
-    Built for the dancefloor
+<!-- Auth screen -->
+<div id="auth-screen" class="hidden">
+  <div class="bg-blobs">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+  </div>
+  <div class="auth-inner">
+  <div class="landing-hero">
+    <div class="auth-logo" style="justify-content:center;margin-bottom:16px;">
+      <svg viewBox="0 0 44 44" width="38" height="38">
+        <defs><linearGradient id="lg2" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#FF2D78"/><stop offset="100%" stop-color="#00F5FF"/>
+        </linearGradient></defs>
+        <rect x="2" y="2" width="40" height="40" rx="12" fill="url(#lg2)"/>
+        <g fill="#050509">
+          <rect x="11" y="22" width="4.5" height="10" rx="2" style="transform-origin:center bottom;animation:eqPulse 1.1s ease-in-out infinite;animation-delay:0s"/>
+          <rect x="19.75" y="15" width="4.5" height="17" rx="2" style="transform-origin:center bottom;animation:eqPulse 1.1s ease-in-out infinite;animation-delay:0.18s"/>
+          <rect x="28.5" y="19" width="4.5" height="13" rx="2" style="transform-origin:center bottom;animation:eqPulse 1.1s ease-in-out infinite;animation-delay:0.36s"/>
+        </g>
+      </svg>
+      <span style="font-family:'Syne',sans-serif;font-weight:800;font-size:2rem;"><span style="color:#fff">Rave</span><span style="color:#39FF14">FAM</span></span>
+    </div>
+    <h1 class="landing-headline">Your Festival Season,<br>Organized.</h1>
+    <p class="landing-sub">Bring your crew together — plan lineups, share memories, and never lose your tribe in the crowd.</p>
+    <div class="landing-features">
+      <div class="lf-item">🎪 Manage Crews</div>
+      <div class="lf-item">🎟️ Track Festivals</div>
+      <div class="lf-item">👥 Build Your Squad</div>
+      <div class="lf-item">📸 Share Memories</div>
+    </div>
   </div>
 
-  <h1 class="hero-title">
-    Your crew deserves<br>
-    <span class="line2"><span class="hero-grad">a real home base</span></span>
-  </h1>
-
-  <p class="hero-sub">
-    RaveFAM keeps your festival tribe organised — crews, countdowns, checklists and invite codes — so you can focus on the music.
-  </p>
-
-  <div class="hero-ctas">
-    <a class="btn-hero-primary" href="app.html?tab=signup">Build your home base →</a>
-    <a class="btn-hero-secondary" href="app.html?tab=login">I have an account →</a>
-  </div>
-
-  <!-- Early access strip -->
-  <div class="proof-strip">
-    <div class="proof-text">🚀 <strong>Early access</strong> · Be one of the first crews in</div>
-    <div class="proof-divider"></div>
-    <div class="proof-text">🖤 <strong>Built by ravers, for ravers</strong> · Come help shape it</div>
-  </div>
-</section>
-
-<!-- ── Phone mockup ── -->
-<div class="mockup-wrap z">
-  <div class="phone">
-    <div class="phone-notch"></div>
-    <div class="phone-screen">
-      <!-- Header -->
-      <div class="phone-header">
-        <span class="phone-logo"><span style="color:#fff">Rave</span><span class="g">FAM</span></span>
-        <span style="font-size:0.65rem;color:var(--green);font-family:'Outfit',sans-serif;font-weight:700;">🟢 3 crews</span>
-      </div>
-      <!-- Crew card 1 -->
-      <div class="phone-card">
-        <div class="phone-card-bar" style="background:linear-gradient(90deg,#FF2D78,#BF00FF)"></div>
-        <div class="phone-card-name">Bass Syndicate</div>
-        <div class="phone-card-meta">👑 You lead · 5 members</div>
-        <div class="phone-card-fest">
-          <div class="phone-card-fest-label">⏳ Next up · 15 days</div>
-          <div class="phone-card-fest-name">Awakenings Festival</div>
-          <div class="phone-card-fest-date">21 Jun · Amsterdam</div>
-        </div>
-        <div class="phone-avatars">
-          <div class="phone-av" style="background:#FF2D78">JD</div>
-          <div class="phone-av" style="background:#BF00FF">MK</div>
-          <div class="phone-av" style="background:#FF6B35">AL</div>
-          <div class="phone-av" style="background:#00B4D8">RS</div>
-          <div class="phone-av" style="background:#39FF14;color:#000">TK</div>
-        </div>
-      </div>
-      <!-- Crew card 2 -->
-      <div class="phone-card" style="margin-top:0;">
-        <div class="phone-card-bar" style="background:linear-gradient(90deg,#00F5FF,#39FF14)"></div>
-        <div class="phone-card-name">Deep Waters</div>
-        <div class="phone-card-meta">🟢 Recruiting · 1 member</div>
-        <div style="height:10px;"></div>
-      </div>
+  <div class="auth-card">
+    <div class="auth-logo" style="display:none;">
+      <svg viewBox="0 0 44 44" width="34" height="34">
+        <defs><linearGradient id="ag" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#FF2D78"/><stop offset="100%" stop-color="#00F5FF"/>
+        </linearGradient></defs>
+        <rect x="2" y="2" width="40" height="40" rx="12" fill="url(#ag)"/>
+        <g fill="#050509">
+          <rect x="11" y="22" width="4.5" height="10" rx="2" style="transform-origin:center bottom;animation:eqPulse 1.1s ease-in-out infinite;animation-delay:0s"/>
+          <rect x="19.75" y="15" width="4.5" height="17" rx="2" style="transform-origin:center bottom;animation:eqPulse 1.1s ease-in-out infinite;animation-delay:0.18s"/>
+          <rect x="28.5" y="19" width="4.5" height="13" rx="2" style="transform-origin:center bottom;animation:eqPulse 1.1s ease-in-out infinite;animation-delay:0.36s"/>
+        </g>
+      </svg>
+      <span style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.8rem;"><span style="color:#fff">Rave</span><span style="color:#39FF14">FAM</span></span>
     </div>
 
-    <!-- Floating badges -->
-    <div class="phone-badge">🎟️ 15 days to Awakenings</div>
-    <div class="phone-badge-2">✅ 4/10 checklist done</div>
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tab-login" onclick="showAuthTab('login')">Log In</button>
+      <button class="auth-tab" id="tab-signup" onclick="showAuthTab('signup')">Sign Up</button>
+    </div>
+
+    <div class="auth-error" id="auth-error"></div>
+    <div class="auth-success" id="auth-success"></div>
+
+    <div id="auth-login-form">
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input class="form-input" id="login-email" type="email" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input class="form-input" id="login-password" type="password" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button class="auth-btn" id="login-btn" onclick="doLogin()">Log In 🔥</button>
+    </div>
+
+    <div id="auth-signup-form" style="display:none;">
+      <div class="form-group">
+        <label class="form-label">Your Name</label>
+        <input class="form-input" id="signup-name" type="text" placeholder="e.g. Jamie D." autocomplete="name">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input class="form-input" id="signup-email" type="email" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input class="form-input" id="signup-password" type="password" placeholder="min 6 characters" autocomplete="new-password">
+      </div>
+      <button class="auth-btn" id="signup-btn" onclick="doSignup()">Create Account 🎉</button>
+    </div>
   </div>
+  </div><!-- /auth-inner -->
 </div>
 
-<!-- ════════════════════════════════════════════
-     FEATURES
-════════════════════════════════════════════ -->
-<section id="features" class="z">
-  <div class="section-inner">
-    <div class="reveal">
-      <div class="section-eyebrow">Everything you need</div>
-      <h2 class="section-title">Built for how<br>crews actually work</h2>
-      <p class="section-sub">No more chasing people on five different chats. RaveFAM puts your whole festival operation in one place.</p>
+<div class="app" id="main-app" style="display:none;">
+  <header>
+    <a href="index.html" class="logo" style="text-decoration:none;">
+      <svg class="logo-mark" viewBox="0 0 44 44" width="34" height="34" aria-hidden="true">
+        <defs>
+          <linearGradient id="logoGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#FF2D78"/>
+            <stop offset="100%" stop-color="#00F5FF"/>
+          </linearGradient>
+        </defs>
+        <rect x="2" y="2" width="40" height="40" rx="12" fill="url(#logoGrad)"/>
+        <g fill="#050509">
+          <rect class="eq-bar" x="11" y="22" width="4.5" height="10" rx="2"/>
+          <rect class="eq-bar" x="19.75" y="15" width="4.5" height="17" rx="2"/>
+          <rect class="eq-bar" x="28.5" y="19" width="4.5" height="13" rx="2"/>
+        </g>
+      </svg>
+      <span class="logo-text"><span>Rave</span><span>FAM</span></span>
+    </a>
+    <div class="header-actions">
+      <button class="btn btn-ghost" onclick="openModal()">+ New Crew</button>
+      <button class="btn btn-ghost" id="logout-btn" onclick="doLogout()" style="font-size:0.75rem;padding:9px 14px;" title="Log out">⏻</button>
     </div>
+  </header>
 
-    <div class="features-grid">
-      <div class="feat-card reveal reveal-d1" style="--accent:var(--pink)">
-        <div class="feat-icon" style="background:rgba(255,45,120,0.15)">👑</div>
-        <div class="feat-title">Crew management</div>
-        <div class="feat-desc">Create crews, set statuses (Recruiting vs Locked In), and share instant invite codes and QR codes with your squad.</div>
-      </div>
-      <div class="feat-card reveal reveal-d2" style="--accent:var(--purple)">
-        <div class="feat-icon" style="background:rgba(191,0,255,0.12)">👤</div>
-        <div class="feat-title">Know your crew</div>
-        <div class="feat-desc">Every raver in your crew — their genres, vibe tags, Instagram and phone — all in one place. Know your tribe before the gates open.</div>
-      </div>
-      <div class="feat-card reveal reveal-d3" style="--accent:var(--green)">
-        <div class="feat-icon" style="background:rgba(57,255,20,0.12)">📲</div>
-        <div class="feat-title">QR invite codes</div>
-        <div class="feat-desc">One scan and you're in. Share a QR at a festival, in a WhatsApp or on a story — crew grows instantly.</div>
-      </div>
-      <div class="feat-card reveal reveal-d1" style="--accent:var(--cyan)">
-        <div class="feat-icon" style="background:rgba(0,245,255,0.12)">🎟️</div>
-        <div class="feat-title">Festival tracking</div>
-        <div class="feat-desc">Log every festival, see who from your tribe is going, and watch the countdown tick down together.</div>
-      </div>
-      <div class="feat-card reveal reveal-d2" style="--accent:var(--orange)">
-        <div class="feat-icon" style="background:rgba(255,107,53,0.12)">⏳</div>
-        <div class="feat-title">Live countdowns</div>
-        <div class="feat-desc">Days, weeks, months — the hype is real. Every crew card shows exactly how long until the next one.</div>
-      </div>
-    </div>
-  </div>
-</section>
+  <nav>
+    <button class="nav-tab active" onclick="switchTab('crews', this)">My Crews</button>
+    <button class="nav-tab" onclick="switchTab('events', this)">Festivals</button>
+    <button class="nav-tab" onclick="switchTab('members', this)">Squad</button>
+    <button class="nav-tab" style="display:none;" onclick="switchTab('checklist', this)">Checklist</button>
+  </nav>
 
-<!-- ════════════ CREW LEADERS PHOTO STRIP ════════════ -->
-<section id="leaders" class="z" style="padding:0 0 24px;">
-  <div class="photo-strip-wrap">
-    <div class="photo-strip strip-a reveal">
-      <!-- Mobile: real DOM image block always visible -->
-      <div class="strip-img-block"></div>
-      <!-- Desktop: absolute bg + tint overlay -->
-      <div class="strip-photo-desk"></div>
-      <div class="strip-tint"></div>
-      <div class="strip-content">
-        <div class="strip-tag" style="background:rgba(255,45,120,0.14);border:1px solid rgba(255,45,120,0.3);color:var(--neon-pink);">
-          <div class="strip-tag-dot" style="background:var(--neon-pink);animation:pulse 2s infinite;"></div>
-          For Crew Leaders
+  <main>
+
+    <!-- CREWS PAGE -->
+    <div class="page active" id="page-crews">
+      <div class="section-header" style="margin-bottom:20px;">
+        <div class="section-title">Your Crews <span id="crews-count" style="color:var(--muted);font-size:1rem;font-weight:400"></span></div>
+      </div>
+      <div class="crew-grid" id="crew-grid">
+        <!-- Crew cards rendered by JS -->
+        <div class="crew-add-card" onclick="openModal()">
+          <div class="add-icon">＋</div>
+          <div class="add-label">Create New Crew</div>
         </div>
-        <div class="strip-title">Lead the tribe.<br>Own the night.</div>
-        <div class="strip-sub">Create a crew in under a minute. Set your status, pick your colour, generate a QR — then send it to everyone who belongs on the dancefloor with you.</div>
-        <div class="strip-pills">
-          <span class="strip-pill">👑 You lead</span>
-          <span class="strip-pill">🟢 Recruiting</span>
-          <span class="strip-pill">🔒 Locked In</span>
-          <span class="strip-pill">📲 QR invite</span>
-        </div>
-        <a class="btn-hero-primary" href="app.html?tab=signup" style="font-size:0.88rem;padding:13px 26px;">Start your crew →</a>
       </div>
     </div>
-  </div>
-</section>
 
-<!-- ════════════ QR SCAN PHOTO STRIP ════════════ -->
-<section class="z" style="padding:0 0 80px;">
-  <div class="photo-strip-wrap">
-    <div class="photo-strip strip-b reveal">
-      <!-- Mobile: real DOM image block always visible -->
-      <div class="strip-img-block"></div>
-      <!-- Desktop: absolute bg + tint overlay -->
-      <div class="strip-photo-desk"></div>
-      <div class="strip-tint"></div>
-      <div class="strip-content">
-        <div class="strip-tag" style="background:rgba(0,245,255,0.12);border:1px solid rgba(0,245,255,0.3);color:var(--neon-cyan);">
-          <div class="strip-tag-dot" style="background:var(--neon-cyan);animation:pulse 2s infinite;"></div>
-          Joining a crew
-        </div>
-        <div class="strip-title">One scan.<br>You're in.</div>
-        <div class="strip-sub">Your Crew Leader shows you a QR. You scan it. You're instantly added to the crew — no group chats to hunt down, no friction at all.</div>
-        <div class="strip-pills">
-          <span class="strip-pill">📷 Scan QR</span>
-          <span class="strip-pill">🔢 Enter code</span>
-          <span class="strip-pill">⚡ Instant join</span>
-        </div>
-        <a class="btn-hero-secondary" href="app.html?tab=signup" style="font-size:0.88rem;padding:13px 26px;border-color:rgba(0,245,255,0.35);color:var(--neon-cyan);">Join a crew →</a>
+    <!-- EVENTS PAGE -->
+    <div class="page" id="page-events">
+      <div class="section-header">
+        <div class="section-title">Festivals</div>
+        <button class="btn btn-ghost" style="font-size:0.78rem;" onclick="openFestivalEditor()">+ Add Festival</button>
+      </div>
+      <div class="events-list" id="events-list">
+        <!-- rendered by JS from the festivals catalog -->
       </div>
     </div>
-  </div>
-</section>
 
-<!-- ════════════════════════════════════════════
-     HOW IT WORKS
-════════════════════════════════════════════ -->
-<section id="how" class="z">
-  <div class="section-inner">
-    <div class="reveal" style="text-align:center;">
-      <div class="section-eyebrow" style="text-align:center;">Dead simple</div>
-      <h2 class="section-title" style="text-align:center;">Up and running<br>in 3 minutes</h2>
+    <!-- MEMBERS PAGE -->
+    <div class="page" id="page-members">
+      <div class="section-header">
+        <div class="section-title">Your Squad</div>
+        <button class="btn btn-ghost" style="font-size:0.78rem;" onclick="openProfileEditor()">+ Add Raver</button>
+      </div>
+      <div class="members-grid" id="members-grid">
+        <!-- rendered by JS -->
+      </div>
     </div>
 
-    <div class="steps-row">
+    <!-- PROFILE PAGE (dedicated, full-view) -->
+    <div class="page" id="page-profile">
+      <!-- rendered by JS -->
+    </div>
 
-      <!-- Step 1: Icon badge — phone + pulse -->
-      <div class="how-step reveal reveal-d1">
-        <div class="how-step-visual">
-          <div class="how-step-num" style="background:linear-gradient(135deg,#FF2D78,#BF00FF)">1</div>
-          <div class="step-icon-badge" style="background:radial-gradient(135deg,rgba(255,45,120,0.2),rgba(191,0,255,0.15));box-shadow:0 0 28px rgba(255,45,120,0.25);">
-            📱
+    <!-- CREW PAGE (full view) -->
+    <div class="page" id="page-crew">
+      <!-- rendered by JS -->
+    </div>
+
+    <!-- CHECKLIST PAGE -->
+    <div class="page" id="page-checklist">
+      <div class="section-header">
+        <div class="section-title">Rave Checklist</div>
+        <span style="font-size:0.8rem;color:var(--muted);font-family:'Outfit',sans-serif;font-weight:600;">Bass Syndicate · Awakenings</span>
+      </div>
+      <div class="progress-label" id="progress-label">4 of 10 complete</div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill" id="progress-bar" style="width:40%"></div>
+      </div>
+
+      <div class="checklist-section">
+        <div class="checklist-section-title">Logistics</div>
+        <div class="checklist" id="checklist">
+          <div class="check-item checked" onclick="toggleCheck(this)">
+            <div class="check-box">✓</div>
+            <div class="check-text">Buy tickets</div>
+            <div class="check-who">Jamie</div>
           </div>
-          <!-- pulse ring -->
-          <div style="position:absolute;width:88px;height:88px;border-radius:50%;border:1px solid rgba(255,45,120,0.2);animation:ringPulse 2s ease-in-out infinite;"></div>
-          <div style="position:absolute;width:108px;height:108px;border-radius:50%;border:1px solid rgba(255,45,120,0.08);animation:ringPulse 2s 0.4s ease-in-out infinite;"></div>
-        </div>
-        <div class="how-step-title">Create your account</div>
-        <div class="how-step-desc">Sign up with your phone number or email. Set your vibe tags and you're in.</div>
-      </div>
-
-      <!-- Step 2: Icon badge — crown with glow -->
-      <div class="how-step reveal reveal-d2">
-        <div class="how-step-visual">
-          <div class="how-step-num" style="background:linear-gradient(135deg,#00F5FF,#39FF14)">2</div>
-          <div class="step-icon-badge" style="background:radial-gradient(135deg,rgba(255,230,0,0.18),rgba(255,45,120,0.12));box-shadow:0 0 32px rgba(255,230,0,0.2);">
-            👑
+          <div class="check-item checked" onclick="toggleCheck(this)">
+            <div class="check-box">✓</div>
+            <div class="check-text">Book accommodation</div>
+            <div class="check-who">Rosa</div>
           </div>
-          <div style="position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:6px;">
-            <span style="background:rgba(57,255,20,0.15);border:1px solid rgba(57,255,20,0.3);border-radius:100px;padding:3px 10px;font-family:'Outfit',sans-serif;font-weight:700;font-size:0.62rem;color:var(--green);white-space:nowrap;">🟢 Recruiting</span>
-            <span style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:100px;padding:3px 10px;font-family:'Outfit',sans-serif;font-weight:700;font-size:0.62rem;color:var(--muted);white-space:nowrap;">🔒 Locked In</span>
+          <div class="check-item" onclick="toggleCheck(this)">
+            <div class="check-box"></div>
+            <div class="check-text">Arrange transport to venue</div>
+            <div class="check-who">Maya</div>
+          </div>
+          <div class="check-item" onclick="toggleCheck(this)">
+            <div class="check-box"></div>
+            <div class="check-text">Sort out airport pickups</div>
+            <div class="check-who">Alex</div>
           </div>
         </div>
-        <div class="how-step-title">Build your crew &amp; set your status</div>
-        <div class="how-step-desc">Name it, colour it, set Recruiting or Locked In. A QR + invite code generates instantly.</div>
       </div>
 
-      <!-- Step 3: Scene — QR connect -->
-      <div class="how-step reveal reveal-d3">
-        <div class="how-step-visual">
-          <div class="how-step-num" style="background:linear-gradient(135deg,#FFE600,#FF6B35)">3</div>
-          <div class="step-qr-scene">
-            <div class="step-av" style="background:linear-gradient(135deg,#FF2D78,#BF00FF)">JD</div>
-            <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
-              <div style="display:flex;gap:0;">
-                <div class="step-qr-dot"></div>
-                <div class="step-qr-dot"></div>
-                <div class="step-qr-dot"></div>
-              </div>
-              <div class="step-qr-box">
-                <div class="step-qr-cell" style="background:#FF2D78;grid-column:1/3;grid-row:1/3;border-radius:4px;"></div>
-                <div class="step-qr-cell" style="background:rgba(255,255,255,0.15);"></div>
-                <div class="step-qr-cell" style="background:rgba(255,255,255,0.15);"></div>
-                <div class="step-qr-cell" style="background:rgba(255,255,255,0.08);"></div>
-                <div class="step-qr-cell" style="background:#00F5FF;border-radius:4px;grid-column:2/4;grid-row:2/4;"></div>
-                <div class="step-qr-cell" style="background:rgba(255,255,255,0.15);"></div>
-              </div>
-              <div class="step-qr-lightning">⚡</div>
-            </div>
-            <div class="step-av" style="background:linear-gradient(135deg,#00F5FF,#39FF14)">MK</div>
+      <div class="checklist-section">
+        <div class="checklist-section-title">Essentials</div>
+        <div class="checklist">
+          <div class="check-item checked" onclick="toggleCheck(this)">
+            <div class="check-box">✓</div>
+            <div class="check-text">Download offline maps</div>
+            <div class="check-who">All</div>
+          </div>
+          <div class="check-item checked" onclick="toggleCheck(this)">
+            <div class="check-box">✓</div>
+            <div class="check-text">Set up group WhatsApp</div>
+            <div class="check-who">Jamie</div>
+          </div>
+          <div class="check-item" onclick="toggleCheck(this)">
+            <div class="check-box"></div>
+            <div class="check-text">Pack earplugs (quality ones!)</div>
+            <div class="check-who">Each</div>
+          </div>
+          <div class="check-item" onclick="toggleCheck(this)">
+            <div class="check-box"></div>
+            <div class="check-text">Portable chargers charged</div>
+            <div class="check-who">Each</div>
           </div>
         </div>
-        <div class="how-step-title">Collect your ravers via QR</div>
-        <div class="how-step-desc">Share the QR at a festival or drop the link in the group chat. One scan and they're in.</div>
       </div>
 
-      <!-- Step 4: Scene — tribe alive -->
-      <div class="how-step reveal reveal-d4">
-        <div class="how-step-visual">
-          <div class="how-step-num" style="background:linear-gradient(135deg,#BF00FF,#00F5FF)">4</div>
-          <div class="step-tribe-scene">
-            <div class="step-tribe-avs">
-              <div class="step-tribe-av" style="background:linear-gradient(135deg,#FF2D78,#BF00FF)">JD</div>
-              <div class="step-tribe-av" style="background:linear-gradient(135deg,#00F5FF,#39FF14)">MK</div>
-              <div class="step-tribe-av" style="background:linear-gradient(135deg,#FFE600,#FF6B35)">AL</div>
-              <div class="step-tribe-av" style="background:linear-gradient(135deg,#BF00FF,#00F5FF)">RS</div>
-              <div class="step-tribe-av" style="background:linear-gradient(135deg,#39FF14,#00F5FF);color:#000">TK</div>
-            </div>
-            <div class="step-fest-chip">⏳ 15 days · Awakenings</div>
+      <div class="checklist-section">
+        <div class="checklist-section-title">Day Of</div>
+        <div class="checklist">
+          <div class="check-item" onclick="toggleCheck(this)">
+            <div class="check-box"></div>
+            <div class="check-text">Set a crew meetup point</div>
+            <div class="check-who">All</div>
+          </div>
+          <div class="check-item" onclick="toggleCheck(this)">
+            <div class="check-box"></div>
+            <div class="check-text">Share event schedule with crew</div>
+            <div class="check-who">Tom</div>
           </div>
         </div>
-        <div class="how-step-title">Watch your tribe come alive</div>
-        <div class="how-step-desc">Track festivals, see who's going, and let the countdown build the hype — together.</div>
       </div>
-
     </div>
-  </div>
-</section>
 
-<!-- ════════════ ENERGY FULL-BLEED ════════════ -->
-<div class="energy-band z">
-  <div class="energy-img-block"></div>
-  <div class="energy-tint"></div>
-  <div class="energy-content reveal">
-    <h2 class="energy-title">This is what<br><span class="hero-grad">it feels like</span></h2>
-    <p class="energy-sub">Every festival. Every crew. Every countdown that ends with the gates opening. RaveFAM is the home base before, during, and after.</p>
-    <a class="btn-hero-primary" href="app.html?tab=signup">Build your tribe →</a>
+  </main>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModalOutside(event)">
+  <div class="modal">
+    <div class="modal-title">🎉 Create New Crew</div>
+    <div class="form-group">
+      <label class="form-label">Crew Name</label>
+      <input class="form-input" type="text" placeholder="e.g. The Underground" id="crew-name-input">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Crew Color</label>
+      <div class="color-swatches">
+        <div class="color-swatch selected" style="background:#FF2D78" onclick="selectSwatch(this)"></div>
+        <div class="color-swatch" style="background:#00F5FF" onclick="selectSwatch(this)"></div>
+        <div class="color-swatch" style="background:#FFE600" onclick="selectSwatch(this)"></div>
+        <div class="color-swatch" style="background:#BF00FF" onclick="selectSwatch(this)"></div>
+        <div class="color-swatch" style="background:#39FF14" onclick="selectSwatch(this)"></div>
+        <div class="color-swatch" style="background:#FF6B35" onclick="selectSwatch(this)"></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="createCrew()">Create Crew 🔥</button>
+    </div>
   </div>
 </div>
 
+<!-- Crew Detail Modal -->
+<div class="modal-overlay" id="detail-overlay" onclick="closeDetailOutside(event)">
+  <div class="modal" id="detail-modal">
+    <!-- filled by JS -->
+  </div>
+</div>
 
+<!-- Profile Editor Modal -->
+<div class="modal-overlay" id="profile-edit-overlay" onclick="closeProfileEditorOutside(event)">
+  <div class="modal" id="profile-edit-modal" style="max-height:88vh;overflow-y:auto;">
+    <!-- filled by JS -->
+  </div>
+</div>
 
-<!-- ════════════════════════════════════════════
-     CTA BANNER
-════════════════════════════════════════════ -->
-<!-- ════════════ FOUNDER NOTE ════════════ -->
-<section class="z" style="padding:60px 24px 0;">
-  <div style="max-width:640px;margin:0 auto;text-align:center;">
-    <div style="
-      background:var(--surf);
-      border:1px solid rgba(255,255,255,0.07);
-      border-left:3px solid var(--pink);
-      border-radius:20px;
-      padding:32px 36px;
-      position:relative;
-    ">
-      <div style="font-size:2.5rem;line-height:1;margin-bottom:16px;opacity:0.4;">"</div>
-      <p style="font-family:'DM Sans',sans-serif;font-size:1.05rem;line-height:1.75;color:var(--text);font-style:italic;margin-bottom:20px;">
-        I built RaveFAM because keeping track of who's going where became impossible. Different crews, different circles, endless group chats — I needed one home base for all of it.
-      </p>
-      <div style="display:flex;align-items:center;justify-content:center;gap:12px;">
-        <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#FF2D78,#BF00FF);display:flex;align-items:center;justify-content:center;font-family:'Outfit',sans-serif;font-weight:800;font-size:0.8rem;color:#fff;">T</div>
-        <div style="text-align:left;">
-          <div style="font-family:'Outfit',sans-serif;font-weight:700;font-size:0.9rem;color:#fff;">Theile</div>
-          <div style="font-family:'Outfit',sans-serif;font-size:0.75rem;color:var(--muted);">Founder, RaveFAM</div>
-        </div>
-      </div>
+<!-- Festival Editor Modal -->
+<div class="modal-overlay" id="festival-edit-overlay" onclick="closeFestivalEditorOutside(event)">
+  <div class="modal" id="festival-edit-modal">
+    <!-- filled by JS -->
+  </div>
+</div>
+
+<!-- Status Change Confirmation Modal -->
+<div class="modal-overlay" id="status-confirm-overlay" onclick="closeStatusConfirmOutside(event)">
+  <div class="modal" id="status-confirm-modal">
+    <div class="modal-title" id="status-confirm-title"></div>
+    <p id="status-confirm-body" style="font-size:0.9rem;color:var(--muted);line-height:1.6;margin-bottom:24px;"></p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="dismissStatusConfirm()">Cancel</button>
+      <button class="btn btn-primary" id="status-confirm-btn" onclick="confirmStatusChange()">Confirm</button>
     </div>
   </div>
-</section>
+</div>
 
-<section class="cta-section z">
-  <div class="cta-inner reveal">
-    <div class="cta-glow-ring">🎊</div>
-    <h2 class="cta-title">Ready to build<br>your tribe?</h2>
-    <p class="cta-sub">Free to start. No credit card. Your crew is one QR scan away from being legendary.</p>
-    <div class="cta-btns">
-      <a class="btn-hero-primary" href="app.html?tab=signup">Build your home base →</a>
-      <a class="btn-hero-secondary" href="app.html?tab=login">Log in to my account</a>
-    </div>
-    <div style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;margin-top:24px;">
-      <span style="font-family:'Outfit',sans-serif;font-size:0.8rem;color:var(--muted);display:flex;align-items:center;gap:6px;">
-        <span style="color:var(--green);font-weight:700;">✓</span> Free forever
-      </span>
-      <span style="font-family:'Outfit',sans-serif;font-size:0.8rem;color:var(--muted);display:flex;align-items:center;gap:6px;">
-        <span style="color:var(--green);font-weight:700;">✓</span> Collect your crew with one QR scan
-      </span>
-      <span style="font-family:'Outfit',sans-serif;font-size:0.8rem;color:var(--muted);display:flex;align-items:center;gap:6px;">
-        <span style="color:var(--green);font-weight:700;">✓</span> Works on any phone
-      </span>
-    </div>
-  </div>
-</section>
+<!-- Toast -->
+<div class="toast" id="toast"></div>
 
-<!-- ════════════════════════════════════════════
-     FOOTER
-════════════════════════════════════════════ -->
-<footer class="z">
-  <div class="footer-logo">
-    <svg viewBox="0 0 44 44" width="26" height="26">
-      <rect x="2" y="2" width="40" height="40" rx="12" fill="url(#ng)"/>
-      <g fill="#050509">
-        <rect class="eq-bar" x="11" y="22" width="4.5" height="10" rx="2"/>
-        <rect class="eq-bar" x="19.75" y="15" width="4.5" height="17" rx="2"/>
-        <rect class="eq-bar" x="28.5" y="19" width="4.5" height="13" rx="2"/>
-      </g>
-    </svg>
-    <span class="footer-wordmark"><span style="color:#fff">Rave</span><span class="g">FAM</span></span>
+
+<!-- ===== ONBOARDING SCREEN ===== -->
+<div id="onboarding-screen">
+  <div class="bg-blobs" style="opacity:0.5;">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
   </div>
-  <div class="footer-links">
-    <a class="footer-link" href="/privacy.html">Privacy</a>
-    <a class="footer-link" href="/terms.html">Terms</a>
-    <a class="footer-link" href="/contact.html">Contact</a>
-    <a class="footer-link" href="app.html?tab=login">Log in</a>
-    <a class="footer-link" href="app.html?tab=signup">Sign up</a>
+
+  <!-- Step 1: Complete Profile -->
+  <div id="onboard-step1" class="onboard-card">
+    <div class="onboard-step-indicator">
+      <div class="onboard-dot active" id="ob-dot1">1</div>
+      <div class="onboard-line" id="ob-line1"></div>
+      <div class="onboard-dot" id="ob-dot2">2</div>
+    </div>
+    <div class="onboard-title">Welcome to RaveFAM! 🎉</div>
+    <div class="onboard-sub">Let's set up your raver identity so your crew can find and recognise you.</div>
+    <div class="onboard-features">
+      <div class="onboard-feat"><span class="onboard-feat-icon">🎭</span><span>Your handle, music taste &amp; home base</span></div>
+      <div class="onboard-feat"><span class="onboard-feat-icon">🎟️</span><span>Which festivals you're going to this season</span></div>
+      <div class="onboard-feat"><span class="onboard-feat-icon">📱</span><span>Contact info so your crew can reach you</span></div>
+    </div>
+    <button class="auth-btn" onclick="startProfileOnboarding()">Complete Your Profile →</button>
   </div>
-  <div class="footer-copy">© 2026 RaveFAM · Built for the tribe 🖤</div>
-</footer>
+
+  <!-- Step 2: Create / Join a Crew -->
+  <div id="onboard-step2" class="onboard-card" style="display:none;">
+    <div class="onboard-step-indicator">
+      <div class="onboard-dot done" id="ob-dot1b">✓</div>
+      <div class="onboard-line done" id="ob-line1b"></div>
+      <div class="onboard-dot active" id="ob-dot2b">2</div>
+    </div>
+    <div class="onboard-title">Build your crew 🔥</div>
+    <div class="onboard-sub">Create your first crew to start organising your festival season together — or skip and do it later.</div>
+    <div class="onboard-features">
+      <div class="onboard-feat"><span class="onboard-feat-icon">👑</span><span>You'll be the Crew Lead — invite your tribe</span></div>
+      <div class="onboard-feat"><span class="onboard-feat-icon">🔗</span><span>Share a QR code for members to self-join</span></div>
+      <div class="onboard-feat"><span class="onboard-feat-icon">🗓️</span><span>Plan lineups and track who's going to what</span></div>
+    </div>
+    <button class="auth-btn" onclick="createCrewOnboarding()">Create My First Crew →</button>
+    <button class="btn btn-ghost" onclick="completeOnboarding()" style="width:100%;margin-top:10px;padding:12px;font-size:0.85rem;">Skip for now</button>
+  </div>
+</div>
+
+</div><!-- /#main-app -->
 
 <script>
-  // ── Scroll-reveal ────────────────────────────────────────────
-  const observer = new IntersectionObserver(entries => {
-    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); observer.unobserve(e.target); } });
-  }, { threshold: 0.12 });
-  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
 
-  // ── Sticky nav shrink ────────────────────────────────────────
-  window.addEventListener('scroll', () => {
-    const nav = document.querySelector('nav');
-    nav.style.padding = window.scrollY > 40 ? '12px 40px' : '18px 40px';
+  // ── Handle ?tab=signup / ?tab=login from landing page links ──
+  (function() {
+    const tab = new URLSearchParams(window.location.search).get('tab');
+    if (tab === 'signup' || tab === 'login') {
+      window._pendingAuthTab = tab;
+    }
+  })();
+
+  // ===== SUPABASE INIT =====
+  const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
+  const SUPA_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2cGdvcGNpaW9xYnFtampqaWdoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3NTY2OTUsImV4cCI6MjA5NjMzMjY5NX0.DAgcx2UsGV1gUCQzHdGmv1Pu0rXlJdQxhn-bf1wGsiI';
+  const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+  let currentUser = null;  // holds the logged-in Supabase user object
+
+  // ===== AUTH UI helpers =====
+  function showAuthTab(tab) {
+    document.getElementById('auth-login-form').style.display  = tab === 'login'  ? 'block' : 'none';
+    document.getElementById('auth-signup-form').style.display = tab === 'signup' ? 'block' : 'none';
+    document.getElementById('tab-login').classList.toggle('active',  tab === 'login');
+    document.getElementById('tab-signup').classList.toggle('active', tab === 'signup');
+    clearAuthMessages();
+  }
+  function authError(msg) {
+    const el = document.getElementById('auth-error');
+    el.textContent = msg; el.classList.add('show');
+    document.getElementById('auth-success').classList.remove('show');
+  }
+  function authSuccess(msg) {
+    const el = document.getElementById('auth-success');
+    el.textContent = msg; el.classList.add('show');
+    document.getElementById('auth-error').classList.remove('show');
+  }
+  function clearAuthMessages() {
+    document.getElementById('auth-error').classList.remove('show');
+    document.getElementById('auth-success').classList.remove('show');
+  }
+  function setAuthBusy(busy) {
+    ['login-btn','signup-btn'].forEach(id => {
+      const b = document.getElementById(id);
+      if (b) b.disabled = busy;
+    });
+  }
+
+  async function doLogin() {
+    const email    = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    if (!email || !password) { authError('Please enter your email and password.'); return; }
+    setAuthBusy(true); clearAuthMessages();
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    setAuthBusy(false);
+    if (error) { authError(error.message); return; }
+    // onAuthStateChange will fire and handle the rest
+  }
+
+  async function doSignup() {
+    const name     = document.getElementById('signup-name').value.trim();
+    const email    = document.getElementById('signup-email').value.trim();
+    const password = document.getElementById('signup-password').value;
+    if (!name)     { authError('Please enter your name.'); return; }
+    if (!email)    { authError('Please enter your email.'); return; }
+    if (password.length < 6) { authError('Password must be at least 6 characters.'); return; }
+    setAuthBusy(true); clearAuthMessages();
+    const { data, error } = await sb.auth.signUp({
+      email, password,
+      options: { data: { full_name: name } }
+    });
+    setAuthBusy(false);
+    if (error) { authError(error.message); return; }
+    // If email confirmation is disabled in Supabase, session fires immediately.
+    // If enabled, prompt the user to check their inbox.
+    if (data.session) {
+      // session ready — onAuthStateChange handles transition
+    } else {
+      authSuccess('✅ Almost there! Check your email for a confirmation link, then log in.');
+      showAuthTab('login');
+    }
+  }
+
+  async function doLogout() {
+    await sb.auth.signOut();
+    // onAuthStateChange will fire SIGNED_OUT and flip back to auth screen
+  }
+
+  // ===== APP SHOW / HIDE =====
+  function showApp(user) {
+    currentUser = user;
+    document.getElementById('app-loading').classList.add('hidden');
+    document.getElementById('auth-screen').classList.add('hidden');
+    document.getElementById('main-app').style.display = 'flex';
+    // Boot data load
+    bootApp();
+  }
+
+  function showAuthScreen() {
+    currentUser = null;
+    document.getElementById('app-loading').classList.add('hidden');
+    document.getElementById('auth-screen').classList.remove('hidden');
+    document.getElementById('main-app').style.display = 'none';
+    if (window._pendingAuthTab) {
+      showAuthTab(window._pendingAuthTab);
+      window._pendingAuthTab = null;
+    }
+  }
+
+  // ===== AUTH STATE LISTENER =====
+  // Runs once on page load to restore session, then on every auth change.
+  sb.auth.onAuthStateChange((event, session) => {
+    if (session?.user) {
+      showApp(session.user);
+    } else {
+      showAuthScreen();
+    }
   });
 
-  // ── Read ?mode= param and pre-set auth on onboarding page ───
-  // (The onboarding page reads this on load to show login vs signup)
+  // Keyboard: submit on Enter in auth forms
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    const loginVisible  = document.getElementById('auth-login-form').style.display  !== 'none';
+    const signupVisible = document.getElementById('auth-signup-form').style.display !== 'none';
+    const authOpen = !document.getElementById('auth-screen').classList.contains('hidden');
+    if (!authOpen) return;
+    if (loginVisible)  doLogin();
+    if (signupVisible) doSignup();
+  });
+
+  // ===== SUPABASE DATA HELPERS =====
+  // Called once the user is authenticated. Loads all data from Supabase,
+  // falls back to the hardcoded demo data if the DB is empty (first run).
+
+  async function bootApp() {
+    try {
+      await loadAllData();
+    } catch(err) {
+      console.warn('DB load failed, starting fresh:', err);
+    }
+    renderSquad();
+    renderCrews();
+    renderEvents();
+    countChecks();
+    // New user: no squad data → launch onboarding
+    if (squad.length === 0) {
+      setTimeout(showOnboarding, 400);
+    }
+  }
+
+  async function loadAllData() {
+    const uid = currentUser.id;
+
+    // Always clear demo data first — real DB data (even empty) takes precedence
+    festivals.length = 0; festSeq = 0;
+    squad.length = 0;     squadSeq = 0;
+    crews.length = 0;     crewSeq = 0;
+
+    // --- Festivals ---
+    const { data: dbFests, error: fErr } = await sb
+      .from('festivals')
+      .select('*')
+      .order('date', { ascending: true });
+    if (!fErr && dbFests) {
+      dbFests.forEach(f => {
+        festivals.push({ id: f.id, name: f.name, date: f.date, location: f.location || '' });
+      });
+    }
+
+    // --- Ravers ---
+    const { data: dbRavers, error: rErr } = await sb
+      .from('ravers')
+      .select('*, raver_festivals(festival_id)')
+      .eq('created_by', uid);
+    if (!rErr && dbRavers) {
+      dbRavers.forEach(r => {
+        squad.push({
+          id: r.id,
+          name: r.name,
+          handle: r.handle || '',
+          isYou: r.is_you || false,
+          base: r.base || '',
+          gradient: r.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)',
+          genres: r.genres || [],
+          favArtists: r.fav_artists || [],
+          festIds: (r.raver_festivals || []).map(rf => rf.festival_id),
+          crew: r.crew_name || '',
+          instagram: r.instagram || '',
+          phone: r.phone || '',
+          metStory: r.met_story || '',
+          notes: r.notes || ''
+        });
+      });
+    }
+
+    // --- Crews ---
+    // Fetch crews where user is leader
+    const { data: leaderCrews } = await sb
+      .from('crews')
+      .select('*, crew_members(raver_id)')
+      .eq('leader_id', uid);
+
+    // Fetch crews where any of the user's ravers are members
+    const myRaverIds = (dbRavers || []).map(r => r.id);
+    let memberCrews = [];
+    if (myRaverIds.length) {
+      const { data: memberRows } = await sb
+        .from('crew_members')
+        .select('crew_id')
+        .in('raver_id', myRaverIds);
+      const memberCrewIds = [...new Set((memberRows || []).map(m => m.crew_id))];
+      const leaderCrewIds = (leaderCrews || []).map(c => c.id);
+      const extraIds = memberCrewIds.filter(id => !leaderCrewIds.includes(id));
+      if (extraIds.length) {
+        const { data: mc } = await sb
+          .from('crews')
+          .select('*, crew_members(raver_id)')
+          .in('id', extraIds);
+        memberCrews = mc || [];
+      }
+    }
+
+    const allDbCrews = [...(leaderCrews || []), ...memberCrews];
+    allDbCrews.forEach(c => {
+      const squadIds = (c.crew_members || []).map(cm => cm.raver_id);
+      const members = squadIds
+        .map(sid => squad.find(r => r.id === sid))
+        .filter(Boolean)
+        .map(r => ({ i: initials(r.name), c: c.color || '#FF2D78', t: '#fff' }));
+      crews.push({
+        id: c.id,
+        name: c.name,
+        color: c.color || '#FF2D78',
+        gradient: c.gradient || `linear-gradient(90deg,${c.color || '#FF2D78'},${c.color || '#FF2D78'})`,
+        status: c.status || 'locked-in',
+        isLead: c.leader_id === uid,
+        squadIds,
+        members: members.length ? members : []
+      });
+    });
+  }
+
+  // ===== SUPABASE WRITE HELPERS =====
+
+  async function dbSaveRaver(data, id) {
+    const uid = currentUser?.id;
+    if (!uid) return null;
+    const row = {
+      name: data.name,
+      handle: data.handle,
+      base: data.base,
+      gradient: data.gradient,
+      genres: data.genres,
+      fav_artists: data.favArtists,
+      crew_name: data.crew,
+      instagram: data.instagram,
+      phone: data.phone,
+      met_story: data.metStory,
+      notes: data.notes,
+      is_you: data.isYou || false,
+      updated_at: new Date().toISOString()
+    };
+    if (id) {
+      const { error } = await sb.from('ravers').update(row).eq('id', id);
+      if (error) console.error('raver update error', error);
+      return id;
+    } else {
+      row.created_by = uid;
+      const { data: inserted, error } = await sb.from('ravers').insert(row).select().single();
+      if (error) console.error('raver insert error', error);
+      return inserted?.id;
+    }
+  }
+
+  async function dbSaveRaverFestivals(raverId, festIds) {
+    // Delete existing links then re-insert
+    await sb.from('raver_festivals').delete().eq('raver_id', raverId);
+    if (festIds.length) {
+      const rows = festIds.map(fid => ({ raver_id: raverId, festival_id: fid }));
+      const { error } = await sb.from('raver_festivals').insert(rows);
+      if (error) console.error('raver_festivals insert error', error);
+    }
+  }
+
+  async function dbSaveFestival(data, id) {
+    const uid = currentUser?.id;
+    if (!uid) return null;
+    const row = { name: data.name, date: data.date, location: data.location };
+    if (id) {
+      const { error } = await sb.from('festivals').update(row).eq('id', id);
+      if (error) console.error('festival update error', error);
+      return id;
+    } else {
+      row.created_by = uid;
+      const { data: inserted, error } = await sb.from('festivals').insert(row).select().single();
+      if (error) console.error('festival insert error', error);
+      return inserted?.id;
+    }
+  }
+
+  async function dbDeleteFestival(id) {
+    await sb.from('raver_festivals').delete().eq('festival_id', id);
+    await sb.from('festivals').delete().eq('id', id);
+  }
+
+  async function dbSaveCrew(data, id) {
+    const uid = currentUser?.id;
+    if (!uid) return null;
+    const row = { name: data.name, color: data.color, gradient: data.gradient, status: data.status };
+    if (id) {
+      const { error } = await sb.from('crews').update(row).eq('id', id);
+      if (error) console.error('crew update error', error);
+      return id;
+    } else {
+      row.leader_id = uid;
+      const { data: inserted, error } = await sb.from('crews').insert(row).select().single();
+      if (error) console.error('crew insert error', error);
+      return inserted?.id;
+    }
+  }
+
+  async function dbSaveCrewMembers(crewId, raverIds) {
+    await sb.from('crew_members').delete().eq('crew_id', crewId);
+    if (raverIds.length) {
+      const uid = currentUser?.id;
+      const rows = raverIds.map(rid => ({ crew_id: crewId, raver_id: rid, added_by: uid }));
+      await sb.from('crew_members').insert(rows);
+    }
+  }
+
+
+  function switchTab(page, el) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('page-' + page).classList.add('active');
+    el.classList.add('active');
+  }
+
+  // Modal
+  function openModal() {
+    document.getElementById('modal-overlay').classList.add('open');
+  }
+  function closeModal() {
+    document.getElementById('modal-overlay').classList.remove('open');
+  }
+  function closeModalOutside(e) {
+    if (e.target === document.getElementById('modal-overlay')) closeModal();
+  }
+
+  function selectSwatch(el) {
+    document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+    el.classList.add('selected');
+  }
+
+  // ===== Crew data model =====
+  // Each crew has: id, name, event, color, gradient, status, members[], isLead
+  // isLead = true means the current user (you) created/leads this crew.
+  // Statuses: 'recruiting' (anyone can self-join) and 'locked-in' (Lead adds members only)
+  const STATUS = {
+    'recruiting': { cls: 'status-recruiting', label: '🟢 Recruiting' },
+    'locked-in':  { cls: 'status-locked-in',  label: '🔒 Locked In' }
+  };
+
+  let crewSeq = 0;
+  const crews = [
+    {
+      id: ++crewSeq, name: 'Bass Syndicate',
+      color: '#FF2D78', gradient: 'linear-gradient(90deg,#FF2D78,#BF00FF)',
+      status: 'locked-in', isLead: true,
+      squadIds: [1, 2, 3, 4, 5],
+      members: [
+        {i:'JD',c:'#FF2D78',t:'#fff'},{i:'MK',c:'#BF00FF',t:'#fff'},
+        {i:'AL',c:'#FF6B35',t:'#fff'},{i:'RS',c:'#00B4D8',t:'#fff'},
+        {i:'TK',c:'#39FF14',t:'#000'}
+      ]
+    },
+    {
+      id: ++crewSeq, name: 'Deep Waters',
+      color: '#00F5FF', gradient: 'linear-gradient(90deg,#00F5FF,#39FF14)',
+      status: 'recruiting', isLead: false,
+      squadIds: [5],
+      members: [{i:'TK',c:'#00F5FF',t:'#000'}]
+    },
+    {
+      id: ++crewSeq, name: 'Voltage',
+      color: '#FFE600', gradient: 'linear-gradient(90deg,#FFE600,#FF6B35)',
+      status: 'recruiting', isLead: true,
+      squadIds: [1],
+      members: [{i:'JD',c:'#FFE600',t:'#000'}]
+    }
+  ];
+
+  function getCrew(id) { return crews.find(c => c.id === id); }
+
+  // ===== Festival date parsing & "next up" computation =====
+  // App's current date — live, not pinned
+  const TODAY = new Date(); TODAY.setHours(0,0,0,0);
+  const MONTHS = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+
+  // Resolve a festival object to a Date. Prefers ISO `date` (YYYY-MM-DD);
+  // falls back to parsing a loose `when` string for any legacy entries.
+  function festDate(f) {
+    if (f && f.date) {
+      const [y,m,d] = f.date.split('-').map(Number);
+      return new Date(y, (m||1)-1, d||1);
+    }
+    return parseFestDate(f && f.when);
+  }
+
+  function parseFestDate(when) {
+    if (!when) return null;
+    const s = when.toLowerCase().trim();
+    const monMatch = s.match(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/);
+    const dayMatch = s.match(/\b(\d{1,2})\b/);
+    const yearMatch = s.match(/\b(20\d{2})\b/);
+    if (monMatch) {
+      const month = MONTHS[monMatch[1]];
+      const day = dayMatch ? parseInt(dayMatch[1]) : 1;
+      let year = yearMatch ? parseInt(yearMatch[1]) : TODAY.getFullYear();
+      let d = new Date(year, month, day);
+      if (!yearMatch && d < TODAY) d = new Date(year + 1, month, day);
+      return d;
+    }
+    if (yearMatch) return new Date(parseInt(yearMatch[1]), 11, 31);
+    return null;
+  }
+
+  // Pretty display for a festival date, e.g. "21 Jun 2026".
+  const MON_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function festWhenLabel(f) {
+    const d = festDate(f);
+    if (!d) return f.when || '';
+    return `${d.getDate()} ${MON_SHORT[d.getMonth()]} ${d.getFullYear()}`;
+  }
+
+  // Days from TODAY to a date (whole days, rounded).
+  function daysUntil(d) {
+    if (!d) return null;
+    const ms = new Date(d.getFullYear(),d.getMonth(),d.getDate()) - TODAY;
+    return Math.round(ms / 86400000);
+  }
+
+  // Countdown phrase for an upcoming festival.
+  function countdownLabel(d) {
+    const n = daysUntil(d);
+    if (n === null) return '';
+    if (n < 0) return 'past';
+    if (n === 0) return 'TODAY 🔥';
+    if (n === 1) return 'tomorrow';
+    if (n < 7) return `${n} days`;
+    if (n < 14) return '1 week';
+    if (n < 60) return `${Math.round(n/7)} weeks`;
+    return `${Math.round(n/30)} months`;
+  }
+
+  // Members of a crew that exist as real squad profiles.
+  function crewSquad(crew) {
+    return (crew.squadIds || []).map(id => getRaver(id)).filter(Boolean);
+  }
+
+  // Compute the crew's headline festival line from its members' profiles.
+  function crewNextUp(crew) {
+    const people = crewSquad(crew);
+    const upcoming = {}; // festName -> { date, name, who: [] }
+    const past = [];     // { date, name, who }
+
+    people.forEach(p => {
+      raverUpcoming(p).forEach(f => {
+        const key = f.name.toLowerCase();
+        if (!upcoming[key]) upcoming[key] = { date: f._d, name: f.name, who: [] };
+        if (f._d < upcoming[key].date) upcoming[key].date = f._d;
+        upcoming[key].who.push(p.name.split(' ')[0]);
+      });
+      raverPast(p).forEach(f => {
+        past.push({ date: f._d, name: f.name, who: p.name.split(' ')[0] });
+      });
+    });
+
+    const upList = Object.values(upcoming).sort((a,b) => a.date - b.date);
+    if (upList.length) {
+      const next = upList[0];
+      return { kind: 'upcoming', name: next.name, date: next.date, who: next.who };
+    }
+    if (past.length) {
+      past.sort((a,b) => b.date - a.date);
+      const last = past[0];
+      return { kind: 'past', name: last.name, date: last.date, who: [last.who] };
+    }
+    return { kind: 'none' };
+  }
+
+  // Build the display string for a crew's festival line.
+  function crewEventLine(crew) {
+    const n = crewNextUp(crew);
+    if (n.kind === 'upcoming') {
+      const who = n.who.length ? ` · ${n.who.length} going: ${n.who.join(', ')}` : '';
+      const cd = countdownLabel(n.date);
+      const when = `${n.date.getDate()} ${MON_SHORT[n.date.getMonth()]}`;
+      return `🎵 ${n.name} · ${when} · ⏳ ${cd}${who}`;
+    }
+    if (n.kind === 'past') {
+      return `📍 Last seen at ${n.name} · ${n.date.getFullYear()}`;
+    }
+    return `🎵 No upcoming fests planned`;
+  }
+
+  function avatarsHTML(members) {
+    const shown = members.slice(0, 4);
+    let html = shown.map(m =>
+      `<div class="avatar" style="background:${m.c};color:${m.t}">${m.i.slice(0,2).toUpperCase()}</div>`
+    ).join('');
+    if (members.length > 4) html += `<div class="avatar avatar-count">+${members.length - 4}</div>`;
+    return html;
+  }
+
+  function renderCrews() {
+    const grid = document.getElementById('crew-grid');
+    const addCard = grid.querySelector('.crew-add-card');
+    grid.querySelectorAll('.crew-card').forEach(c => c.remove());
+
+    crews.forEach(crew => {
+      const s = STATUS[crew.status];
+      const card = document.createElement('div');
+      card.className = 'crew-card';
+      card.style.setProperty('--accent-a', crew.color);
+      card.onclick = () => openCrewPage(crew.id);
+      const leadBadge = crew.isLead ? '👑 You lead' : '';
+      const n = crewNextUp(crew);
+
+      // Build the "next fest" block
+      let festBlock;
+      if (n.kind === 'upcoming') {
+        const when = `${n.date.getDate()} ${MON_SHORT[n.date.getMonth()]}`;
+        const goingNames = n.who.length ? n.who.join(', ') : 'Nobody yet';
+        festBlock = `
+          <div class="crew-fest">
+            <div class="crew-fest-label">⏳ Next up · ${countdownLabel(n.date)}</div>
+            <div class="crew-fest-name">${n.name}</div>
+            <div class="crew-fest-date">${when}</div>
+            <div class="crew-fest-going">🎟️ ${n.who.length} going: ${goingNames}</div>
+          </div>`;
+      } else if (n.kind === 'past') {
+        festBlock = `
+          <div class="crew-fest crew-fest-past">
+            <div class="crew-fest-label">📍 Last seen at</div>
+            <div class="crew-fest-name">${n.name}</div>
+            <div class="crew-fest-date">${n.date.getFullYear()}</div>
+          </div>`;
+      } else {
+        festBlock = `
+          <div class="crew-fest crew-fest-empty">
+            <div class="crew-fest-label">🎵 No upcoming fests planned</div>
+          </div>`;
+      }
+
+      card.innerHTML = `
+        <div class="crew-color-bar" style="background:${crew.gradient}"></div>
+        <div class="crew-card-head">
+          <div class="crew-name">${crew.name}</div>
+          <span class="crew-status ${s.cls}${crew.isLead ? ' tappable' : ''}"
+                onclick="event.stopPropagation(); toggleStatus('${crew.id}')"
+                title="${crew.isLead ? 'Tap to change status' : 'Only the Crew Lead can change status'}">${s.label}</span>
+        </div>
+        ${festBlock}
+        <div class="crew-tribe">
+          <div class="crew-tribe-label">👥 The Tribe · ${crew.members.length} ${crew.members.length!==1?'members':'member'}${leadBadge ? ` · ${leadBadge}` : ''}</div>
+          <div class="crew-members">${avatarsHTML(crew.members)}</div>
+        </div>
+      `;
+      grid.insertBefore(card, addCard);
+    });
+    // Update dynamic count
+    const countEl = document.getElementById('crews-count');
+    if (countEl) countEl.textContent = crews.length ? crews.length + ' active' : '';
+  }
+
+  // ===== Status change confirmation modal =====
+  let _pendingStatusId = null;
+  let _pendingStatusValue = null;
+
+  function requestStatusChange(id, newStatus) {
+    const crew = getCrew(id);
+    if (!crew || !crew.isLead) { showToast('🔒 Only the Crew Lead can change the status'); return; }
+    if (crew.status === newStatus) return;
+    _pendingStatusId = id;
+    _pendingStatusValue = newStatus;
+    const title = document.getElementById('status-confirm-title');
+    const body  = document.getElementById('status-confirm-body');
+    const btn   = document.getElementById('status-confirm-btn');
+    if (newStatus === 'recruiting') {
+      title.textContent = '🟢 Set to Recruiting?';
+      body.textContent  = 'Setting this crew to Recruiting means anyone can find and join via QR code. Are you sure?';
+      btn.textContent   = 'Yes, set Recruiting';
+    } else {
+      title.textContent = '🔒 Lock this crew?';
+      body.textContent  = "Locking this crew means only you can add members manually. Existing members won't be removed.";
+      btn.textContent   = 'Yes, Lock In';
+    }
+    document.getElementById('status-confirm-overlay').classList.add('open');
+  }
+
+  function confirmStatusChange() {
+    if (!_pendingStatusId || !_pendingStatusValue) return;
+    const id = _pendingStatusId, status = _pendingStatusValue;
+    _pendingStatusId = null; _pendingStatusValue = null;
+    dismissStatusConfirm();
+    applyStatusChange(id, status);
+  }
+
+  function dismissStatusConfirm() {
+    document.getElementById('status-confirm-overlay').classList.remove('open');
+  }
+
+  function closeStatusConfirmOutside(e) {
+    if (e.target === document.getElementById('status-confirm-overlay')) dismissStatusConfirm();
+  }
+
+  function applyStatusChange(id, status) {
+    const crew = getCrew(id);
+    if (!crew) return;
+    crew.status = status;
+    renderCrews();
+    if (document.getElementById('detail-overlay').classList.contains('open')) renderDetail(id);
+    if (activeCrewPageId === id) renderCrewPage(id);
+    showToast(status === 'recruiting'
+      ? `🟢 ${crew.name} is now Recruiting — anyone can join`
+      : `🔒 ${crew.name} is Locked In — invite only`);
+    if (currentUser) dbSaveCrew({ name: crew.name, color: crew.color, gradient: crew.gradient, status }, id);
+  }
+
+  // Quick tap: flip status — now goes through confirmation modal
+  function toggleStatus(id) {
+    const crew = getCrew(id);
+    if (!crew) return;
+    if (!crew.isLead) { showToast('🔒 Only the Crew Lead can change the status'); return; }
+    requestStatusChange(id, crew.status === 'recruiting' ? 'locked-in' : 'recruiting');
+  }
+
+  // ===== Crew detail view =====
+  let activeDetailId = null;
+
+  function openDetail(id) {
+    activeDetailId = id;
+    renderDetail(id);
+    document.getElementById('detail-overlay').classList.add('open');
+  }
+  function closeDetail() {
+    document.getElementById('detail-overlay').classList.remove('open');
+    activeDetailId = null;
+  }
+  function closeDetailOutside(e) {
+    if (e.target === document.getElementById('detail-overlay')) closeDetail();
+  }
+
+  // Jump from a crew's member list straight to that raver's profile page
+  function goToProfileFromDetail(raverId) {
+    closeDetail();
+    openProfile(raverId);
+  }
+
+  function renderDetail(id) {
+    const crew = getCrew(id);
+    if (!crew) return;
+    const s = STATUS[crew.status];
+        const isRecruiting = crew.status === 'recruiting';
+    const meaning = isRecruiting
+      ? '🌐 <strong>Visible to others.</strong> Anyone can join by scanning your crew QR code or browsing open crews. Great for festival meetups where you want to grow the tribe.'
+      : '🔒 <strong>Invite only.</strong> The roster is set — only you as Crew Lead can add members manually. The crew will not appear to people looking to join.';
+
+    // Build member list from linked squad profiles → first names, clickable
+    const people = crewSquad(crew);
+    const memberList = people.length
+      ? people.map(p => `
+          <div class="detail-member detail-member-link" onclick="goToProfileFromDetail('${p.id}')" title="View ${p.name}'s profile">
+            <div class="avatar" style="background:${p.gradient};margin:0">${initials(p.name).toUpperCase()}</div>
+            <span>${p.name.split(' ')[0]}${p.isYou ? ' (You)' : ''}</span>
+            <span class="detail-member-arrow">›</span>
+          </div>
+        `).join('')
+      : '<div class="fest-empty">No linked tribe members yet</div>';
+
+    // Lead controls vs read-only
+    let controls;
+    if (crew.isLead) {
+      const otherStatus = crew.status === 'recruiting' ? 'locked-in' : 'recruiting';
+      controls = `
+        <div class="form-group">
+          <label class="form-label">Status (you're the Crew Lead 👑)</label>
+          <div class="status-toggle">
+            <button class="status-opt ${crew.status==='recruiting'?'active':''}" onclick="setStatus('${crew.id}','recruiting')">🟢 Recruiting</button>
+            <button class="status-opt ${crew.status==='locked-in'?'active':''}" onclick="setStatus('${crew.id}','locked-in')">🔒 Locked In</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Add Member</label>
+          <div style="display:flex;gap:8px;">
+            <input class="form-input" id="add-member-input" placeholder="Name or @handle" style="flex:1">
+            <button class="btn btn-primary" onclick="addMember('${crew.id}')" style="padding:11px 16px;">Add</button>
+          </div>
+        </div>`;
+    } else {
+      const canJoin = crew.status === 'recruiting';
+      controls = `
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <div style="font-size:0.85rem;color:var(--muted);">Set by the Crew Lead — you can't change this.</div>
+        </div>
+        <button class="btn ${canJoin?'btn-primary':'btn-ghost'}" style="width:100%;padding:12px;"
+          onclick="${canJoin ? `joinCrew('${crew.id}')` : `showToast('🔒 This crew is Locked In — ask the Lead for an invite')`}">
+          ${canJoin ? '➕ Join this crew' : '🔒 Locked — invite only'}
+        </button>`;
+    }
+
+    document.getElementById('detail-modal').innerHTML = `
+      <div class="detail-bar" style="background:${crew.gradient}"></div>
+      <div class="modal-title" style="margin-bottom:6px;">${crew.name}</div>
+      <div style="color:var(--muted);font-size:0.85rem;margin-bottom:18px;">${crewEventLine(crew)}</div>
+      <div class="detail-status-line">
+        <span class="crew-status ${s.cls}">${s.label}</span>
+        <span style="font-size:0.8rem;color:var(--muted);">${crew.members.length} member${crew.members.length!==1?'s':''}</span>
+      </div>
+      ${controls}
+      <div class="form-group">
+        <label class="form-label">Crew Members</label>
+        <div class="detail-members">${memberList}</div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeDetail()" style="flex:1;padding:12px;">Close</button>
+      </div>
+    `;
+  }
+
+  // Routes through confirmation modal
+  function setStatus(id, status) { requestStatusChange(id, status); }
+
+  function addMember(crewId) {
+    const crew = getCrew(crewId);
+    if (!crew || !crew.isLead) return;
+    const input = document.getElementById('add-member-input');
+    if (!input) { showToast('Input not found'); return; }
+    const name = input.value.trim();
+    if (!name) { showToast('Enter a name first ✍️'); return; }
+
+    // Try to find an existing raver by name or handle
+    const match = squad.find(r =>
+      r.name.toLowerCase().includes(name.toLowerCase()) ||
+      (r.handle && r.handle.toLowerCase().includes(name.toLowerCase().replace('@','')))
+    );
+
+    if (match) {
+      if (crew.squadIds.includes(match.id)) {
+        showToast(`${match.name} is already in ${crew.name}`);
+        input.value = '';
+        return;
+      }
+      crew.squadIds.push(match.id);
+      crew.members.push({ i: initials(match.name), c: crew.color, t: '#fff' });
+      showToast(`✅ Added ${match.name} to ${crew.name}`);
+      if (currentUser) dbSaveCrewMembers(crewId, crew.squadIds);
+    } else {
+      // Create a lightweight placeholder raver
+      const newRaver = {
+        id: 'temp_' + Date.now(),
+        name, handle: '', isYou: false,
+        base: '', gradient: crew.gradient,
+        genres: [], favArtists: [], festIds: [],
+        crew: crew.name, instagram: '', phone: '',
+        metStory: '', notes: ''
+      };
+      squad.push(newRaver);
+      crew.squadIds.push(newRaver.id);
+      crew.members.push({ i: initials(name), c: crew.color, t: '#fff' });
+      showToast(`✅ Added ${name} to ${crew.name}`);
+      if (currentUser) {
+        dbSaveRaver({ ...newRaver }, null).then(dbId => {
+          if (dbId) {
+            newRaver.id = dbId;
+            crew.squadIds = crew.squadIds.map(sid => sid === newRaver.id ? dbId : sid);
+            dbSaveCrewMembers(crewId, crew.squadIds);
+          }
+        });
+      }
+    }
+    input.value = '';
+    renderCrews();
+    renderSquad();
+    renderCrewPage(crewId);
+  }
+
+  // ===== Full crew page =====
+  let activeCrewPageId = null;
+
+  function openCrewPage(id) {
+    activeCrewPageId = id;
+    renderCrewPage(id);
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-crew').classList.add('active');
+    window.scrollTo(0, 0);
+  }
+
+  function backToCrews() {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-crews').classList.add('active');
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.nav-tab').forEach(t => {
+      if (t.textContent.trim() === 'My Crews') t.classList.add('active');
+    });
+    activeCrewPageId = null;
+  }
+
+  function renderCrewPage(id) {
+    const crew = getCrew(id);
+    if (!crew) return;
+    const s = STATUS[crew.status];
+    const people = crewSquad(crew);
+    const n = crewNextUp(crew);
+
+    // Festival block
+    let festBlock = '';
+    if (n.kind === 'upcoming') {
+      const when = `${n.date.getDate()} ${MON_SHORT[n.date.getMonth()]} ${n.date.getFullYear()}`;
+      festBlock = `
+        <div class="crew-page-section">
+          <h3>⏳ Next Festival</h3>
+          <div style="font-family:'Outfit',sans-serif;font-weight:800;font-size:1.1rem;color:#fff;margin-bottom:4px;">${n.name}</div>
+          <div style="font-size:0.82rem;color:var(--muted);margin-bottom:8px;">📅 ${when} · ⏳ ${countdownLabel(n.date)}</div>
+          ${n.who.length ? `<div style="font-size:0.82rem;color:var(--neon-green);">🎟️ ${n.who.length} going: ${n.who.join(', ')}</div>` : ''}
+        </div>`;
+    } else if (n.kind === 'past') {
+      festBlock = `
+        <div class="crew-page-section">
+          <h3>📍 Last Festival</h3>
+          <div style="font-family:'Outfit',sans-serif;font-weight:800;font-size:1.1rem;color:#fff;margin-bottom:4px;">${n.name}</div>
+          <div style="font-size:0.82rem;color:var(--muted);">${n.date.getFullYear()}</div>
+        </div>`;
+    }
+
+    // If crew leader has no raver profile in the member list, prepend a placeholder
+    const leaderInMembers = people.some(p => p.isYou);
+    let leaderRow = '';
+    if (crew.isLead && !leaderInMembers) {
+      const leaderName = currentUser?.user_metadata?.full_name || 'You';
+      const leaderInits = (leaderName.trim().split(/\s+/).map(w => w[0]).join('') || '?').toUpperCase();
+      leaderRow = `
+        <div class="crew-member-row" style="border-color:rgba(255,230,0,0.2);">
+          <div class="avatar" style="background:linear-gradient(135deg,#FF2D78,#BF00FF);width:36px;height:36px;font-size:0.8rem;border:none;margin:0;">${leaderInits}</div>
+          <div class="crew-member-name">${leaderName} <span style="color:var(--neon-yellow);font-size:0.76rem;">👑 You (Lead)</span></div>
+          <div style="font-size:0.73rem;color:var(--muted);margin-right:6px;font-style:italic;">No profile yet</div>
+        </div>`;
+    }
+
+    // Member list
+    const memberRows = (leaderRow || people.length)
+      ? leaderRow + people.map(p => `
+          <div class="crew-member-row" onclick="goToProfileFromCrew('${p.id}')">
+            <div class="avatar" style="background:${p.gradient};width:36px;height:36px;font-size:0.8rem;border:none;margin:0;">${initials(p.name).toUpperCase()}</div>
+            <div class="crew-member-name">${p.name}${p.isYou ? ' <span style="color:var(--neon-yellow);font-size:0.76rem;">👑 Lead</span>' : ''}</div>
+            <div style="font-size:0.75rem;color:var(--muted);margin-right:6px;">${p.base || ''}</div>
+            <div class="crew-member-arrow">›</div>
+          </div>`).join('')
+      : '<div class="fest-empty">No members yet — add some below</div>';
+
+    // QR code — only shown when Recruiting
+    const inviteUrl = `${window.location.origin}${window.location.pathname}?join=${crew.id}`;
+    const qrBlock = crew.status === 'recruiting' ? `
+      <div class="crew-page-section">
+        <h3>📲 QR Invite</h3>
+        <p style="font-size:0.82rem;color:var(--muted);margin-bottom:14px;">Anyone who scans this can request to join your crew.</p>
+        <div style="display:flex;justify-content:center;">
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&bgcolor=0E0E16&color=FF2D78&data=${encodeURIComponent(inviteUrl)}"
+               style="border-radius:12px;border:2px solid rgba(255,45,120,0.3);" width="180" height="180" alt="QR invite code">
+        </div>
+      </div>` : '';
+
+    // Status toggle (lead only)
+    const statusBlock = crew.isLead ? `
+      <div class="crew-page-section">
+        <h3>👑 Crew Lead Controls</h3>
+        <div style="font-size:0.82rem;color:var(--muted);margin-bottom:12px;">
+          ${crew.status === 'recruiting'
+            ? '🌐 <strong style="color:var(--text)">Recruiting</strong> — ravers can scan your QR to join'
+            : '🔒 <strong style="color:var(--text)">Locked In</strong> — invite only, you add members manually'}
+        </div>
+        <div class="status-toggle">
+          <button class="status-opt ${crew.status==='recruiting'?'active':''}" onclick="setCrewPageStatus('${crew.id}','recruiting')">🟢 Recruiting</button>
+          <button class="status-opt ${crew.status==='locked-in'?'active':''}" onclick="setCrewPageStatus('${crew.id}','locked-in')">🔒 Locked In</button>
+        </div>
+      </div>` : `
+      <div class="crew-page-section">
+        <h3>Status</h3>
+        <span class="crew-status ${s.cls}">${s.label}</span>
+      </div>`;
+
+    // Add member (lead only)
+    const addMemberBlock = crew.isLead ? `
+      <div class="add-member-row">
+        <input class="form-input" id="add-member-input" placeholder="Name or @handle" onkeydown="if(event.key==='Enter')addMember('${crew.id}')">
+        <button class="btn btn-primary" onclick="addMember('${crew.id}')" style="padding:11px 18px;white-space:nowrap;">Add</button>
+      </div>` : '';
+
+    document.getElementById('page-crew').innerHTML = `
+      <button class="crew-page-back" onclick="backToCrews()">← My Crews</button>
+      <div class="crew-page-hero">
+        <div class="crew-page-bar" style="background:${crew.gradient}"></div>
+        <div class="crew-page-name">${crew.name}</div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="crew-status ${s.cls}">${s.label}</span>
+          <span style="font-size:0.8rem;color:var(--muted);">${people.length} member${people.length!==1?'s':''}</span>
+          ${crew.isLead ? '<span style="font-size:0.8rem;color:var(--neon-yellow);">👑 You lead</span>' : ''}
+        </div>
+      </div>
+
+      ${festBlock}
+
+      ${statusBlock}
+
+      ${qrBlock}
+
+      <div class="crew-page-section">
+        <h3>👥 Members</h3>
+        ${memberRows}
+        ${addMemberBlock}
+      </div>
+    `;
+  }
+
+  function goToProfileFromCrew(raverId) {
+    openProfile(raverId);
+  }
+
+  function setCrewPageStatus(id, status) { requestStatusChange(id, status); }
+
+  function joinCrew(id) {
+    const crew = getCrew(id);
+    if (!crew || crew.status !== 'recruiting') return;
+    crew.members.push({ i: 'ME', c: crew.color, t: '#000' });
+    renderCrews();
+    renderDetail(id);
+    showToast(`🎉 You joined ${crew.name}!`);
+  }
+
+  function createCrew() {
+    const name = document.getElementById('crew-name-input').value.trim() || 'New Crew';
+    const selected = document.querySelector('.color-swatch.selected');
+    const color = selected ? rgbToHex(selected.style.background) : '#FF2D78';
+    const you = squad.find(r => r.isYou);
+
+    const newCrew = {
+      id: 'temp_' + Date.now(), name, color,
+      gradient: `linear-gradient(90deg,${color},${color})`,
+      status: 'recruiting', isLead: true,
+      squadIds: you ? [you.id] : [],
+      members: [{ i: you ? initials(you.name) : 'ME', c: color, t: '#000' }]
+    };
+    crews.push(newCrew);
+    renderCrews();
+    closeModal();
+    document.getElementById('crew-name-input').value = '';
+    showToast(`🔥 ${name} created — you're the Crew Lead 👑`);
+    // Navigate directly to the new crew page
+    setTimeout(() => openCrewPage(newCrew.id), 150);
+
+    // Persist async
+    if (currentUser) {
+      dbSaveCrew({ name, color, gradient: newCrew.gradient, status: 'recruiting' }, null).then(dbId => {
+        if (dbId) {
+          newCrew.id = dbId;
+          if (you) dbSaveCrewMembers(dbId, [you.id]);
+        }
+      });
+    }
+  }
+
+  // Convert "rgb(...)" from style.background to hex; pass through if already hex
+  function rgbToHex(c) {
+    if (!c) return '#FF2D78';
+    if (c.startsWith('#')) return c;
+    const m = c.match(/\d+/g);
+    if (!m) return '#FF2D78';
+    return '#' + m.slice(0,3).map(n => parseInt(n).toString(16).padStart(2,'0')).join('');
+  }
+
+  // ===== Squad / Raver profiles =====
+  // ===== Festivals catalog — single source of truth =====
+  // Each festival is one record; profiles reference these by id.
+  let festSeq = 0;
+  const festivals = [
+    { id: ++festSeq, name: 'Awakenings Festival', date: '2026-06-21', location: 'Amsterdam, NL' },
+    { id: ++festSeq, name: 'Berghain Sunday',     date: '2026-07-12', location: 'Berlin, DE' },
+    { id: ++festSeq, name: 'Sónar Barcelona',     date: '2026-08-18', location: 'Barcelona, ES' },
+    { id: ++festSeq, name: 'Time Warp',           date: '2024-04-06', location: 'Mannheim, DE' },
+    { id: ++festSeq, name: 'Dekmantel',           date: '2023-08-02', location: 'Amsterdam, NL' },
+    { id: ++festSeq, name: 'Glastonbury',         date: '2024-06-26', location: 'Somerset, UK' },
+    { id: ++festSeq, name: 'Lost Village',        date: '2023-08-24', location: 'Lincolnshire, UK' },
+    { id: ++festSeq, name: 'Boomtown',            date: '2024-08-07', location: 'Hampshire, UK' },
+    { id: ++festSeq, name: 'CTM Festival',        date: '2024-01-26', location: 'Berlin, DE' },
+    { id: ++festSeq, name: 'Atonal',              date: '2024-08-21', location: 'Berlin, DE' }
+  ];
+
+  function getFestival(id) { return festivals.find(f => f.id === id); }
+  // Find an existing festival by name (case-insensitive), for de-duping
+  function findFestivalByName(name) {
+    const n = (name||'').trim().toLowerCase();
+    return festivals.find(f => f.name.toLowerCase() === n);
+  }
+
+  let squadSeq = 0;
+  const squad = [
+    {
+      id: ++squadSeq, name: 'Jamie D.', handle: '@jamied', isYou: true,
+      base: 'Manchester, UK', gradient: 'linear-gradient(135deg,#FF2D78,#BF00FF)',
+      genres: ['Techno','Industrial'],
+      favArtists: ['Amelie Lens','I Hate Models','Charlotte de Witte'],
+      festIds: [1, 3, 4, 5],
+      crew: 'Bass Syndicate',
+      instagram: '@jamied', phone: '+44 7700 900111',
+      metStory: "This is you — the one keeping the tribe together.",
+      notes: 'Always first on the dancefloor, last to leave.'
+    },
+    {
+      id: ++squadSeq, name: 'Maya K.', handle: '@mayabeats', isYou: false,
+      base: 'London, UK', gradient: 'linear-gradient(135deg,#BF00FF,#00F5FF)',
+      genres: ['House','Disco'],
+      favArtists: ['Peggy Gou','HAAi'],
+      festIds: [1, 6, 7],
+      crew: 'Bass Syndicate',
+      instagram: '@mayabeats', phone: '+44 7700 900222',
+      metStory: "Met in the queue at Fabric in 2022 — bonded over a shared poncho in the rain.",
+      notes: 'The designated driver and group mum. Keeps everyone hydrated.'
+    },
+    {
+      id: ++squadSeq, name: 'Alex L.', handle: '@alex_raves', isYou: false,
+      base: 'Bristol, UK', gradient: 'linear-gradient(135deg,#FF6B35,#FFE600)',
+      genres: ['Drum & Bass'],
+      favArtists: ['Sub Focus','Chase & Status'],
+      festIds: [1, 8],
+      crew: 'Bass Syndicate',
+      instagram: '@alex_raves', phone: '+44 7700 900333',
+      metStory: "Alex's brother knows Jamie from uni. Joined the tribe in 2023.",
+      notes: 'Will find the afterparty no matter what city you are in.'
+    },
+    {
+      id: ++squadSeq, name: 'Rosa S.', handle: '@rosa_bass', isYou: false,
+      base: 'Berlin, DE', gradient: 'linear-gradient(135deg,#00B4D8,#39FF14)',
+      genres: ['Minimal','Techno'],
+      favArtists: ['Ricardo Villalobos','Zip'],
+      festIds: [1, 2, 4, 9],
+      crew: 'Bass Syndicate',
+      instagram: '@rosa_bass', phone: '+49 151 23456789',
+      metStory: "Our Berlin local. Met at Panorama Bar at 6am — became the crew's hotel-booker.",
+      notes: 'Books the best Airbnbs. Knows every doorman in Berlin.'
+    },
+    {
+      id: ++squadSeq, name: 'Tom K.', handle: '@tk_berlin', isYou: false,
+      base: 'Berlin, DE', gradient: 'linear-gradient(135deg,#00F5FF,#39FF14)',
+      genres: ['Industrial','Hard Techno'],
+      favArtists: ['Perc','SPFDJ'],
+      festIds: [1, 10],
+      crew: 'Deep Waters',
+      instagram: '@tk_berlin', phone: '+49 151 98765432',
+      metStory: "Rosa's flatmate. Tagged along to Awakenings 2023 and never left.",
+      notes: 'Encyclopaedic knowledge of the harder end of the spectrum.'
+    }
+  ];
+
+  function getRaver(id) { return squad.find(r => r.id === id); }
+  function initials(name) {
+    const parts = name.trim().split(/\s+/);
+    return ((parts[0]||'')[0] || '' ) + ((parts[1]||'')[0] || '');
+  }
+
+  // Resolve a raver's festIds into festival records, sorted by date.
+  function raverFestivals(r) {
+    return (r.festIds || [])
+      .map(getFestival)
+      .filter(Boolean)
+      .map(f => ({ ...f, _d: festDate(f) }))
+      .filter(f => f._d);
+  }
+  function raverUpcoming(r) {
+    return raverFestivals(r).filter(f => f._d >= TODAY).sort((a,b) => a._d - b._d);
+  }
+  function raverPast(r) {
+    return raverFestivals(r).filter(f => f._d < TODAY).sort((a,b) => b._d - a._d);
+  }
+
+  function renderSquad() {
+    const grid = document.getElementById('members-grid');
+    grid.innerHTML = '';
+    squad.forEach(r => {
+      const card = document.createElement('div');
+      card.className = 'member-card';
+      card.onclick = () => openProfile(r.id);
+      const tags = r.genres.slice(0,2).map(g =>
+        `<span class="tag" style="background:rgba(255,45,120,0.12);color:var(--neon-pink)">${g}</span>`
+      ).join('');
+      card.innerHTML = `
+        <div class="member-avatar" style="background:${r.gradient}">${initials(r.name).toUpperCase()}</div>
+        <div class="member-name">${r.name}</div>
+        <div class="member-handle">${r.handle}${r.isYou ? ' · You' : ''}</div>
+        <div class="member-base">📍 ${r.base}</div>
+        <div class="member-tags">${tags}</div>
+      `;
+      grid.appendChild(card);
+    });
+    // Add-raver card
+    const add = document.createElement('div');
+    add.className = 'member-card';
+    add.style.cssText = 'border:2px dashed rgba(255,255,255,0.1);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--muted);';
+    add.onclick = () => openProfileEditor();
+    add.innerHTML = `<div style="font-size:1.8rem">+</div><div style="font-family:'Outfit',sans-serif;font-weight:700;font-size:0.82rem;">Add Raver</div>`;
+    grid.appendChild(add);
+  }
+
+  // ===== Dedicated profile page =====
+  function openProfile(id) {
+    const r = getRaver(id);
+    if (!r) return;
+
+    // Upcoming: sorted soonest-first, with date + countdown
+    const upcomingFests = raverUpcoming(r);
+    const festListUpcoming = upcomingFests.length
+      ? upcomingFests.map(f => `
+          <div class="fest-row">
+            <span>${f.name}<span class="fest-loc">📍 ${f.location || 'TBD'}</span></span>
+            <span class="fest-when">${festWhenLabel(f)} <span class="fest-cd">⏳ ${countdownLabel(f._d)}</span></span>
+          </div>`).join('')
+      : '<div class="fest-empty">Nothing logged yet</div>';
+
+    // Past: most recent first, year shown
+    const pastFests = raverPast(r);
+    const festListPast = pastFests.length
+      ? pastFests.map(f => `
+          <div class="fest-row">
+            <span>${f.name}<span class="fest-loc">📍 ${f.location || 'TBD'}</span></span>
+            <span class="fest-when">${f._d.getFullYear()}</span>
+          </div>`).join('')
+      : '<div class="fest-empty">Nothing logged yet</div>';
+
+    // Personal next-fest countdown banner
+    let nextBanner = '';
+    if (upcomingFests.length) {
+      const f = upcomingFests[0];
+      const n = daysUntil(f._d);
+      nextBanner = `
+        <div class="countdown-banner" style="background:${r.gradient}">
+          <div class="cd-label">⏳ Next festival</div>
+          <div class="cd-fest">${f.name}</div>
+          <div class="cd-days">${n === 0 ? "It's TODAY! 🔥" : n === 1 ? '1 day to go' : n + ' days to go'}</div>
+          <div class="cd-date">${festWhenLabel(f)} · 📍 ${f.location || 'TBD'}</div>
+        </div>`;
+    }
+
+    const favs = r.favArtists.length
+      ? r.favArtists.map(a => `<span class="fav-chip">${a}</span>`).join('')
+      : '<div class="fest-empty">No favorites logged yet</div>';
+    const genreChips = r.genres.map(g => `<span class="fav-chip">${g}</span>`).join('');
+
+    // Connect buttons — only show what exists
+    const connectBtns = [];
+    if (r.instagram) {
+      const ig = r.instagram.replace('@','');
+      connectBtns.push(`<a class="connect-btn connect-ig" href="https://instagram.com/${ig}" target="_blank" rel="noopener">📷 Instagram</a>`);
+    }
+    if (r.phone) {
+      const tel = r.phone.replace(/[^+\d]/g,'');
+      connectBtns.push(`<a class="connect-btn connect-call" href="tel:${tel}">📞 Call</a>`);
+      connectBtns.push(`<a class="connect-btn connect-text" href="sms:${tel}">💬 Text</a>`);
+    }
+    const connectBlock = connectBtns.length
+      ? `<div class="connect-row">${connectBtns.join('')}</div>`
+      : (r.isYou ? '' : `<div class="connect-empty">No contact info yet — add it in Edit Profile.</div>`);
+
+    document.getElementById('page-profile').innerHTML = `
+      <button class="profile-back" onclick="backToSquad()">← Back to Squad</button>
+      <div class="profile-hero">
+        <div class="profile-hero-bar" style="background:${r.gradient}"></div>
+        <div class="profile-avatar" style="background:${r.gradient}">${initials(r.name).toUpperCase()}</div>
+        <div class="profile-id">
+          <h2>${r.name}${r.isYou ? ' <span style="font-size:0.9rem;color:var(--muted)">(You)</span>' : ''}</h2>
+          <div class="profile-handle">${r.handle}</div>
+          <div class="profile-base-line">📍 Based in ${r.base}</div>
+        </div>
+      </div>
+
+      ${nextBanner}
+
+      <div class="profile-actions">
+        <button class="btn btn-primary" style="flex:1;padding:14px;font-size:0.95rem;box-shadow:0 0 24px rgba(255,45,120,0.35);" onclick="openProfileEditor('${r.id}')">✏️ Edit Profile</button>
+      </div>
+
+      ${connectBlock}
+
+      <div class="profile-section">
+        <h3>🎶 Genres & Favorite Artists</h3>
+        <div style="margin-bottom:14px;"><div class="fav-chips">${genreChips}</div></div>
+        <div class="fav-chips">${favs}</div>
+      </div>
+
+      <div class="profile-section">
+        <h3>🎟️ Festivals — Going To</h3>
+        ${festListUpcoming}
+      </div>
+
+      <div class="profile-section">
+        <h3>✅ Festivals — Been To</h3>
+        ${festListPast}
+      </div>
+
+      <div class="profile-section">
+        <h3>👥 Go-To Crew</h3>
+        <div class="profile-note">${r.crew || '<span class="fest-empty">Not set</span>'}</div>
+      </div>
+
+      <div class="profile-section">
+        <h3>🤝 How We Met</h3>
+        <div class="profile-note">${r.metStory || '<span class="fest-empty">No story logged yet</span>'}</div>
+      </div>
+
+      <div class="profile-section">
+        <h3>📝 Notes</h3>
+        <div class="profile-note">${r.notes || '<span class="fest-empty">No notes yet</span>'}</div>
+      </div>
+    `;
+    // Swap to profile page (hide nav active states; this is a sub-page)
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-profile').classList.add('active');
+    window.scrollTo(0,0);
+  }
+
+  function backToSquad() {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-members').classList.add('active');
+    // keep the Squad nav tab highlighted
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.nav-tab').forEach(t => { if (t.textContent.trim()==='Squad') t.classList.add('active'); });
+  }
+
+  // ===== Profile editor (add / edit) =====
+  let editingId = null;
+
+  function fieldRow(label, id, value, placeholder, textarea) {
+    const v = (value || '').replace(/"/g,'&quot;');
+    const input = textarea
+      ? `<textarea class="form-input" id="${id}" placeholder="${placeholder}">${value || ''}</textarea>`
+      : `<input class="form-input" id="${id}" value="${v}" placeholder="${placeholder}">`;
+    return `<div class="form-group"><label class="form-label">${label}</label>${input}</div>`;
+  }
+
+  function openProfileEditor(id) {
+    editingId = id || null;
+    const r = id ? getRaver(id) : null;
+
+    document.getElementById('profile-edit-modal').innerHTML = `
+      <div class="modal-title">${r ? '✏️ Edit ' + r.name : '🎉 Add a Raver'}</div>
+      ${fieldRow('Name','pf-name', r?.name, 'e.g. Sam P.')}
+      ${fieldRow('Handle','pf-handle', r?.handle, 'e.g. @samraves')}
+      ${fieldRow('Home Base','pf-base', r?.base, 'e.g. Berlin, DE')}
+      ${fieldRow('Genres (comma separated)','pf-genres', r?.genres?.join(', '), 'Techno, House')}
+      ${fieldRow('Favorite Artists (comma separated)','pf-favs', r?.favArtists?.join(', '), 'Amelie Lens, Peggy Gou')}
+
+      <div class="form-group">
+        <label class="form-label">🎟️ Festivals</label>
+        <div class="fest-picker-hint">Tick the festivals they're going to or have been to. Going vs. been is set automatically by each festival's date.</div>
+        <div id="fest-picker"></div>
+        <div id="new-fest-form" style="display:none;">
+          <div class="fest-edit-row" style="margin-top:8px;">
+            <input class="form-input" id="nf-name" placeholder="Festival name" style="flex:2;">
+            <input class="form-input" id="nf-date" type="date" style="flex:1.3;color-scheme:dark;">
+          </div>
+          <input class="form-input" id="nf-loc" placeholder="Location (e.g. Berlin, DE)" style="margin-top:8px;">
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <button type="button" class="btn btn-ghost" style="flex:1;padding:9px;font-size:0.8rem;" onclick="hideNewFest()">Cancel</button>
+            <button type="button" class="btn btn-primary" style="flex:1;padding:9px;font-size:0.8rem;" onclick="createFestivalInline()">Add Festival</button>
+          </div>
+        </div>
+        <button type="button" class="add-fest-btn" id="show-new-fest-btn" onclick="showNewFest()">+ Create new festival</button>
+      </div>
+
+      ${fieldRow('Go-To Crew','pf-crew', r?.crew, 'e.g. Bass Syndicate')}
+      ${fieldRow('Instagram','pf-instagram', r?.instagram, 'e.g. @samraves')}
+      ${fieldRow('Phone Number','pf-phone', r?.phone, 'e.g. +44 7700 900000')}
+      ${fieldRow('How We Met','pf-met', r?.metStory, 'Where did your paths cross?', true)}
+      ${fieldRow('Notes','pf-notes', r?.notes, "What's their vibe?", true)}
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeProfileEditor()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveProfile()">${r ? 'Save Changes' : 'Add Raver 🔥'}</button>
+      </div>
+    `;
+
+    // Render the festival checklist, pre-ticking this raver's festivals
+    editingFestIds = new Set(r?.festIds || []);
+    renderFestPicker();
+
+    document.getElementById('profile-edit-overlay').classList.add('open');
+    document.getElementById('profile-edit-modal').scrollTop = 0;
+  }
+
+  // Tracks which festivals are ticked in the open editor
+  let editingFestIds = new Set();
+
+  // Render the festival picker (sorted: upcoming first, then past)
+  function renderFestPicker() {
+    const box = document.getElementById('fest-picker');
+    if (!box) return;
+    const withDates = festivals.map(f => ({ ...f, _d: festDate(f) }));
+    const up = withDates.filter(f => f._d && f._d >= TODAY).sort((a,b) => a._d - b._d);
+    const past = withDates.filter(f => !f._d || f._d < TODAY).sort((a,b) => (b._d||0) - (a._d||0));
+
+    const row = (f) => {
+      const checked = editingFestIds.has(f.id) ? 'checked' : '';
+      const when = f._d ? `${f._d.getDate()} ${MON_SHORT[f._d.getMonth()]} ${f._d.getFullYear()}` : '';
+      return `
+        <label class="fest-check">
+          <input type="checkbox" ${checked} onchange="toggleFestPick('${f.id}', this.checked)">
+          <span class="fest-check-name">${f.name}</span>
+          <span class="fest-check-meta">${when}${f.location ? ' · ' + f.location : ''}</span>
+        </label>`;
+    };
+
+    let html = '';
+    if (up.length) html += `<div class="fest-group-label">Upcoming</div>` + up.map(row).join('');
+    if (past.length) html += `<div class="fest-group-label">Past</div>` + past.map(row).join('');
+    if (!up.length && !past.length) html = '<div class="fest-empty">No festivals yet — create one below.</div>';
+    box.innerHTML = html;
+  }
+
+  function toggleFestPick(id, on) {
+    if (on) editingFestIds.add(id); else editingFestIds.delete(id);
+  }
+
+  function showNewFest() {
+    document.getElementById('new-fest-form').style.display = 'block';
+    document.getElementById('show-new-fest-btn').style.display = 'none';
+  }
+  function hideNewFest() {
+    document.getElementById('new-fest-form').style.display = 'none';
+    document.getElementById('show-new-fest-btn').style.display = 'block';
+    document.getElementById('nf-name').value = '';
+    document.getElementById('nf-date').value = '';
+    document.getElementById('nf-loc').value = '';
+  }
+
+  function createFestivalInline() {
+    const name = val('nf-name');
+    const date = document.getElementById('nf-date').value;
+    const loc = val('nf-loc');
+    if (!name) { showToast('Festival needs a name ✍️'); return; }
+    if (!date) { showToast('Pick a date for the festival 📅'); return; }
+
+    // De-dupe: if a festival with this name exists, reuse it
+    let fest = findFestivalByName(name);
+    if (fest) {
+      showToast(`"${fest.name}" already exists — ticked it for you`);
+    } else {
+      fest = { id: ++festSeq, name, date, location: loc };
+      festivals.push(fest);
+      showToast(`🎉 Created ${name}`);
+    }
+    editingFestIds.add(fest.id);
+    hideNewFest();
+    renderFestPicker();
+  }
+
+  function closeProfileEditor() {
+    document.getElementById('profile-edit-overlay').classList.remove('open');
+    editingId = null;
+  }
+  function closeProfileEditorOutside(e) {
+    if (e.target === document.getElementById('profile-edit-overlay')) closeProfileEditor();
+  }
+
+  function parseList(text) {
+    return (text || '').split(',').map(s => s.trim()).filter(Boolean);
+  }
+  const val = (id) => (document.getElementById(id)?.value || '').trim();
+
+  const gradientPool = [
+    'linear-gradient(135deg,#FF2D78,#BF00FF)','linear-gradient(135deg,#00F5FF,#39FF14)',
+    'linear-gradient(135deg,#FF6B35,#FFE600)','linear-gradient(135deg,#BF00FF,#00F5FF)',
+    'linear-gradient(135deg,#00B4D8,#39FF14)'
+  ];
+
+  function saveProfile() {
+    const name = val('pf-name');
+    if (!name) { showToast('Give them a name first ✍️'); return; }
+    const data = {
+      name,
+      handle: val('pf-handle') || '@newraver',
+      base: val('pf-base') || 'Unknown',
+      genres: parseList(val('pf-genres')),
+      favArtists: parseList(val('pf-favs')),
+      festIds: Array.from(editingFestIds),
+      crew: val('pf-crew'),
+      instagram: val('pf-instagram'),
+      phone: val('pf-phone'),
+      metStory: val('pf-met'),
+      notes: val('pf-notes')
+    };
+
+    if (editingId) {
+      const r = getRaver(editingId);
+      Object.assign(r, data);
+      closeProfileEditor();
+      renderSquad(); renderCrews(); renderEvents();
+      openProfile(r.id);
+      showToast(`✅ Updated ${r.name}`);
+      if (currentUser) {
+        dbSaveRaver(data, r.id).then(() => dbSaveRaverFestivals(r.id, data.festIds));
+      }
+    } else {
+      const newId = 'temp_' + Date.now();
+      const r = { id: newId, isYou: false, gradient: gradientPool[squad.length % gradientPool.length], ...data };
+      // Mark as "you" when saving during onboarding
+      if (isOnboarding) r.isYou = true;
+      squad.push(r);
+      closeProfileEditor();
+      renderSquad(); renderCrews(); renderEvents();
+      if (isOnboarding) {
+        maybeAdvanceOnboarding(r.name);
+      } else {
+        openProfile(r.id);
+        showToast(`🎉 Added ${r.name} to the tribe`);
+      }
+      if (currentUser) {
+        dbSaveRaver({ ...data, gradient: r.gradient }, null).then(dbId => {
+          if (dbId) {
+            r.id = dbId;
+            dbSaveRaverFestivals(dbId, data.festIds);
+          }
+        });
+      }
+    }
+  }
+
+  // ===== Festivals tab — browse & manage the catalog =====
+  const FALLBACK_COLORS = ['#FF2D78','#00F5FF','#FFE600','#BF00FF','#39FF14','#FF6B35'];
+
+  // Who from the tribe references a given festival id
+  function festivalGoers(festId) {
+    return squad.filter(p => (p.festIds || []).includes(festId));
+  }
+
+  function renderEvents() {
+    const list = document.getElementById('events-list');
+    if (!list) return;
+
+    const withDates = festivals.map((f, idx) => ({ ...f, _d: festDate(f), _idx: idx }));
+    const up = withDates.filter(f => f._d && f._d >= TODAY).sort((a,b) => a._d - b._d);
+    const past = withDates.filter(f => !f._d || f._d < TODAY).sort((a,b) => (b._d||0) - (a._d||0));
+
+    const card = (f) => {
+      const color = FALLBACK_COLORS[(f.id - 1) % FALLBACK_COLORS.length];
+      const day = f._d ? f._d.getDate() : '—';
+      const mon = f._d ? MON_SHORT[f._d.getMonth()].toUpperCase() : '';
+      const goers = festivalGoers(f.id);
+      const isUpcoming = f._d && f._d >= TODAY;
+      const metaLine = `📍 ${f.location || 'Location TBD'}` + (isUpcoming ? ` · ⏳ ${countdownLabel(f._d)}` : (f._d ? ` · ${f._d.getFullYear()}` : ''));
+      const chips = goers.length
+        ? goers.map(w => `<span class="going-chip" onclick="event.stopPropagation(); openProfile('${w.id}')" title="View ${w.name}'s profile">${w.name.split(' ')[0]}</span>`).join('')
+        : '<span class="fest-empty" style="font-size:0.74rem;">Nobody from the tribe yet</span>';
+
+      return `
+        <div class="event-item event-item-clickable" onclick="openFestivalEditor('${f.id}')" title="Tap to edit ${f.name}">
+          <div class="event-date">
+            <div class="event-day" style="color:${color}">${day}</div>
+            <div class="event-month">${mon}</div>
+          </div>
+          <div class="event-divider" style="background:${color}"></div>
+          <div class="event-info">
+            <div class="event-name">${f.name} <span class="fest-edit-hint">✏️</span></div>
+            <div class="event-meta">${metaLine}</div>
+            <div class="going-chips">${chips}</div>
+          </div>
+          <div class="event-crew-going">
+            <div class="going-count" style="color:${color}">${goers.length}</div>
+            <div class="going-label">going</div>
+          </div>
+        </div>`;
+    };
+
+    let html = '';
+    if (up.length) html += `<div class="fest-group-label" style="margin:4px 0 10px;">🔜 Upcoming</div>` + up.map(card).join('');
+    if (past.length) html += `<div class="fest-group-label" style="margin:22px 0 10px;">📼 Past</div>` + past.map(card).join('');
+    if (!up.length && !past.length) html = '<div class="fest-empty" style="padding:20px;text-align:center;">No festivals yet. Hit "+ Add Festival" to create one.</div>';
+    list.innerHTML = html;
+  }
+
+  // ===== Festival editor (create / edit / delete a catalog item) =====
+  let editingFestivalId = null;
+
+  function openFestivalEditor(id) {
+    editingFestivalId = id || null;
+    const f = id ? getFestival(id) : null;
+    const goers = id ? festivalGoers(id) : [];
+    document.getElementById('festival-edit-modal').innerHTML = `
+      <div class="modal-title">${f ? '✏️ Edit Festival' : '🎉 Add Festival'}</div>
+      ${fieldRow('Festival Name','fe-name', f?.name, 'e.g. Awakenings Festival')}
+      <div class="form-group">
+        <label class="form-label">Date</label>
+        <input class="form-input" id="fe-date" type="date" value="${f?.date || ''}" style="color-scheme:dark;">
+      </div>
+      ${fieldRow('Location','fe-loc', f?.location, 'e.g. Amsterdam, NL')}
+      ${f ? `<div class="fest-goers-note">${goers.length ? goers.length + ' tribe member' + (goers.length!==1?'s':'') + ' linked: ' + goers.map(g=>g.name.split(' ')[0]).join(', ') : 'No tribe members linked yet'}</div>` : ''}
+      <div class="modal-actions">
+        ${f ? `<button class="btn btn-ghost" style="color:var(--neon-pink);" onclick="deleteFestival('${f.id}')">Delete</button>` : ''}
+        <button class="btn btn-ghost" onclick="closeFestivalEditor()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveFestival()">${f ? 'Save' : 'Add 🔥'}</button>
+      </div>
+    `;
+    document.getElementById('festival-edit-overlay').classList.add('open');
+  }
+  function closeFestivalEditor() {
+    document.getElementById('festival-edit-overlay').classList.remove('open');
+    editingFestivalId = null;
+  }
+  function closeFestivalEditorOutside(e) {
+    if (e.target === document.getElementById('festival-edit-overlay')) closeFestivalEditor();
+  }
+  function saveFestival() {
+    const name = val('fe-name');
+    const date = document.getElementById('fe-date').value;
+    const location = val('fe-loc');
+    if (!name) { showToast('Festival needs a name ✍️'); return; }
+    if (!date) { showToast('Pick a date 📅'); return; }
+
+    if (editingFestivalId) {
+      const f = getFestival(editingFestivalId);
+      Object.assign(f, { name, date, location });
+      showToast(`✅ Updated ${name}`);
+      if (currentUser) dbSaveFestival({ name, date, location }, editingFestivalId);
+    } else {
+      const dupe = findFestivalByName(name);
+      if (dupe) { showToast(`"${dupe.name}" already exists`); return; }
+      const tempId = 'temp_' + Date.now();
+      const newFest = { id: tempId, name, date, location };
+      festivals.push(newFest);
+      showToast(`🎉 Added ${name}`);
+      if (currentUser) {
+        dbSaveFestival({ name, date, location }, null).then(dbId => {
+          if (dbId) newFest.id = dbId;
+        });
+      }
+    }
+    closeFestivalEditor();
+    renderEvents(); renderCrews();
+  }
+
+  function deleteFestival(id) {
+    const f = getFestival(id);
+    if (!f) return;
+    const goers = festivalGoers(id);
+    if (goers.length && !confirm(`${f.name} is linked to ${goers.length} tribe member(s). Delete it and remove from their profiles?`)) return;
+    const i = festivals.findIndex(x => x.id === id);
+    if (i >= 0) festivals.splice(i, 1);
+    squad.forEach(p => { if (p.festIds) p.festIds = p.festIds.filter(fid => fid !== id); });
+    closeFestivalEditor();
+    renderEvents(); renderCrews(); renderSquad();
+    showToast(`🗑️ Deleted ${f.name}`);
+    if (currentUser) dbDeleteFestival(id);
+  }
+
+  let checked = 0;
+
+  function countChecks() {
+    const all = document.querySelectorAll('.check-item');
+    total = all.length;
+    checked = document.querySelectorAll('.check-item.checked').length;
+    document.getElementById('progress-label').textContent = `${checked} of ${total} complete`;
+    document.getElementById('progress-bar').style.width = `${(checked/total)*100}%`;
+  }
+
+  function toggleCheck(el) {
+    el.classList.toggle('checked');
+    if (el.classList.contains('checked')) {
+      el.querySelector('.check-box').textContent = '✓';
+    } else {
+      el.querySelector('.check-box').textContent = '';
+    }
+    countChecks();
+  }
+
+  countChecks();
+
+  // Toast
+  let toastTimer;
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+  }
+
+  // ===== ONBOARDING =====
+  let isOnboarding = false;
+
+  function showOnboarding() {
+    isOnboarding = true;
+    document.getElementById('onboarding-screen').classList.add('show');
+  }
+
+  function completeOnboarding() {
+    isOnboarding = false;
+    document.getElementById('onboarding-screen').classList.remove('show');
+    // If they skipped profile, at least show the main app nicely
+    renderSquad();
+    renderCrews();
+  }
+
+  function startProfileOnboarding() {
+    // Open profile editor — prefill name from auth metadata
+    openProfileEditor();
+    const authName = currentUser?.user_metadata?.full_name || '';
+    if (authName) {
+      // slight delay so the modal DOM is ready
+      setTimeout(() => {
+        const el = document.getElementById('pf-name');
+        if (el) el.value = authName;
+      }, 50);
+    }
+  }
+
+  function createCrewOnboarding() {
+    // Close onboarding screen, open crew modal — user sees main app behind it
+    document.getElementById('onboarding-screen').classList.remove('show');
+    isOnboarding = false;
+    openModal();
+  }
+
+  // Advance onboarding after profile is saved for the first time
+  function maybeAdvanceOnboarding(profileName) {
+    if (!isOnboarding) return;
+    document.getElementById('onboard-step1').style.display = 'none';
+    document.getElementById('onboard-step2').style.display = 'block';
+    showToast('\u2705 Profile created! Now build your crew.');
+  }
+
 </script>
 </body>
 </html>
