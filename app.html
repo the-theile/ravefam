@@ -970,6 +970,45 @@
     50% { opacity: 0.5; transform: scale(0.8); }
   }
 
+  /* Inline tag editing */
+  .tag-edit-wrap { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: 28px; }
+  .tag-removable { display: inline-flex; align-items: center; gap: 3px; }
+  .tag-remove-btn {
+    background: none; border: none; cursor: pointer; color: var(--muted);
+    font-size: 0.72rem; padding: 0 1px; line-height: 1; transition: color 0.12s;
+  }
+  .tag-remove-btn:hover { color: var(--neon-pink); }
+  .tag-add-btn {
+    background: rgba(255,255,255,0.06); border: 1px dashed rgba(255,255,255,0.2);
+    color: var(--muted); border-radius: 20px; padding: 3px 9px;
+    font-size: 0.72rem; cursor: pointer; font-family: 'Outfit',sans-serif; font-weight: 600;
+    transition: all 0.15s;
+  }
+  .tag-add-btn:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+  .tag-add-input {
+    background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.18);
+    color: var(--text); border-radius: 20px; padding: 3px 10px;
+    font-size: 0.78rem; font-family: 'DM Sans',sans-serif; width: 110px; outline: none;
+  }
+  .tag-add-input:focus { border-color: var(--neon-cyan); }
+  .blocked-tag { opacity: 0.4; text-decoration: line-through; pointer-events: none; }
+  .inline-notes-area {
+    width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+    color: var(--text); border-radius: 10px; padding: 10px 12px;
+    font-family: 'DM Sans',sans-serif; font-size: 0.85rem; resize: none;
+    min-height: 80px; line-height: 1.55; transition: border-color 0.18s;
+  }
+  .inline-notes-area:focus { outline: none; border-color: var(--neon-cyan); }
+  .inline-notes-saved { font-size: 0.72rem; color: var(--muted); margin-top: 5px; text-align: right; opacity: 0; transition: opacity 0.3s; }
+  .inline-notes-saved.show { opacity: 1; }
+  .fest-been-add-btn {
+    font-size: 0.72rem; padding: 3px 9px; border-radius: 100px;
+    background: rgba(57,255,20,0.07); border: 1px solid rgba(57,255,20,0.2);
+    color: var(--neon-green); cursor: pointer;
+    font-family: 'Outfit',sans-serif; font-weight: 700; transition: all 0.15s;
+  }
+  .fest-been-add-btn:hover { background: rgba(57,255,20,0.15); }
+
   /* Scrollbar */
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -1489,6 +1528,18 @@
   </div>
 </div>
 
+<!-- Confirmation Modal -->
+<div class="modal-overlay" id="confirm-overlay" onclick="closeConfirmOutside(event)">
+  <div class="modal" style="max-width:380px;">
+    <div class="modal-title" id="confirm-title"></div>
+    <p id="confirm-body" style="font-size:0.88rem;color:var(--muted);margin-bottom:24px;line-height:1.6;"></p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeConfirm()">Cancel</button>
+      <button class="btn btn-primary" id="confirm-ok-btn">Confirm</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
@@ -1829,6 +1880,7 @@
           isYou: r.is_you || r.claimed_by === uid,
           base: r.base || '',
           gradient: r.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)',
+          blockedTags: r.blocked_tags || [],
           genres: r.genres || [],
           favArtists: r.fav_artists || [],
           festIds: (r.raver_festivals || []).map(rf => rf.festival_id),
@@ -1901,6 +1953,7 @@
       handle: data.handle,
       base: data.base,
       gradient: data.gradient,
+      blocked_tags: data.blockedTags || [],
       genres: data.genres,
       fav_artists: data.favArtists,
       crew_name: data.crew,
@@ -2797,10 +2850,24 @@
         </div>`;
     }
 
-    const favs = r.favArtists.length
-      ? r.favArtists.map(a => `<span class="fav-chip">${a}</span>`).join('')
-      : '<div class="fest-empty">No favorites logged yet</div>';
-    const genreChips = r.genres.map(g => `<span class="fav-chip">${g}</span>`).join('');
+    // Inline tag chips (removable for own profile, add-input for all)
+    const blockedTags = r.blockedTags || [];
+    function tagChip(val, field) {
+      if (r.isYou) {
+        return `<span class="fav-chip tag-removable">${val}<button class="tag-remove-btn" title="Remove"
+          onclick="showConfirm('Remove tag?','Remove \'${val.replace(/'/g,"\\'")}\'?','Remove',()=>removeTag('${r.id}','${field}','${val.replace(/'/g,"\\'")}'))">&nbsp;✕</button></span>`;
+      }
+      return `<span class="fav-chip">${val}</span>`;
+    }
+    const addTagInput = (field, placeholder) => `
+      <input class="tag-add-input" id="tag-input-${field}" placeholder="${placeholder}"
+        onkeydown="if(event.key==='Enter'&&this.value.trim()){addTag('${r.id}','${field}',this.value);this.value='';}" style="margin-top:4px;">`;
+    const genreChips = r.genres.length
+      ? r.genres.map(g => tagChip(g, 'genres')).join('')
+      : '<span class="fest-empty" style="font-size:0.8rem;">None logged yet</span>';
+    const favChips = r.favArtists.length
+      ? r.favArtists.map(a => tagChip(a, 'favArtists')).join('')
+      : '<span class="fest-empty" style="font-size:0.8rem;">None logged yet</span>';
 
     // Connect buttons — only show what exists
     const connectBtns = [];
@@ -2839,9 +2906,15 @@
       ${connectBlock}
 
       <div class="profile-section">
-        <h3>🎶 Genres & Favorite Artists</h3>
-        <div style="margin-bottom:14px;"><div class="fav-chips">${genreChips}</div></div>
-        <div class="fav-chips">${favs}</div>
+        <h3>🎶 Genres</h3>
+        <div class="tag-edit-wrap">${genreChips}</div>
+        ${addTagInput('genres', '+ genre')}
+      </div>
+
+      <div class="profile-section">
+        <h3>🎵 Favourite Artists</h3>
+        <div class="tag-edit-wrap">${favChips}</div>
+        ${addTagInput('favArtists', '+ artist')}
       </div>
 
       <div class="profile-section">
@@ -2852,6 +2925,13 @@
       <div class="profile-section">
         <h3>✅ Festivals — Been To</h3>
         ${festListPast}
+        ${festivals.length ? `<div style="margin-top:10px;">
+          <select id="been-to-select" class="tag-add-input" style="width:auto;max-width:200px;border-radius:8px;padding:4px 8px;">
+            <option value="">Add a festival…</option>
+            ${festivals.filter(f => !(r.festIds||[]).includes(f.id)).map(f => `<option value="${f.id}">${f.name}</option>`).join('')}
+          </select>
+          <button class="fest-been-add-btn" style="margin-left:6px;" onclick="const v=document.getElementById('been-to-select').value;if(v)addBeenTo('${r.id}',+v)">Add ✓</button>
+        </div>` : ''}
       </div>
 
       <div class="profile-section">
@@ -2866,7 +2946,15 @@
 
       <div class="profile-section">
         <h3>📝 Notes</h3>
-        <div class="profile-note">${r.notes || '<span class="fest-empty">No notes yet</span>'}</div>
+        ${r.isYou ? `<div class="profile-note">${r.notes || '<span class="fest-empty">No notes yet</span>'}</div>` : (() => {
+          const savedNotes = localStorage.getItem('viewer_notes_' + r.id) || '';
+          return `<p style="font-size:0.72rem;color:var(--muted);margin-bottom:8px;line-height:1.4;">Private — only you can see this.</p>
+            <textarea id="viewer-notes-${r.id}" class="inline-notes-area"
+              placeholder="How you met, their vibe, things to remember..."
+              oninput="localStorage.setItem('viewer_notes_${r.id}',this.value);const s=document.getElementById('notes-saved-${r.id}');if(s){s.classList.add('show');clearTimeout(s._t);s._t=setTimeout(()=>s.classList.remove('show'),1400);}"
+            >${savedNotes}</textarea>
+            <div id="notes-saved-${r.id}" class="inline-notes-saved">Saved ✓</div>`;
+        })()}
       </div>
     `;
     // Swap to profile page (hide nav active states; this is a sub-page)
@@ -3394,6 +3482,48 @@
   }
 
   countChecks();
+
+  // ── Inline tag editing (genres & favArtists) ─────────────────────────────
+  function addTag(raverId, field, value) {
+    const v = (value || '').trim();
+    if (!v) return;
+    const r = getRaver(raverId);
+    if (!r) return;
+    const blocked = r.blockedTags || [];
+    if (blocked.includes(v.toLowerCase())) { showToast('That tag was blocked by the profile owner.'); return; }
+    if ((r[field] || []).map(x => x.toLowerCase()).includes(v.toLowerCase())) { showToast('Already on the list'); return; }
+    r[field] = [...(r[field] || []), v];
+    if (currentUser) dbSaveRaver({ ...r }, r.id);
+    openProfile(raverId);
+  }
+  function removeTag(raverId, field, value) {
+    const r = getRaver(raverId);
+    if (!r) return;
+    r[field] = (r[field] || []).filter(x => x !== value);
+    if (currentUser) dbSaveRaver({ ...r }, r.id);
+    openProfile(raverId);
+  }
+  function addBeenTo(raverId, festId) {
+    const r = getRaver(raverId);
+    if (!r) return;
+    if ((r.festIds || []).includes(festId)) { showToast('Already on their list'); return; }
+    r.festIds = [...(r.festIds || []), festId];
+    if (currentUser) dbSaveRaverFestivals(raverId, r.festIds);
+    renderSquad(); renderEvents();
+    openProfile(raverId);
+  }
+
+  // ── Confirmation modal ────────────────────────────────────────────────────
+  function showConfirm(title, body, okLabel, callback) {
+    document.getElementById('confirm-title').textContent = title;
+    document.getElementById('confirm-body').textContent = body;
+    const okBtn = document.getElementById('confirm-ok-btn');
+    okBtn.textContent = okLabel;
+    okBtn.onclick = () => { closeConfirm(); callback(); };
+    document.getElementById('confirm-overlay').classList.add('open');
+  }
+  function closeConfirm() { document.getElementById('confirm-overlay').classList.remove('open'); }
+  function closeConfirmOutside(e) { if (e.target === document.getElementById('confirm-overlay')) closeConfirm(); }
 
   // Toast
   let toastTimer;
