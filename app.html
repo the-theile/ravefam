@@ -1687,12 +1687,33 @@
     }
 
     // --- Crews ---
-    const { data: dbCrews, error: cErr } = await sb
+    // Query 1: crews where this user is the leader
+    const { data: ledCrews, error: cErr1 } = await sb
       .from('crews')
       .select('*, crew_members(raver_id)')
-      .or(`leader_id.eq.${uid},crew_members.added_by.eq.${uid}`);
-    if (!cErr && dbCrews) {
-      dbCrews.forEach(c => {
+      .eq('leader_id', uid);
+
+    // Query 2: crew IDs where this user was added as a member
+    const { data: memberLinks } = await sb
+      .from('crew_members')
+      .select('crew_id')
+      .eq('added_by', uid);
+
+    // Load those extra crews (ones not already in ledCrews)
+    const ledIds = new Set((ledCrews || []).map(c => c.id));
+    const extraIds = [...new Set((memberLinks || []).map(m => m.crew_id))].filter(id => !ledIds.has(id));
+    let memberCrews = [];
+    if (extraIds.length) {
+      const { data: extra } = await sb
+        .from('crews')
+        .select('*, crew_members(raver_id)')
+        .in('id', extraIds);
+      memberCrews = extra || [];
+    }
+
+    const allCrews = [...(ledCrews || []), ...memberCrews];
+    if (!cErr1 && allCrews.length) {
+      allCrews.forEach(c => {
         const squadIds = (c.crew_members || []).map(cm => cm.raver_id);
         const members = squadIds
           .map(sid => squad.find(r => r.id === sid))
@@ -2113,9 +2134,10 @@
 
     // Build member list from linked squad profiles → first names, clickable
     const people = crewSquad(crew);
+    const isAdmin = !!squad.find(r => r.isYou);
     const memberList = people.length
       ? people.map(p => {
-          const canRemove = crew.isLead && !p.isYou;
+          const canRemove = (crew.isLead || isAdmin) && !p.isYou;
           const right = canRemove
             ? `<button class="remove-member-btn" data-crew="${crew.id}" data-raver="${p.id}" onclick="event.stopPropagation(); removeMemberFromCrew(this.dataset.crew, this.dataset.raver)" title="Remove from crew">×</button>`
             : `<span class="detail-member-arrow">›</span>`;
@@ -2179,7 +2201,7 @@
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeDetail()" style="flex:1;padding:12px;">Close</button>
       </div>
-      ${crew.isLead ? `
+      ${(crew.isLead || isAdmin) ? `
         <div class="danger-zone">
           <button class="btn btn-ghost" style="width:100%;padding:10px;font-size:0.8rem;color:var(--neon-pink);border-color:rgba(255,45,120,0.25);"
             onclick="showDeleteCrewConfirm(activeDetailId)">🗑️ Delete Crew</button>
@@ -2261,7 +2283,8 @@
     // dataset values are strings; use String() coercion for safe comparison
     const crew  = crews.find(c => String(c.id) === String(crewId));
     const raver = squad.find(r => String(r.id) === String(raverId));
-    if (!crew || !crew.isLead) return;
+    const isAdmin = !!squad.find(r => r.isYou);
+    if (!crew || (!crew.isLead && !isAdmin)) return;
     crew.squadIds = crew.squadIds.filter(id => String(id) !== String(raverId));
     // Rebuild members array cleanly from remaining squadIds
     crew.members = crew.squadIds
@@ -2498,7 +2521,7 @@
 
       card.innerHTML = `
         <div class="member-avatar" style="background:${r.gradient}">${initials(r.name).toUpperCase()}</div>
-        <div class="member-name">${r.name}${r.isYou ? ' <span style="font-size:0.7rem;color:var(--neon-pink);font-family:\'Outfit\',sans-serif;font-weight:700;">YOU</span>' : ''}</div>
+        <div class="member-name">${r.name}${r.isYou ? ' <span style="font-size:0.75rem;margin-right:2px;">👑</span><span style="font-size:0.7rem;color:var(--neon-pink);font-family:\'Outfit\',sans-serif;font-weight:700;">YOU</span>' : ''}</div>
         <div class="member-handle">${r.handle}</div>
         ${crewLine}
         ${nextFestLine}
@@ -2580,7 +2603,7 @@
         <div class="profile-hero-bar" style="background:${r.gradient}"></div>
         <div class="profile-avatar" style="background:${r.gradient}">${initials(r.name).toUpperCase()}</div>
         <div class="profile-id">
-          <h2>${r.name}${r.isYou ? ' <span style="font-size:0.9rem;color:var(--muted)">(You)</span>' : ''}</h2>
+          <h2>${r.isYou ? '👑 ' : ''}${r.name}${r.isYou ? ' <span style="font-size:0.9rem;color:var(--muted)">(You)</span>' : ''}</h2>
           <div class="profile-handle">${r.handle}</div>
           <div class="profile-base-line">📍 Based in ${r.base}</div>
         </div>
@@ -2588,8 +2611,9 @@
 
       ${nextBanner}
 
-      <div class="profile-actions">
-        <button class="btn btn-primary" style="flex:1;padding:11px;" onclick="openProfileEditor(${r.id})">✏️ Edit Profile</button>
+      <div class="profile-actions" data-raver-id="${r.id}">
+        <button class="btn btn-primary" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="openProfileEditor(this.closest('[data-raver-id]').dataset.raverId)">✏️ Edit Profile</button>
+        ${!r.isYou ? `<button class="btn btn-ghost" style="padding:11px;color:var(--neon-pink);border-color:rgba(255,45,120,0.3);" data-raver-id="${r.id}" onclick="showDeleteRaverConfirm(this.dataset.raverId)">🗑️</button>` : ''}
       </div>
 
       ${connectBlock}
@@ -2637,6 +2661,56 @@
     // keep the Squad nav tab highlighted
     document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.nav-tab').forEach(t => { if (t.textContent.trim()==='Ravers') t.classList.add('active'); });
+  }
+
+  // ===== Admin: delete raver =====
+  function showDeleteRaverConfirm(raverId) {
+    const r = getRaver(raverId);
+    if (!r) return;
+    const crewNames = crews.filter(c => (c.squadIds || []).some(id => String(id) === String(raverId))).map(c => c.name);
+    const crewNote = crewNames.length
+      ? `They're in ${crewNames.length} crew${crewNames.length !== 1 ? 's' : ''}: ${crewNames.join(', ')}.`
+      : 'They have no crew memberships.';
+    document.getElementById('page-profile').innerHTML = `
+      <button class="profile-back" data-raver-id="${raverId}" onclick="openProfile(this.dataset.raverId)">← Back</button>
+      <div style="text-align:center;padding:40px 24px 24px;">
+        <div style="font-size:3rem;margin-bottom:16px;">🗑️</div>
+        <h2 style="margin-bottom:8px;">Remove ${r.name}?</h2>
+        <p style="font-size:0.86rem;color:var(--muted);line-height:1.65;margin-bottom:6px;">${crewNote}</p>
+        <p style="font-size:0.86rem;color:var(--muted);line-height:1.65;margin-bottom:18px;">They will be removed from all crews and festival links.</p>
+        <p style="font-size:0.86rem;color:var(--neon-pink);font-weight:700;">This cannot be undone.</p>
+      </div>
+      <div class="modal-actions" style="padding:0 16px;">
+        <button class="btn btn-ghost" style="flex:1;padding:13px;" data-raver-id="${raverId}" onclick="openProfile(this.dataset.raverId)">Cancel</button>
+        <button class="btn btn-primary" style="flex:1;padding:13px;background:var(--neon-pink);" data-raver-id="${raverId}" onclick="deleteRaver(this.dataset.raverId)">Yes, remove</button>
+      </div>`;
+  }
+
+  function deleteRaver(raverId) {
+    const r = getRaver(raverId);
+    if (!r) return;
+    // Remove from all crews
+    crews.forEach(c => {
+      if ((c.squadIds || []).some(id => String(id) === String(raverId))) {
+        c.squadIds = c.squadIds.filter(id => String(id) !== String(raverId));
+        c.members = c.squadIds
+          .map(sid => squad.find(x => String(x.id) === String(sid)))
+          .filter(Boolean)
+          .map(x => ({ i: initials(x.name), c: c.color, t: '#fff' }));
+        if (currentUser) dbSaveCrewMembers(c.id, c.squadIds);
+      }
+    });
+    // Remove from squad
+    const idx = squad.findIndex(x => String(x.id) === String(raverId));
+    if (idx >= 0) squad.splice(idx, 1);
+    backToSquad();
+    renderSquad(); renderCrews(); renderEvents();
+    showToast(`🗑️ ${r.name} removed from the tribe`);
+    if (currentUser) {
+      sb.from('ravers').delete().eq('id', raverId).then(({ error }) => {
+        if (error) console.error('delete raver error', error);
+      });
+    }
   }
 
   // ===== Profile editor (add / edit) =====
