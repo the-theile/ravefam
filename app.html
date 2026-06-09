@@ -3270,9 +3270,31 @@
       if (currentUser) {
         dbSaveRaver({ ...data, gradient: r.gradient, isYou: r.isYou }, null).then(inserted => {
           if (inserted?.id) {
+            const oldTempId = r.id;
             r.id = inserted.id;
             if (inserted.qr_token) r.qrToken = inserted.qr_token;
             dbSaveRaverFestivals(inserted.id, data.festIds);
+            // When a raver's temp ID is replaced with a real DB UUID, patch any
+            // crew.squadIds still holding the old temp ID. Without this fix,
+            // the next renderCrews() call does squad.find(r => r.id === 'temp_*'),
+            // finds nothing, silently drops the member, and dbSaveCrewMembers also
+            // skips them (temp IDs are filtered before the DB insert).
+            let anyCrewUpdated = false;
+            crews.forEach(crew => {
+              const idx = crew.squadIds.findIndex(sid => String(sid) === String(oldTempId));
+              if (idx < 0) return;
+              crew.squadIds[idx] = inserted.id;
+              crew.members = crew.squadIds
+                .map(sid => squad.find(x => String(x.id) === String(sid)))
+                .filter(Boolean)
+                .map(x => ({ i: initials(x.name), c: crew.color, t: '#fff' }));
+              anyCrewUpdated = true;
+              // Only persist once the crew itself also has a real DB ID
+              if (!String(crew.id).startsWith('temp_')) {
+                dbSaveCrewMembers(crew.id, crew.squadIds);
+              }
+            });
+            if (anyCrewUpdated) renderCrews();
           }
         });
       }
