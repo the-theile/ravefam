@@ -1351,6 +1351,7 @@
       <span class="logo-text"><span>Rave</span><span>FAM</span></span>
     </div>
     <div class="header-actions">
+      <button class="btn btn-ghost" id="edit-profile-btn" onclick="openOwnProfileEditor()" style="font-size:0.75rem;padding:9px 14px;">✏️ My Profile</button>
       <button class="btn btn-ghost" id="logout-btn" onclick="doLogout()" style="font-size:0.75rem;padding:9px 14px;">Log out</button>
     </div>
   </header>
@@ -2268,10 +2269,16 @@
     if (e.target === document.getElementById('detail-overlay')) closeDetail();
   }
 
-  // Jump from a crew's member list straight to that raver's profile page
+  // Jump from a crew's member list — opens editor for others, profile view for yourself
   function goToProfileFromDetail(raverId) {
+    const r = getRaver(raverId);
+    if (!r) return;
     closeDetail();
-    openProfile(raverId);
+    if (r.isYou) {
+      openProfile(raverId);
+    } else {
+      openProfileEditor(raverId);
+    }
   }
 
   function renderDetail(id) {
@@ -2502,7 +2509,7 @@
     const newCrew = {
       id: 'temp_' + Date.now(), name, color,
       gradient,
-      status: 'recruiting', isLead: true,
+      status: 'locked-in', isLead: true,
       squadIds: you ? [you.id] : [],
       members: [{ i: you ? initials(you.name) : 'ME', c: color, t: '#000' }]
     };
@@ -2518,7 +2525,7 @@
 
     // Persist async
     if (currentUser) {
-      dbSaveCrew({ name, color, gradient, status: 'recruiting' }, null).then(dbId => {
+      dbSaveCrew({ name, color, gradient, status: 'locked-in' }, null).then(dbId => {
         if (dbId) {
           newCrew.id = dbId;
           if (you) dbSaveCrewMembers(dbId, [you.id]);
@@ -2883,11 +2890,41 @@
   function openProfileEditor(id) {
     editingId = id || null;
     const r = id ? getRaver(id) : null;
+    const isOwnProfile = r?.isYou || isOnboarding;
+
+    // Quick-add mode: new raver added by crew leader (not onboarding own profile)
+    const quickAdd = !id && !isOnboarding;
+
+    if (quickAdd) {
+      document.getElementById('profile-edit-modal').innerHTML = `
+        <div class="modal-title">➕ Add Raver</div>
+        <p style="font-size:0.82rem;color:var(--muted);margin-bottom:18px;line-height:1.5;">Just the basics — you can fill in more details by tapping their name in the crew later.</p>
+        ${fieldRow('Name','pf-name', '', 'e.g. Sam P.')}
+        ${fieldRow('Phone Number','pf-phone', '', 'e.g. +44 7700 900000')}
+        ${fieldRow('Instagram','pf-instagram', '', 'e.g. @samraves')}
+        <div class="modal-actions">
+          <button class="btn btn-ghost" onclick="closeProfileEditor()">Cancel</button>
+          <button class="btn btn-primary" onclick="saveProfile()">Add Raver 🔥</button>
+        </div>
+      `;
+      editingFestIds = new Set();
+      document.getElementById('profile-edit-overlay').classList.add('open');
+      document.getElementById('profile-edit-modal').scrollTop = 0;
+      return;
+    }
+
+    // Full editor: editing existing raver, or own profile during onboarding
+    const claimedHandle = r?.claimedBy && r?.handle
+      ? `<div class="form-group"><label class="form-label">Handle</label><div style="font-size:0.88rem;color:var(--muted);padding:11px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;">${r.handle} <span style="font-size:0.72rem;color:var(--neon-green);margin-left:6px;">✓ Claimed</span></div></div>`
+      : '';
+    const handleField = isOwnProfile
+      ? fieldRow('Handle','pf-handle', r?.handle, 'e.g. @samraves')
+      : claimedHandle;
 
     document.getElementById('profile-edit-modal').innerHTML = `
-      <div class="modal-title">${r ? '✏️ Edit ' + r.name : '🎉 Add a Raver'}</div>
+      <div class="modal-title">${r ? '✏️ Edit ' + r.name : '✨ Your Raver Profile'}</div>
       ${fieldRow('Name','pf-name', r?.name, 'e.g. Sam P.')}
-      ${fieldRow('Handle','pf-handle', r?.handle, 'e.g. @samraves')}
+      ${handleField}
       ${fieldRow('Home Base','pf-base', r?.base, 'e.g. Berlin, DE')}
       ${fieldRow('Genres (comma separated)','pf-genres', r?.genres?.join(', '), 'Techno, House')}
       ${fieldRow('Favorite Artists (comma separated)','pf-favs', r?.favArtists?.join(', '), 'Amelie Lens, Peggy Gou')}
@@ -2910,18 +2947,16 @@
         <button type="button" class="add-fest-btn" id="show-new-fest-btn" onclick="showNewFest()">+ Create new festival</button>
       </div>
 
-      ${fieldRow('Go-To Crew','pf-crew', r?.crew, 'e.g. Bass Syndicate')}
       ${fieldRow('Instagram','pf-instagram', r?.instagram, 'e.g. @samraves')}
       ${fieldRow('Phone Number','pf-phone', r?.phone, 'e.g. +44 7700 900000')}
-      ${fieldRow('How We Met','pf-met', r?.metStory, 'Where did your paths cross?', true)}
-      ${fieldRow('Notes','pf-notes', r?.notes, "What's their vibe?", true)}
+      ${isOwnProfile ? '' : fieldRow('How We Met','pf-met', r?.metStory, 'Where did your paths cross?', true)}
+      ${fieldRow('Notes','pf-notes', r?.notes, isOwnProfile ? "Anything about yourself…" : "What's their vibe?", true)}
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeProfileEditor()">Cancel</button>
-        <button class="btn btn-primary" onclick="saveProfile()">${r ? 'Save Changes' : 'Add Raver 🔥'}</button>
+        <button class="btn btn-primary" onclick="saveProfile()">${r ? 'Save Changes' : 'Save Profile 🔥'}</button>
       </div>
     `;
 
-    // Render the festival checklist, pre-ticking this raver's festivals
     editingFestIds = new Set(r?.festIds || []);
     renderFestPicker();
 
@@ -2998,6 +3033,18 @@
     renderFestPicker();
   }
 
+  // Edit the logged-in user's own raver profile from the header button
+  function openOwnProfileEditor() {
+    const me = squad.find(r => r.isYou);
+    if (me) {
+      openProfileEditor(me.id);
+    } else {
+      // No raver profile yet — open onboarding-style full form
+      isOnboarding = false;
+      openProfileEditor(null);
+    }
+  }
+
   function closeProfileEditor() {
     document.getElementById('profile-edit-overlay').classList.remove('open');
     editingId = null;
@@ -3022,8 +3069,8 @@
     if (!name) { showToast('Give them a name first ✍️'); return; }
     const data = {
       name,
-      handle: val('pf-handle') || '@newraver',
-      base: val('pf-base') || 'Unknown',
+      handle: val('pf-handle') || '',
+      base: val('pf-base') || '',
       genres: parseList(val('pf-genres')),
       favArtists: parseList(val('pf-favs')),
       festIds: Array.from(editingFestIds),
