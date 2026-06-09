@@ -662,14 +662,16 @@
   }
   .fest-check {
     display: flex; align-items: center; gap: 10px;
-    padding: 8px 10px; border-radius: 9px; cursor: pointer;
-    background: rgba(255,255,255,0.03); margin-bottom: 6px;
-    transition: background 0.15s;
+    padding: 10px 12px; border-radius: 10px; cursor: pointer;
+    background: rgba(255,255,255,0.04); margin-bottom: 6px;
+    border: 1px solid rgba(255,255,255,0.07);
+    transition: background 0.15s, border-color 0.15s;
   }
-  .fest-check:hover { background: rgba(255,255,255,0.06); }
-  .fest-check input { width: 17px; height: 17px; accent-color: var(--neon-green); flex-shrink: 0; cursor: pointer; }
-  .fest-check-name { font-size: 0.86rem; font-weight: 500; }
-  .fest-check-meta { font-size: 0.72rem; color: var(--muted); margin-left: auto; text-align: right; }
+  .fest-check:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.14); }
+  .fest-check:has(input:checked) { background: rgba(57,255,20,0.07); border-color: rgba(57,255,20,0.25); }
+  .fest-check input { width: 18px; height: 18px; accent-color: var(--neon-green); flex-shrink: 0; cursor: pointer; }
+  .fest-check-name { font-size: 0.88rem; font-weight: 600; color: var(--text); flex: 1; line-height: 1.35; }
+  .fest-check-meta { font-size: 0.76rem; color: var(--muted); font-weight: 400; }
 
   /* Location line on profile fest rows */
   .fest-loc { display: block; font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
@@ -3123,11 +3125,11 @@
     const row = (f) => {
       const checked = editingFestIds.has(f.id) || [...editingFestIds].some(id => String(id) === String(f.id)) ? 'checked' : '';
       const when = f._d ? `${f._d.getDate()} ${MON_SHORT[f._d.getMonth()]} ${f._d.getFullYear()}` : '';
+      const meta = [when, f.location].filter(Boolean).join(' · ');
       return `
         <label class="fest-check">
           <input type="checkbox" ${checked} data-fid="${f.id}" onchange="toggleFestPick(this.dataset.fid, this.checked)">
-          <span class="fest-check-name">${f.name}</span>
-          <span class="fest-check-meta">${when}${f.location ? ' · ' + f.location : ''}</span>
+          <span class="fest-check-name">${f.name}${meta ? `<span class="fest-check-meta"> · ${meta}</span>` : ''}</span>
         </label>`;
     };
 
