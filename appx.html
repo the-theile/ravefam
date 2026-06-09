@@ -1859,6 +1859,7 @@
   const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
 
   let currentUser = null;  // holds the logged-in Supabase user object
+  let _bootedUserId = null; // guard: prevents bootApp() running more than once per session
 
   // ===== AUTH UI helpers =====
   function showAuthTab(tab) {
@@ -1954,11 +1955,16 @@
   }
 
   // ===== AUTH STATE LISTENER =====
-  // Runs once on page load to restore session, then on every auth change.
+  // Fires on INITIAL_SESSION, SIGNED_IN, TOKEN_REFRESHED, SIGNED_OUT, etc.
+  // Guard against TOKEN_REFRESHED re-triggering a full bootApp() re-run.
   sb.auth.onAuthStateChange((event, session) => {
     if (session?.user) {
-      showApp(session.user);
+      if (session.user.id !== _bootedUserId) {
+        _bootedUserId = session.user.id;
+        showApp(session.user);
+      }
     } else {
+      _bootedUserId = null;
       showAuthScreen();
     }
   });
