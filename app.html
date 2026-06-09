@@ -2525,10 +2525,19 @@
 
     // Persist async
     if (currentUser) {
+      const tempId = newCrew.id;
       dbSaveCrew({ name, color, gradient, status: 'locked-in' }, null).then(dbId => {
         if (dbId) {
           newCrew.id = dbId;
-          if (you) dbSaveCrewMembers(dbId, [you.id]);
+          // Keep activeDetailId (and any pending-add reference) in sync so that
+          // member lookups on this crew still work after the temp→real ID swap.
+          if (String(activeDetailId) === String(tempId)) activeDetailId = dbId;
+          if (String(_pendingAddToCrew) === String(tempId)) _pendingAddToCrew = dbId;
+          // Save ALL current members (not just 'you') — the user may have added
+          // people via the detail modal while the DB save was in-flight.
+          // Filter out any raver IDs that are still temp (not yet persisted).
+          const memberIds = newCrew.squadIds.filter(id => !String(id).startsWith('temp_'));
+          if (memberIds.length) dbSaveCrewMembers(dbId, memberIds);
         }
       });
     }
