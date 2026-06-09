@@ -1518,6 +1518,28 @@
   }
   .fest-been-add-btn:hover { background: rgba(57,255,20,0.15); }
 
+  /* == BETA badge (remove for launch) == */
+  .beta-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: linear-gradient(135deg, #FF2D78, #BF00FF);
+    color: #fff;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 800;
+    font-size: 0.72rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 4px 14px;
+    border-radius: 9999px;
+    box-shadow: 0 0 20px rgba(255,45,120,0.6);
+    animation: betaPulse 2s infinite alternate;
+    white-space: nowrap;
+  }
+  @keyframes betaPulse {
+    from { box-shadow: 0 0 20px rgba(255,45,120,0.6); }
+    to   { box-shadow: 0 0 30px rgba(255,45,120,0.9); }
+  }
 </style>
 </head>
 <body>
@@ -1601,6 +1623,11 @@
         <input class="form-input" id="login-password" type="password" placeholder="••••••••" autocomplete="current-password">
       </div>
       <button class="auth-btn" id="login-btn" onclick="doLogin()">Log In 🔥</button>
+      <p style="text-align:center;margin-top:12px;font-size:0.8rem;color:var(--muted);">
+        <a href="mailto:support@myravefam.com?subject=Forgot%20Password" style="color:var(--muted);text-decoration:underline;">Forgot password?</a>
+        &nbsp;&middot;&nbsp;
+        <a href="#" onclick="showAuthTab('signup');return false;" style="color:var(--neon-pink);text-decoration:none;font-weight:600;">Sign up free →</a>
+      </p>
     </div>
 
     <div id="auth-signup-form" style="display:none;">
@@ -1617,6 +1644,12 @@
         <input class="form-input" id="signup-password" type="password" placeholder="min 6 characters" autocomplete="new-password">
       </div>
       <button class="auth-btn" id="signup-btn" onclick="doSignup()">Create Account 🎉</button>
+      <p style="text-align:center;margin-top:12px;font-size:0.8rem;color:var(--muted);">
+        Already have an account? <a href="#" onclick="showAuthTab('login');return false;" style="color:var(--neon-pink);text-decoration:none;font-weight:600;">Log in →</a>
+      </p>
+      <p style="text-align:center;margin-top:6px;font-size:0.72rem;color:var(--muted);">
+        By signing up you agree to our <a href="/terms.html" style="color:var(--muted);text-decoration:underline;">Terms</a> &amp; <a href="/privacy.html" style="color:var(--muted);text-decoration:underline;">Privacy Policy</a>.
+      </p>
     </div>
   </div>
   </div><!-- /auth-inner -->
@@ -1646,6 +1679,7 @@
 <button id="claim-header-btn" class="btn btn-ghost" onclick="showClaimCodeEntry()" style="display:none;font-size:0.75rem;padding:9px 14px;" title="Claim your profile with a code">🔑 Claim</button>
 <button class="btn btn-ghost" onclick="editMyProfile()" style="font-size:0.75rem;padding:9px 14px;" title="Edit your profile">✏️ My Profile</button>
       <button class="btn btn-ghost" id="logout-btn" onclick="doLogout()" style="font-size:0.75rem;padding:9px 14px;" title="Log out">⏻</button>
+      <span class="beta-badge" style="font-size:0.68rem;padding:6px 13px;">BETA BUILD</span>
     </div>
   </header>
 
@@ -1657,6 +1691,10 @@
   </nav>
 
   <main>
+<!-- BETA warning bar (remove for launch) -->
+<div style="background:linear-gradient(90deg,#FF2D78,#BF00FF);color:#fff;padding:14px 24px;text-align:center;font-weight:700;font-size:0.85rem;margin:-28px -28px 32px;border-radius:0 0 14px 14px;box-shadow:0 4px 25px rgba(255,45,120,0.5);">
+  ⚠️ EARLY BETA RAVE — The full experience is still loading. Expect missing tracks &amp; evolving features. Let's build the ultimate crew HQ together! 🔥
+</div>
 
     <!-- CREWS PAGE -->
     <div class="page active" id="page-crews">
@@ -1957,7 +1995,16 @@
   // ===== AUTH STATE LISTENER =====
   // Fires on INITIAL_SESSION, SIGNED_IN, TOKEN_REFRESHED, SIGNED_OUT, etc.
   // Guard against TOKEN_REFRESHED re-triggering a full bootApp() re-run.
+  // Safety fallback: if Supabase never fires, show auth screen after 6s.
+  const _authTimeout = setTimeout(() => {
+    if (!document.getElementById('app-loading').classList.contains('hidden')) {
+      console.warn('Auth timeout - showing auth screen as fallback');
+      showAuthScreen();
+    }
+  }, 6000);
+
   sb.auth.onAuthStateChange((event, session) => {
+    clearTimeout(_authTimeout);
     if (session?.user) {
       if (session.user.id !== _bootedUserId) {
         _bootedUserId = session.user.id;
@@ -4839,14 +4886,4 @@
   }
 
   // Capture ?claim= token before auth renders (page may redirect to auth screen)
-  (function() {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('claim')) {
-      window._preAuthClaimToken = params.get('claim');
-      window.history.replaceState({}, '', window.location.pathname + window.location.hash);
-    }
-  })();
-
-</script>
-</body>
-</html>
+  (function
