@@ -1297,30 +1297,35 @@
 <!-- Music Toggle Button -->
 <div id="music-btn" style="position:fixed;bottom:28px;right:28px;z-index:9999;display:none;flex-direction:column;align-items:center;">
 
-  <!-- Credit tooltip (hover to reveal) -->
-  <div id="music-credit" style="background:rgba(14,14,22,0.95);border:1px solid rgba(255,45,120,0.3);border-radius:10px;padding:8px 12px;font-family:'DM Sans',sans-serif;font-size:0.68rem;color:#6A6A8A;line-height:1.6;text-align:center;max-width:220px;margin-bottom:8px;opacity:0;transform:translateY(4px) scale(0.97);transition:opacity 0.2s ease,transform 0.2s ease;pointer-events:none;">
+  <!-- Credit tooltip (hover/long-press to reveal) -->
+  <div id="music-credit" style="background:rgba(14,14,22,0.95);border:1px solid rgba(57,255,20,0.3);border-radius:10px;padding:8px 12px;font-family:'DM Sans',sans-serif;font-size:0.68rem;color:#6A6A8A;line-height:1.6;text-align:center;max-width:220px;margin-bottom:8px;opacity:0;transform:translateY(4px) scale(0.97);transition:opacity 0.2s ease,transform 0.2s ease;pointer-events:none;">
     <span style="color:#F0EEFF;font-weight:500;">Powerful Trap Beat | Strong</span><br>
-    Alex-Productions &middot; <a href="https://onsound.eu/" target="_blank" rel="noopener" style="color:#FF2D78;text-decoration:none;">onsound.eu</a><br>
+    Alex-Productions &middot; <a href="https://onsound.eu/" target="_blank" rel="noopener" style="color:#39FF14;text-decoration:none;">onsound.eu</a><br>
     <span style="font-size:0.62rem;">CC BY 3.0 via chosic.com</span>
   </div>
 
   <!-- Button -->
-  <button id="music-toggle" onclick="toggleMusic()" aria-label="Toggle background music"
-    onmouseenter="showCredit()" onmouseleave="hideCredit()"
-    style="width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#FF2D78,#BF00FF);box-shadow:0 0 18px rgba(255,45,120,0.55),0 0 36px rgba(191,0,255,0.3);font-size:1.35rem;display:flex;align-items:center;justify-content:center;transition:transform 0.15s ease,box-shadow 0.15s ease;outline:none;">
+  <button id="music-toggle" aria-label="Toggle background music"
+    style="width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#39FF14,#00F5FF);box-shadow:0 0 18px rgba(57,255,20,0.55),0 0 36px rgba(0,245,255,0.3);font-size:1.35rem;display:flex;align-items:center;justify-content:center;transition:transform 0.15s ease,box-shadow 0.15s ease;outline:none;">
     &#127925;
   </button>
 </div>
 
 <script>
 (function(){
-  var audio  = document.getElementById('bg-music');
-  var btn    = document.getElementById('music-btn');
-  var toggle = document.getElementById('music-toggle');
-  var credit = document.getElementById('music-credit');
-  var primed = false;
+  var audio   = document.getElementById('bg-music');
+  var btn     = document.getElementById('music-btn');
+  var toggle  = document.getElementById('music-toggle');
+  var credit  = document.getElementById('music-credit');
+  var primed  = false;
+  var playing = false;
+  var fadeTimer = null;
 
-  /* Reveal button on first interaction */
+  /* ── Colours ── */
+  var glowOff = '0 0 18px rgba(57,255,20,0.55),0 0 36px rgba(0,245,255,0.3)';
+  var glowOn  = '0 0 22px rgba(57,255,20,0.9),0 0 48px rgba(0,245,255,0.6)';
+
+  /* ── Reveal button on first interaction ── */
   function prime(){
     if(primed) return;
     primed = true;
@@ -1335,50 +1340,85 @@
       });
     });
     ['click','keydown','scroll','touchstart'].forEach(function(ev){
-      document.removeEventListener(ev,prime);
+      document.removeEventListener(ev, prime);
     });
   }
   ['click','keydown','scroll','touchstart'].forEach(function(ev){
-    document.addEventListener(ev,prime,{passive:true});
+    document.addEventListener(ev, prime, {passive:true});
   });
 
-  /* Play / pause with fade */
-  window.toggleMusic = function(){
-    if(audio.paused){
+  /* ── Toggle play/pause (works on mobile: pause called synchronously) ── */
+  toggle.addEventListener('click', function(){
+    if(fadeTimer){ clearInterval(fadeTimer); fadeTimer=null; }
+    if(playing){
+      /* Stop immediately — must be synchronous for mobile browsers */
+      audio.pause();
       audio.volume = 0;
-      audio.play().then(function(){
-        var v=0, t=setInterval(function(){
-          v = Math.min(v+0.04,0.55); audio.volume=v;
-          if(v>=0.55) clearInterval(t);
-        },60);
-        toggle.innerHTML = '&#128266;';
-        toggle.style.boxShadow = '0 0 22px rgba(255,45,120,0.85),0 0 48px rgba(191,0,255,0.55)';
-      }).catch(function(){});
+      playing = false;
+      toggle.innerHTML = '&#127925;';
+      toggle.style.boxShadow = glowOff;
     } else {
-      var t=setInterval(function(){
-        if(audio.volume>0.04){ audio.volume=Math.max(audio.volume-0.04,0); }
-        else{ clearInterval(t); audio.pause(); audio.volume=0;
-          toggle.innerHTML = '&#127925;';
-          toggle.style.boxShadow = '0 0 18px rgba(255,45,120,0.55),0 0 36px rgba(191,0,255,0.3)';
-        }
-      },60);
+      audio.volume = 0;
+      var p = audio.play();
+      if(p !== undefined){
+        p.then(startFade).catch(function(){});
+      } else {
+        startFade(); /* older WebKit */
+      }
     }
-  };
+    hideCredit();
+  });
 
-  /* Credit tooltip */
-  window.showCredit = function(){
+  function startFade(){
+    playing = true;
+    toggle.innerHTML = '&#128266;';
+    toggle.style.boxShadow = glowOn;
+    var v = 0;
+    fadeTimer = setInterval(function(){
+      v = Math.min(v + 0.04, 0.55);
+      audio.volume = v;
+      if(v >= 0.55){ clearInterval(fadeTimer); fadeTimer=null; }
+    }, 60);
+  }
+
+  /* ── Credit tooltip: hover on desktop, tap-hold on mobile ── */
+  var holdTimer = null;
+  var isTouchDevice = ('ontouchstart' in window);
+
+  function showCredit(){
     credit.style.opacity='1';
     credit.style.transform='translateY(0) scale(1)';
     credit.style.pointerEvents='auto';
-  };
-  window.hideCredit = function(){
+  }
+  function hideCredit(){
     credit.style.opacity='0';
     credit.style.transform='translateY(4px) scale(0.97)';
     credit.style.pointerEvents='none';
-  };
+    if(holdTimer){ clearTimeout(holdTimer); holdTimer=null; }
+  }
+
+  if(!isTouchDevice){
+    toggle.addEventListener('mouseenter', showCredit);
+    toggle.addEventListener('mouseleave', hideCredit);
+  } else {
+    /* Long-press (400ms) reveals credit on mobile */
+    toggle.addEventListener('touchstart', function(e){
+      holdTimer = setTimeout(function(){
+        showCredit();
+        /* Auto-hide after 3s */
+        setTimeout(hideCredit, 3000);
+      }, 400);
+    }, {passive:true});
+    toggle.addEventListener('touchend',   function(){ clearTimeout(holdTimer); holdTimer=null; });
+    toggle.addEventListener('touchmove',  function(){ clearTimeout(holdTimer); holdTimer=null; });
+    /* Tap outside to dismiss */
+    document.addEventListener('touchstart', function(e){
+      if(!btn.contains(e.target)) hideCredit();
+    }, {passive:true});
+  }
 
   /* Hover scale */
-  var s=document.createElement('style');
+  var s = document.createElement('style');
   s.textContent='#music-toggle:hover{transform:scale(1.08)!important}';
   document.head.appendChild(s);
 })();
