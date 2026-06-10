@@ -1354,6 +1354,19 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .crew-edit-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.9rem;
+    opacity: 0.4;
+    padding: 4px;
+    line-height: 1;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+    color: var(--text);
+  }
+  .crew-edit-btn:hover { opacity: 1; }
 
   /* ===== PHOTO FEATURES ===== */
 
@@ -2840,6 +2853,13 @@
 <!-- Crew Detail Modal -->
 <div class="modal-overlay" id="detail-overlay" onclick="closeDetailOutside(event)">
   <div class="modal" id="detail-modal">
+    <!-- filled by JS -->
+  </div>
+</div>
+
+<!-- Crew Edit Modal (rename + recolour) -->
+<div class="modal-overlay" id="crew-edit-overlay" onclick="if(event.target===this)closeCrewEditModal()">
+  <div class="modal" id="crew-edit-modal-content">
     <!-- filled by JS -->
   </div>
 </div>
@@ -4983,6 +5003,7 @@
       <div class="detail-bar" style="background:${crew.gradient}"></div>
       <div class="crew-detail-title-row">
         <div class="modal-title">${crew.name}</div>
+        ${crew.isLead ? `<button class="crew-edit-btn" onclick="showCrewEditModal('${crew.id}')" title="Edit crew name and colour">✏️</button>` : ''}
         <span class="crew-status ${s.cls}${crew.isLead ? ' tappable-lead' : ''}"
           ${crew.isLead ? `onclick="toggleStatus('${crew.id}')" title="Tap to change status"` : ''}>${s.label}</span>
       </div>
@@ -5388,6 +5409,67 @@
         }
       });
     }
+  }
+
+  // ===== Crew Edit (rename + recolour) =====
+
+  let _editingCrewId = null;
+  const EDIT_SWATCH_COLORS = ['#FF2D78','#FF0099','#FF4040','#FF6B35','#FFCC00','#FFE600','#39FF14','#00FFCC','#00F5FF','#0066FF','#BF00FF','#FF00CC'];
+
+  function showCrewEditModal(id) {
+    const crew = getCrew(id);
+    if (!crew || !crew.isLead) return;
+    _editingCrewId = id;
+    const swatches = EDIT_SWATCH_COLORS.map(c =>
+      `<div class="crew-edit-swatch color-swatch${c.toLowerCase() === (crew.color||'').toLowerCase() ? ' selected' : ''}" style="background:${c}" onclick="selectCrewEditSwatch(this)"></div>`
+    ).join('');
+    document.getElementById('crew-edit-modal-content').innerHTML = `
+      <div class="modal-title">Edit Crew</div>
+      <div class="form-group" style="margin-top:4px;">
+        <label class="form-label">Crew Name</label>
+        <input class="form-input" id="crew-edit-name-input" value="${crew.name.replace(/"/g,'&quot;')}" maxlength="40" placeholder="Crew name…">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Crew Colour</label>
+        <div class="color-swatches">${swatches}</div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeCrewEditModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveCrewEdit()">Save Changes</button>
+      </div>`;
+    document.getElementById('crew-edit-overlay').classList.add('open');
+    setTimeout(() => document.getElementById('crew-edit-name-input')?.focus(), 50);
+  }
+
+  function closeCrewEditModal() {
+    document.getElementById('crew-edit-overlay').classList.remove('open');
+    _editingCrewId = null;
+  }
+
+  function selectCrewEditSwatch(el) {
+    document.querySelectorAll('#crew-edit-modal-content .crew-edit-swatch').forEach(s => s.classList.remove('selected'));
+    el.classList.add('selected');
+  }
+
+  function saveCrewEdit() {
+    const id = _editingCrewId;
+    const crew = getCrew(id);
+    if (!crew) return;
+    const newName = document.getElementById('crew-edit-name-input')?.value.trim();
+    if (!newName) return;
+    const sel = document.querySelector('#crew-edit-modal-content .crew-edit-swatch.selected');
+    const newColor = sel ? rgbToHex(sel.style.background) : crew.color;
+    const colorKey = Object.keys(CREW_GRADIENTS).find(k => k.toLowerCase() === newColor.toLowerCase()) || newColor;
+    const newGradient = CREW_GRADIENTS[colorKey] || `linear-gradient(135deg,${newColor},${newColor})`;
+    crew.name = newName;
+    crew.color = newColor;
+    crew.gradient = newGradient;
+    crew.members = crew.members.map(m => ({ ...m, c: newColor }));
+    closeCrewEditModal();
+    renderCrews();
+    renderDetail(id);
+    showToast('✅ Crew updated');
+    if (currentUser) dbSaveCrew({ name: newName, color: newColor, gradient: newGradient, status: crew.status, totemPhotoUrl: crew.totemPhotoUrl }, id);
   }
 
   // Map each crew color to a vibrant 2-stop gradient
