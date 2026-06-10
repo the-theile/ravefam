@@ -350,6 +350,22 @@
   .crew-status.tappable:hover { filter: brightness(1.25); border-color: currentColor; }
   .status-recruiting { background: rgba(57,255,20,0.12); color: var(--neon-green); }
   .status-locked-in { background: rgba(255,230,0,0.15); color: var(--neon-yellow); }
+  .status-secret { background: rgba(255,45,120,0.12); color: #FF2D78; }
+
+  /* Closed-eye badge — absolute top-right of crew card for Secret crews */
+  .secret-eye-badge {
+    position: absolute;
+    top: 14px; right: 14px;
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: rgba(255,45,120,0.15);
+    border: 1.5px solid rgba(255,45,120,0.35);
+    display: flex; align-items: center; justify-content: center;
+    color: #FF2D78;
+    pointer-events: none;
+    z-index: 3;
+    flex-shrink: 0;
+  }
 
   /* Add crew card */
   .crew-add-card {
@@ -2223,7 +2239,7 @@
           name: c.name,
           color: c.color || '#FF2D78',
           gradient: c.gradient || `linear-gradient(90deg,${c.color},${c.color})`,
-          status: c.status || 'recruiting',
+          status: c.status || 'secret',
           isLead: c.leader_id === uid,
           totemPhotoUrl: c.totem_photo_url || null,
           squadIds,
@@ -2542,8 +2558,13 @@
   // ===== Crew data model =====
   // Each crew has: id, name, event, color, gradient, status, members[], isLead
   // isLead = true means the current user (you) created/leads this crew.
-  // Statuses: 'recruiting' (anyone can self-join) and 'locked-in' (Lead adds members only)
+  // Statuses:
+  //   'secret'    — private workspace for leader only; new crew default
+  //   'recruiting' — active; claimed members see each other; QR codes live
+  //   'locked-in'  — roster closed; no new members; QR disabled
+  // Transition: secret → recruiting (one-way); recruiting ↔ locked-in freely
   const STATUS = {
+    'secret':    { cls: 'status-secret',    label: '🔴 Secret' },
     'recruiting': { cls: 'status-recruiting', label: '🟢 Recruiting' },
     'locked-in':  { cls: 'status-locked-in',  label: '🔒 Locked In' }
   };
@@ -2571,7 +2592,7 @@
     {
       id: ++crewSeq, name: 'Voltage',
       color: '#FFE600', gradient: 'linear-gradient(90deg,#FFE600,#FF6B35)',
-      status: 'recruiting', isLead: true,
+      status: 'secret', isLead: true,
       squadIds: [1],
       members: [{i:'JD',c:'#FFE600',t:'#000'}]
     }
@@ -2760,6 +2781,7 @@
 
       card.innerHTML = `
         <div class="crew-color-bar" style="background:${crew.gradient}"></div>
+        ${crew.status === 'secret' ? `<div class="secret-eye-badge" title="Secret — only you can see this crew"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg></div>` : ''}
         <div class="crew-card-head">
           ${crew.totemPhotoUrl ? `<img class="crew-totem-thumb" src="${crew.totemPhotoUrl}" alt="Crew totem">` : ''}
           <div class="crew-name">${crew.name}</div>
@@ -2780,7 +2802,8 @@
     if (countEl) countEl.textContent = crews.length ? crews.length + ' active' : '';
   }
 
-  // Quick tap: flip status (Lead only) — shows confirmation first
+  // Quick tap: change status (Lead only) — shows confirmation first
+  // Secret → Recruiting (one-way); Recruiting ↔ Locked-in freely
   function toggleStatus(id) {
     const crew = getCrew(id);
     if (!crew) return;
@@ -2788,7 +2811,10 @@
       showToast('🔒 Only the Crew Lead can change the status');
       return;
     }
-    const newStatus = crew.status === 'recruiting' ? 'locked-in' : 'recruiting';
+    let newStatus;
+    if (crew.status === 'secret') newStatus = 'recruiting';
+    else if (crew.status === 'recruiting') newStatus = 'locked-in';
+    else newStatus = 'recruiting'; // locked-in → recruiting
     showStatusWarn(id, newStatus);
   }
 
@@ -2824,10 +2850,13 @@
     const crew = getCrew(id);
     if (!crew) return;
     const s = STATUS[crew.status];
-        const isRecruiting = crew.status === 'recruiting';
-    const meaning = isRecruiting
-      ? '🌐 <strong>Visible to others.</strong> Anyone can join by scanning your crew QR code or browsing open crews. Great for festival meetups where you want to grow the tribe.'
-      : '🔒 <strong>Invite only.</strong> The roster is set — only you as Crew Lead can add members manually. The crew will not appear to people looking to join.';
+    const isSecret = crew.status === 'secret';
+    const isRecruiting = crew.status === 'recruiting';
+    const meaning = isSecret
+      ? '🔴 <strong>Secret mode.</strong> Only you can see this crew. Use it as a private workspace — plan your lineup, add unclaimed profiles, and get everything ready before you open up to your tribe.'
+      : isRecruiting
+      ? '🌐 <strong>Recruiting.</strong> Claimed members can see each other and access shared features. Personal QR codes and invite links are active — share them to grow your tribe.'
+      : '🔒 <strong>Locked In.</strong> The roster is final. No new ravers can join and QR invites are disabled. Your crew is official — it\'s happening!';
 
     // Build member list from linked squad profiles → first names, clickable
     const people = crewSquad(crew);
@@ -2861,6 +2890,7 @@
       addMemberControl = `
         <div class="form-group">
           <label class="form-label">Add Member</label>
+          ${isSecret ? `<div style="background:rgba(255,45,120,0.07);border:1px solid rgba(255,45,120,0.2);border-radius:10px;padding:9px 12px;font-size:0.78rem;color:var(--muted);line-height:1.5;margin-bottom:10px;">🔴 <strong style="color:#FF2D78;">Secret mode:</strong> Members you add now won't be notified until you open the crew to Recruiting.</div>` : ''}
           <div class="member-search-wrap">
             <input class="form-input" id="add-member-input" placeholder="Search by name or @handle…"
               oninput="searchMembersDropdown(this.value)"
@@ -2868,14 +2898,24 @@
             <div id="member-search-dropdown" class="member-search-dropdown" style="display:none;"></div>
           </div>
         </div>`;
-      statusControl = `
-        <div class="form-group">
-          <label class="form-label">Status (you're the Crew Lead 👑)</label>
-          <div class="status-toggle">
-            <button class="status-opt ${crew.status==='recruiting'?'active':''}" onclick="setStatus('${crew.id}','recruiting')">🟢 Recruiting</button>
-            <button class="status-opt ${crew.status==='locked-in'?'active':''}" onclick="setStatus('${crew.id}','locked-in')">🔒 Locked In</button>
-          </div>
-        </div>`;
+      if (isSecret) {
+        statusControl = `
+          <div class="form-group">
+            <label class="form-label">Status (you're the Crew Lead 👑)</label>
+            <button class="btn btn-primary" style="width:100%;padding:12px;font-size:0.85rem;margin-top:4px;"
+              onclick="setStatus('${crew.id}','recruiting')">🟢 Open Crew to Recruiting</button>
+            <div style="font-size:0.75rem;color:var(--muted);margin-top:8px;line-height:1.5;">Once you go Recruiting, members get notified and you can't go back to Secret.</div>
+          </div>`;
+      } else {
+        statusControl = `
+          <div class="form-group">
+            <label class="form-label">Status (you're the Crew Lead 👑)</label>
+            <div class="status-toggle">
+              <button class="status-opt ${crew.status==='recruiting'?'active':''}" onclick="setStatus('${crew.id}','recruiting')">🟢 Recruiting</button>
+              <button class="status-opt ${crew.status==='locked-in'?'active':''}" onclick="setStatus('${crew.id}','locked-in')">🔒 Locked In</button>
+            </div>
+          </div>`;
+      }
     } else {
       const canJoin = crew.status === 'recruiting';
       statusControl = `
@@ -2883,10 +2923,10 @@
           <label class="form-label">Status</label>
           <div style="font-size:0.85rem;color:var(--muted);">Set by the Crew Lead — you can't change this.</div>
         </div>
-        <button class="btn ${canJoin?'btn-primary':'btn-ghost'}" style="width:100%;padding:12px;"
+        ${!isSecret ? `<button class="btn ${canJoin?'btn-primary':'btn-ghost'}" style="width:100%;padding:12px;"
           onclick="${canJoin ? `joinCrew('${crew.id}')` : `showToast('🔒 This crew is Locked In — ask the Lead for an invite')`}">
           ${canJoin ? '➕ Join this crew' : '🔒 Locked — invite only'}
-        </button>`;
+        </button>` : ''}`;
     }
 
     // Totem photo block
@@ -2972,13 +3012,23 @@
     _statusWarnId = crewId;
     _statusWarnTarget = newStatus;
 
-    const toLocked = newStatus === 'locked-in';
-    const icon = toLocked ? '🔒' : '🟢';
-    const title = toLocked ? `Lock in ${crew.name}?` : `Re-open ${crew.name} to Recruiting?`;
-    const body = toLocked
-      ? `The crew roster is set. <strong>QR invite links will be disabled</strong> and the crew won't appear to people looking to join. Only you can add members manually.`
-      : `Anyone with your crew QR code or browsing open crews will be able to join. <strong>QR invite links will be re-enabled</strong> for unclaimed members.`;
-    const confirmLabel = toLocked ? `🔒 Lock It In` : `🟢 Open Recruiting`;
+    let icon, title, body, confirmLabel;
+    if (newStatus === 'recruiting' && crew.status === 'secret') {
+      icon = '🟢';
+      title = `Ready to Open ${crew.name} to Recruiting?`;
+      body = `Claimed members will be able to see each other and access shared features. Personal QR codes and invite links become active. <strong>This can't be undone</strong> — you won't be able to go back to Secret.`;
+      confirmLabel = `🟢 Open to Recruiting`;
+    } else if (newStatus === 'locked-in') {
+      icon = '🔒';
+      title = `Lock ${crew.name} In? 🔒`;
+      body = `No more new ravers will be joining the squad — this crew is official! QR invite links will be disabled. You can re-open to Recruiting any time.`;
+      confirmLabel = `🔒 Lock It In`;
+    } else {
+      icon = '🌟';
+      title = `Re-open ${crew.name} to Recruiting? 🌟`;
+      body = `More ravers might be joining the squad — keep an eye out! QR invite links will be re-enabled for unclaimed members.`;
+      confirmLabel = `🌟 Re-open Recruiting`;
+    }
 
     document.getElementById('status-warn-modal').innerHTML = `
       <div style="font-size:2.4rem;margin-bottom:14px;">${icon}</div>
@@ -3002,12 +3052,20 @@
     const status = _statusWarnTarget;
     closeStatusWarn();
     if (!crew || !status) return;
+    const prevStatus = crew.status;
     crew.status = status;
     renderCrews();
     if (document.getElementById('detail-overlay').classList.contains('open')) renderDetail(crew.id);
-    showToast(status === 'recruiting'
-      ? `🟢 ${crew.name} is now Recruiting — QR invites enabled`
-      : `🔒 ${crew.name} is Locked In — QR invites disabled`);
+    if (status === 'secret') {
+      showToast(`🔴 ${crew.name} is now Secret — private workspace only`);
+    } else if (status === 'recruiting') {
+      const wasSecret = prevStatus === 'secret';
+      showToast(wasSecret
+        ? `🟢 ${crew.name} is now Recruiting — notifications sent, QR invites live!`
+        : `🌟 ${crew.name} is back in Recruiting — QR invites re-enabled`);
+    } else {
+      showToast(`🔒 ${crew.name} is Locked In — the crew is official!`);
+    }
     // Persist to DB
     if (currentUser) dbSaveCrew({ name: crew.name, color: crew.color, gradient: crew.gradient, status }, crew.id);
   }
@@ -3056,7 +3114,11 @@
       .map(r => ({ i: initials(r.name), c: crew.color, t: '#fff' }));
     renderCrews();
     renderDetail(crew.id);
-    showToast(`✅ ${raver.name.split(' ')[0]} added to ${crew.name}`);
+    if (crew.status === 'secret') {
+      showToast(`✅ ${raver.name.split(' ')[0]} added — they won't be notified until you go Recruiting`);
+    } else {
+      showToast(`✅ ${raver.name.split(' ')[0]} added to ${crew.name}`);
+    }
     if (currentUser) dbSaveCrewMembers(crew.id, crew.squadIds);
   }
 
@@ -3134,7 +3196,7 @@
     const newCrew = {
       id: 'temp_' + Date.now(), name, color,
       gradient,
-      status: 'locked-in', isLead: true,
+      status: 'secret', isLead: true,
       squadIds: you ? [you.id] : [],
       members: [{ i: you ? initials(you.name) : 'ME', c: color, t: '#000' }]
     };
@@ -3151,7 +3213,7 @@
     // Persist async
     if (currentUser) {
       const tempId = newCrew.id;
-      dbSaveCrew({ name, color, gradient, status: 'locked-in' }, null).then(dbId => {
+      dbSaveCrew({ name, color, gradient, status: 'secret' }, null).then(dbId => {
         if (dbId) {
           newCrew.id = dbId;
           // Keep activeDetailId (and any pending-add reference) in sync so that
@@ -4390,5 +4452,6 @@
   }
 
 </script>
+<script defer src="/_vercel/insights/script.js"></script>
 </body>
 </html>
