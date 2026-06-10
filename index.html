@@ -1269,6 +1269,19 @@
         body: JSON.stringify({ name, instagram: ig || null, email: email || null })
       });
       if (!res.ok) throw new Error('Request failed');
+
+      // Notify owner by email
+      fetch('https://formsubmit.co/ajax/bump@myravefam.com', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({
+          _subject: '🎪 New RaveFAM waitlist signup!',
+          name: name,
+          instagram: ig || '—',
+          email: email || '—'
+        })
+      }).catch(() => {}); // fire-and-forget
+
       document.getElementById('waitlist-form-state').style.display = 'none';
       document.getElementById('waitlist-success').style.display    = 'block';
     } catch {
