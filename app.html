@@ -1464,19 +1464,20 @@
   }
   .our-photo-slot {
     position: relative;
-    width: 110px;
+    width: 140px;
   }
   .our-photo-slot img {
-    width: 110px; height: 110px;
-    object-fit: cover; border-radius: 10px; display: block;
+    width: 140px; height: 140px;
+    object-fit: cover; border-radius: 12px; display: block;
     border: 2px solid rgba(255,255,255,0.1);
   }
   .our-photo-slot-empty {
-    width: 110px; height: 110px;
-    border-radius: 10px;
-    border: 1px solid rgba(255,255,255,0.07);
+    width: 140px; height: 140px;
+    border-radius: 12px;
+    border: 1px dashed rgba(255,255,255,0.12);
     position: relative;
     overflow: hidden;
+    background: linear-gradient(135deg, rgba(0,207,255,0.06) 0%, rgba(57,255,20,0.04) 50%, rgba(255,45,120,0.06) 100%);
   }
   .our-photo-remove {
     position: absolute; top: 4px; right: 4px;
@@ -1492,9 +1493,9 @@
   .our-photo-slot:hover .our-photo-remove { opacity: 1; }
   @media (max-width: 640px) { .our-photo-remove { opacity: 1; } }
   .our-photo-add {
-    width: 110px; height: 110px;
+    width: 140px; height: 140px;
     border: 2px dashed rgba(255,255,255,0.14);
-    border-radius: 10px;
+    border-radius: 12px;
     display: flex; align-items: center; justify-content: center;
     cursor: pointer;
     color: var(--muted); font-size: 1.6rem;
@@ -4591,9 +4592,10 @@
     people.forEach(p => {
       raverUpcoming(p).forEach(f => {
         const key = f.name.toLowerCase();
-        if (!upcoming[key]) upcoming[key] = { date: f._d, name: f.name, who: [] };
+        if (!upcoming[key]) upcoming[key] = { date: f._d, name: f.name, who: [], whoRavers: [] };
         if (f._d < upcoming[key].date) upcoming[key].date = f._d;
         upcoming[key].who.push(p.name.split(' ')[0]);
+        upcoming[key].whoRavers.push(p);
       });
       raverPast(p).forEach(f => {
         past.push({ date: f._d, name: f.name, who: p.name.split(' ')[0] });
@@ -4603,7 +4605,7 @@
     const upList = Object.values(upcoming).sort((a,b) => a.date - b.date);
     if (upList.length) {
       const next = upList[0];
-      return { kind: 'upcoming', name: next.name, date: next.date, who: next.who };
+      return { kind: 'upcoming', name: next.name, date: next.date, who: next.who, whoRavers: next.whoRavers };
     }
     if (past.length) {
       past.sort((a,b) => b.date - a.date);
@@ -4633,8 +4635,8 @@
     if (n.kind === 'upcoming') {
       const cd = countdownLabel(n.date);
       const when = `${n.date.getDate()} ${MON_SHORT[n.date.getMonth()]}`;
-      const goingAvatars = n.who.map(name =>
-        `<span class="cnf-avatar">${name[0].toUpperCase()}</span>`
+      const goingAvatars = (n.whoRavers || []).map(r =>
+        raverAvatarHTML(r.avatarUrl || r.avatar_url || null, r.gradient || 'linear-gradient(135deg,#FF2D78,#00F5FF)', r.name, 'cnf-avatar', '')
       ).join('');
       const goingLabel = n.who.length === 1
         ? `${n.who[0]} is going`
@@ -4839,11 +4841,15 @@
           if (b.id === crew.leader_id) return 1;
           return 0;
         }).map(p => {
-          const isClaimed = p.claimedBy || p.isYou || p.status === 'claimed';
+          const isLeader = p.id === crew.leader_id;
+          const isClaimed = isLeader || p.claimedBy || p.isYou || p.status === 'claimed';
           const statusDot = `<span class="${isClaimed ? 'claimed-dot' : 'unclaimed-dot'}" title="${isClaimed ? 'Claimed' : 'Unclaimed — share QR to invite'}"></span>`;
-          const canRemove = (crew.isLead || isAdmin) && !p.isYou;
+          const canRemove = (crew.isLead || isAdmin) && !p.isYou && !isLeader;
           let right;
-          if (!isClaimed && (crew.isLead || isAdmin)) {
+          if (isLeader) {
+            // Crew leader: always claimed, no QR, no remove — just navigate to profile
+            right = `<span class="detail-member-arrow">›</span>`;
+          } else if (!isClaimed && (crew.isLead || isAdmin)) {
             // Unclaimed row for leader: QR (all non-Secret states) + edit + delete
             const qrBtn = !isSecret && p.qrToken
               ? `<button class="remove-member-btn" style="background:none;border:1.5px solid rgba(255,255,255,0.15);border-radius:8px;padding:2px 7px;font-size:0.8rem;" data-raver-id="${p.id}" onclick="event.stopPropagation(); showQRModal(this.dataset.raverId)" title="Show QR to invite">📲</button>`
@@ -4860,10 +4866,13 @@
           } else {
             right = `<span class="detail-member-arrow">›</span>`;
           }
+          const nameDisplay = isLeader
+            ? `<span style="display:flex;align-items:center;gap:5px;">${p.name.split(' ')[0]}${p.isYou ? ' (You)' : ''} <span title="Crew Leader" style="font-size:1rem;">👑</span> ${statusDot}</span>`
+            : `<span>${p.name.split(' ')[0]}${p.isYou ? ' (You)' : ''} ${statusDot}</span>`;
           return `
             <div class="detail-member detail-member-link" data-raver-id="${p.id}" onclick="goToProfileFromDetail(this.dataset.raverId)" title="View ${p.name}'s profile">
               ${raverAvatarHTML(p.avatarUrl, p.gradient, p.name, 'avatar', 'margin:0;')}
-              <span>${p.name.split(' ')[0]}${p.isYou ? ' (You)' : ''}${p.id === crew.leader_id ? ' 👑' : ''} ${statusDot}</span>
+              ${nameDisplay}
               ${right}
             </div>`;
         }).join('')
