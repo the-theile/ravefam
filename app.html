@@ -1016,6 +1016,72 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
 
+  /* ===== Vibe Tags ===== */
+  .vibe-tags-section { margin-top: 14px; }
+  .vibe-tag-cloud { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 10px; }
+
+  .vibe-preset {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 13px; border-radius: 100px;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.75rem;
+    cursor: pointer; border: 1.5px solid transparent;
+    background: rgba(255,255,255,0.04); color: var(--muted);
+    transition: all 0.18s cubic-bezier(0.34,1.4,0.64,1);
+    user-select: none; position: relative; overflow: hidden;
+  }
+  .vibe-preset::before {
+    content: ''; position: absolute; inset: 0;
+    background: currentColor; opacity: 0; transition: opacity 0.18s;
+  }
+  .vibe-preset:hover { transform: translateY(-2px) scale(1.04); }
+  .vibe-preset.picked {
+    border-color: currentColor; background: rgba(255,255,255,0.08);
+    transform: translateY(-1px) scale(1.03);
+    box-shadow: 0 0 14px -4px currentColor;
+  }
+  .vibe-preset.picked::before { opacity: 0.12; }
+  .vibe-preset .vt-icon { font-size: 0.9rem; line-height: 1; }
+
+  .vibe-custom-row { display: flex; gap: 8px; margin-top: 4px; }
+  .vibe-custom-input {
+    flex: 1; background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1); border-radius: 100px;
+    padding: 8px 16px; color: var(--text);
+    font-family: 'Outfit', sans-serif; font-size: 0.82rem; outline: none;
+    transition: border-color 0.2s;
+  }
+  .vibe-custom-input:focus { border-color: var(--neon-cyan); }
+  .vibe-custom-input::placeholder { color: var(--muted); }
+  .vibe-add-btn {
+    background: rgba(0,245,255,0.12); border: 1px solid rgba(0,245,255,0.3);
+    color: var(--neon-cyan); border-radius: 100px; padding: 8px 16px;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.78rem;
+    cursor: pointer; transition: all 0.18s; white-space: nowrap;
+  }
+  .vibe-add-btn:hover { background: rgba(0,245,255,0.24); }
+
+  .vibe-custom-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .vibe-custom-chip {
+    display: inline-flex; align-items: center; gap: 5px; padding: 4px 11px;
+    border-radius: 100px; background: rgba(191,0,255,0.15);
+    border: 1px solid rgba(191,0,255,0.35); color: #d67fff;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.72rem;
+  }
+  .vibe-chip-remove { cursor: pointer; font-size: 0.8rem; opacity: 0.7; transition: opacity 0.15s; }
+  .vibe-chip-remove:hover { opacity: 1; }
+
+  .member-vibes { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; margin-top: 8px; }
+  .profile-vibes { display: flex; flex-wrap: wrap; gap: 7px; }
+  .vibe-display-tag {
+    display: inline-flex; align-items: center; gap: 4px; padding: 4px 11px;
+    border-radius: 100px; font-family: 'Outfit', sans-serif; font-weight: 700;
+    font-size: 0.72rem; border: 1.5px solid transparent;
+  }
+  .vibe-display-tag.is-custom {
+    background: rgba(191,0,255,0.12); border-color: rgba(191,0,255,0.3); color: #d67fff;
+  }
+  .vibe-mini { font-size: 0.65rem; padding: 2px 8px; }
+
   /* ===== AUTH SCREEN ===== */
   #auth-screen {
     position: fixed; inset: 0; z-index: 1000;
@@ -1893,7 +1959,9 @@
           notes: r.notes || '',
           qrToken: r.qr_token || '',
           claimedBy: r.claimed_by || null,
-          status: r.status || 'unclaimed'
+          status: r.status || 'unclaimed',
+          vibeTags: r.vibe_tags || [],
+          customVibeTags: r.custom_vibe_tags || []
         });
       });
     }
@@ -1964,6 +2032,8 @@
       met_story: data.metStory,
       notes: data.notes,
       is_you: data.isYou || false,
+      vibe_tags: data.vibeTags || [],
+      custom_vibe_tags: data.customVibeTags || [],
       updated_at: new Date().toISOString()
     };
     if (id) {
@@ -2671,6 +2741,36 @@
     return '#' + m.slice(0,3).map(n => parseInt(n).toString(16).padStart(2,'0')).join('');
   }
 
+  // ===== Vibe Tags — preset catalog =====
+  const VIBE_PRESETS = [
+    { id:'vt-mainstage',   label:'Mainstage Monster',        icon:'🎤', color:'#FF2D78', bg:'rgba(255,45,120,0.14)' },
+    { id:'vt-bunker',      label:'Bunker Dweller',           icon:'🕳️', color:'#BF00FF', bg:'rgba(191,0,255,0.14)' },
+    { id:'vt-sunrise',     label:'Sunrise Chaser',           icon:'🌅', color:'#FFE600', bg:'rgba(255,230,0,0.14)' },
+    { id:'vt-certified',   label:'Certified Raver',          icon:'🧿', color:'#00F5FF', bg:'rgba(0,245,255,0.14)' },
+    { id:'vt-vinyl',       label:'Vinyl Purist',             icon:'💿', color:'#39FF14', bg:'rgba(57,255,20,0.14)' },
+    { id:'vt-lostphone',   label:'Always Lost Phone',        icon:'📵', color:'#FF6B35', bg:'rgba(255,107,53,0.14)' },
+    { id:'vt-nap',         label:'Nap Anywhere',             icon:'😴', color:'#00F5FF', bg:'rgba(0,245,255,0.14)' },
+    { id:'vt-firstqueue',  label:'First in Queue',           icon:'🏃', color:'#39FF14', bg:'rgba(57,255,20,0.14)' },
+    { id:'vt-foodscout',   label:'Food Scout',               icon:'🌮', color:'#FFE600', bg:'rgba(255,230,0,0.14)' },
+    { id:'vt-photographer',label:'Accidental Photographer',  icon:'📸', color:'#FF2D78', bg:'rgba(255,45,120,0.14)' },
+    { id:'vt-merch',       label:'Merch Addict',             icon:'👕', color:'#BF00FF', bg:'rgba(191,0,255,0.14)' },
+    { id:'vt-earplugs',    label:'Earplug Evangelist',       icon:'🦺', color:'#00F5FF', bg:'rgba(0,245,255,0.14)' },
+    { id:'vt-localmenu',   label:'Local Menu Explorer',      icon:'🗺️', color:'#FF6B35', bg:'rgba(255,107,53,0.14)' },
+    { id:'vt-setlist',     label:'Memorises Set Lists',      icon:'🧠', color:'#39FF14', bg:'rgba(57,255,20,0.14)' },
+    { id:'vt-latenight',   label:'3AM Is Early',             icon:'🌙', color:'#BF00FF', bg:'rgba(191,0,255,0.14)' },
+    { id:'vt-afterparty',  label:'Afterparty Legend',        icon:'🔑', color:'#FF2D78', bg:'rgba(255,45,120,0.14)' },
+  ];
+
+  function getPreset(id) { return VIBE_PRESETS.find(v => v.id === id); }
+
+  function vibeTagHTML(vtId, isCustom, mini) {
+    const cls = `vibe-display-tag ${isCustom ? 'is-custom' : 'is-preset'}${mini ? ' vibe-mini' : ''}`;
+    if (isCustom) return `<span class="${cls}">✨ ${vtId}</span>`;
+    const p = getPreset(vtId);
+    if (!p) return '';
+    return `<span class="${cls}" style="background:${p.bg};border-color:${p.color}40;color:${p.color};">${p.icon} ${p.label}</span>`;
+  }
+
   // ===== Squad / Raver profiles =====
   // ===== Festivals catalog — single source of truth =====
   // Each festival is one record; profiles reference these by id.
@@ -2706,7 +2806,9 @@
       crew: 'Bass Syndicate',
       instagram: '@jamied', phone: '+44 7700 900111',
       metStory: "This is you — the one keeping the tribe together.",
-      notes: 'Always first on the dancefloor, last to leave.'
+      notes: 'Always first on the dancefloor, last to leave.',
+      vibeTags: ['vt-certified','vt-firstqueue'],
+      customVibeTags: []
     },
     {
       id: ++squadSeq, name: 'Maya K.', handle: '@mayabeats', isYou: false,
@@ -2717,7 +2819,9 @@
       crew: 'Bass Syndicate',
       instagram: '@mayabeats', phone: '+44 7700 900222',
       metStory: "Met in the queue at Fabric in 2022 — bonded over a shared poncho in the rain.",
-      notes: 'The designated driver and group mum. Keeps everyone hydrated.'
+      notes: 'The designated driver and group mum. Keeps everyone hydrated.',
+      vibeTags: ['vt-mainstage','vt-photographer'],
+      customVibeTags: ['Poncho Queen']
     },
     {
       id: ++squadSeq, name: 'Alex L.', handle: '@alex_raves', isYou: false,
@@ -2728,7 +2832,9 @@
       crew: 'Bass Syndicate',
       instagram: '@alex_raves', phone: '+44 7700 900333',
       metStory: "Alex's brother knows Jamie from uni. Joined the tribe in 2023.",
-      notes: 'Will find the afterparty no matter what city you are in.'
+      notes: 'Will find the afterparty no matter what city you are in.',
+      vibeTags: ['vt-afterparty','vt-lostphone'],
+      customVibeTags: []
     },
     {
       id: ++squadSeq, name: 'Rosa S.', handle: '@rosa_bass', isYou: false,
@@ -2739,7 +2845,9 @@
       crew: 'Bass Syndicate',
       instagram: '@rosa_bass', phone: '+49 151 23456789',
       metStory: "Our Berlin local. Met at Panorama Bar at 6am — became the crew's hotel-booker.",
-      notes: 'Books the best Airbnbs. Knows every doorman in Berlin.'
+      notes: 'Books the best Airbnbs. Knows every doorman in Berlin.',
+      vibeTags: ['vt-bunker','vt-latenight','vt-vinyl'],
+      customVibeTags: ['Berlin Local']
     },
     {
       id: ++squadSeq, name: 'Tom K.', handle: '@tk_berlin', isYou: false,
@@ -2750,7 +2858,9 @@
       crew: 'Deep Waters',
       instagram: '@tk_berlin', phone: '+49 151 98765432',
       metStory: "Rosa's flatmate. Tagged along to Awakenings 2023 and never left.",
-      notes: 'Encyclopaedic knowledge of the harder end of the spectrum.'
+      notes: 'Encyclopaedic knowledge of the harder end of the spectrum.',
+      vibeTags: ['vt-setlist','vt-earplugs'],
+      customVibeTags: []
     }
   ];
 
@@ -2794,6 +2904,12 @@
         ? `<div class="member-crew">👥 ${r.crew}</div>`
         : `<div class="member-crew" style="visibility:hidden;">—</div>`;
 
+      const allVibes = [...(r.vibeTags||[]), ...(r.customVibeTags||[])];
+      const miniVibes = allVibes.slice(0,3).map((v, i) => {
+        const isCustom = i >= (r.vibeTags||[]).length;
+        return vibeTagHTML(v, isCustom, true);
+      }).join('');
+
       card.innerHTML = `
         <div class="member-avatar" style="background:${r.gradient}">${initials(r.name).toUpperCase()}</div>
         <div class="member-name">${r.name}${r.isYou ? ' <span style="font-size:0.75rem;margin-right:2px;">👑</span><span style="font-size:0.7rem;color:var(--neon-pink);font-family:\'Outfit\',sans-serif;font-weight:700;">YOU</span>' : ''}</div>
@@ -2801,6 +2917,7 @@
         ${crewLine}
         ${nextFestLine}
         <div class="member-base">📍 ${r.base}</div>
+        ${miniVibes ? `<div class="member-vibes">${miniVibes}</div>` : ''}
       `;
       grid.appendChild(card);
     });
@@ -2908,6 +3025,17 @@
       ${connectBlock}
 
       <div class="profile-section">
+        <h3>⚡ Vibe Tags</h3>
+        ${(() => {
+          const presetVibes = (r.vibeTags||[]).map(v => vibeTagHTML(v, false, false)).join('');
+          const customVibes = (r.customVibeTags||[]).map(v => vibeTagHTML(v, true, false)).join('');
+          return (presetVibes || customVibes)
+            ? `<div class="profile-vibes">${presetVibes}${customVibes}</div>`
+            : '<div class="fest-empty">No vibe tags yet — edit profile to add some</div>';
+        })()}
+      </div>
+
+      <div class="profile-section">
         <h3>🎶 Genres</h3>
         <div class="tag-edit-wrap">${genreChips}</div>
         ${addTagInput('genres', '+ genre')}
@@ -2927,13 +3055,6 @@
       <div class="profile-section">
         <h3>✅ Festivals — Been To</h3>
         ${festListPast}
-        ${festivals.length ? `<div style="margin-top:10px;">
-          <select id="been-to-select" class="tag-add-input" style="width:auto;max-width:200px;border-radius:8px;padding:4px 8px;">
-            <option value="">Add a festival…</option>
-            ${festivals.filter(f => !(r.festIds||[]).includes(f.id)).map(f => `<option value="${f.id}">${f.name}</option>`).join('')}
-          </select>
-          <button class="fest-been-add-btn" style="margin-left:6px;" onclick="const v=document.getElementById('been-to-select').value;if(v)addBeenTo('${r.id}',+v)">Add ✓</button>
-        </div>` : ''}
       </div>
 
       <div class="profile-section">
@@ -3025,6 +3146,8 @@
 
   // ===== Profile editor (add / edit) =====
   let editingId = null;
+  let editingVibeTags = new Set();
+  let editingCustomVibeTags = [];
 
   function fieldRow(label, id, value, placeholder, textarea) {
     const v = (value || '').replace(/"/g,'&quot;');
@@ -3055,6 +3178,8 @@
         </div>
       `;
       editingFestIds = new Set();
+      editingVibeTags = new Set();
+      editingCustomVibeTags = [];
       document.getElementById('profile-edit-overlay').classList.add('open');
       document.getElementById('profile-edit-modal').scrollTop = 0;
       return;
@@ -3075,6 +3200,23 @@
       ${fieldRow('Home Base','pf-base', r?.base, 'e.g. Berlin, DE')}
       ${fieldRow('Genres (comma separated)','pf-genres', r?.genres?.join(', '), 'Techno, House')}
       ${fieldRow('Favorite Artists (comma separated)','pf-favs', r?.favArtists?.join(', '), 'Amelie Lens, Peggy Gou')}
+
+      <div class="form-group vibe-tags-section">
+        <label class="form-label">⚡ Vibe Tags</label>
+        <div class="vibe-tag-cloud" id="vibe-preset-cloud">
+          ${VIBE_PRESETS.map(p => {
+            const picked = (r?.vibeTags || []).includes(p.id) ? ' picked' : '';
+            const pickedStyle = picked ? `style="border-color:${p.color};background:rgba(255,255,255,0.08);color:${p.color};box-shadow:0 0 14px -4px ${p.color};"` : `style="color:${p.color};"`;
+            return `<span class="vibe-preset${picked}" ${pickedStyle} onclick="toggleVibePick('${p.id}', this)"><span class="vt-icon">${p.icon}</span>${p.label}</span>`;
+          }).join('')}
+        </div>
+        <div class="vibe-custom-row">
+          <input class="vibe-custom-input" id="vibe-custom-input" placeholder="Add your own vibe tag…" maxlength="30"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();addCustomVibe();}">
+          <button type="button" class="vibe-add-btn" onclick="addCustomVibe()">Add</button>
+        </div>
+        <div class="vibe-custom-chips" id="vibe-custom-chips"></div>
+      </div>
 
       <div class="form-group">
         <label class="form-label">🎟️ Festivals</label>
@@ -3106,6 +3248,10 @@
 
     editingFestIds = new Set(r?.festIds || []);
     renderFestPicker();
+
+    editingVibeTags = new Set(r?.vibeTags || []);
+    editingCustomVibeTags = [...(r?.customVibeTags || [])];
+    renderCustomVibeTags();
 
     document.getElementById('profile-edit-overlay').classList.add('open');
     document.getElementById('profile-edit-modal').scrollTop = 0;
@@ -3200,6 +3346,36 @@
     if (e.target === document.getElementById('profile-edit-overlay')) closeProfileEditor();
   }
 
+  // ===== Vibe Tag editor helpers =====
+  function toggleVibePick(id, el) {
+    if (editingVibeTags.has(id)) { editingVibeTags.delete(id); el.classList.remove('picked'); }
+    else { editingVibeTags.add(id); el.classList.add('picked'); }
+  }
+
+  function addCustomVibe() {
+    const input = document.getElementById('vibe-custom-input');
+    const raw = (input?.value || '').trim();
+    if (!raw) return;
+    if (editingCustomVibeTags.includes(raw)) { showToast('Tag already added'); return; }
+    if (editingCustomVibeTags.length >= 10) { showToast('Max 10 custom tags'); return; }
+    editingCustomVibeTags.push(raw);
+    input.value = '';
+    renderCustomVibeTags();
+  }
+
+  function removeCustomVibe(i) {
+    editingCustomVibeTags.splice(i, 1);
+    renderCustomVibeTags();
+  }
+
+  function renderCustomVibeTags() {
+    const box = document.getElementById('vibe-custom-chips');
+    if (!box) return;
+    box.innerHTML = editingCustomVibeTags.map((t, i) =>
+      `<span class="vibe-custom-chip">${t} <span class="vibe-chip-remove" onclick="removeCustomVibe(${i})">✕</span></span>`
+    ).join('');
+  }
+
   function parseList(text) {
     return (text || '').split(',').map(s => s.trim()).filter(Boolean);
   }
@@ -3225,7 +3401,9 @@
       instagram: val('pf-instagram'),
       phone: val('pf-phone'),
       metStory: val('pf-met'),
-      notes: val('pf-notes')
+      notes: val('pf-notes'),
+      vibeTags: Array.from(editingVibeTags),
+      customVibeTags: [...editingCustomVibeTags]
     };
 
     if (editingId) {
