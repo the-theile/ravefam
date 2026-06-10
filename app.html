@@ -1028,6 +1028,20 @@
   }
   .fest-been-add-btn:hover { background: rgba(57,255,20,0.15); }
 
+  /* Crew detail page */
+  .crew-detail-page-wrap {
+    max-width: 480px;
+    margin: 0 auto;
+    background: var(--surface2);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 24px;
+    padding: 32px;
+  }
+  #page-crew-detail .detail-members {
+    max-height: none;
+    overflow-y: visible;
+  }
+
   /* Scrollbar */
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -2359,6 +2373,11 @@
 
     <!-- PROFILE PAGE (dedicated, full-view) -->
     <div class="page" id="page-profile">
+      <!-- rendered by JS -->
+    </div>
+
+    <!-- CREW DETAIL PAGE (dedicated, full-view) -->
+    <div class="page" id="page-crew-detail">
       <!-- rendered by JS -->
     </div>
 
@@ -4085,10 +4104,15 @@
   function openDetail(id) {
     activeDetailId = id;
     renderDetail(id);
-    document.getElementById('detail-overlay').classList.add('open');
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-crew-detail').classList.add('active');
+    window.scrollTo(0, 0);
   }
   function closeDetail() {
-    document.getElementById('detail-overlay').classList.remove('open');
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-crews').classList.add('active');
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.querySelector('.nav-tab[onclick*="crews"]')?.classList.add('active');
     activeDetailId = null;
   }
   function closeDetailOutside(e) {
@@ -4099,7 +4123,6 @@
   function goToProfileFromDetail(raverId) {
     const r = getRaver(raverId);
     if (!r) return;
-    closeDetail();
     if (r.isYou) {
       openProfile(raverId);
     } else {
@@ -4221,7 +4244,9 @@
       totemBlock = '';
     }
 
-    document.getElementById('detail-modal').innerHTML = `
+    document.getElementById('page-crew-detail').innerHTML = `
+      <button class="profile-back" onclick="closeDetail()">← My Crews</button>
+      <div class="crew-detail-page-wrap">
       <div class="detail-bar" style="background:${crew.gradient}"></div>
       <div class="crew-detail-title-row">
         <div class="modal-title">${crew.name}</div>
@@ -4243,14 +4268,12 @@
         <div class="status-meaning-compact">${meaning}</div>
         ${statusControl}
       </div>
-      <div class="modal-actions" style="margin-top:16px;">
-        <button class="btn btn-ghost" onclick="closeDetail()" style="flex:1;padding:12px;">Close</button>
-      </div>
       ${(crew.isLead || isAdmin) ? `
         <div class="danger-zone">
           <button class="btn btn-ghost" style="width:100%;padding:10px;font-size:0.8rem;color:var(--neon-pink);border-color:rgba(255,45,120,0.25);"
             onclick="showDeleteCrewConfirm(activeDetailId)">🗑️ Delete Crew</button>
         </div>` : ''}
+      </div>
     `;
   }
 
@@ -4315,7 +4338,7 @@
     const prevStatus = crew.status;
     crew.status = status;
     renderCrews();
-    if (document.getElementById('detail-overlay').classList.contains('open')) renderDetail(crew.id);
+    if (document.getElementById('page-crew-detail').classList.contains('active')) renderDetail(crew.id);
     if (status === 'secret') {
       showToast(`🔴 ${crew.name} is now Secret — private workspace only`);
     } else if (status === 'recruiting') {
@@ -4416,8 +4439,10 @@
     const note = otherCount > 0
       ? `This crew has ${otherCount} member${otherCount !== 1 ? 's' : ''}. Any who have RaveFAM accounts will keep access and can claim the lead spot.`
       : 'This crew has no other members. All crew data will be permanently deleted.';
-    // Replace the whole modal so the confirmation is always fully visible
-    document.getElementById('detail-modal').innerHTML = `
+    // Replace the page so the confirmation is always fully visible
+    document.getElementById('page-crew-detail').innerHTML = `
+      <button class="profile-back" onclick="renderDetail(activeDetailId)">← Back</button>
+      <div class="crew-detail-page-wrap">
       <div class="detail-bar" style="background:${crew.gradient}"></div>
       <div style="text-align:center;padding:8px 0 24px;">
         <div style="font-size:2.8rem;margin-bottom:14px;">🗑️</div>
@@ -4428,6 +4453,7 @@
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="renderDetail(activeDetailId)" style="flex:1;padding:12px;">Cancel</button>
         <button class="btn btn-primary" onclick="deleteCrew(activeDetailId)" style="flex:1;padding:12px;background:var(--neon-pink);box-shadow:0 0 20px rgba(255,45,120,0.4);">Yes, delete it</button>
+      </div>
       </div>`;
   }
 
