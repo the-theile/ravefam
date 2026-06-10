@@ -4356,10 +4356,12 @@
 
   function ourPhotoKeys(viewingRaverId) {
     const me = squad.find(r => r.isYou);
-    if (!me) return null;
-    const sorted = [String(me.id), String(viewingRaverId)].sort();
+    // Fall back to auth UID so section shows even if no raver has isYou=true
+    const myKey = me ? String(me.id) : (currentUser ? `u_${currentUser.id.slice(0, 8)}` : null);
+    if (!myKey) return null;
+    const sorted = [myKey, String(viewingRaverId)].sort();
     const prefix = `ourPhoto_${sorted[0]}_${sorted[1]}_from_`;
-    return { mine: prefix + me.id, theirs: prefix + viewingRaverId };
+    return { mine: prefix + myKey, theirs: prefix + viewingRaverId };
   }
 
   function ourPhotoSectionHTML(viewingRaverId) {
@@ -5670,7 +5672,7 @@
       : `<div class="profile-avatar" style="background:${avatarBg};${avatarOverflow}">${avatarContent}</div>`;
 
     // Our Photo section — only shown when viewing someone else's profile
-    const ourPhotoHTML = (!r.isYou && squad.find(x => x.isYou)) ? ourPhotoSectionHTML(r.id) : '';
+    const ourPhotoHTML = (!r.isYou && (squad.find(x => x.isYou) || currentUser)) ? ourPhotoSectionHTML(r.id) : '';
 
     // Countdown + Our Photo layout
     let photoCountdownBlock;
