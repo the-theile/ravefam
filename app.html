@@ -6,6 +6,7 @@
 <title>RaveFAM 🎉</title>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
 <!-- qrcode library replaced with api.qrserver.com (no dependency) -->
 <style>
   :root {
@@ -1622,6 +1623,550 @@
   }
   .onboard-feat-icon { font-size: 1.3rem; flex-shrink: 0; }
 
+
+  /* ═══════════════════════════════════════════════
+     QR SCANNER & CLAIM FLOW
+  ═══════════════════════════════════════════════ */
+
+  /* ── Floating Action Button ── */
+  .qr-fab {
+    position: fixed;
+    bottom: 90px; /* above mobile nav */
+    right: 20px;
+    z-index: 90;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: none;
+    background: linear-gradient(135deg, #00F5FF, #39FF14);
+    color: #000;
+    font-size: 1.25rem;
+    cursor: pointer;
+    box-shadow: 0 0 0 0 rgba(0,245,255,0.35), 0 4px 20px rgba(0,245,255,0.3);
+    transition: transform 0.25s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: fabPulse 3s ease-in-out infinite;
+  }
+  @keyframes fabPulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(0,245,255,0.35), 0 4px 20px rgba(0,245,255,0.22); }
+    50%      { box-shadow: 0 0 0 9px rgba(0,245,255,0), 0 4px 28px rgba(0,245,255,0.45); }
+  }
+  .qr-fab:hover { transform: scale(1.09); }
+  @media (min-width: 641px) { .qr-fab { bottom: 28px; } }
+
+  /* ── Scanner full-screen overlay ── */
+  #scanner-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: rgba(5,5,9,0.97);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  #scanner-overlay.open { display: flex; }
+
+  .scanner-header {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px 12px;
+    flex-shrink: 0;
+  }
+  .scanner-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 1.25rem;
+    color: #fff;
+  }
+  .scanner-close {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.07);
+    color: var(--muted);
+    font-size: 1rem;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+  .scanner-close:hover { color: #fff; background: rgba(255,255,255,0.13); }
+
+  .scanner-tabs {
+    display: flex;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 4px;
+    margin: 0 24px 20px;
+    width: calc(100% - 48px);
+    max-width: 432px;
+    flex-shrink: 0;
+  }
+  .scanner-tab {
+    flex: 1;
+    padding: 9px 12px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.82rem;
+    border-radius: 9px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .scanner-tab.active { background: rgba(0,245,255,0.15); color: var(--neon-cyan); }
+
+  /* ── Camera viewfinder ── */
+  .viewfinder-wrap {
+    position: relative;
+    width: calc(100% - 48px);
+    max-width: 432px;
+    aspect-ratio: 1;
+    border-radius: 20px;
+    overflow: hidden;
+    background: #0a0a14;
+    flex-shrink: 0;
+  }
+  #scanner-video {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  #scanner-canvas { display: none; }
+
+  .scan-reticle {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+  .scan-reticle-inner {
+    width: 58%;
+    aspect-ratio: 1;
+    position: relative;
+  }
+  /* Corner brackets */
+  .scan-reticle-inner::before,
+  .scan-reticle-inner::after,
+  .reticle-br::before,
+  .reticle-br::after {
+    content: '';
+    position: absolute;
+    width: 22px; height: 22px;
+    border-color: #00F5FF;
+    border-style: solid;
+    border-width: 0;
+  }
+  .reticle-br { position: absolute; inset: 0; }
+  .scan-reticle-inner::before { top:0; left:0; border-top-width:3px; border-left-width:3px; border-radius:4px 0 0 0; }
+  .scan-reticle-inner::after  { top:0; right:0; border-top-width:3px; border-right-width:3px; border-radius:0 4px 0 0; }
+  .reticle-br::before { bottom:0; left:0; border-bottom-width:3px; border-left-width:3px; border-radius:0 0 0 4px; }
+  .reticle-br::after  { bottom:0; right:0; border-bottom-width:3px; border-right-width:3px; border-radius:0 0 4px 0; }
+
+  .scan-line {
+    position: absolute;
+    left: 8%; right: 8%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #00F5FF, transparent);
+    top: 8%;
+    animation: scanLine 2.2s ease-in-out infinite;
+    box-shadow: 0 0 8px #00F5FF;
+    border-radius: 2px;
+  }
+  @keyframes scanLine {
+    0%   { top: 8%;  opacity: 1; }
+    95%  { top: 92%; opacity: 0.4; }
+    100% { top: 92%; opacity: 0; }
+  }
+
+  .scan-flash {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,245,255,0.22);
+    opacity: 0;
+    pointer-events: none;
+    border-radius: 20px;
+  }
+  .scan-flash.flash { animation: flashPop 0.45s ease-out forwards; }
+  @keyframes flashPop { 0% { opacity: 1; } 100% { opacity: 0; } }
+
+  .camera-status {
+    text-align: center;
+    padding: 12px 24px 4px;
+    font-size: 0.81rem;
+    color: var(--muted);
+    max-width: 480px;
+    width: 100%;
+    line-height: 1.5;
+  }
+  .upload-qr-link {
+    display: block;
+    text-align: center;
+    font-size: 0.78rem;
+    color: var(--neon-cyan);
+    cursor: pointer;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    padding: 6px 0 10px;
+    transition: opacity 0.2s;
+  }
+  .upload-qr-link:hover { opacity: 0.72; }
+  #scanner-file-input { display: none; }
+
+  /* ── OTP code boxes ── */
+  .code-input-wrap {
+    width: calc(100% - 48px);
+    max-width: 432px;
+    padding: 8px 0 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .code-input-label {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin-bottom: 16px;
+    text-align: center;
+  }
+  .otp-boxes {
+    display: flex;
+    gap: 9px;
+    justify-content: center;
+    margin-bottom: 22px;
+  }
+  .otp-box {
+    width: 46px; height: 56px;
+    border-radius: 12px;
+    border: 1.5px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.04);
+    color: #fff;
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 1.4rem;
+    text-align: center;
+    caret-color: var(--neon-cyan);
+    transition: border-color 0.2s, box-shadow 0.2s;
+    outline: none;
+    -webkit-appearance: none;
+    text-transform: uppercase;
+  }
+  .otp-box:focus {
+    border-color: var(--neon-cyan);
+    box-shadow: 0 0 12px rgba(0,245,255,0.18);
+  }
+
+  /* ── Scanner sub-views ── */
+  .scanner-view { display: none; width: 100%; max-width: 480px; flex-direction: column; align-items: center; }
+  .scanner-view.active { display: flex; }
+
+  /* ── Claim preview ── */
+  .claim-preview-body {
+    width: calc(100% - 48px);
+    max-width: 432px;
+    padding-bottom: 28px;
+  }
+  .claim-crew-banner {
+    border-radius: 16px;
+    padding: 18px 20px;
+    margin-bottom: 18px;
+  }
+  .claim-crew-name {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 1.4rem;
+    color: #fff;
+    margin-bottom: 8px;
+  }
+  .claim-crew-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .claim-crew-badge {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    padding: 3px 10px;
+    border-radius: 100px;
+    background: rgba(0,0,0,0.35);
+  }
+  .claim-crew-members { font-size: 0.78rem; color: rgba(255,255,255,0.55); font-family:'Outfit',sans-serif; }
+
+  .claim-divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 16px;
+    color: var(--muted);
+    font-size: 0.7rem;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+  .claim-divider::before, .claim-divider::after {
+    content:''; flex:1; height:1px; background:rgba(255,255,255,0.07);
+  }
+
+  .claim-slot-card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 18px;
+    padding: 18px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 14px;
+    position: relative;
+    overflow: hidden;
+  }
+  .claim-slot-card::before {
+    content:'';
+    position: absolute;
+    inset: 0;
+    background: var(--slot-grad, linear-gradient(135deg,#FF2D78,#BF00FF));
+    opacity: 0.05;
+  }
+  .claim-slot-avatar {
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 1.2rem;
+    color: #fff;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+    overflow: hidden;
+  }
+  .claim-slot-info { flex: 1; min-width: 0; position: relative; z-index: 1; }
+  .claim-slot-name { font-family:'Outfit',sans-serif; font-weight:800; font-size:1rem; color:#fff; margin-bottom:2px; }
+  .claim-slot-handle { font-size:0.76rem; color:var(--muted); margin-bottom:5px; }
+  .claim-slot-tags { display:flex; flex-wrap:wrap; gap:4px; }
+  .claim-tag {
+    background: rgba(255,255,255,0.07);
+    border-radius: 100px;
+    padding: 2px 8px;
+    font-size: 0.67rem;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .claim-spot-label {
+    text-align: center;
+    font-size: 0.76rem;
+    color: var(--muted);
+    margin-bottom: 18px;
+    font-style: italic;
+  }
+
+  .btn-claim {
+    width: 100%;
+    padding: 15px;
+    border-radius: 14px;
+    border: none;
+    background: linear-gradient(135deg, #00F5FF, #39FF14);
+    color: #000;
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    box-shadow: 0 0 24px rgba(0,245,255,0.28);
+    margin-bottom: 13px;
+    letter-spacing: -0.2px;
+  }
+  .btn-claim:hover  { transform: translateY(-2px); box-shadow: 0 0 36px rgba(0,245,255,0.48); }
+  .btn-claim:active { transform: translateY(0); }
+  .btn-claim:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  .claim-back-link {
+    display: block;
+    text-align: center;
+    font-size: 0.76rem;
+    color: var(--muted);
+    cursor: pointer;
+    font-family: 'Outfit', sans-serif;
+    padding-bottom: 4px;
+    transition: color 0.2s;
+  }
+  .claim-back-link:hover { color: var(--text); }
+
+  /* ── Error view ── */
+  .claim-error-body { width: calc(100% - 48px); max-width: 432px; text-align: center; padding: 24px 0 28px; }
+  .claim-error-icon { font-size: 3.5rem; margin-bottom: 16px; }
+  .claim-error-title {
+    font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.45rem; color: #fff; margin-bottom: 10px;
+  }
+  .claim-error-desc {
+    font-size: 0.88rem; color: var(--muted); line-height: 1.65; margin-bottom: 28px;
+  }
+  .claim-error-actions { display: flex; flex-direction: column; gap: 10px; }
+
+  /* ── Full-screen success ── */
+  #claim-success-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    background: var(--bg);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 32px 24px;
+    overflow: hidden;
+  }
+  #claim-success-screen.open { display: flex; }
+  #confetti-canvas { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+
+  .success-content {
+    position: relative; z-index: 1;
+    display: flex; flex-direction: column; align-items: center; max-width: 360px;
+  }
+  .success-check {
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #00F5FF, #39FF14);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 2rem;
+    margin-bottom: 24px;
+    box-shadow: 0 0 40px rgba(0,245,255,0.4);
+    animation: successPop 0.55s cubic-bezier(0.34,1.56,0.64,1) both;
+  }
+  @keyframes successPop {
+    from { transform: scale(0) rotate(-18deg); opacity: 0; }
+    to   { transform: scale(1) rotate(0deg);   opacity: 1; }
+  }
+  .success-crew-name {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 2.2rem;
+    color: #fff;
+    line-height: 1.15;
+    margin-bottom: 8px;
+    animation: fadeSlideUp 0.5s 0.15s both;
+  }
+  .success-tagline {
+    font-size: 1rem;
+    color: var(--muted);
+    margin-bottom: 24px;
+    animation: fadeSlideUp 0.5s 0.25s both;
+  }
+  .success-raver-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 100px;
+    padding: 8px 18px 8px 8px;
+    margin-bottom: 32px;
+    animation: fadeSlideUp 0.5s 0.35s both;
+  }
+  .success-raver-avatar {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Syne', sans-serif; font-weight: 800; font-size: 0.85rem; color: #fff;
+    overflow: hidden;
+  }
+  .success-raver-name { font-family:'Outfit',sans-serif; font-weight:700; font-size:0.88rem; color:var(--text); }
+  .success-cta { width:100%; max-width:280px; animation: fadeSlideUp 0.5s 0.45s both; }
+
+  @keyframes fadeSlideUp {
+    from { opacity:0; transform:translateY(16px); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+
+  /* ── Pre-auth claim intercept ── */
+  #claim-intercept {
+    position: fixed;
+    inset: 0;
+    z-index: 65;
+    background: rgba(5,5,9,0.94);
+    backdrop-filter: blur(22px);
+    -webkit-backdrop-filter: blur(22px);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 24px;
+    text-align: center;
+  }
+  #claim-intercept.open { display: flex; }
+  .intercept-card {
+    background: var(--surface2);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 28px;
+    padding: 36px 28px;
+    max-width: 400px;
+    width: 100%;
+    position: relative;
+    overflow: hidden;
+  }
+  .intercept-accent {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+  }
+  .intercept-emoji { font-size: 3rem; margin-bottom: 14px; display: block; }
+  .intercept-title {
+    font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.5rem;
+    color: #fff; margin-bottom: 8px; line-height: 1.2;
+  }
+  .intercept-sub { font-size: 0.88rem; color: var(--muted); line-height: 1.6; margin-bottom: 20px; }
+  .intercept-crew-pill {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    border-radius: 100px;
+    padding: 6px 16px 6px 10px;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.82rem;
+    margin: 0 auto 22px;
+  }
+  .intercept-crew-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .intercept-actions { display: flex; flex-direction: column; gap: 10px; }
+  .btn-intercept-signup {
+    padding: 14px; border-radius: 12px; border: none;
+    background: linear-gradient(135deg, #00F5FF, #39FF14);
+    color: #000; font-family: 'Syne', sans-serif; font-weight: 800; font-size: 0.95rem;
+    cursor: pointer; transition: opacity 0.2s, transform 0.2s;
+  }
+  .btn-intercept-signup:hover { transform: translateY(-1px); opacity: 0.9; }
+  .btn-intercept-login {
+    padding: 14px; border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.05);
+    color: var(--text); font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.88rem;
+    cursor: pointer; transition: background 0.2s;
+  }
+  .btn-intercept-login:hover { background: rgba(255,255,255,0.09); }
+  .intercept-skip {
+    margin-top: 16px; font-size: 0.75rem; color: var(--muted);
+    cursor: pointer; font-family: 'Outfit', sans-serif; transition: color 0.2s;
+  }
+  .intercept-skip:hover { color: var(--text); }
+
 </style>
 </head>
 <body>
@@ -1830,7 +2375,18 @@
       </div>
     </div>
 
-  </main>
+  
+  <!-- ── Floating Action Button: Scan to Join Crew ── -->
+  <button class="qr-fab" id="qr-fab" onclick="openScanner()" aria-label="Scan QR to join a crew" title="Scan to Join Crew">
+    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
+      <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
+      <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
+      <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
+      <rect width="7" height="7" x="7" y="7" rx="1"/>
+    </svg>
+  </button>
+</main>
 </div>
 
 <!-- Modal -->
@@ -1915,6 +2471,112 @@
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
+
+
+<!-- ══════════════════════════════════════════════
+     QR SCANNER OVERLAY
+══════════════════════════════════════════════ -->
+<div id="scanner-overlay" role="dialog" aria-modal="true" aria-label="Scan to join a crew">
+
+  <!-- ── SCAN VIEW (camera + code tabs) ── -->
+  <div class="scanner-view active" id="sv-scan">
+    <div class="scanner-header">
+      <div class="scanner-title">📲 Join a Crew</div>
+      <button class="scanner-close" onclick="closeScanner()" aria-label="Close scanner">✕</button>
+    </div>
+    <div class="scanner-tabs">
+      <button class="scanner-tab active" id="stab-camera" onclick="switchScannerTab('camera')">📷 Scan QR</button>
+      <button class="scanner-tab"        id="stab-code"   onclick="switchScannerTab('code')">🔢 Enter Code</button>
+    </div>
+
+    <!-- Camera pane -->
+    <div id="scanner-pane-camera" style="width:100%;display:flex;flex-direction:column;align-items:center;">
+      <div class="viewfinder-wrap">
+        <video id="scanner-video" autoplay muted playsinline></video>
+        <canvas id="scanner-canvas"></canvas>
+        <div class="scan-reticle">
+          <div class="scan-reticle-inner">
+            <div class="reticle-br"></div>
+            <div class="scan-line"></div>
+          </div>
+        </div>
+        <div class="scan-flash" id="scan-flash"></div>
+      </div>
+      <div class="camera-status" id="camera-status">Initializing camera…</div>
+      <span class="upload-qr-link" role="button" tabindex="0"
+        onclick="document.getElementById('scanner-file-input').click()"
+        onkeydown="if(event.key==='Enter')document.getElementById('scanner-file-input').click()">
+        💻 Upload a QR image instead
+      </span>
+      <input type="file" id="scanner-file-input" accept="image/*" onchange="handleQRFileUpload(event)">
+    </div>
+
+    <!-- Code entry pane -->
+    <div id="scanner-pane-code" class="code-input-wrap" style="display:none;">
+      <div class="code-input-label">Enter your 6-character invite code</div>
+      <div class="otp-boxes" id="otp-boxes">
+        <input class="otp-box" maxlength="1" data-idx="0" oninput="otpInput(this)" onkeydown="otpKeydown(event,this)" autocomplete="off" inputmode="text" spellcheck="false">
+        <input class="otp-box" maxlength="1" data-idx="1" oninput="otpInput(this)" onkeydown="otpKeydown(event,this)" autocomplete="off" inputmode="text" spellcheck="false">
+        <input class="otp-box" maxlength="1" data-idx="2" oninput="otpInput(this)" onkeydown="otpKeydown(event,this)" autocomplete="off" inputmode="text" spellcheck="false">
+        <input class="otp-box" maxlength="1" data-idx="3" oninput="otpInput(this)" onkeydown="otpKeydown(event,this)" autocomplete="off" inputmode="text" spellcheck="false">
+        <input class="otp-box" maxlength="1" data-idx="4" oninput="otpInput(this)" onkeydown="otpKeydown(event,this)" autocomplete="off" inputmode="text" spellcheck="false">
+        <input class="otp-box" maxlength="1" data-idx="5" oninput="otpInput(this)" onkeydown="otpKeydown(event,this)" autocomplete="off" inputmode="text" spellcheck="false">
+      </div>
+      <button class="btn-claim" id="code-submit-btn" onclick="submitInviteCode()" style="max-width:340px;" disabled>Look up code →</button>
+      <div id="code-error" style="text-align:center;font-size:0.78rem;color:var(--neon-pink);margin-top:10px;min-height:20px;font-family:'Outfit',sans-serif;font-weight:600;"></div>
+    </div>
+  </div><!-- /sv-scan -->
+
+  <!-- ── PREVIEW VIEW ── -->
+  <div class="scanner-view" id="sv-preview">
+    <div class="scanner-header">
+      <div class="scanner-title">🎉 Your Spot</div>
+      <button class="scanner-close" onclick="closeScanner()" aria-label="Close">✕</button>
+    </div>
+    <div class="claim-preview-body" id="preview-body"><!-- filled by JS --></div>
+  </div>
+
+  <!-- ── ERROR VIEW ── -->
+  <div class="scanner-view" id="sv-error">
+    <div class="scanner-header">
+      <div class="scanner-title"></div>
+      <button class="scanner-close" onclick="closeScanner()" aria-label="Close">✕</button>
+    </div>
+    <div class="claim-error-body" id="error-body"><!-- filled by JS --></div>
+  </div>
+
+</div><!-- /scanner-overlay -->
+
+<!-- ══════════════════════════════════════════════
+     SUCCESS SCREEN
+══════════════════════════════════════════════ -->
+<div id="claim-success-screen" role="dialog" aria-modal="true" aria-live="assertive">
+  <canvas id="confetti-canvas"></canvas>
+  <div class="success-content" id="success-content"><!-- filled by JS --></div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     PRE-AUTH CLAIM INTERCEPT
+══════════════════════════════════════════════ -->
+<div id="claim-intercept" role="dialog" aria-modal="true">
+  <div class="intercept-card">
+    <div class="intercept-accent" id="intercept-accent"></div>
+    <span class="intercept-emoji">🎪</span>
+    <div class="intercept-title"  id="intercept-title">You've been invited!</div>
+    <div class="intercept-sub"   id="intercept-sub">Log in or create an account to claim your spot in the crew.</div>
+    <div class="intercept-crew-pill" id="intercept-crew-pill">
+      <div class="intercept-crew-dot" id="intercept-crew-dot"></div>
+      <span id="intercept-crew-name"></span>
+    </div>
+    <div class="intercept-actions">
+      <button class="btn-intercept-signup" onclick="dismissIntercept('signup')">Create Account — it's free 🎉</button>
+      <button class="btn-intercept-login"  onclick="dismissIntercept('login')">Already have an account? Log in</button>
+    </div>
+    <div class="intercept-skip" role="button" tabindex="0"
+      onclick="dismissIntercept(null)"
+      onkeydown="if(event.key==='Enter')dismissIntercept(null)">Skip for now →</div>
+  </div>
+</div>
 
 <!-- ===== ONBOARDING SCREEN ===== -->
 <div id="onboarding-screen">
@@ -2096,6 +2758,16 @@
     const tab = window._pendingAuthTab || 'login';
     window._pendingAuthTab = null;
     showAuthTab(tab);
+
+    // If there's a pending claim token, overlay the branded intercept so the
+    // user understands WHY they're being asked to sign in / sign up.
+    const pendingToken = sessionStorage.getItem('pendingClaim');
+    if (pendingToken) {
+      // RPC is SECURITY DEFINER + granted to anon — works without auth
+      sb.rpc('get_claim_preview', { p_token: pendingToken }).then(({ data }) => {
+        showPreAuthIntercept(data, pendingToken);
+      });
+    }
   }
 
   // ===== AUTH STATE LISTENER =====
@@ -2144,32 +2816,22 @@
     }
   })();
 
+  // processPendingClaim: now shows the rich preview/confirm flow instead of
+  // silently auto-claiming, so the user knows exactly what they're joining.
   async function processPendingClaim() {
     const token = sessionStorage.getItem('pendingClaim');
     if (!token || !currentUser) return;
     sessionStorage.removeItem('pendingClaim');
 
-    // If the user already has their own raver profile, pass its ID so crew
-    // memberships migrate to it rather than the stub becoming their profile.
-    const existingRaver = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
-    const params = { p_token: token };
-    if (existingRaver) params.p_existing_raver_id = existingRaver.id;
+    const { data: preview, error } = await sb.rpc('get_claim_preview', { p_token: token });
+    if (error) { showToast('⚠️ Could not load invite details.'); return; }
+    if (preview?.error === 'invalid_token')   { showToast('⚠️ This invite link is no longer valid.'); return; }
+    if (preview?.error === 'already_claimed') { showToast('⚠️ This spot has already been claimed.'); return; }
 
-    const { data: result, error } = await sb.rpc('claim_and_merge_raver', params);
-    if (error) { console.error('claim error', error); showToast('⚠️ Could not claim profile — link may be expired'); return; }
-
-    if (result?.error) {
-      showToast('⚠️ This invite has already been used or is invalid.');
-      return;
-    }
-
-    if (result?.merged_into) {
-      showToast("🎉 You've been added to the crew! Your existing profile was linked.");
-    } else {
-      showToast('🎉 Profile claimed! Welcome to the crew.');
-    }
-    await loadAllData();
-    renderSquad(); renderCrews(); renderEvents();
+    // Show scanner overlay in preview mode — no camera needed
+    _pendingClaimToken = token;
+    document.getElementById('scanner-overlay').classList.add('open');
+    showClaimPreview(preview, token);
   }
 
   function showQRModal(raverId) {
@@ -2224,6 +2886,499 @@
 
   function closeQRModal() {
     document.getElementById('qr-overlay').classList.remove('open');
+  }
+
+
+  // ═══════════════════════════════════════════════════════
+  //  QR SCANNER & CLAIM FLOW — member-side join experience
+  // ═══════════════════════════════════════════════════════
+
+  let _scannerStream    = null;   // active MediaStream
+  let _scannerAnimFrame = null;   // rAF handle
+  let _scannerActive    = false;  // scanning loop running
+  let _pendingClaimToken = null;  // token awaiting user confirmation
+
+  // ── Open / Close ──────────────────────────────────────
+  function openScanner() {
+    _pendingClaimToken = null;
+    showScannerView('scan');
+    document.getElementById('scanner-overlay').classList.add('open');
+    switchScannerTab('camera');
+  }
+
+  function closeScanner() {
+    stopCamera();
+    document.getElementById('scanner-overlay').classList.remove('open');
+    _pendingClaimToken = null;
+    // Reset OTP boxes
+    document.querySelectorAll('.otp-box').forEach(b => b.value = '');
+    const errEl = document.getElementById('code-error');
+    if (errEl) errEl.textContent = '';
+    const btn = document.getElementById('code-submit-btn');
+    if (btn) btn.disabled = true;
+  }
+
+  function showScannerView(viewId) {
+    document.querySelectorAll('.scanner-view').forEach(v => v.classList.remove('active'));
+    const el = document.getElementById('sv-' + viewId);
+    if (el) el.classList.add('active');
+  }
+
+  // ── Scanner tabs ──────────────────────────────────────
+  function switchScannerTab(tab) {
+    document.querySelectorAll('.scanner-tab').forEach(t => t.classList.remove('active'));
+    const tabEl = document.getElementById('stab-' + tab);
+    if (tabEl) tabEl.classList.add('active');
+
+    const cameraPane = document.getElementById('scanner-pane-camera');
+    const codePane   = document.getElementById('scanner-pane-code');
+    if (!cameraPane || !codePane) return;
+
+    if (tab === 'camera') {
+      cameraPane.style.display = 'flex';
+      codePane.style.display   = 'none';
+      startCamera();
+    } else {
+      cameraPane.style.display = 'none';
+      codePane.style.display   = 'flex';
+      stopCamera();
+      setTimeout(() => {
+        const first = document.querySelector('.otp-box[data-idx="0"]');
+        if (first) first.focus();
+      }, 60);
+    }
+  }
+
+  // ── Camera ────────────────────────────────────────────
+  async function startCamera() {
+    if (_scannerStream) return;
+    const statusEl = document.getElementById('camera-status');
+    if (statusEl) statusEl.textContent = 'Starting camera…';
+    try {
+      _scannerStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 640 } }
+      });
+      const video = document.getElementById('scanner-video');
+      video.srcObject = _scannerStream;
+      await video.play();
+      _scannerActive = true;
+      if (statusEl) statusEl.textContent = 'Point at a RaveFAM QR code…';
+      tickScan();
+    } catch (err) {
+      console.warn('Camera error:', err.name, err.message);
+      _scannerStream = null;
+      if (statusEl) {
+        if (err.name === 'NotAllowedError') {
+          statusEl.innerHTML = '📵 Camera access denied.<br><small>Use the <strong>Enter Code</strong> tab or upload a QR image.</small>';
+        } else {
+          statusEl.innerHTML = '📷 Camera unavailable.<br><small>Use <strong>Enter Code</strong> or upload a QR image.</small>';
+        }
+      }
+    }
+  }
+
+  function stopCamera() {
+    _scannerActive = false;
+    if (_scannerAnimFrame) { cancelAnimationFrame(_scannerAnimFrame); _scannerAnimFrame = null; }
+    if (_scannerStream) {
+      _scannerStream.getTracks().forEach(t => t.stop());
+      _scannerStream = null;
+      const v = document.getElementById('scanner-video');
+      if (v) v.srcObject = null;
+    }
+  }
+
+  // Decode QR from live video: BarcodeDetector → jsQR → give up
+  function tickScan() {
+    if (!_scannerActive) return;
+    const video  = document.getElementById('scanner-video');
+    const canvas = document.getElementById('scanner-canvas');
+    if (!video || !canvas || video.readyState < 2) {
+      _scannerAnimFrame = requestAnimationFrame(tickScan);
+      return;
+    }
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(video, 0, 0);
+
+    if (window.BarcodeDetector) {
+      const bd = new window.BarcodeDetector({ formats: ['qr_code'] });
+      bd.detect(canvas).then(codes => {
+        if (!_scannerActive) return;
+        if (codes.length) { handleRawScan(codes[0].rawValue); }
+        else { _scannerAnimFrame = requestAnimationFrame(tickScan); }
+      }).catch(() => { _scannerAnimFrame = requestAnimationFrame(tickScan); });
+    } else if (window.jsQR) {
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const result = window.jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'dontInvert'
+      });
+      if (result) { handleRawScan(result.data); }
+      else { _scannerAnimFrame = requestAnimationFrame(tickScan); }
+    } else {
+      const s = document.getElementById('camera-status');
+      if (s) s.innerHTML = '⚠️ QR decoding unavailable.<br><small>Use <strong>Enter Code</strong> or upload a QR image.</small>';
+    }
+  }
+
+  function handleRawScan(rawValue) {
+    let token = null;
+    try { token = new URL(rawValue).searchParams.get('claim'); } catch { token = rawValue.trim(); }
+    if (!token) { _scannerAnimFrame = requestAnimationFrame(tickScan); return; }
+
+    stopCamera();
+    // Flash effect
+    const flash = document.getElementById('scan-flash');
+    if (flash) { flash.classList.remove('flash'); void flash.offsetWidth; flash.classList.add('flash'); }
+    handleClaimToken(token, false);
+  }
+
+  // ── File / image upload fallback ──────────────────────
+  async function handleQRFileUpload(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    event.target.value = '';
+    const statusEl = document.getElementById('camera-status');
+    if (statusEl) statusEl.textContent = 'Reading image…';
+
+    try {
+      const bitmap = await createImageBitmap(file);
+      const c = document.createElement('canvas');
+      c.width = bitmap.width; c.height = bitmap.height;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(bitmap, 0, 0);
+
+      if (window.BarcodeDetector) {
+        const bd = new window.BarcodeDetector({ formats: ['qr_code'] });
+        const codes = await bd.detect(bitmap);
+        if (codes.length) { handleRawScan(codes[0].rawValue); return; }
+      }
+      if (window.jsQR) {
+        const id = ctx.getImageData(0, 0, c.width, c.height);
+        const res = window.jsQR(id.data, id.width, id.height, { inversionAttempts: 'attemptBoth' });
+        if (res) { handleRawScan(res.data); return; }
+      }
+      if (statusEl) statusEl.textContent = '⚠️ No QR code found in image. Try a clearer photo.';
+    } catch (err) {
+      console.warn('QR image decode error:', err);
+      if (statusEl) statusEl.textContent = '⚠️ Could not read image.';
+    }
+  }
+
+  // ── OTP code input ────────────────────────────────────
+  function otpInput(input) {
+    input.value = input.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 1);
+    if (input.value.length === 1) {
+      const next = document.querySelector(`.otp-box[data-idx="${parseInt(input.dataset.idx) + 1}"]`);
+      if (next) next.focus();
+    }
+    const allFilled = [...document.querySelectorAll('.otp-box')].every(b => b.value.trim());
+    const btn = document.getElementById('code-submit-btn');
+    if (btn) btn.disabled = !allFilled;
+  }
+
+  function otpKeydown(e, input) {
+    if (e.key === 'Backspace' && !input.value) {
+      const prev = document.querySelector(`.otp-box[data-idx="${parseInt(input.dataset.idx) - 1}"]`);
+      if (prev) { prev.value = ''; prev.focus(); }
+    }
+    if (e.key === 'Enter') submitInviteCode();
+  }
+
+  async function submitInviteCode() {
+    const code = [...document.querySelectorAll('.otp-box')].map(b => b.value.trim()).join('').toUpperCase();
+    if (code.length < 6) return;
+    const btn = document.getElementById('code-submit-btn');
+    if (btn) btn.disabled = true;
+    const errEl = document.getElementById('code-error');
+    if (errEl) errEl.textContent = '';
+
+    // The invite code is qr_token.replace(/-/g,'').slice(0,6).toUpperCase()
+    // Match by the first 6 chars of qr_token (stored without dashes)
+    const { data: matches, error } = await sb
+      .from('ravers')
+      .select('qr_token')
+      .filter('qr_token', 'not.is', null)
+      .limit(200); // fetch and filter client-side (avoids complex DB regex)
+
+    const match = (matches || []).find(r =>
+      r.qr_token && r.qr_token.replace(/-/g,'').slice(0,6).toUpperCase() === code
+    );
+
+    if (error || !match) {
+      if (errEl) errEl.textContent = '⚠️ Code not found or already used.';
+      if (btn) btn.disabled = false;
+      return;
+    }
+
+    await handleClaimToken(match.qr_token, false);
+    if (btn) btn.disabled = false;
+  }
+
+  // ── Main claim handler ────────────────────────────────
+  async function handleClaimToken(token, _unused) {
+    _pendingClaimToken = token;
+
+    // Not logged in → stash and show branded intercept
+    if (!currentUser) {
+      sessionStorage.setItem('pendingClaim', token);
+      const { data: preview } = await sb.rpc('get_claim_preview', { p_token: token });
+      closeScanner();
+      showPreAuthIntercept(preview, token);
+      return;
+    }
+
+    // Logged in → fetch preview and show confirmation
+    const { data: preview, error } = await sb.rpc('get_claim_preview', { p_token: token });
+    if (error)                               { showScannerError('unknown', null); return; }
+    if (preview?.error === 'invalid_token')  { showScannerError('invalid', null); return; }
+    if (preview?.error === 'already_claimed'){ showScannerError('claimed', preview); return; }
+
+    showClaimPreview(preview, token);
+  }
+
+  // ── Claim preview screen ──────────────────────────────
+  function showClaimPreview(data, token) {
+    const raver = data?.raver || {};
+    const crew  = data?.crew  || null;
+    _pendingClaimToken = token;
+
+    const crewColor   = crew?.color || '#FF2D78';
+    const crewName    = crew?.name  || 'a crew';
+    const memberCount = crew?.member_count ?? 0;
+    const statusLabel = crew?.status === 'locked-in' ? '🔒 Locked In' : '🌐 Recruiting';
+    const memberText  = memberCount > 0
+      ? `${memberCount} raver${memberCount !== 1 ? 's' : ''} already in`
+      : 'Be the first to claim';
+
+    const tags = [...(raver.genres || []), ...(raver.fav_artists || [])].slice(0, 5);
+    const tagsHtml = tags.length
+      ? tags.map(t => `<span class="claim-tag">${t}</span>`).join('')
+      : `<span class="claim-tag">Raver</span>`;
+
+    const avatarContent = raver.avatar_url
+      ? `<img src="${raver.avatar_url}" style="width:100%;height:100%;object-fit:cover;" alt="${raver.name || ''}">`
+      : (raver.name ? initials(raver.name) : '?');
+
+    document.getElementById('preview-body').innerHTML = `
+      <div class="claim-crew-banner" style="background:${crewColor}20;border:1px solid ${crewColor}44;">
+        <div class="claim-crew-name">${crewName}</div>
+        <div class="claim-crew-meta">
+          <span class="claim-crew-badge" style="color:${crewColor};">${statusLabel}</span>
+          <span class="claim-crew-members">👥 ${memberText}</span>
+        </div>
+      </div>
+      <div class="claim-divider">your profile slot</div>
+      <div class="claim-slot-card" style="--slot-grad:${raver.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)'};">
+        <div class="claim-slot-avatar" style="background:${raver.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)'};">${avatarContent}</div>
+        <div class="claim-slot-info">
+          <div class="claim-slot-name">${raver.name || 'Your Spot'}</div>
+          ${raver.handle ? `<div class="claim-slot-handle">${raver.handle}</div>` : ''}
+          <div class="claim-slot-tags">${tagsHtml}</div>
+        </div>
+      </div>
+      <div class="claim-spot-label">This profile was saved for you by your crew leader.</div>
+      <button class="btn-claim" id="confirm-claim-btn" onclick="commitClaim()">🎉 Claim My Spot in ${crewName}</button>
+      <span class="claim-back-link" role="button" tabindex="0" onclick="backToScan()" onkeydown="if(event.key==='Enter')backToScan()">Not you? Scan a different code</span>
+    `;
+    showScannerView('preview');
+  }
+
+  // ── Error view ────────────────────────────────────────
+  function showScannerError(type, data) {
+    let icon, title, desc, actions;
+    if (type === 'claimed') {
+      icon    = '🔒';
+      title   = "This spot's taken";
+      desc    = `<strong>${data?.raver_name || 'This profile'}</strong> has already been claimed${data?.claimer_name ? ' by ' + data.claimer_name : ''}.<br><br>Ask your crew leader to create a new invite for you.`;
+      actions = `
+        <button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="backToScan()">📷 Scan a Different Code</button>
+        <button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="closeScanner()">Close</button>`;
+    } else if (type === 'invalid') {
+      icon    = '⚠️';
+      title   = 'Link Expired';
+      desc    = "This QR code or invite link is no longer valid. It may have already been used or your crew leader generated a new one.";
+      actions = `
+        <button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="backToScan()">📷 Try Again</button>
+        <button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="closeScanner()">Close</button>`;
+    } else {
+      icon    = '⚠️';
+      title   = 'Something went wrong';
+      desc    = "Couldn't reach the server. Check your connection and try again.";
+      actions = `<button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="backToScan()">Try Again</button>`;
+    }
+    document.getElementById('error-body').innerHTML = `
+      <div class="claim-error-icon">${icon}</div>
+      <div class="claim-error-title">${title}</div>
+      <div class="claim-error-desc">${desc}</div>
+      <div class="claim-error-actions">${actions}</div>`;
+    showScannerView('error');
+  }
+
+  function backToScan() {
+    _pendingClaimToken = null;
+    showScannerView('scan');
+    switchScannerTab('camera');
+  }
+
+  // ── Commit claim ──────────────────────────────────────
+  async function commitClaim() {
+    const token = _pendingClaimToken;
+    if (!token || !currentUser) return;
+    const btn = document.getElementById('confirm-claim-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Joining…'; }
+
+    const existingRaver = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
+    const params = { p_token: token };
+    if (existingRaver) params.p_existing_raver_id = existingRaver.id;
+
+    // Grab preview data before the claim so we can pass it to the success screen
+    const { data: previewSnap } = await sb.rpc('get_claim_preview', { p_token: token });
+
+    const { data: result, error } = await sb.rpc('claim_and_merge_raver', params);
+    if (error || result?.error) {
+      if (btn) { btn.disabled = false; btn.textContent = '🎉 Claim My Spot'; }
+      showScannerError(result?.error === 'invalid_or_used_token' ? 'claimed' : 'unknown', null);
+      return;
+    }
+
+    closeScanner();
+    await loadAllData();
+    renderSquad(); renderCrews(); renderEvents();
+    showClaimSuccess(previewSnap);
+  }
+
+  // ── Success screen ────────────────────────────────────
+  function showClaimSuccess(previewData) {
+    const raver    = previewData?.raver  || {};
+    const crew     = previewData?.crew   || {};
+    const crewName = crew.name  || 'the crew';
+    const raverName= raver.name || 'Raver';
+    const gradient = raver.gradient || 'linear-gradient(135deg,#00F5FF,#39FF14)';
+    const avatarContent = raver.avatar_url
+      ? `<img src="${raver.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="${raverName}">`
+      : (raver.name ? initials(raver.name) : '🎉');
+
+    document.getElementById('success-content').innerHTML = `
+      <div class="success-check">🎉</div>
+      <div class="success-crew-name">${crewName}</div>
+      <div class="success-tagline">You're officially in the crew.</div>
+      <div class="success-raver-pill">
+        <div class="success-raver-avatar" style="background:${gradient};">${avatarContent}</div>
+        <span class="success-raver-name">${raverName}</span>
+      </div>
+      <div class="success-cta">
+        <button class="btn-claim" onclick="closeSuccessScreen();switchTab('crews',document.querySelector('.nav-tab'));">View My Crews →</button>
+      </div>
+    `;
+
+    document.getElementById('claim-success-screen').classList.add('open');
+    launchConfetti();
+    if (window._successAutoClose) clearTimeout(window._successAutoClose);
+    window._successAutoClose = setTimeout(closeSuccessScreen, 7000);
+  }
+
+  function closeSuccessScreen() {
+    document.getElementById('claim-success-screen').classList.remove('open');
+    const canvas = document.getElementById('confetti-canvas');
+    if (canvas) { const ctx = canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height); }
+    if (window._confettiFrame) { cancelAnimationFrame(window._confettiFrame); window._confettiFrame = null; }
+    if (window._successAutoClose) { clearTimeout(window._successAutoClose); window._successAutoClose = null; }
+  }
+
+  // ── Confetti ──────────────────────────────────────────
+  function launchConfetti() {
+    const canvas = document.getElementById('confetti-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+    if (window._confettiFrame) cancelAnimationFrame(window._confettiFrame);
+
+    const COLORS = ['#FF2D78','#00F5FF','#39FF14','#BF00FF','#FFE600','#FF00CC','#00FFCC','#FF6B35'];
+    const particles = Array.from({ length: 170 }, () => ({
+      x:     Math.random() * canvas.width,
+      y:    -10 - Math.random() * canvas.height * 0.35,
+      vx:   (Math.random() - 0.5) * 4.5,
+      vy:    1.8 + Math.random() * 5,
+      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      size:  4 + Math.random() * 7,
+      rot:   Math.random() * Math.PI * 2,
+      rotV: (Math.random() - 0.5) * 0.14,
+      shape: Math.random() > 0.5 ? 'rect' : 'circle',
+      alpha: 1
+    }));
+
+    let tick = 0;
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      tick++;
+      let alive = false;
+      for (const p of particles) {
+        p.x  += p.vx;
+        p.y  += p.vy;
+        p.vy += 0.075;
+        p.rot += p.rotV;
+        if (tick > 110) p.alpha = Math.max(0, p.alpha - 0.013);
+        if (p.alpha <= 0 || p.y > canvas.height + 20) continue;
+        alive = true;
+        ctx.save();
+        ctx.globalAlpha = p.alpha;
+        ctx.fillStyle   = p.color;
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        if (p.shape === 'rect') {
+          ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
+        } else {
+          ctx.beginPath();
+          ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+      if (alive) window._confettiFrame = requestAnimationFrame(draw);
+      else { ctx.clearRect(0, 0, canvas.width, canvas.height); window._confettiFrame = null; }
+    }
+    window._confettiFrame = requestAnimationFrame(draw);
+  }
+
+  // ── Pre-auth intercept ────────────────────────────────
+  function showPreAuthIntercept(previewData, token) {
+    const crew      = previewData?.crew  || {};
+    const raver     = previewData?.raver || {};
+    const crewColor = crew.color || '#00F5FF';
+    const crewName  = crew.name;
+    const raverName = raver.name;
+
+    const titleEl  = document.getElementById('intercept-title');
+    const subEl    = document.getElementById('intercept-sub');
+    const pillEl   = document.getElementById('intercept-crew-pill');
+    const dotEl    = document.getElementById('intercept-crew-dot');
+    const nameEl   = document.getElementById('intercept-crew-name');
+    const accentEl = document.getElementById('intercept-accent');
+
+    if (crewName && titleEl) {
+      titleEl.textContent = `You're invited to join ${crewName}! 🎪`;
+      if (subEl) subEl.textContent =
+        `${raverName ? raverName + ' is your spot. ' : ''}Create an account or log in to claim it.`;
+      if (pillEl) {
+        pillEl.style.cssText = `display:inline-flex;background:${crewColor}20;border:1px solid ${crewColor}44;color:${crewColor};`;
+        if (dotEl) dotEl.style.background = crewColor;
+        if (nameEl) nameEl.textContent = crewName;
+      }
+    }
+    if (accentEl) accentEl.style.background = `linear-gradient(90deg,${crewColor},${crewColor}66)`;
+    document.getElementById('claim-intercept').classList.add('open');
+  }
+
+  function dismissIntercept(tab) {
+    document.getElementById('claim-intercept').classList.remove('open');
+    if (tab) {
+      window._pendingAuthTab = tab;
+      // Trigger auth screen re-render to correct tab (it's already showing)
+      showAuthTab(tab);
+    }
   }
 
   function copyClaimLink(url) {
