@@ -845,7 +845,7 @@
     border-color: var(--neon-pink);
     color: #fff;
   }
-  .detail-members { display: flex; flex-direction: column; gap: 8px; max-height: 180px; overflow-y: auto; }
+  .detail-members { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; }
   .detail-member {
     display: flex; align-items: center; gap: 10px;
     font-size: 0.88rem;
@@ -1242,6 +1242,34 @@
     background: rgba(191,0,255,0.12); border-color: rgba(191,0,255,0.3); color: #d67fff;
   }
   .vibe-mini { font-size: 0.65rem; padding: 2px 8px; }
+
+  /* ===== Genre Presets ===== */
+  .genre-preset-cloud { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .genre-preset {
+    padding: 5px 13px; border-radius: 100px;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.75rem;
+    cursor: pointer; border: 1.5px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.04); color: var(--muted);
+    transition: all 0.18s cubic-bezier(0.34,1.4,0.64,1);
+    user-select: none;
+  }
+  .genre-preset:hover { border-color: rgba(0,245,255,0.4); color: var(--neon-cyan); transform: translateY(-1px); }
+  .genre-preset.picked {
+    border-color: var(--neon-cyan); background: rgba(0,245,255,0.1);
+    color: var(--neon-cyan); transform: translateY(-1px);
+    box-shadow: 0 0 10px -4px var(--neon-cyan);
+  }
+  /* Inline suggestion chips on profile view */
+  .genre-suggest-label { font-size: 0.68rem; color: var(--muted); margin: 8px 0 5px; font-family: 'Outfit', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; }
+  .genre-suggest-cloud { display: flex; flex-wrap: wrap; gap: 5px; }
+  .genre-suggest-chip {
+    padding: 3px 11px; border-radius: 100px;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.7rem;
+    cursor: pointer; border: 1px dashed rgba(0,245,255,0.25);
+    background: rgba(0,245,255,0.05); color: var(--muted);
+    transition: all 0.15s;
+  }
+  .genre-suggest-chip:hover { border-color: var(--neon-cyan); color: var(--neon-cyan); background: rgba(0,245,255,0.1); }
 
   /* ===== AUTH SCREEN ===== */
   #auth-screen {
@@ -2797,18 +2825,11 @@
         }).join('')
       : '<div class="fest-empty">No linked tribe members yet</div>';
 
-    // Lead controls vs read-only
-    let controls;
+    // Lead controls vs read-only — split into addMemberControl and statusControl
+    let addMemberControl = '';
+    let statusControl;
     if (crew.isLead) {
-      const otherStatus = crew.status === 'recruiting' ? 'locked-in' : 'recruiting';
-      controls = `
-        <div class="form-group">
-          <label class="form-label">Status (you're the Crew Lead 👑)</label>
-          <div class="status-toggle">
-            <button class="status-opt ${crew.status==='recruiting'?'active':''}" onclick="setStatus('${crew.id}','recruiting')">🟢 Recruiting</button>
-            <button class="status-opt ${crew.status==='locked-in'?'active':''}" onclick="setStatus('${crew.id}','locked-in')">🔒 Locked In</button>
-          </div>
-        </div>
+      addMemberControl = `
         <div class="form-group">
           <label class="form-label">Add Member</label>
           <div class="member-search-wrap">
@@ -2818,9 +2839,17 @@
             <div id="member-search-dropdown" class="member-search-dropdown" style="display:none;"></div>
           </div>
         </div>`;
+      statusControl = `
+        <div class="form-group">
+          <label class="form-label">Status (you're the Crew Lead 👑)</label>
+          <div class="status-toggle">
+            <button class="status-opt ${crew.status==='recruiting'?'active':''}" onclick="setStatus('${crew.id}','recruiting')">🟢 Recruiting</button>
+            <button class="status-opt ${crew.status==='locked-in'?'active':''}" onclick="setStatus('${crew.id}','locked-in')">🔒 Locked In</button>
+          </div>
+        </div>`;
     } else {
       const canJoin = crew.status === 'recruiting';
-      controls = `
+      statusControl = `
         <div class="form-group">
           <label class="form-label">Status</label>
           <div style="font-size:0.85rem;color:var(--muted);">Set by the Crew Lead — you can't change this.</div>
@@ -2874,16 +2903,17 @@
       <div class="modal-title" style="margin-bottom:6px;">${crew.name}</div>
       <div style="color:var(--muted);font-size:0.85rem;margin-bottom:18px;">${crewEventLine(crew)}</div>
       ${totemBlock}
-      <div class="detail-status-line">
-        <span class="crew-status ${s.cls}">${s.label}</span>
-        <span style="font-size:0.8rem;color:var(--muted);">${crew.members.length} member${crew.members.length!==1?'s':''}</span>
-      </div>
-      <div class="status-meaning">${meaning}</div>
-      ${controls}
+      ${addMemberControl}
       <div class="form-group">
         <label class="form-label">Crew Members</label>
         <div class="detail-members">${memberList}</div>
       </div>
+      <div class="detail-status-line" style="margin-top:16px;">
+        <span class="crew-status ${s.cls}">${s.label}</span>
+        <span style="font-size:0.8rem;color:var(--muted);">${crew.members.length} member${crew.members.length!==1?'s':''}</span>
+      </div>
+      <div class="status-meaning">${meaning}</div>
+      ${statusControl}
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeDetail()" style="flex:1;padding:12px;">Close</button>
       </div>
@@ -3152,6 +3182,15 @@
     { id:'vt-setlist',     label:'Memorises Set Lists',      icon:'🧠', color:'#39FF14', bg:'rgba(57,255,20,0.14)' },
     { id:'vt-latenight',   label:'3AM Is Early',             icon:'🌙', color:'#BF00FF', bg:'rgba(191,0,255,0.14)' },
     { id:'vt-afterparty',  label:'Afterparty Legend',        icon:'🔑', color:'#FF2D78', bg:'rgba(255,45,120,0.14)' },
+  ];
+
+  // ===== Genre Presets =====
+  const GENRE_PRESETS = [
+    'Techno','House','Deep House','Tech House','Minimal','Micro House',
+    'Drum & Bass','Jungle','Breaks','UK Garage','Dubstep','Grime',
+    'Trance','Psytrance','Progressive','Ambient','Industrial','Hard Techno',
+    'Disco','Funk','Soul','Afro House','Melodic Techno','Electro',
+    'IDM','Experimental','Rave','Hardcore','Noise',
   ];
 
   function getPreset(id) { return VIBE_PRESETS.find(v => v.id === id); }
@@ -3473,7 +3512,16 @@
       <div class="profile-section">
         <h3>🎶 Genres</h3>
         <div class="tag-edit-wrap">${genreChips}</div>
-        ${addTagInput('genres', '+ genre')}
+        ${r.isYou ? (() => {
+          const existing = (r.genres || []).map(x => x.toLowerCase());
+          const suggestions = GENRE_PRESETS.filter(g => !existing.includes(g.toLowerCase())).slice(0, 12);
+          return suggestions.length ? `
+            <div class="genre-suggest-label">Suggestions</div>
+            <div class="genre-suggest-cloud">
+              ${suggestions.map(g => `<span class="genre-suggest-chip" onclick="addTag('${r.id}','genres','${g.replace(/'/g,"\\'")}');return false;">+ ${g}</span>`).join('')}
+            </div>` : '';
+        })() : ''}
+        ${addTagInput('genres', '+ custom genre')}
       </div>
 
       <div class="profile-section">
@@ -3633,7 +3681,21 @@
       ${fieldRow('Name','pf-name', r?.name, 'e.g. Sam P.')}
       ${handleField}
       ${fieldRow('Home Base','pf-base', r?.base, 'e.g. Berlin, DE')}
-      ${fieldRow('Genres (comma separated)','pf-genres', r?.genres?.join(', '), 'Techno, House')}
+      <div class="form-group">
+        <label class="form-label">🎶 Genres</label>
+        <div class="genre-preset-cloud" id="genre-preset-cloud">
+          ${GENRE_PRESETS.map(g => {
+            const picked = (r?.genres || []).map(x=>x.toLowerCase()).includes(g.toLowerCase()) ? ' picked' : '';
+            return `<span class="genre-preset${picked}" onclick="toggleGenrePick('${g.replace(/'/g,"\\'").replace(/"/g,'&quot;')}', this)">${g}</span>`;
+          }).join('')}
+        </div>
+        <div class="vibe-custom-row">
+          <input class="vibe-custom-input" id="genre-custom-input" placeholder="Add your own genre…" maxlength="40"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();addCustomGenre();}">
+          <button type="button" class="vibe-add-btn" onclick="addCustomGenre()">Add</button>
+        </div>
+        <div class="vibe-custom-chips" id="genre-custom-chips"></div>
+      </div>
       ${fieldRow('Favorite Artists (comma separated)','pf-favs', r?.favArtists?.join(', '), 'Amelie Lens, Peggy Gou')}
 
       <div class="form-group vibe-tags-section">
@@ -3688,12 +3750,63 @@
     editingCustomVibeTags = [...(r?.customVibeTags || [])];
     renderCustomVibeTags();
 
+    editingGenres = new Set((r?.genres || []).filter(g => GENRE_PRESETS.map(x=>x.toLowerCase()).includes(g.toLowerCase())));
+    editingCustomGenres = (r?.genres || []).filter(g => !GENRE_PRESETS.map(x=>x.toLowerCase()).includes(g.toLowerCase()));
+    renderCustomGenres();
+
     document.getElementById('profile-edit-overlay').classList.add('open');
     document.getElementById('profile-edit-modal').scrollTop = 0;
   }
 
   // Tracks which festivals are ticked in the open editor
   let editingFestIds = new Set();
+
+  // Tracks genres in the open editor
+  let editingGenres = new Set();
+  let editingCustomGenres = [];
+
+  function toggleGenrePick(genre, el) {
+    if (editingGenres.has(genre)) {
+      editingGenres.delete(genre);
+      el.classList.remove('picked');
+    } else {
+      editingGenres.add(genre);
+      el.classList.add('picked');
+    }
+  }
+
+  function addCustomGenre() {
+    const inp = document.getElementById('genre-custom-input');
+    const v = (inp?.value || '').trim();
+    if (!v) return;
+    // If it matches a preset, toggle it instead
+    const match = GENRE_PRESETS.find(g => g.toLowerCase() === v.toLowerCase());
+    if (match) {
+      editingGenres.add(match);
+      inp.value = '';
+      // Visually pick the preset chip
+      const chips = document.querySelectorAll('#genre-preset-cloud .genre-preset');
+      chips.forEach(c => { if (c.textContent.toLowerCase() === match.toLowerCase()) c.classList.add('picked'); });
+      return;
+    }
+    if (editingCustomGenres.map(x=>x.toLowerCase()).includes(v.toLowerCase())) { showToast('Already added'); return; }
+    editingCustomGenres.push(v);
+    inp.value = '';
+    renderCustomGenres();
+  }
+
+  function removeCustomGenre(i) {
+    editingCustomGenres.splice(i, 1);
+    renderCustomGenres();
+  }
+
+  function renderCustomGenres() {
+    const box = document.getElementById('genre-custom-chips');
+    if (!box) return;
+    box.innerHTML = editingCustomGenres.map((g, i) =>
+      `<span class="vibe-custom-chip">${g} <span class="vibe-chip-remove" onclick="removeCustomGenre(${i})">✕</span></span>`
+    ).join('');
+  }
 
   // Render the festival picker (sorted: upcoming first, then past)
   function renderFestPicker() {
@@ -3830,7 +3943,7 @@
       name,
       handle: val('pf-handle') || '',
       base: val('pf-base') || '',
-      genres: parseList(val('pf-genres')),
+      genres: [...Array.from(editingGenres), ...editingCustomGenres],
       favArtists: parseList(val('pf-favs')),
       festIds: Array.from(editingFestIds),
       crew: val('pf-crew'),
