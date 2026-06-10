@@ -1509,6 +1509,14 @@
     .our-photo-slot-empty { width: 88px; height: 88px; }
     .our-photo-add { width: 88px; height: 88px; }
   }
+  @media (max-width: 640px) {
+    .our-photo-countdown-row {
+      flex-direction: column;
+    }
+    .our-photo-countdown-row .countdown-banner {
+      width: 100%;
+    }
+  }
   /* standalone (no countdown) */
   .our-photos-standalone {
     display: flex; align-items: center; gap: 10px;
@@ -2709,7 +2717,7 @@
         🔔
         <span class="notif-badge" id="notif-badge"></span>
       </button>
-<button class="btn btn-ghost" id="logout-btn" onclick="doLogout()" style="font-size:0.75rem;padding:9px 14px;">Log out</button>
+<button class="btn btn-ghost" id="logout-btn" onclick="doLogout()" style="font-size:0.75rem;padding:9px 14px;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64A9 9 0 1 1 5.64 6.64"/><line x1="12" y1="2" x2="12" y2="12"/></svg></button>
     </div>
   </header>
 
@@ -3760,6 +3768,16 @@
     closeScanner();
     await loadAllData();
     renderSquad(); renderCrews(); renderEvents();
+    // Notify the new member (local feed)
+    const _claimCrewName = previewSnap?.crew?.name || 'the crew';
+    addNotification(`🎉 You just claimed your spot in ${_claimCrewName}! Welcome to the tribe — the bassline drops harder with you here.`);
+    // Notify the crew leader (DB)
+    const _claimLeaderId = previewSnap?.crew?.leader_id;
+    const _claimCrewId   = previewSnap?.crew?.id;
+    const _claimRaverName = previewSnap?.raver?.name || 'Someone';
+    if (_claimLeaderId && _claimLeaderId !== currentUser?.id) {
+      dbAddNotification(_claimLeaderId, _claimCrewId, `📡 ${_claimRaverName} just scanned in and claimed their spot in ${_claimCrewName}! The squad is growing!`);
+    }
     showClaimSuccess(previewSnap);
   }
 
@@ -5074,10 +5092,16 @@
         : `🌟 ${crew.name} is back in Recruiting mode! More ravers might be joining the squad — keep an eye out!`;
       showToast(msg);
       notifyCrewMembers(crew, msg);
+      if (wasSecret) {
+        addNotification(`🟢 ${crew.name} just went public! QR codes are hot, invite links are live — it's time to rally the tribe!`);
+      } else {
+        addNotification(`🌟 ${crew.name} is back in Recruiting mode! The gates are open again — keep an eye on who slides through the portal.`);
+      }
     } else {
       const msg = `🔒 ${crew.name} is now Locked In! No new ravers are joining the squad — this crew is official!`;
       showToast(msg);
       notifyCrewMembers(crew, msg);
+      addNotification(`🔒 ${crew.name} is Locked In! The roster is sealed and the vibe is set — this crew is official, no new heads allowed.`);
     }
     // Persist to DB
     if (currentUser) dbSaveCrew({ name: crew.name, color: crew.color, gradient: crew.gradient, status }, crew.id);
@@ -5309,6 +5333,7 @@
     closeDetail();
     renderCrews();
     showToast(`🗑️ ${name} deleted`);
+    addNotification(`🗑️ ${name} has been dissolved. The memories live on in the frequencies — the energy never dies.`);
     if (currentUser) {
       await sb.from('crew_members').delete().eq('crew_id', id);
       await sb.from('crews').delete().eq('id', id);
@@ -5334,6 +5359,7 @@
     closeModal();
     document.getElementById('crew-name-input').value = '';
     showToast(`🔥 ${name} created — you're the Crew Lead 👑`);
+    addNotification(`🔥 You sparked a new crew — ${name} is live in Secret mode. Time to build your lineup before the drop!`);
 
     // Always open the crew detail so the leader can immediately add members
     _openDetailAfterCreate = false;
@@ -5848,6 +5874,7 @@
     backToSquad();
     renderSquad(); renderCrews(); renderEvents();
     showToast(`🗑️ ${r.name} removed from the tribe`);
+    addNotification(`🗑️ ${r.name} has been removed from the tribe. The circle tightens — may the bass always find them.`);
     if (currentUser) {
       sb.from('ravers').delete().eq('id', raverId).then(({ error }) => {
         if (error) console.error('delete raver error', error);
@@ -6201,6 +6228,9 @@
       squad.push(r);
       closeProfileEditor();
       renderSquad(); renderCrews(); renderEvents();
+      if (r.isYou) {
+        addNotification(`✨ Profile locked in! You're now on the grid — scan QR codes, join crews, and let the fam find you in the wild.`);
+      }
 
       if (isOnboarding) {
         maybeAdvanceOnboarding(r.name);
@@ -6372,6 +6402,7 @@
       const fest = festivals.find(f => String(f.id) === String(festId));
       you.festIds.push(fest ? fest.id : festId);
       showToast(`✅ You're going to ${fest?.name || 'that rave'}!`);
+      addNotification(`🎪 You're locked in for ${fest?.name || 'that rave'}! Pack your kit, charge the glowsticks, and get ready for the frequencies.`);
     }
     renderEvents();
     renderSquad();
@@ -6404,6 +6435,10 @@
       const newFest = { id: tempId, name, date, location };
       festivals.push(newFest);
       showToast(`🎉 Added ${name}`);
+      addNotification(`🗓️ ${name} is on the radar! The rave is in the calendar — now get the crew onboard.`);
+      // Notify all claimed crew members about the new rave
+      const _raveMsg = `🗓️ A new rave just dropped on the radar: ${name}${date ? ' on ' + date : ''}. Check it out in the Events tab — is the crew going?`;
+      crews.forEach(c => { if (c.isLead) notifyCrewMembers(c, _raveMsg); });
       if (currentUser) {
         dbSaveFestival({ name, date, location }, null).then(dbId => {
           if (dbId) newFest.id = dbId;
@@ -6443,6 +6478,7 @@
     closeRaveEditor();
     renderEvents(); renderCrews(); renderSquad();
     showToast(`🗑️ Deleted ${f.name}`);
+    addNotification(`🗑️ ${f.name} has been wiped from the calendar. Gone but not forgotten — the dancefloor was a state of mind anyway.`);
     if (currentUser) dbDeleteFestival(id);
   }
 
