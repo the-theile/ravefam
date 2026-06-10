@@ -1032,6 +1032,88 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
 
+  /* ===== CREW STATUS ZONE (bottom of detail modal) ===== */
+  .crew-status-zone {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255,255,255,0.07);
+  }
+  .crew-status-zone-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .crew-status-zone-label {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+  }
+  .status-meaning-compact {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.5;
+    margin-bottom: 14px;
+  }
+  /* Outlined shimmer button for one-way status CTA */
+  .btn-status-cta {
+    width: 100%;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1.5px solid rgba(255,45,120,0.45);
+    background: rgba(255,45,120,0.06);
+    color: var(--neon-pink);
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .btn-status-cta:hover {
+    border-color: var(--neon-pink);
+    background: rgba(255,45,120,0.14);
+  }
+  .btn-status-cta::after {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%; width: 60%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+    animation: btnShimmer 2.8s ease-in-out infinite;
+  }
+  @keyframes btnShimmer {
+    0% { left: -100%; }
+    60%, 100% { left: 200%; }
+  }
+  /* Tappable status pill in crew name row */
+  .crew-status.tappable-lead {
+    cursor: pointer;
+    transition: filter 0.15s, transform 0.15s;
+  }
+  .crew-status.tappable-lead:hover {
+    filter: brightness(1.3);
+    transform: scale(1.04);
+  }
+  /* Crew name + status pill row */
+  .crew-detail-title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+  .crew-detail-title-row .modal-title {
+    margin-bottom: 0;
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   /* ===== PHOTO FEATURES ===== */
 
   /* Profile Photo — avatar wrapper with upload overlay */
@@ -2890,7 +2972,7 @@
       addMemberControl = `
         <div class="form-group">
           <label class="form-label">Add Member</label>
-          ${isSecret ? `<div style="background:rgba(255,45,120,0.07);border:1px solid rgba(255,45,120,0.2);border-radius:10px;padding:9px 12px;font-size:0.78rem;color:var(--muted);line-height:1.5;margin-bottom:10px;">🔴 <strong style="color:#FF2D78;">Secret mode:</strong> Members you add now won't be notified until you open the crew to Recruiting.</div>` : ''}
+          ${isSecret ? `<div style="display:flex;align-items:center;gap:6px;font-size:0.74rem;color:var(--muted);margin-bottom:8px;">🔴 Added members won't be notified until you go Recruiting.</div>` : ''}
           <div class="member-search-wrap">
             <input class="form-input" id="add-member-input" placeholder="Search by name or @handle…"
               oninput="searchMembersDropdown(this.value)"
@@ -2900,20 +2982,13 @@
         </div>`;
       if (isSecret) {
         statusControl = `
-          <div class="form-group">
-            <label class="form-label">Status (you're the Crew Lead 👑)</label>
-            <button class="btn btn-primary" style="width:100%;padding:12px;font-size:0.85rem;margin-top:4px;"
-              onclick="setStatus('${crew.id}','recruiting')">🟢 Open Crew to Recruiting</button>
-            <div style="font-size:0.75rem;color:var(--muted);margin-top:8px;line-height:1.5;">Once you go Recruiting, members get notified and you can't go back to Secret.</div>
-          </div>`;
+          <button class="btn-status-cta" onclick="setStatus('${crew.id}','recruiting')">🟢 Open to Recruiting</button>
+          <div style="font-size:0.72rem;color:var(--muted);margin-top:7px;line-height:1.5;text-align:center;">Members get notified · Can't go back to Secret</div>`;
       } else {
         statusControl = `
-          <div class="form-group">
-            <label class="form-label">Status (you're the Crew Lead 👑)</label>
-            <div class="status-toggle">
-              <button class="status-opt ${crew.status==='recruiting'?'active':''}" onclick="setStatus('${crew.id}','recruiting')">🟢 Recruiting</button>
-              <button class="status-opt ${crew.status==='locked-in'?'active':''}" onclick="setStatus('${crew.id}','locked-in')">🔒 Locked In</button>
-            </div>
+          <div class="status-toggle">
+            <button class="status-opt ${crew.status==='recruiting'?'active':''}" onclick="setStatus('${crew.id}','recruiting')">🟢 Recruiting</button>
+            <button class="status-opt ${crew.status==='locked-in'?'active':''}" onclick="setStatus('${crew.id}','locked-in')">🔒 Locked In</button>
           </div>`;
       }
     } else {
@@ -2969,7 +3044,11 @@
 
     document.getElementById('detail-modal').innerHTML = `
       <div class="detail-bar" style="background:${crew.gradient}"></div>
-      <div class="modal-title" style="margin-bottom:6px;">${crew.name}</div>
+      <div class="crew-detail-title-row">
+        <div class="modal-title">${crew.name}</div>
+        <span class="crew-status ${s.cls}${crew.isLead ? ' tappable-lead' : ''}"
+          ${crew.isLead ? `onclick="toggleStatus('${crew.id}')" title="Tap to change status"` : ''}>${s.label}</span>
+      </div>
       <div style="color:var(--muted);font-size:0.85rem;margin-bottom:18px;">${crewEventLine(crew)}</div>
       ${totemBlock}
       ${addMemberControl}
@@ -2977,13 +3056,15 @@
         <label class="form-label">Crew Members</label>
         <div class="detail-members">${memberList}</div>
       </div>
-      <div class="detail-status-line" style="margin-top:16px;">
-        <span class="crew-status ${s.cls}">${s.label}</span>
-        <span style="font-size:0.8rem;color:var(--muted);">${crew.members.length} member${crew.members.length!==1?'s':''}</span>
+      <div class="crew-status-zone">
+        <div class="crew-status-zone-header">
+          <span class="crew-status-zone-label">Status</span>
+          <span style="font-size:0.78rem;color:var(--muted);">${crew.members.length} member${crew.members.length!==1?'s':''}</span>
+        </div>
+        <div class="status-meaning-compact">${meaning}</div>
+        ${statusControl}
       </div>
-      <div class="status-meaning">${meaning}</div>
-      ${statusControl}
-      <div class="modal-actions">
+      <div class="modal-actions" style="margin-top:16px;">
         <button class="btn btn-ghost" onclick="closeDetail()" style="flex:1;padding:12px;">Close</button>
       </div>
       ${(crew.isLead || isAdmin) ? `
@@ -3021,7 +3102,7 @@
     } else if (newStatus === 'locked-in') {
       icon = '🔒';
       title = `Lock ${crew.name} In? 🔒`;
-      body = `No more new ravers will be joining the squad — this crew is official! QR invite links will be disabled. You can re-open to Recruiting any time.`;
+      body = `The roster is sealed. No new ravers can join and QR invite links are disabled. <strong>Make sure everyone's in before you lock it.</strong>`;
       confirmLabel = `🔒 Lock It In`;
     } else {
       icon = '🌟';
