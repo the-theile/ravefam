@@ -6,7 +6,7 @@
 <title>RaveFAM 🎉</title>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<!-- qrcode library replaced with api.qrserver.com (no dependency) -->
 <style>
   :root {
     --neon-pink: #FF2D78;
@@ -1588,7 +1588,7 @@
       <div class="form-group">
         <label class="form-label" style="display:flex;justify-content:space-between;align-items:center;">
           Password
-          <a href="mailto:bump@myravefam.com?subject=Password Reset Request" style="font-size:0.75rem;color:var(--neon-pink);text-decoration:none;font-weight:600;">Forgot password?</a>
+          <a href="#" onclick="doForgotPassword();return false;" style="font-size:0.75rem;color:var(--neon-pink);text-decoration:none;font-weight:600;">Forgot password?</a>
         </label>
         <input class="form-input" id="login-password" type="password" placeholder="••••••••" autocomplete="current-password">
       </div>
@@ -1911,6 +1911,17 @@
     });
   }
 
+  async function doForgotPassword() {
+    const email = document.getElementById('login-email').value.trim();
+    if (!email) { authError('Enter your email address above, then click Forgot password.'); return; }
+    clearAuthMessages();
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + window.location.pathname
+    });
+    if (error) { authError(error.message); return; }
+    authSuccess('Password reset email sent! Check your inbox and follow the link to set a new password.');
+  }
+
   async function doLogin() {
     const email    = document.getElementById('login-email').value.trim();
     const password = document.getElementById('login-password').value;
@@ -2078,22 +2089,21 @@
       </div>`;
     document.getElementById('qr-overlay').classList.add('open');
 
-    // Render QR after DOM update — use toDataURL (more reliable than toCanvas)
+    // Render QR using qrserver.com — no library dependency
     setTimeout(() => {
       const wrap = document.getElementById('qr-canvas-wrap');
       if (!wrap) return;
-      if (typeof QRCode === 'undefined') {
+      const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=10&data=${encodeURIComponent(claimUrl)}`;
+      const img = document.createElement('img');
+      img.width = 200;
+      img.height = 200;
+      img.style.cssText = 'border-radius:4px;display:block;';
+      img.onerror = () => {
         wrap.innerHTML = `<div style="padding:12px;font-size:0.78rem;color:var(--muted);">QR unavailable — use the invite code above.</div>`;
-        return;
-      }
-      QRCode.toDataURL(claimUrl, {
-        width: 200, margin: 1,
-        color: { dark: '#000000', light: '#ffffff' }
-      }).then(dataUrl => {
-        wrap.innerHTML = `<img src="${dataUrl}" width="200" height="200" style="border-radius:4px;display:block;">`;
-      }).catch(() => {
-        wrap.innerHTML = `<div style="padding:12px;font-size:0.78rem;color:var(--muted);">QR unavailable — use the invite code above.</div>`;
-      });
+      };
+      img.src = qrSrc;
+      wrap.innerHTML = '';
+      wrap.appendChild(img);
     }, 80);
   }
 
