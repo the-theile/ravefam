@@ -1354,6 +1354,37 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .crew-edit-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.9rem;
+    opacity: 0.4;
+    padding: 4px;
+    line-height: 1;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+    color: var(--text);
+  }
+  .crew-edit-btn:hover { opacity: 1; }
+  .crew-invite-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .crew-invite-link-btn {
+    flex-shrink: 0;
+    padding: 8px 16px;
+    font-size: 0.82rem;
+    border-color: rgba(255,255,255,0.18);
+  }
+  .crew-invite-hint {
+    font-size: 0.72rem;
+    color: var(--muted);
+    line-height: 1.4;
+  }
 
   /* ===== PHOTO FEATURES ===== */
 
@@ -2844,6 +2875,20 @@
   </div>
 </div>
 
+<!-- Crew Edit Modal (rename + recolour) -->
+<div class="modal-overlay" id="crew-edit-overlay" onclick="if(event.target===this)closeCrewEditModal()">
+  <div class="modal" id="crew-edit-modal-content">
+    <!-- filled by JS -->
+  </div>
+</div>
+
+<!-- Crew Join Modal (invite link flow) -->
+<div class="modal-overlay" id="crew-join-overlay" onclick="if(event.target===this)closeCrewJoinModal()">
+  <div class="modal" id="crew-join-modal-content" style="overflow:hidden;">
+    <!-- filled by JS -->
+  </div>
+</div>
+
 <!-- Profile Editor Modal -->
 <div class="modal-overlay" id="profile-edit-overlay" onclick="closeProfileEditorOutside(event)">
   <div class="modal" id="profile-edit-modal" style="max-height:88vh;overflow-y:auto;">
@@ -3241,6 +3286,13 @@
       sb.rpc('get_claim_preview', { p_token: pendingToken }).then(({ data }) => {
         showPreAuthIntercept(data, pendingToken);
       });
+    } else {
+      const pendingJoin = sessionStorage.getItem('pendingCrewJoin');
+      if (pendingJoin) {
+        sb.rpc('get_crew_by_invite_token', { p_token: pendingJoin }).then(({ data }) => {
+          if (data && !data.error) showPreAuthIntercept({ crew: data, raver: null }, pendingJoin);
+        });
+      }
     }
   }
 
@@ -3282,15 +3334,15 @@
   // On page load: stash any ?claim= token so it survives the auth redirect.
   // Also reads localStorage backup set by the landing-page QR scanner.
   (function checkClaimParam() {
-    const token = new URLSearchParams(window.location.search).get('claim')
-                  || localStorage.getItem('pendingClaimToken');
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('claim') || localStorage.getItem('pendingClaimToken');
     if (token) {
       sessionStorage.setItem('pendingClaim', token);
       localStorage.removeItem('pendingClaimToken');
-      // Clean the URL so it doesn't re-trigger on refresh
-      const clean = window.location.pathname + window.location.hash;
-      history.replaceState(null, '', clean);
     }
+    const joinToken = params.get('join');
+    if (joinToken) sessionStorage.setItem('pendingCrewJoin', joinToken);
+    if (token || joinToken) history.replaceState(null, '', window.location.pathname + window.location.hash);
   })();
 
   // processPendingClaim: now shows the rich preview/confirm flow instead of
@@ -3309,6 +3361,17 @@
     _pendingClaimToken = token;
     document.getElementById('scanner-overlay').classList.add('open');
     showClaimPreview(preview, token);
+  }
+
+  async function processPendingCrewJoin() {
+    const token = sessionStorage.getItem('pendingCrewJoin');
+    if (!token || !currentUser) return;
+    sessionStorage.removeItem('pendingCrewJoin');
+    const { data, error } = await sb.rpc('get_crew_by_invite_token', { p_token: token });
+    if (error || !data) { showToast('⚠️ Could not load crew invite.'); return; }
+    if (data.error === 'invalid_token')    { showToast('⚠️ This invite link is no longer valid.'); return; }
+    if (data.error === 'not_recruiting')   { showToast(`⚠️ ${data.crew_name || 'This crew'} isn't currently recruiting.`); return; }
+    showCrewJoinModal(token, data);
   }
 
   function showQRModal(raverId) {
@@ -3925,8 +3988,9 @@
     } catch(err) {
       console.warn('DB load failed, starting fresh:', err);
     }
-    // Process any pending claim token from a QR scan
+    // Process any pending claim token from a QR scan, or a crew invite link
     await processPendingClaim();
+    await processPendingCrewJoin();
     renderSquad();
     renderCrews();
     renderEvents();
@@ -4010,6 +4074,7 @@
           .map(sid => squad.find(r => r.id === sid))
           .filter(Boolean)
           .map(r => ({ i: initials(r.name), c: c.color || '#FF2D78', t: '#fff', url: r.avatarUrl || null }));
+        const leaderRaver = squad.find(r => r.claimedBy === c.leader_id);
         crews.push({
           id: c.id,
           name: c.name,
@@ -4017,7 +4082,9 @@
           gradient: c.gradient || `linear-gradient(90deg,${c.color},${c.color})`,
           status: c.status || 'secret',
           isLead: c.leader_id === uid,
+          leader_id: leaderRaver?.id ?? null,
           totemPhotoUrl: c.totem_photo_url || null,
+          invite_token: c.invite_token || null,
           squadIds,
           members: members.length ? members : []
         });
@@ -4981,12 +5048,18 @@
       <div class="detail-bar" style="background:${crew.gradient}"></div>
       <div class="crew-detail-title-row">
         <div class="modal-title">${crew.name}</div>
+        ${crew.isLead ? `<button class="crew-edit-btn" onclick="showCrewEditModal('${crew.id}')" title="Edit crew name and colour">✏️</button>` : ''}
         <span class="crew-status ${s.cls}${crew.isLead ? ' tappable-lead' : ''}"
           ${crew.isLead ? `onclick="toggleStatus('${crew.id}')" title="Tap to change status"` : ''}>${s.label}</span>
       </div>
       ${crewNextFestBlock(crew)}
       ${totemBlock}
       ${addMemberControl}
+      ${crew.isLead && isRecruiting ? `
+      <div class="crew-invite-row">
+        <button class="btn btn-ghost crew-invite-link-btn" onclick="generateAndShareCrewInvite('${crew.id}')">🔗 Copy Invite Link</button>
+        <span class="crew-invite-hint">Share with anyone — they can join straight from the link</span>
+      </div>` : ''}
       <div class="form-group">
         <label class="form-label">Crew Members</label>
         <div class="detail-members">${memberList}</div>
@@ -5353,6 +5426,7 @@
       id: 'temp_' + Date.now(), name, color,
       gradient,
       status: 'secret', isLead: true,
+      leader_id: you?.id ?? null,
       squadIds: you ? [you.id] : [],
       members: [{ i: you ? initials(you.name) : 'ME', c: color, t: '#000' }]
     };
@@ -5384,6 +5458,165 @@
           if (memberIds.length) dbSaveCrewMembers(dbId, memberIds);
         }
       });
+    }
+  }
+
+  // ===== Crew Edit (rename + recolour) =====
+
+  let _editingCrewId = null;
+  const EDIT_SWATCH_COLORS = ['#FF2D78','#FF0099','#FF4040','#FF6B35','#FFCC00','#FFE600','#39FF14','#00FFCC','#00F5FF','#0066FF','#BF00FF','#FF00CC'];
+
+  function showCrewEditModal(id) {
+    const crew = getCrew(id);
+    if (!crew || !crew.isLead) return;
+    _editingCrewId = id;
+    const swatches = EDIT_SWATCH_COLORS.map(c =>
+      `<div class="crew-edit-swatch color-swatch${c.toLowerCase() === (crew.color||'').toLowerCase() ? ' selected' : ''}" style="background:${c}" onclick="selectCrewEditSwatch(this)"></div>`
+    ).join('');
+    document.getElementById('crew-edit-modal-content').innerHTML = `
+      <div class="modal-title">Edit Crew</div>
+      <div class="form-group" style="margin-top:4px;">
+        <label class="form-label">Crew Name</label>
+        <input class="form-input" id="crew-edit-name-input" value="${crew.name.replace(/"/g,'&quot;')}" maxlength="40" placeholder="Crew name…">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Crew Colour</label>
+        <div class="color-swatches">${swatches}</div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeCrewEditModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveCrewEdit()">Save Changes</button>
+      </div>`;
+    document.getElementById('crew-edit-overlay').classList.add('open');
+    setTimeout(() => document.getElementById('crew-edit-name-input')?.focus(), 50);
+  }
+
+  function closeCrewEditModal() {
+    document.getElementById('crew-edit-overlay').classList.remove('open');
+    _editingCrewId = null;
+  }
+
+  function selectCrewEditSwatch(el) {
+    document.querySelectorAll('#crew-edit-modal-content .crew-edit-swatch').forEach(s => s.classList.remove('selected'));
+    el.classList.add('selected');
+  }
+
+  function saveCrewEdit() {
+    const id = _editingCrewId;
+    const crew = getCrew(id);
+    if (!crew) return;
+    const newName = document.getElementById('crew-edit-name-input')?.value.trim();
+    if (!newName) return;
+    const sel = document.querySelector('#crew-edit-modal-content .crew-edit-swatch.selected');
+    const newColor = sel ? rgbToHex(sel.style.background) : crew.color;
+    const colorKey = Object.keys(CREW_GRADIENTS).find(k => k.toLowerCase() === newColor.toLowerCase()) || newColor;
+    const newGradient = CREW_GRADIENTS[colorKey] || `linear-gradient(135deg,${newColor},${newColor})`;
+    crew.name = newName;
+    crew.color = newColor;
+    crew.gradient = newGradient;
+    crew.members = crew.members.map(m => ({ ...m, c: newColor }));
+    closeCrewEditModal();
+    renderCrews();
+    renderDetail(id);
+    showToast('✅ Crew updated');
+    if (currentUser) dbSaveCrew({ name: newName, color: newColor, gradient: newGradient, status: crew.status, totemPhotoUrl: crew.totemPhotoUrl }, id);
+  }
+
+  // ===== Crew invite link =====
+
+  async function generateAndShareCrewInvite(crewId) {
+    const crew = getCrew(crewId);
+    if (!crew || !crew.isLead) return;
+    let token = crew.invite_token;
+    if (!token) {
+      token = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : (Math.random().toString(36).slice(2) + Date.now().toString(36));
+      const { error } = await sb.from('crews').update({ invite_token: token }).eq('id', crewId);
+      if (error) { showToast('⚠️ Could not generate invite link.'); return; }
+      crew.invite_token = token;
+    }
+    const url = `${location.origin}${location.pathname}?join=${token}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast('🔗 Invite link copied! Send it to anyone you want in the crew.');
+    } catch {
+      prompt('Copy your invite link:', url);
+    }
+  }
+
+  let _pendingCrewJoinToken = null;
+
+  function showCrewJoinModal(token, crewData) {
+    _pendingCrewJoinToken = token;
+    const color    = crewData.color || '#FF2D78';
+    const gradient = crewData.gradient || `linear-gradient(135deg,${color},${color})`;
+    const name     = crewData.name || 'the crew';
+    const count    = crewData.member_count ?? 0;
+    const you      = squad.find(r => r.isYou);
+    const profileSection = you
+      ? `<div style="display:flex;align-items:center;gap:12px;background:rgba(255,255,255,0.05);border-radius:12px;padding:12px 14px;margin-bottom:4px;">
+           ${raverAvatarHTML(you.avatarUrl, you.gradient, you.name, 'avatar', 'margin:0;flex-shrink:0;')}
+           <div>
+             <div style="font-weight:600;font-size:0.9rem;">${you.name}</div>
+             ${you.handle ? `<div style="font-size:0.75rem;color:var(--muted);">@${you.handle}</div>` : ''}
+           </div>
+         </div>
+         <p style="font-size:0.78rem;color:var(--muted);margin:0 0 4px;">You'll join as this profile.</p>`
+      : `<div class="form-group" style="margin-bottom:8px;">
+           <label class="form-label">Your Name</label>
+           <input class="form-input" id="crew-join-name" placeholder="What do people call you?" maxlength="40">
+         </div>
+         <div class="form-group" style="margin-bottom:4px;">
+           <label class="form-label">Handle <span style="font-size:0.75rem;color:var(--muted);">(optional)</span></label>
+           <input class="form-input" id="crew-join-handle" placeholder="@yourhandle" maxlength="30">
+         </div>`;
+    document.getElementById('crew-join-modal-content').innerHTML = `
+      <div style="height:6px;background:${gradient};border-radius:6px 6px 0 0;margin:-32px -32px 20px;"></div>
+      <div class="modal-title" style="margin-bottom:4px;">You're invited! 🎪</div>
+      <p style="font-size:0.85rem;color:var(--muted);margin-bottom:18px;">
+        <strong style="color:var(--text);">${name}</strong> &nbsp;·&nbsp; ${count} member${count !== 1 ? 's' : ''}
+      </p>
+      ${profileSection}
+      <div class="modal-actions" style="margin-top:20px;">
+        <button class="btn btn-ghost" onclick="closeCrewJoinModal()">Maybe later</button>
+        <button class="btn btn-primary" id="crew-join-confirm-btn" onclick="confirmJoinCrew()">🎉 Claim My Spot</button>
+      </div>`;
+    document.getElementById('crew-join-overlay').classList.add('open');
+    if (!you) setTimeout(() => document.getElementById('crew-join-name')?.focus(), 50);
+  }
+
+  function closeCrewJoinModal() {
+    document.getElementById('crew-join-overlay').classList.remove('open');
+    _pendingCrewJoinToken = null;
+  }
+
+  async function confirmJoinCrew() {
+    const token = _pendingCrewJoinToken;
+    if (!token || !currentUser) return;
+    const btn = document.getElementById('crew-join-confirm-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Joining…'; }
+    const you = squad.find(r => r.isYou);
+    const name   = you ? null : document.getElementById('crew-join-name')?.value.trim();
+    const handle = you ? null : document.getElementById('crew-join-handle')?.value.trim();
+    if (!you && !name) {
+      showToast('⚠️ Enter your name to join.');
+      if (btn) { btn.disabled = false; btn.textContent = '🎉 Claim My Spot'; }
+      return;
+    }
+    const { data, error } = await sb.rpc('join_crew_via_invite', { p_token: token, p_name: name || null, p_handle: handle || null });
+    if (error || !data) { showToast('⚠️ Something went wrong. Try again.'); if (btn) { btn.disabled = false; btn.textContent = '🎉 Claim My Spot'; } return; }
+    if (data.error === 'not_recruiting')  { showToast(`⚠️ This crew isn't recruiting right now.`); closeCrewJoinModal(); return; }
+    if (data.error === 'invalid_token')   { showToast('⚠️ This invite link has expired.'); closeCrewJoinModal(); return; }
+    if (data.error === 'name_required')   { showToast('⚠️ Enter your name to join.'); if (btn) { btn.disabled = false; btn.textContent = '🎉 Claim My Spot'; } return; }
+    const crewName = data.crew_name || 'the crew';
+    closeCrewJoinModal();
+    showToast(`🎉 You're in ${crewName}! Welcome to the tribe.`);
+    addNotification(`🎉 You joined ${crewName}! Welcome to the tribe — the bassline drops harder with you here.`);
+    if (data.leader_id) dbAddNotification(data.leader_id, data.crew_id, `🔗 Someone just joined ${crewName} via your invite link! The tribe is growing.`);
+    await loadAllData();
+    renderSquad(); renderCrews(); renderEvents();
+    if (data.crew_id) {
+      const joinedCrew = getCrew(data.crew_id);
+      if (joinedCrew) openDetail(data.crew_id);
     }
   }
 
