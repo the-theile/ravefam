@@ -2052,30 +2052,49 @@
     const crew = crews.find(c => (c.squadIds || []).some(id => String(id) === String(raverId)));
     const color = crew?.color || '#FF2D78';
     const gradient = crew?.gradient || `linear-gradient(135deg,${color},${color})`;
-    const claimUrl = `${window.location.origin}${window.location.pathname}?claim=${r.qrToken}`;
+    // Build claim URL — works for both hosted and local file:// contexts
+    const base = (window.location.origin && window.location.origin !== 'null')
+      ? window.location.origin + window.location.pathname
+      : window.location.href.split('?')[0];
+    const claimUrl = `${base}?claim=${r.qrToken}`;
+    // 6-char alphanumeric invite code derived from qrToken
+    const inviteCode = r.qrToken.replace(/-/g, '').slice(0, 6).toUpperCase();
 
     document.getElementById('qr-modal').innerHTML = `
       <div class="qr-color-bar" style="background:${gradient}"></div>
       <div class="modal-title" style="margin-bottom:4px;">Share with ${r.name.split(' ')[0]}</div>
-      <div class="qr-hint">They scan this, sign up, and get added to the crew.</div>
-      <div class="qr-canvas-wrap"><canvas id="qr-canvas"></canvas></div>
-      <div class="qr-hint" style="margin-bottom:12px;">${r.name} · <span style="color:var(--muted);font-size:0.72rem;word-break:break-all;">${claimUrl}</span></div>
-      <div style="display:flex;gap:10px;justify-content:center;">
+      <div class="qr-hint">Scan the QR or share the invite code below.</div>
+      <div class="qr-canvas-wrap" id="qr-canvas-wrap" style="min-width:200px;min-height:200px;display:flex;align-items:center;justify-content:center;">
+        <div style="color:var(--muted);font-size:0.78rem;">Generating…</div>
+      </div>
+      <div style="margin:14px 0 6px;">
+        <div style="font-family:'Outfit',sans-serif;font-weight:600;font-size:0.66rem;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);margin-bottom:6px;">Invite Code</div>
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:2rem;letter-spacing:0.14em;color:#fff;text-shadow:0 0 20px ${color}88;">${inviteCode}</div>
+        <div style="font-size:0.7rem;color:var(--muted);margin-top:2px;">Type this on sign-up to join</div>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:center;margin-top:14px;">
         <button class="qr-copy-btn" onclick="copyClaimLink('${claimUrl}')">📋 Copy link</button>
         <button class="btn btn-ghost" style="padding:8px 18px;font-size:0.8rem;" onclick="closeQRModal()">Close</button>
       </div>`;
     document.getElementById('qr-overlay').classList.add('open');
 
-    // Render QR after DOM update
+    // Render QR after DOM update — use toDataURL (more reliable than toCanvas)
     setTimeout(() => {
-      const canvas = document.getElementById('qr-canvas');
-      if (canvas && typeof QRCode !== 'undefined') {
-        QRCode.toCanvas(canvas, claimUrl, {
-          width: 200, margin: 1,
-          color: { dark: '#050509', light: '#ffffff' }
-        });
+      const wrap = document.getElementById('qr-canvas-wrap');
+      if (!wrap) return;
+      if (typeof QRCode === 'undefined') {
+        wrap.innerHTML = `<div style="padding:12px;font-size:0.78rem;color:var(--muted);">QR unavailable — use the invite code above.</div>`;
+        return;
       }
-    }, 50);
+      QRCode.toDataURL(claimUrl, {
+        width: 200, margin: 1,
+        color: { dark: '#000000', light: '#ffffff' }
+      }).then(dataUrl => {
+        wrap.innerHTML = `<img src="${dataUrl}" width="200" height="200" style="border-radius:4px;display:block;">`;
+      }).catch(() => {
+        wrap.innerHTML = `<div style="padding:12px;font-size:0.78rem;color:var(--muted);">QR unavailable — use the invite code above.</div>`;
+      });
+    }, 80);
   }
 
   function closeQRModal() {
@@ -2819,7 +2838,7 @@
           return `
             <div class="detail-member detail-member-link" data-raver-id="${p.id}" onclick="goToProfileFromDetail(this.dataset.raverId)" title="View ${p.name}'s profile">
               <div class="avatar" style="background:${p.gradient};margin:0">${initials(p.name).toUpperCase()}</div>
-              <span>${p.name.split(' ')[0]}${p.isYou ? ' (You)' : ''} ${statusDot}</span>
+              <span>${p.name.split(' ')[0]}${p.isYou ? ' (You)' : ''}${p.id === crew.leader_id ? ' 👑' : ''} ${statusDot}</span>
               ${right}
             </div>`;
         }).join('')
