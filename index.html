@@ -687,6 +687,117 @@
   /* BETA badge */
   .beta-badge { display: inline-flex; align-items: center; gap: 6px; background: linear-gradient(135deg, #FF2D78, #BF00FF); color: #fff; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.72rem; letter-spacing: 1px; text-transform: uppercase; padding: 4px 14px; border-radius: 9999px; box-shadow: 0 0 20px rgba(255,45,120,0.6); animation: betaPulse 2s infinite alternate; white-space: nowrap; }
   @keyframes betaPulse { from { box-shadow: 0 0 20px rgba(255,45,120,0.6); } to { box-shadow: 0 0 30px rgba(255,45,120,0.9); } }
+
+  /* ── QR Scan button (landing page) ── */
+  .btn-hero-scan {
+    font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1rem;
+    padding: 16px 36px; border-radius: 100px; border: none; cursor: pointer;
+    background: linear-gradient(90deg, var(--pink) 0%, var(--cyan) 100%);
+    color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,0.4);
+    box-shadow: 0 0 36px rgba(255,45,120,0.5), 0 0 60px rgba(0,245,255,0.25), 0 6px 24px rgba(0,0,0,0.35);
+    transition: all 0.22s; position: relative; overflow: hidden; display: inline-block;
+    animation: scanBtnGlow 2.5s ease-in-out infinite alternate;
+  }
+  @keyframes scanBtnGlow {
+    from { box-shadow: 0 0 36px rgba(255,45,120,0.5), 0 0 60px rgba(0,245,255,0.25), 0 6px 24px rgba(0,0,0,0.35); }
+    to   { box-shadow: 0 0 56px rgba(255,45,120,0.75), 0 0 90px rgba(0,245,255,0.45), 0 8px 32px rgba(0,0,0,0.4); }
+  }
+  .btn-hero-scan:hover { transform: translateY(-3px) scale(1.03); }
+  .btn-hero-scan:active { transform: translateY(0) scale(0.98); }
+
+  /* ── QR Scanner Modal ── */
+  #qr-scan-modal {
+    display: none; position: fixed; inset: 0; z-index: 9000;
+    background: rgba(5,5,9,0.96); backdrop-filter: blur(28px) saturate(160%);
+    flex-direction: column; align-items: center; justify-content: flex-start;
+    padding: 0;
+  }
+  #qr-scan-modal.open { display: flex; }
+
+  .qrs-header {
+    width: 100%; display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .qrs-title {
+    font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.05rem;
+    background: linear-gradient(90deg, var(--pink), var(--cyan));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+  .qrs-close {
+    background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
+    color: var(--text); border-radius: 50%; width: 36px; height: 36px;
+    font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s;
+  }
+  .qrs-close:hover { background: rgba(255,255,255,0.14); }
+
+  .qrs-body {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    justify-content: flex-start; padding: 28px 24px 32px; width: 100%; max-width: 480px;
+    overflow-y: auto;
+  }
+
+  .qrs-instruction {
+    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.88rem;
+    color: rgba(255,255,255,0.6); text-align: center; margin-bottom: 20px; line-height: 1.5;
+  }
+
+  .qrs-viewport-wrap {
+    width: 100%; max-width: 320px; aspect-ratio: 1;
+    border-radius: 20px; padding: 3px; margin-bottom: 22px;
+    background: linear-gradient(135deg, var(--pink), var(--cyan), var(--purple));
+    animation: qrsBorderPulse 2s ease-in-out infinite;
+    box-shadow: 0 0 40px rgba(255,45,120,0.35), 0 0 80px rgba(0,245,255,0.2);
+  }
+  @keyframes qrsBorderPulse {
+    0%,100% { box-shadow: 0 0 40px rgba(255,45,120,0.35), 0 0 80px rgba(0,245,255,0.2); }
+    50%      { box-shadow: 0 0 60px rgba(255,45,120,0.6),  0 0 110px rgba(0,245,255,0.4); }
+  }
+  .qrs-viewport-inner {
+    width: 100%; height: 100%; border-radius: 18px; overflow: hidden;
+    background: #000; position: relative;
+  }
+  #qrs-video {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+  }
+  .qrs-scan-line {
+    position: absolute; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+    box-shadow: 0 0 12px var(--cyan);
+    animation: scanLine 2.5s ease-in-out infinite;
+    top: 0;
+  }
+  @keyframes scanLine {
+    0%   { top: 8%;  opacity: 0.8; }
+    50%  { top: 88%; opacity: 1; }
+    100% { top: 8%;  opacity: 0.8; }
+  }
+  .qrs-corner {
+    position: absolute; width: 22px; height: 22px;
+    border-color: var(--cyan); border-style: solid; border-width: 0;
+  }
+  .qrs-corner.tl { top: 10px; left: 10px; border-top-width: 3px; border-left-width: 3px; border-radius: 4px 0 0 0; }
+  .qrs-corner.tr { top: 10px; right: 10px; border-top-width: 3px; border-right-width: 3px; border-radius: 0 4px 0 0; }
+  .qrs-corner.bl { bottom: 10px; left: 10px; border-bottom-width: 3px; border-left-width: 3px; border-radius: 0 0 0 4px; }
+  .qrs-corner.br { bottom: 10px; right: 10px; border-bottom-width: 3px; border-right-width: 3px; border-radius: 0 0 4px 0; }
+
+  .qrs-status {
+    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.82rem;
+    min-height: 22px; text-align: center; color: var(--muted); margin-bottom: 18px;
+    transition: color 0.2s;
+  }
+  .qrs-status.err { color: var(--pink); }
+  .qrs-status.ok  { color: var(--green); }
+
+  .qrs-manual-link {
+    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.82rem;
+    color: var(--muted); text-decoration: underline; cursor: pointer;
+    background: none; border: none; transition: color 0.2s; padding: 0;
+  }
+  .qrs-manual-link:hover { color: var(--cyan); }
+
+  #qrs-canvas { display: none; }
 </style>
 </head>
 <body>
@@ -764,6 +875,9 @@
   <div class="hero-ctas">
     <button class="btn-hero-primary" onclick="openWaitlist()">Join the waitlist →</button>
     <a class="btn-hero-secondary" href="app.html?tab=login">I have an account →</a>
+  </div>
+  <div style="margin-bottom:44px;animation:fadeUp 0.7s 0.55s both;">
+    <button class="btn-hero-scan" onclick="openQrScanner()">📷 Scan Crew Invite</button>
   </div>
   <div class="proof-strip">
     <div class="proof-text">🚀 <strong>Early access</strong> · Be one of the first crews in</div>
@@ -1314,5 +1428,163 @@
 </script>
 
 <script defer src="/_vercel/insights/script.js"></script>
+
+<!-- ══ QR SCANNER MODAL ══ -->
+<div id="qr-scan-modal" role="dialog" aria-modal="true" aria-label="Scan crew invite QR code">
+  <div class="qrs-header">
+    <span class="qrs-title">📷 Scan Crew Invite</span>
+    <button class="qrs-close" onclick="closeQrScanner()" aria-label="Close">✕</button>
+  </div>
+  <div class="qrs-body">
+    <p class="qrs-instruction">Point your camera at a RaveFAM crew invite QR code</p>
+
+    <div class="qrs-viewport-wrap">
+      <div class="qrs-viewport-inner">
+        <video id="qrs-video" autoplay playsinline muted></video>
+        <div class="qrs-scan-line"></div>
+        <div class="qrs-corner tl"></div>
+        <div class="qrs-corner tr"></div>
+        <div class="qrs-corner bl"></div>
+        <div class="qrs-corner br"></div>
+      </div>
+    </div>
+    <canvas id="qrs-canvas"></canvas>
+
+    <div class="qrs-status" id="qrs-status">Scanning…</div>
+    <button class="qrs-manual-link" onclick="qrsGoManual()">Enter code manually instead</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  var stream = null;
+  var rafHandle = null;
+  var scanning = false;
+
+  window.openQrScanner = function() {
+    var modal = document.getElementById('qr-scan-modal');
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    setStatus('', '');
+    startCamera();
+  };
+
+  window.closeQrScanner = function() {
+    document.getElementById('qr-scan-modal').classList.remove('open');
+    document.body.style.overflow = '';
+    stopCamera();
+  };
+
+  window.qrsGoManual = function() {
+    closeQrScanner();
+    window.location.href = 'app.html?tab=login';
+  };
+
+  function setStatus(msg, type) {
+    var el = document.getElementById('qrs-status');
+    el.textContent = msg;
+    el.className = 'qrs-status' + (type ? ' ' + type : '');
+  }
+
+  function startCamera() {
+    var video = document.getElementById('qrs-video');
+    scanning = false;
+    if (rafHandle) { cancelAnimationFrame(rafHandle); rafHandle = null; }
+
+    // Prefer rear camera on mobile; fall back to any camera
+    var constraints = {
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 1280 } }
+    };
+
+    navigator.mediaDevices.getUserMedia(constraints)
+      .then(function(s) {
+        stream = s;
+        video.srcObject = s;
+        video.play().then(function() {
+          scanning = true;
+          rafHandle = requestAnimationFrame(tick);
+        });
+        setStatus('Scanning…', '');
+      })
+      .catch(function(err) {
+        var msg = err.name === 'NotAllowedError'
+          ? '⚠️ Camera permission denied — use manual code entry'
+          : '⚠️ Camera unavailable — use manual code entry';
+        setStatus(msg, 'err');
+      });
+  }
+
+  function stopCamera() {
+    scanning = false;
+    if (rafHandle) { cancelAnimationFrame(rafHandle); rafHandle = null; }
+    if (stream) { stream.getTracks().forEach(function(t) { t.stop(); }); stream = null; }
+    var video = document.getElementById('qrs-video');
+    video.srcObject = null;
+  }
+
+  function tick() {
+    if (!scanning) return;
+    var video = document.getElementById('qrs-video');
+    var canvas = document.getElementById('qrs-canvas');
+    if (video.readyState < video.HAVE_ENOUGH_DATA) {
+      rafHandle = requestAnimationFrame(tick); return;
+    }
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    var imageData = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+    var code = window.jsQR ? window.jsQR(imageData.data, imageData.width, imageData.height) : null;
+    if (code && code.data) {
+      scanning = false;
+      cancelAnimationFrame(rafHandle);
+      handleScan(code.data);
+    } else {
+      rafHandle = requestAnimationFrame(tick);
+    }
+  }
+
+  function handleScan(rawValue) {
+    var token = null;
+    try { token = new URL(rawValue).searchParams.get('claim'); } catch(e) {}
+    if (!token) token = rawValue.trim();
+
+    // Validate: expect 6–64 alphanumeric chars
+    if (!token || !/^[A-Za-z0-9_-]{4,64}$/.test(token)) {
+      setStatus('⚠️ Invalid QR — try manual code entry', 'err');
+      // Resume scanning after a moment
+      setTimeout(function() {
+        if (document.getElementById('qr-scan-modal').classList.contains('open')) {
+          setStatus('Scanning…', '');
+          scanning = true;
+          rafHandle = requestAnimationFrame(tick);
+        }
+      }, 2200);
+      return;
+    }
+
+    setStatus('✓ Code found — redirecting…', 'ok');
+    stopCamera();
+
+    // Store in both sessionStorage (same-tab) and localStorage (cross-tab fallback)
+    try { sessionStorage.setItem('pendingClaim', token); } catch(e) {}
+    try { localStorage.setItem('pendingClaimToken', token); } catch(e) {}
+
+    setTimeout(function() {
+      closeQrScanner();
+      window.location.href = 'app.html?tab=signup&claim=' + encodeURIComponent(token);
+    }, 600);
+  }
+
+  // Close on Escape key
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && document.getElementById('qr-scan-modal').classList.contains('open')) {
+      closeQrScanner();
+    }
+  });
+})();
+</script>
+
+<!-- jsQR for QR decoding (same lib already used in app.html) -->
+<script src="jsQR.min.js"></script>
 </body>
 </html>

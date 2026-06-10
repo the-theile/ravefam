@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RaveFAM 🎉</title>
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@800;900&family=Outfit:wght@400;500;600;700;800&family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script src="jsQR.min.js"></script>
 <!-- qrcode library replaced with api.qrserver.com (no dependency) -->
 <style>
   :root {
@@ -353,19 +353,26 @@
   .status-locked-in { background: rgba(255,230,0,0.15); color: var(--neon-yellow); }
   .status-secret { background: rgba(255,45,120,0.12); color: #FF2D78; }
 
-  /* Closed-eye badge — absolute top-right of crew card for Secret crews */
+  /* Eye badge — absolute top-right of crew card */
   .secret-eye-badge {
     position: absolute;
     top: 14px; right: 14px;
     width: 24px; height: 24px;
     border-radius: 50%;
-    background: rgba(255,45,120,0.15);
-    border: 1.5px solid rgba(255,45,120,0.35);
     display: flex; align-items: center; justify-content: center;
-    color: #FF2D78;
     pointer-events: none;
     z-index: 3;
     flex-shrink: 0;
+  }
+  .secret-eye-badge.eye-secret {
+    background: rgba(255,45,120,0.15);
+    border: 1.5px solid rgba(255,45,120,0.35);
+    color: #FF2D78;
+  }
+  .secret-eye-badge.eye-open {
+    background: rgba(255,255,255,0.06);
+    border: 1.5px solid rgba(255,255,255,0.15);
+    color: rgba(255,255,255,0.45);
   }
 
   /* Add crew card */
@@ -1047,6 +1054,150 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
 
+  /* ===== NOTIFICATION FEED ===== */
+  .notif-bell-btn {
+    position: relative;
+    background: none;
+    border: 1.5px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 8px 10px;
+    cursor: pointer;
+    color: var(--text);
+    font-size: 1rem;
+    line-height: 1;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .notif-bell-btn:hover { border-color: rgba(255,255,255,0.25); background: rgba(255,255,255,0.05); }
+  .notif-badge {
+    position: absolute;
+    top: 4px; right: 4px;
+    width: 8px; height: 8px;
+    background: var(--neon-pink);
+    border-radius: 50%;
+    border: 1.5px solid var(--bg);
+    display: none;
+  }
+  .notif-badge.has-unread { display: block; }
+
+  .notif-drawer-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    background: rgba(0,0,0,0.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .notif-drawer-overlay.open { opacity: 1; pointer-events: all; }
+
+  .notif-drawer {
+    position: fixed;
+    top: 0; right: 0;
+    width: min(380px, 100vw);
+    height: 100vh;
+    background: var(--surface);
+    border-left: 1px solid rgba(255,255,255,0.08);
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.25s cubic-bezier(0.4,0,0.2,1);
+    z-index: 301;
+  }
+  .notif-drawer-overlay.open .notif-drawer { transform: translateX(0); }
+
+  .notif-drawer-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 20px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    flex-shrink: 0;
+  }
+  .notif-drawer-title {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 1rem;
+  }
+  .notif-drawer-actions { display: flex; align-items: center; gap: 10px; }
+  .notif-clear-btn {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 0.75rem;
+    cursor: pointer;
+    font-family: 'Outfit', sans-serif;
+    padding: 4px 0;
+    transition: color 0.15s;
+  }
+  .notif-clear-btn:hover { color: var(--text); }
+  .notif-close-btn {
+    background: none;
+    border: 1.5px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    width: 30px; height: 30px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 1rem;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .notif-close-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.25); }
+
+  .notif-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 0;
+  }
+  .notif-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    transition: background 0.15s;
+  }
+  .notif-item:last-child { border-bottom: none; }
+  .notif-item.unread { background: rgba(255,45,120,0.04); }
+  .notif-item.unread::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    width: 3px;
+    height: 100%;
+    background: var(--neon-pink);
+    border-radius: 0 2px 2px 0;
+  }
+  .notif-item { position: relative; }
+  .notif-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--neon-pink);
+    flex-shrink: 0;
+    margin-top: 6px;
+    opacity: 0;
+  }
+  .notif-item.unread .notif-dot { opacity: 1; }
+  .notif-text {
+    flex: 1;
+    font-size: 0.84rem;
+    line-height: 1.55;
+    color: var(--text);
+  }
+  .notif-time {
+    font-size: 0.7rem;
+    color: var(--muted);
+    flex-shrink: 0;
+    margin-top: 3px;
+  }
+  .notif-empty {
+    padding: 48px 20px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.88rem;
+    line-height: 1.6;
+  }
+  .notif-empty-icon { font-size: 2rem; margin-bottom: 10px; }
+
   /* ===== CREW STATUS ZONE (bottom of detail modal) ===== */
   .crew-status-zone {
     margin-top: 20px;
@@ -1401,6 +1552,11 @@
   }
   .genre-suggest-chip:hover { border-color: var(--neon-cyan); color: var(--neon-cyan); background: rgba(0,245,255,0.1); }
 
+  @keyframes scanAuthGlow {
+    from { box-shadow: 0 0 32px rgba(255,45,120,0.4), 0 0 60px rgba(0,245,255,0.2), 0 4px 20px rgba(0,0,0,0.35); }
+    to   { box-shadow: 0 0 52px rgba(255,45,120,0.7), 0 0 90px rgba(0,245,255,0.4), 0 6px 28px rgba(0,0,0,0.4); }
+  }
+
   /* ===== AUTH SCREEN ===== */
   #auth-screen {
     position: fixed; inset: 0; z-index: 1000;
@@ -1408,11 +1564,28 @@
     overflow-y: auto; overflow-x: hidden;
   }
   #auth-screen.hidden { display: none; }
+
+  /* Scanlines overlay on auth screen */
+  #auth-screen::before {
+    content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    animation: scanlinePulse 8s ease-in-out infinite;
+  }
+  @keyframes scanlinePulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+
+  /* Radial glow behind hero side */
+  #auth-screen::after {
+    content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background: radial-gradient(ellipse at 30% 50%, rgba(255,45,120,0.13) 0%, transparent 55%),
+                radial-gradient(ellipse at 80% 80%, rgba(191,0,255,0.08) 0%, transparent 45%);
+  }
+
   .auth-inner {
     min-height: 100%;
     display: flex; align-items: center; justify-content: center;
-    flex-wrap: wrap; gap: 32px;
-    padding: 40px 24px;
+    flex-wrap: wrap; gap: 48px;
+    padding: 48px 32px;
+    position: relative; z-index: 1;
   }
   @media (max-width: 680px) {
     .auth-inner {
@@ -1423,7 +1596,7 @@
       padding: 36px 20px 60px;
     }
     .landing-hero { max-width: 100%; margin-bottom: 0; }
-    .landing-headline { font-size: 1.5rem !important; }
+    .landing-headline { font-size: 2rem !important; }
     .landing-sub { font-size: 0.85rem !important; }
     .lf-item { font-size: 0.75rem !important; padding: 5px 12px !important; }
     .auth-card { max-width: 100%; padding: 28px 20px; }
@@ -1431,13 +1604,23 @@
 
   .auth-card {
     width: 100%; max-width: 400px;
-    background: var(--surface2);
+    background: rgba(22,22,31,0.85);
     border: 1px solid rgba(255,255,255,0.1);
     border-radius: 28px;
     padding: 40px 36px;
     position: relative;
     z-index: 1;
+    backdrop-filter: blur(24px);
+    box-shadow: 0 0 60px rgba(255,45,120,0.1), 0 40px 80px rgba(0,0,0,0.4);
   }
+  /* Glowing top accent line on card */
+  .auth-card::before {
+    content: ''; position: absolute; top: 0; left: 10%; right: 10%; height: 2px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--neon-pink), var(--neon-purple), var(--neon-cyan));
+    box-shadow: 0 0 20px rgba(255,45,120,0.5);
+  }
+
   .auth-logo {
     display: flex; align-items: center; gap: 10px;
     justify-content: center; margin-bottom: 8px;
@@ -1458,7 +1641,11 @@
     font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.85rem;
     color: var(--muted); border-radius: 9px; transition: all 0.2s;
   }
-  .auth-tab.active { background: var(--neon-pink); color: #fff; }
+  .auth-tab.active {
+    background: linear-gradient(135deg, var(--neon-pink), var(--neon-purple));
+    color: #fff;
+    box-shadow: 0 0 16px rgba(255,45,120,0.35);
+  }
   .auth-error {
     background: rgba(255,45,120,0.12);
     border: 1px solid rgba(255,45,120,0.3);
@@ -1477,14 +1664,22 @@
   }
   .auth-success.show { display: block; }
   .auth-btn {
-    width: 100%; padding: 13px;
-    background: var(--neon-pink); color: #fff;
+    width: 100%; padding: 14px;
+    background: linear-gradient(135deg, var(--neon-pink), var(--neon-purple));
+    color: #fff;
     border: none; border-radius: 100px; cursor: pointer;
-    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.9rem;
-    box-shadow: 0 0 24px rgba(255,45,120,0.4);
+    font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.95rem;
+    box-shadow: 0 0 28px rgba(255,45,120,0.45);
     transition: all 0.2s; margin-top: 8px;
+    position: relative; overflow: hidden;
   }
-  .auth-btn:hover { transform: translateY(-1px); box-shadow: 0 0 36px rgba(255,45,120,0.6); }
+  .auth-btn::after {
+    content: ''; position: absolute; top: 0; left: -100%; width: 60%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+    animation: shimmer 3s 1s infinite;
+  }
+  @keyframes shimmer { 0%{left:-60%} 60%,100%{left:130%} }
+  .auth-btn:hover { transform: translateY(-2px); box-shadow: 0 0 44px rgba(255,45,120,0.65); }
   .auth-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 
   /* Loading spinner overlay */
@@ -1506,42 +1701,72 @@
 
   /* ===== LANDING HERO (shown inside auth screen for non-logged-in visitors) ===== */
   .landing-hero {
-    text-align: center;
-    margin-bottom: 28px;
-    max-width: 420px;
+    text-align: left;
+    max-width: 460px;
     width: 100%;
   }
+  @media (max-width: 680px) { .landing-hero { text-align: center; } }
+
+  .landing-eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.7rem;
+    letter-spacing: 3px; text-transform: uppercase; color: var(--neon-green);
+    background: rgba(57,255,20,0.08); border: 1px solid rgba(57,255,20,0.2);
+    padding: 6px 14px; border-radius: 100px; margin-bottom: 22px;
+    animation: fadeUp 0.6s 0.1s both;
+  }
+  .landing-eyebrow-dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--neon-green);
+    animation: dotPulse 2s infinite;
+  }
+  @keyframes dotPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.7)} }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+
   .landing-headline {
-    font-family: 'Syne', sans-serif;
-    font-weight: 800;
-    font-size: 2rem;
-    color: #fff;
-    margin-bottom: 10px;
-    line-height: 1.2;
+    font-family: 'Urbanist', sans-serif;
+    font-weight: 900;
+    font-size: clamp(2.2rem, 5vw, 3.4rem);
+    line-height: 1.08;
+    letter-spacing: -1px;
+    margin-bottom: 18px;
+    animation: fadeUp 0.6s 0.2s both;
+  }
+  .landing-headline-grad {
+    background: linear-gradient(90deg, var(--neon-pink) 0%, var(--neon-cyan) 55%, var(--neon-green) 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    filter: drop-shadow(0 0 28px rgba(255,45,120,0.45));
   }
   .landing-sub {
     color: var(--muted);
-    font-size: 0.9rem;
-    line-height: 1.6;
-    margin-bottom: 18px;
+    font-size: 1rem;
+    line-height: 1.65;
+    margin-bottom: 28px;
+    max-width: 380px;
+    animation: fadeUp 0.6s 0.3s both;
   }
+  @media (max-width: 680px) { .landing-sub { margin: 0 auto 28px; } }
+
   .landing-features {
     display: flex;
     gap: 8px;
-    justify-content: center;
+    justify-content: flex-start;
     flex-wrap: wrap;
-    margin-bottom: 4px;
+    animation: fadeUp 0.6s 0.4s both;
   }
+  @media (max-width: 680px) { .landing-features { justify-content: center; } }
+
   .lf-item {
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.1);
     border-radius: 100px;
     padding: 6px 14px;
-    font-size: 0.8rem;
+    font-size: 0.78rem;
     font-family: 'Outfit', sans-serif;
-    font-weight: 600;
-    color: var(--text);
+    font-weight: 700;
+    display: flex; align-items: center; gap: 5px;
   }
+  .lf-item:nth-child(1) { background: rgba(255,45,120,0.1);  border: 1px solid rgba(255,45,120,0.25);  color: var(--neon-pink); }
+  .lf-item:nth-child(2) { background: rgba(0,245,255,0.08);  border: 1px solid rgba(0,245,255,0.2);    color: var(--neon-cyan); }
+  .lf-item:nth-child(3) { background: rgba(57,255,20,0.08);  border: 1px solid rgba(57,255,20,0.2);    color: var(--neon-green); }
+  .lf-item:nth-child(4) { background: rgba(191,0,255,0.08); border: 1px solid rgba(191,0,255,0.2);   color: #CF4FFF; }
 
   /* ===== ONBOARDING SCREEN ===== */
   #onboarding-screen {
@@ -2023,6 +2248,51 @@
   }
   .claim-back-link:hover { color: var(--text); }
 
+  /* ── Claim review block (leader pre-fill disclosure) ── */
+  .claim-review-block {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+  }
+  .claim-review-label {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .claim-review-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 0.82rem;
+    color: var(--text);
+    line-height: 1.5;
+    margin-bottom: 5px;
+  }
+  .claim-review-row:last-child { margin-bottom: 0; }
+  .claim-review-key { color: var(--muted); flex-shrink: 0; min-width: 56px; }
+  .claim-review-edit-form { margin-top: 10px; display: none; flex-direction: column; gap: 8px; }
+  .claim-review-edit-form.open { display: flex; }
+  .claim-edit-btn {
+    background: none;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 8px;
+    color: var(--muted);
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.74rem;
+    font-weight: 600;
+    padding: 5px 12px;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .claim-edit-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.3); }
+
   /* ── Error view ── */
   .claim-error-body { width: calc(100% - 48px); max-width: 432px; text-align: center; padding: 24px 0 28px; }
   .claim-error-icon { font-size: 3.5rem; margin-bottom: 16px; }
@@ -2206,22 +2476,37 @@
   </div>
   <div class="auth-inner">
   <div class="landing-hero">
-    <div class="auth-logo" style="justify-content:center;margin-bottom:16px;">
-      <svg viewBox="0 0 44 44" width="38" height="38">
+    <!-- Wordmark -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:28px;">
+      <svg viewBox="0 0 44 44" width="36" height="36" style="filter:drop-shadow(0 0 10px rgba(255,45,120,0.5))">
         <defs><linearGradient id="lg2" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stop-color="#FF2D78"/><stop offset="100%" stop-color="#00F5FF"/>
         </linearGradient></defs>
         <rect x="2" y="2" width="40" height="40" rx="12" fill="url(#lg2)"/>
         <g fill="#050509">
-          <rect x="11" y="22" width="4.5" height="10" rx="2" style="transform-origin:center bottom;animation:eqPulse 1.1s ease-in-out infinite;animation-delay:0s"/>
-          <rect x="19.75" y="15" width="4.5" height="17" rx="2" style="transform-origin:center bottom;animation:eqPulse 1.1s ease-in-out infinite;animation-delay:0.18s"/>
-          <rect x="28.5" y="19" width="4.5" height="13" rx="2" style="transform-origin:center bottom;animation:eqPulse 1.1s ease-in-out infinite;animation-delay:0.36s"/>
+          <rect x="11" y="22" width="4.5" height="10" rx="2" class="eq-bar"/>
+          <rect x="19.75" y="15" width="4.5" height="17" rx="2" class="eq-bar"/>
+          <rect x="28.5" y="19" width="4.5" height="13" rx="2" class="eq-bar"/>
         </g>
       </svg>
-      <span style="font-family:'Syne',sans-serif;font-weight:800;font-size:2rem;"><span style="color:#fff">Rave</span><span style="color:#39FF14">FAM</span></span>
+      <span style="font-family:'Urbanist',sans-serif;font-weight:800;font-size:1.7rem;letter-spacing:-0.5px;"><span style="color:#fff">Rave</span><span style="color:#39FF14">FAM</span></span>
     </div>
-    <h1 class="landing-headline">Your crew's home base.</h1>
-    <p class="landing-sub">Build your crew, collect your ravers, and never lose your tribe in the crowd.</p>
+
+    <!-- Eyebrow -->
+    <div class="landing-eyebrow">
+      <span class="landing-eyebrow-dot"></span>
+      Now in Beta — Join Your Tribe
+    </div>
+
+    <!-- Headline -->
+    <h1 class="landing-headline">
+      Your crew.<br>
+      Your festivals.<br>
+      <span class="landing-headline-grad">Your tribe.</span>
+    </h1>
+
+    <p class="landing-sub">Build private crews, track festivals together, and never lose your people in the crowd.</p>
+
     <div class="landing-features">
       <div class="lf-item">🎪 Manage Crews</div>
       <div class="lf-item">🎟️ Track Festivals</div>
@@ -2297,6 +2582,27 @@
         By signing up you agree to our <a href="/terms.html" style="color:var(--muted);text-decoration:underline;">Terms</a> and <a href="/privacy.html" style="color:var(--muted);text-decoration:underline;">Privacy Policy</a>
       </p>
     </div>
+
+    <!-- ── QR scan alternative ── -->
+    <div style="display:flex;align-items:center;gap:12px;margin:24px 0 6px;">
+      <div style="flex:1;height:1px;background:rgba(255,255,255,0.08);"></div>
+      <span style="font-family:'Outfit',sans-serif;font-size:0.72rem;color:var(--muted);white-space:nowrap;">or</span>
+      <div style="flex:1;height:1px;background:rgba(255,255,255,0.08);"></div>
+    </div>
+    <button onclick="openScanner()" style="
+      width:100%; padding:15px; border-radius:14px; border:none; cursor:pointer;
+      background:linear-gradient(90deg,var(--neon-pink),var(--neon-cyan));
+      color:#fff; font-family:'Outfit',sans-serif; font-weight:800; font-size:1rem;
+      letter-spacing:0px;
+      box-shadow:0 0 32px rgba(255,45,120,0.4),0 0 60px rgba(0,245,255,0.2),0 4px 20px rgba(0,0,0,0.35);
+      transition:all 0.22s;
+      animation:scanAuthGlow 2.5s ease-in-out infinite alternate;
+      margin-bottom:4px;
+    ">📷 Scan Crew Invite QR</button>
+    <p style="text-align:center;font-size:0.74rem;color:var(--muted);margin-top:6px;font-family:'Outfit',sans-serif;">
+      Got a crew invite? Scan the QR code — no account needed first
+    </p>
+
   </div>
   </div><!-- /auth-inner -->
 </div>
@@ -2321,6 +2627,10 @@
       <span class="logo-text"><span>Rave</span><span>FAM</span></span>
     </div>
     <div class="header-actions">
+      <button class="notif-bell-btn" id="notif-bell" onclick="openNotifDrawer()" title="Notifications" aria-label="Notifications">
+        🔔
+        <span class="notif-badge" id="notif-badge"></span>
+      </button>
       <button class="btn btn-ghost" id="edit-profile-btn" onclick="openOwnProfileEditor()" style="font-size:0.75rem;padding:9px 14px;">✏️ My Profile</button>
       <button class="btn btn-ghost" id="logout-btn" onclick="doLogout()" style="font-size:0.75rem;padding:9px 14px;">Log out</button>
     </div>
@@ -2483,6 +2793,51 @@
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeConfirm()">Cancel</button>
       <button class="btn btn-primary" id="confirm-ok-btn">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Notification Drawer -->
+<div class="notif-drawer-overlay" id="notif-drawer-overlay" onclick="if(event.target===this)closeNotifDrawer()">
+  <div class="notif-drawer">
+    <div class="notif-drawer-head">
+      <span class="notif-drawer-title">🔔 Notifications</span>
+      <div class="notif-drawer-actions">
+        <button class="notif-clear-btn" onclick="clearAllNotifs()">Clear all</button>
+        <button class="notif-close-btn" onclick="closeNotifDrawer()">×</button>
+      </div>
+    </div>
+    <div class="notif-list" id="notif-list">
+      <div class="notif-empty">
+        <div class="notif-empty-icon">🔔</div>
+        No notifications yet — crew activity will show up here.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Unclaimed Profile Modal -->
+<div class="modal-overlay" id="edit-unclaimed-overlay" onclick="if(event.target===this)closeEditUnclaimedModal()">
+  <div class="modal" style="max-width:380px;">
+    <div class="modal-title" style="margin-bottom:16px;">Edit Profile</div>
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input class="form-input" id="edit-unclaimed-name" placeholder="Full name">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Handle <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
+      <input class="form-input" id="edit-unclaimed-handle" placeholder="@handle">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Note <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
+      <input class="form-input" id="edit-unclaimed-note" placeholder="e.g. met at Coachella">
+    </div>
+    <div class="modal-actions" style="margin-top:8px;justify-content:space-between;">
+      <button class="btn btn-ghost" style="color:var(--neon-pink);border-color:rgba(255,45,120,0.25);padding:10px 14px;font-size:0.8rem;" onclick="deleteUnclaimedProfile(_editUnclaimedRaverId)">🗑️ Delete</button>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-ghost" onclick="closeEditUnclaimedModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveEditUnclaimed()">Save</button>
+      </div>
     </div>
   </div>
 </div>
@@ -2824,11 +3179,14 @@
 
   // ===== QR Claim flow =====
 
-  // On page load: stash any ?claim= token so it survives the auth redirect
+  // On page load: stash any ?claim= token so it survives the auth redirect.
+  // Also reads localStorage backup set by the landing-page QR scanner.
   (function checkClaimParam() {
-    const token = new URLSearchParams(window.location.search).get('claim');
+    const token = new URLSearchParams(window.location.search).get('claim')
+                  || localStorage.getItem('pendingClaimToken');
     if (token) {
       sessionStorage.setItem('pendingClaim', token);
+      localStorage.removeItem('pendingClaimToken');
       // Clean the URL so it doesn't re-trigger on refresh
       const clean = window.location.pathname + window.location.hash;
       history.replaceState(null, '', clean);
@@ -3180,6 +3538,30 @@
       ? `<img src="${raver.avatar_url}" style="width:100%;height:100%;object-fit:cover;" alt="${raver.name || ''}">`
       : (raver.name ? initials(raver.name) : '?');
 
+    const hasPreFill = raver.notes || raver.met_story || raver.handle;
+    const reviewBlock = hasPreFill ? `
+      <div class="claim-review-block">
+        <div class="claim-review-label">Your leader added these details for you</div>
+        ${raver.handle ? `<div class="claim-review-row"><span class="claim-review-key">Handle</span><span>${raver.handle}</span></div>` : ''}
+        ${raver.met_story ? `<div class="claim-review-row"><span class="claim-review-key">How we met</span><span>${raver.met_story}</span></div>` : ''}
+        ${raver.notes ? `<div class="claim-review-row"><span class="claim-review-key">Note</span><span>${raver.notes}</span></div>` : ''}
+        <button class="claim-edit-btn" onclick="toggleClaimEditForm(this)">✏️ Edit before claiming</button>
+        <div class="claim-review-edit-form" id="claim-edit-form">
+          <div>
+            <div class="claim-review-label" style="margin-bottom:5px;">Name</div>
+            <input class="form-input" id="claim-edit-name" value="${(raver.name || '').replace(/"/g,'&quot;')}" placeholder="Your name">
+          </div>
+          <div>
+            <div class="claim-review-label" style="margin-bottom:5px;">Handle</div>
+            <input class="form-input" id="claim-edit-handle" value="${(raver.handle || '').replace(/"/g,'&quot;')}" placeholder="@handle">
+          </div>
+          <div>
+            <div class="claim-review-label" style="margin-bottom:5px;">How we met</div>
+            <input class="form-input" id="claim-edit-met" value="${(raver.met_story || '').replace(/"/g,'&quot;')}" placeholder="Where did your paths cross?">
+          </div>
+        </div>
+      </div>` : '';
+
     document.getElementById('preview-body').innerHTML = `
       <div class="claim-crew-banner" style="background:${crewColor}20;border:1px solid ${crewColor}44;">
         <div class="claim-crew-name">${crewName}</div>
@@ -3197,7 +3579,8 @@
           <div class="claim-slot-tags">${tagsHtml}</div>
         </div>
       </div>
-      <div class="claim-spot-label">This profile was saved for you by your crew leader.</div>
+      ${reviewBlock}
+      <div class="claim-spot-label">${hasPreFill ? 'Review the details above — you can edit anything before joining.' : 'This profile was saved for you by your crew leader.'}</div>
       <button class="btn-claim" id="confirm-claim-btn" onclick="commitClaim()">🎉 Claim My Spot in ${crewName}</button>
       <span class="claim-back-link" role="button" tabindex="0" onclick="backToScan()" onkeydown="if(event.key==='Enter')backToScan()">Not you? Scan a different code</span>
     `;
@@ -3235,6 +3618,13 @@
     showScannerView('error');
   }
 
+  function toggleClaimEditForm(btn) {
+    const form = document.getElementById('claim-edit-form');
+    if (!form) return;
+    const open = form.classList.toggle('open');
+    btn.textContent = open ? '✕ Cancel edit' : '✏️ Edit before claiming';
+  }
+
   function backToScan() {
     _pendingClaimToken = null;
     showScannerView('scan');
@@ -3248,6 +3638,11 @@
     const btn = document.getElementById('confirm-claim-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Joining…'; }
 
+    // Apply any edits the user made in the review form before committing
+    const editName   = document.getElementById('claim-edit-name')?.value.trim();
+    const editHandle = document.getElementById('claim-edit-handle')?.value.trim();
+    const editMet    = document.getElementById('claim-edit-met')?.value.trim();
+
     const existingRaver = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
     const params = { p_token: token };
     if (existingRaver) params.p_existing_raver_id = existingRaver.id;
@@ -3260,6 +3655,16 @@
       if (btn) { btn.disabled = false; btn.textContent = '🎉 Claim My Spot'; }
       showScannerError(result?.error === 'invalid_or_used_token' ? 'claimed' : 'unknown', null);
       return;
+    }
+
+    // Persist any edits the user made in the review form
+    const claimedId = result?.claimed_id || result?.merged_into;
+    if (claimedId && (editName || editHandle || editMet)) {
+      const updates = {};
+      if (editName)   updates.name       = editName;
+      if (editHandle) updates.handle     = editHandle;
+      if (editMet)    updates.met_story  = editMet;
+      await sb.from('ravers').update(updates).eq('id', claimedId);
     }
 
     closeScanner();
@@ -3416,6 +3821,8 @@
     renderCrews();
     renderEvents();
     countChecks();
+    // Load persisted notifications from DB
+    dbLoadNotifications();
     // New user: no squad data AND hasn't been through onboarding → launch onboarding
     if (squad.length === 0 && !currentUser?.user_metadata?.onboarded) {
       setTimeout(showOnboarding, 400);
@@ -3475,34 +3882,20 @@
     }
 
     // --- Crews ---
-    // Query 1: crews where this user is the leader
-    const { data: ledCrews, error: cErr1 } = await sb
+    // RLS now enforces visibility: Secret = leader only, else = leader + claimed members.
+    // A single query returns every crew the current user is allowed to see.
+    const { data: allCrewsRaw, error: cErr1 } = await sb
       .from('crews')
-      .select('*, crew_members(raver_id)')
-      .eq('leader_id', uid);
+      .select('*, crew_members(raver_id, added_at)')
+      .order('created_at', { ascending: true });
 
-    // Query 2: crew IDs where this user was added as a member
-    const { data: memberLinks } = await sb
-      .from('crew_members')
-      .select('crew_id')
-      .eq('added_by', uid);
-
-    // Load those extra crews (ones not already in ledCrews)
-    const ledIds = new Set((ledCrews || []).map(c => c.id));
-    const extraIds = [...new Set((memberLinks || []).map(m => m.crew_id))].filter(id => !ledIds.has(id));
-    let memberCrews = [];
-    if (extraIds.length) {
-      const { data: extra } = await sb
-        .from('crews')
-        .select('*, crew_members(raver_id)')
-        .in('id', extraIds);
-      memberCrews = extra || [];
-    }
-
-    const allCrews = [...(ledCrews || []), ...memberCrews];
+    const allCrews = allCrewsRaw || [];
     if (!cErr1 && allCrews.length) {
       allCrews.forEach(c => {
-        const squadIds = (c.crew_members || []).map(cm => cm.raver_id);
+        // Sort members by date added ascending (oldest first)
+        const sortedMembers = [...(c.crew_members || [])].sort((a, b) =>
+          new Date(a.added_at || 0) - new Date(b.added_at || 0));
+        const squadIds = sortedMembers.map(cm => cm.raver_id);
         const members = squadIds
           .map(sid => squad.find(r => r.id === sid))
           .filter(Boolean)
@@ -3605,6 +3998,7 @@
     }
   }
 
+  // Bulk insert for initial crew creation — safe to wipe first because there are no rows yet
   async function dbSaveCrewMembers(crewId, raverIds) {
     await sb.from('crew_members').delete().eq('crew_id', crewId);
     if (raverIds.length) {
@@ -3614,6 +4008,82 @@
     }
   }
 
+  // Targeted single-row insert — preserves added_at for all existing members
+  async function dbAddCrewMember(crewId, raverId) {
+    const uid = currentUser?.id;
+    if (!uid) return;
+    const { error } = await sb.from('crew_members')
+      .upsert({ crew_id: crewId, raver_id: raverId, added_by: uid },
+               { onConflict: 'crew_id,raver_id', ignoreDuplicates: true });
+    if (error) console.error('crew member add error', error);
+  }
+
+  // Targeted single-row delete — only touches the removed member
+  async function dbRemoveCrewMember(crewId, raverId) {
+    const { error } = await sb.from('crew_members')
+      .delete()
+      .eq('crew_id', crewId)
+      .eq('raver_id', raverId);
+    if (error) console.error('crew member remove error', error);
+  }
+
+
+  // ===== NOTIFICATION DB HELPERS =====
+
+  async function dbAddNotification(userId, crewId, message) {
+    if (!userId) return;
+    const { error } = await sb.from('notifications').insert({
+      user_id: userId,
+      crew_id: crewId || null,
+      message
+    });
+    if (error) console.error('notification insert error', error);
+  }
+
+  async function dbLoadNotifications() {
+    const uid = currentUser?.id;
+    if (!uid) return;
+    const { data, error } = await sb
+      .from('notifications')
+      .select('*')
+      .eq('user_id', uid)
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if (error || !data) return;
+    // Merge DB notifications into localStorage feed (DB is source of truth)
+    const list = data.map(n => ({
+      id: n.id,
+      message: n.message,
+      timestamp: new Date(n.created_at).getTime(),
+      read: n.read
+    }));
+    saveNotifs(list);
+    updateNotifBadge();
+  }
+
+  async function dbMarkNotifsRead() {
+    const uid = currentUser?.id;
+    if (!uid) return;
+    await sb.from('notifications').update({ read: true }).eq('user_id', uid).eq('read', false);
+  }
+
+  async function dbClearNotifications() {
+    const uid = currentUser?.id;
+    if (!uid) return;
+    await sb.from('notifications').delete().eq('user_id', uid);
+  }
+
+  // Notify all currently claimed members of a crew (excluding the acting user)
+  async function notifyCrewMembers(crew, message) {
+    const uid = currentUser?.id;
+    const people = crewSquad(crew);
+    // In Secret mode this intentionally notifies no one except the leader (who is handled separately).
+    // Claimed members only exist once the crew is Recruiting or Locked In.
+    const claimed = people.filter(p => (p.claimedBy || p.status === 'claimed') && p.claimedBy !== uid);
+    await Promise.all(claimed.map(p => dbAddNotification(p.claimedBy, crew.id, message)));
+    // Add to local feed for the acting user (leader sees their own actions)
+    addNotification(message);
+  }
 
   // ===== PHOTO HELPERS =====
 
@@ -4061,7 +4531,9 @@
 
       card.innerHTML = `
         <div class="crew-color-bar" style="background:${crew.gradient}"></div>
-        ${crew.status === 'secret' ? `<div class="secret-eye-badge" title="Secret — only you can see this crew"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg></div>` : ''}
+        ${crew.status === 'secret'
+          ? `<div class="secret-eye-badge eye-secret" title="Secret — only you can see this crew"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg></div>`
+          : `<div class="secret-eye-badge eye-open" title="Crew is visible to members"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>`}
         <div class="crew-card-head">
           ${crew.totemPhotoUrl ? `<img class="crew-totem-thumb" src="${crew.totemPhotoUrl}" alt="Crew totem">` : ''}
           <div class="crew-name">${crew.name}</div>
@@ -4145,16 +4617,28 @@
     // Build member list from linked squad profiles → first names, clickable
     const people = crewSquad(crew);
     const isAdmin = isAdminUser();
+    const isLockedIn = crew.status === 'locked-in';
     const memberList = people.length
       ? people.map(p => {
           const isClaimed = p.claimedBy || p.isYou || p.status === 'claimed';
           const statusDot = `<span class="${isClaimed ? 'claimed-dot' : 'unclaimed-dot'}" title="${isClaimed ? 'Claimed' : 'Unclaimed — share QR to invite'}"></span>`;
           const canRemove = (crew.isLead || isAdmin) && !p.isYou;
           let right;
-          if (!isClaimed && (crew.isLead || isAdmin) && p.qrToken && isRecruiting) {
-            right = `<button class="remove-member-btn" style="background:none;border:1.5px solid rgba(255,255,255,0.15);border-radius:8px;padding:2px 7px;font-size:0.8rem;" data-raver-id="${p.id}" onclick="event.stopPropagation(); showQRModal(this.dataset.raverId)" title="Show QR to invite">📲</button>`;
+          if (!isClaimed && (crew.isLead || isAdmin)) {
+            // Unclaimed row for leader: QR (all non-Secret states) + edit + delete
+            const qrBtn = !isSecret && p.qrToken
+              ? `<button class="remove-member-btn" style="background:none;border:1.5px solid rgba(255,255,255,0.15);border-radius:8px;padding:2px 7px;font-size:0.8rem;" data-raver-id="${p.id}" onclick="event.stopPropagation(); showQRModal(this.dataset.raverId)" title="Show QR to invite">📲</button>`
+              : '';
+            right = `<span style="display:flex;align-items:center;gap:5px;">
+              ${qrBtn}
+              <button class="remove-member-btn" style="background:none;border:1.5px solid rgba(255,255,255,0.12);border-radius:8px;padding:2px 7px;font-size:0.78rem;color:var(--muted);" data-raver-id="${p.id}" onclick="event.stopPropagation(); showEditUnclaimedModal(this.dataset.raverId)" title="Edit profile">✏️</button>
+              <button class="remove-member-btn" data-crew="${crew.id}" data-raver="${p.id}" onclick="event.stopPropagation(); confirmRemoveMember(this.dataset.crew, this.dataset.raver)" title="Remove from crew">×</button>
+            </span>`;
+          } else if (!isClaimed) {
+            // Unclaimed row for non-leader: subtle indicator
+            right = `<span style="font-size:0.68rem;color:var(--muted);padding:3px 8px;border:1px solid rgba(255,255,255,0.1);border-radius:6px;flex-shrink:0;">Unclaimed</span>`;
           } else if (canRemove) {
-            right = `<button class="remove-member-btn" data-crew="${crew.id}" data-raver="${p.id}" onclick="event.stopPropagation(); removeMemberFromCrew(this.dataset.crew, this.dataset.raver)" title="Remove from crew">×</button>`;
+            right = `<button class="remove-member-btn" data-crew="${crew.id}" data-raver="${p.id}" onclick="event.stopPropagation(); confirmRemoveMember(this.dataset.crew, this.dataset.raver)" title="Remove from crew">×</button>`;
           } else {
             right = `<span class="detail-member-arrow">›</span>`;
           }
@@ -4171,7 +4655,7 @@
     let addMemberControl = '';
     let statusControl;
     if (crew.isLead) {
-      addMemberControl = `
+      if (!isLockedIn) addMemberControl = `
         <div class="form-group">
           <label class="form-label">Add Member</label>
           ${isSecret ? `<div style="display:flex;align-items:center;gap:6px;font-size:0.74rem;color:var(--muted);margin-bottom:8px;">🔴 Added members won't be notified until you go Recruiting.</div>` : ''}
@@ -4184,8 +4668,8 @@
         </div>`;
       if (isSecret) {
         statusControl = `
-          <button class="btn-status-cta" onclick="setStatus('${crew.id}','recruiting')">🟢 Open to Recruiting</button>
-          <div style="font-size:0.72rem;color:var(--muted);margin-top:7px;line-height:1.5;text-align:center;">Members get notified · Can't go back to Secret</div>`;
+          <button class="btn-status-cta" onclick="setStatus('${crew.id}','recruiting')">🟢 Open the Crew to Recruiting</button>
+          <div style="font-size:0.72rem;color:var(--muted);margin-top:7px;line-height:1.5;text-align:center;">Your tribe gets notified · QR invites go live · No going back to Secret</div>`;
       } else {
         statusControl = `
           <div class="status-toggle">
@@ -4272,7 +4756,18 @@
         <div class="danger-zone">
           <button class="btn btn-ghost" style="width:100%;padding:10px;font-size:0.8rem;color:var(--neon-pink);border-color:rgba(255,45,120,0.25);"
             onclick="showDeleteCrewConfirm(activeDetailId)">🗑️ Delete Crew</button>
-        </div>` : ''}
+        </div>` : (() => {
+          const meInCrew = people.find(p => p.isYou);
+          const iAmClaimed = meInCrew && (meInCrew.claimedBy || meInCrew.isYou || meInCrew.status === 'claimed');
+          return iAmClaimed ? `
+        <div class="danger-zone">
+          <button class="btn btn-ghost" style="width:100%;padding:10px;font-size:0.8rem;color:var(--neon-pink);border-color:rgba(255,45,120,0.25);"
+            data-crew-id="${crew.id}" onclick="confirmLeaveCrew(this.dataset.crewId)">✌️ Leave Crew</button>
+        </div>` : '';
+        })()}
+      <div style="margin-top:24px;">
+        <button class="btn btn-ghost" style="width:100%;padding:12px;font-size:0.88rem;" onclick="closeDetail()">← Back to My Crews</button>
+      </div>
       </div>
     `;
   }
@@ -4304,7 +4799,11 @@
     } else if (newStatus === 'locked-in') {
       icon = '🔒';
       title = `Lock ${crew.name} In? 🔒`;
-      body = `The roster is sealed. No new ravers can join and QR invite links are disabled. <strong>Make sure everyone's in before you lock it.</strong>`;
+      const unclaimedCount = crewSquad(crew).filter(p => !(p.claimedBy || p.isYou || p.status === 'claimed')).length;
+      const unclaimedWarn = unclaimedCount > 0
+        ? `<div style="margin-top:10px;padding:10px 12px;background:rgba(255,230,0,0.08);border:1px solid rgba(255,230,0,0.25);border-radius:10px;color:var(--neon-yellow);font-size:0.8rem;line-height:1.5;">⚠️ <strong>${unclaimedCount} unclaimed profile${unclaimedCount > 1 ? 's' : ''}</strong> won't be able to join without an invite — but their QR codes stay active so they can still claim a spot later.</div>`
+        : '';
+      body = `No new members can be added once locked. QR codes stay active so unclaimed members can still join. <strong>Make sure everyone's in before you lock it.</strong>${unclaimedWarn}`;
       confirmLabel = `🔒 Lock It In`;
     } else {
       icon = '🌟';
@@ -4343,11 +4842,15 @@
       showToast(`🔴 ${crew.name} is now Secret — private workspace only`);
     } else if (status === 'recruiting') {
       const wasSecret = prevStatus === 'secret';
-      showToast(wasSecret
-        ? `🟢 ${crew.name} is now Recruiting — notifications sent, QR invites live!`
-        : `🌟 ${crew.name} is back in Recruiting — QR invites re-enabled`);
+      const msg = wasSecret
+        ? `🎉 ${crew.name} is now Recruiting! Share the QR codes and invite your family.`
+        : `🌟 ${crew.name} is back in Recruiting mode! More ravers might be joining the squad — keep an eye out!`;
+      showToast(msg);
+      notifyCrewMembers(crew, msg);
     } else {
-      showToast(`🔒 ${crew.name} is Locked In — the crew is official!`);
+      const msg = `🔒 ${crew.name} is now Locked In! No new ravers are joining the squad — this crew is official!`;
+      showToast(msg);
+      notifyCrewMembers(crew, msg);
     }
     // Persist to DB
     if (currentUser) dbSaveCrew({ name: crew.name, color: crew.color, gradient: crew.gradient, status }, crew.id);
@@ -4383,12 +4886,32 @@
     dropdown.style.display = 'block';
   }
 
+  const CREW_LIMIT = 10;
+  const CREW_LIMIT_WARN = 8;
+
+  function userCrewCount(userId) {
+    return crews.filter(c => {
+      if (c.isLead) return true;
+      return crewSquad(c).some(p => p.claimedBy === userId || p.isYou);
+    }).length;
+  }
+
   function addExistingMember(raverId) {
     const crew = crews.find(c => String(c.id) === String(activeDetailId));
     const raver = squad.find(r => String(r.id) === String(raverId));
     if (!crew || !raver) return;
     if (crew.squadIds.some(id => String(id) === String(raverId))) {
       showToast(`${raver.name.split(' ')[0]} is already in ${crew.name}`); return;
+    }
+    // Soft crew limit check for the raver being added (if they're a claimed user)
+    if (raver.claimedBy) {
+      const count = userCrewCount(raver.claimedBy);
+      if (count >= CREW_LIMIT) {
+        showToast(`⚠️ ${raver.name.split(' ')[0]} is already in ${CREW_LIMIT} crews — the limit has been reached`); return;
+      }
+      if (count >= CREW_LIMIT_WARN) {
+        showToast(`⚠️ ${raver.name.split(' ')[0]} is in ${count}/${CREW_LIMIT} crews — almost at the limit`);
+      }
     }
     crew.squadIds.push(raver.id);
     crew.members = crew.squadIds
@@ -4400,9 +4923,11 @@
     if (crew.status === 'secret') {
       showToast(`✅ ${raver.name.split(' ')[0]} added — they won't be notified until you go Recruiting`);
     } else {
+      const addMsg = `🎉 You've been added to ${crew.name}! The squad is forming — scan your QR code or enter your invite code to claim your spot!`;
       showToast(`✅ ${raver.name.split(' ')[0]} added to ${crew.name}`);
+      addNotification(addMsg);
     }
-    if (currentUser) dbSaveCrewMembers(crew.id, crew.squadIds);
+    if (currentUser) dbAddCrewMember(crew.id, raver.id);
   }
 
   function joinCrew(id) {
@@ -4412,6 +4937,19 @@
     renderCrews();
     renderDetail(id);
     showToast(`🎉 You joined ${crew.name}!`);
+  }
+
+  function confirmRemoveMember(crewId, raverId) {
+    const crew  = crews.find(c => String(c.id) === String(crewId));
+    const raver = squad.find(r => String(r.id) === String(raverId));
+    if (!crew || !raver) return;
+    const firstName = raver.name.split(' ')[0];
+    showConfirm(
+      `Remove ${firstName} from ${crew.name}?`,
+      `They'll lose access to all shared features. You can re-add them later as long as the crew is in Recruiting mode.`,
+      `🔒 Remove from Crew`,
+      () => removeMemberFromCrew(crewId, raverId)
+    );
   }
 
   function removeMemberFromCrew(crewId, raverId) {
@@ -4428,8 +4966,86 @@
       .map(r => ({ i: initials(r.name), c: crew.color, t: '#fff', url: r.avatarUrl || null }));
     renderCrews();
     renderDetail(crew.id);
-    showToast(`✅ ${raver ? raver.name.split(' ')[0] : 'Member'} removed from ${crew.name}`);
-    if (currentUser) dbSaveCrewMembers(crew.id, crew.squadIds);
+    const removedName = raver ? raver.name.split(' ')[0] : 'Member';
+    const removeMsg = `${removedName} was removed from the crew by the leader. The squad just got a little tighter! 🔒`;
+    showToast(removeMsg);
+    notifyCrewMembers(crew, removeMsg);
+    if (currentUser) dbRemoveCrewMember(crew.id, raverId);
+  }
+
+  function confirmLeaveCrew(crewId) {
+    const crew = getCrew(crewId);
+    if (!crew) return;
+    showConfirm(
+      `Leave ${crew.name}?`,
+      `You'll lose access to shared memories, the dream board, and everything else. Only the Crew Lead can re-add you — and only while the crew is in Recruiting mode.`,
+      `✌️ Leave Crew`,
+      () => {
+        const me = squad.find(r => r.isYou);
+        if (!me) return;
+        const leaveMsg = `${me.name.split(' ')[0]} has left the crew and bounced! ✌️`;
+        notifyCrewMembers(crew, leaveMsg);
+        removeMemberFromCrew(crewId, me.id);
+        closeDetail();
+        showToast(leaveMsg);
+      }
+    );
+  }
+
+  // ── Edit Unclaimed Profile modal ──
+  let _editUnclaimedRaverId = null;
+
+  function showEditUnclaimedModal(raverId) {
+    const r = getRaver(raverId);
+    if (!r) return;
+    _editUnclaimedRaverId = raverId;
+    document.getElementById('edit-unclaimed-name').value = r.name || '';
+    document.getElementById('edit-unclaimed-handle').value = r.handle || '';
+    document.getElementById('edit-unclaimed-note').value = r.note || '';
+    document.getElementById('edit-unclaimed-overlay').classList.add('open');
+  }
+
+  function closeEditUnclaimedModal() {
+    document.getElementById('edit-unclaimed-overlay').classList.remove('open');
+    _editUnclaimedRaverId = null;
+  }
+
+  function saveEditUnclaimed() {
+    const r = getRaver(_editUnclaimedRaverId);
+    if (!r) return;
+    const name = document.getElementById('edit-unclaimed-name').value.trim();
+    if (!name) { showToast('⚠️ Name can\'t be empty'); return; }
+    r.name = name;
+    r.handle = document.getElementById('edit-unclaimed-handle').value.trim();
+    r.note = document.getElementById('edit-unclaimed-note').value.trim();
+    closeEditUnclaimedModal();
+    renderCrews();
+    renderDetail(activeDetailId);
+    showToast(`✅ ${name.split(' ')[0]}'s profile updated`);
+  }
+
+  function deleteUnclaimedProfile(raverId) {
+    const r = getRaver(raverId);
+    if (!r) return;
+    const firstName = r.name.split(' ')[0];
+    showConfirm(
+      `Delete ${firstName}'s profile?`,
+      `This will permanently remove the unclaimed profile and their invite code. This can't be undone.`,
+      `🗑️ Delete Profile`,
+      () => {
+        // Remove from all crews
+        crews.forEach(c => {
+          c.squadIds = (c.squadIds || []).filter(id => String(id) !== String(raverId));
+          c.members = c.squadIds.map(sid => squad.find(r2 => String(r2.id) === String(sid))).filter(Boolean)
+            .map(r2 => ({ i: initials(r2.name), c: c.color, t: '#fff', url: r2.avatarUrl || null }));
+        });
+        squad = squad.filter(r2 => String(r2.id) !== String(raverId));
+        closeEditUnclaimedModal();
+        renderCrews();
+        renderDetail(activeDetailId);
+        showToast(`🗑️ ${firstName}'s profile deleted`);
+      }
+    );
   }
 
   function showDeleteCrewConfirm(id) {
@@ -5744,11 +6360,88 @@
     showToast('\u2705 Profile created! Now build your crew.');
   }
 
+  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+  //  IN-APP NOTIFICATION FEED
+  // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+
+  const NOTIF_KEY = 'ravefam_notifications';
+
+  function loadNotifs() {
+    try { return JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]'); } catch { return []; }
+  }
+  function saveNotifs(list) {
+    localStorage.setItem(NOTIF_KEY, JSON.stringify(list));
+  }
+
+  function addNotification(message) {
+    const list = loadNotifs();
+    list.unshift({ id: Date.now(), message, timestamp: Date.now(), read: false });
+    if (list.length > 100) list.splice(100);
+    saveNotifs(list);
+    updateNotifBadge();
+    if (document.getElementById('notif-drawer-overlay').classList.contains('open')) {
+      renderNotifList();
+    }
+  }
+
+  function updateNotifBadge() {
+    const badge = document.getElementById('notif-badge');
+    if (!badge) return;
+    const hasUnread = loadNotifs().some(n => !n.read);
+    badge.classList.toggle('has-unread', hasUnread);
+  }
+
+  function renderNotifList() {
+    const list = loadNotifs();
+    const el = document.getElementById('notif-list');
+    if (!el) return;
+    if (!list.length) {
+      el.innerHTML = `<div class="notif-empty"><div class="notif-empty-icon">\ud83d\udd14</div>No notifications yet \u2014 crew activity will show up here.</div>`;
+      return;
+    }
+    el.innerHTML = list.map(n => `
+      <div class="notif-item ${n.read ? '' : 'unread'}">
+        <span class="notif-dot"></span>
+        <span class="notif-text">${n.message}</span>
+        <span class="notif-time">${relativeTime(n.timestamp)}</span>
+      </div>`).join('');
+  }
+
+  function relativeTime(ts) {
+    const diff = Date.now() - ts;
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
+  }
+
+  function openNotifDrawer() {
+    const list = loadNotifs();
+    const updated = list.map(n => ({ ...n, read: true }));
+    saveNotifs(updated);
+    updateNotifBadge();
+    renderNotifList();
+    document.getElementById('notif-drawer-overlay').classList.add('open');
+    if (currentUser) dbMarkNotifsRead();
+  }
+
+  function closeNotifDrawer() {
+    document.getElementById('notif-drawer-overlay').classList.remove('open');
+  }
+
+  function clearAllNotifs() {
+    saveNotifs([]);
+    updateNotifBadge();
+    renderNotifList();
+    if (currentUser) dbClearNotifications();
+  }
+
+  // Initialise badge on load
+  document.addEventListener('DOMContentLoaded', updateNotifBadge);
+
 </script>
 <script defer src="/_vercel/insights/script.js"></script>
 </body>
 </html>
-Change 1 occurrences: 1
-Change 2 occurrences: 1
-Change 3 occurrences: 1
-Final size: 187006 chars
