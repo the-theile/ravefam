@@ -4229,6 +4229,13 @@
     window._pendingAuthTab = null;
     showAuthTab(tab);
 
+    // If the user came from the landing page via "Enter code manually", open the
+    // scanner overlay on the code entry tab automatically.
+    if (sessionStorage.getItem('openCodeEntry')) {
+      sessionStorage.removeItem('openCodeEntry');
+      setTimeout(() => { openScanner(); switchScannerTab('code'); }, 150);
+    }
+
     // If there's a pending claim token, overlay the branded intercept so the
     // user understands WHY they're being asked to sign in / sign up.
     const pendingToken = sessionStorage.getItem('pendingClaim');
@@ -4602,19 +4609,10 @@
     const errEl = document.getElementById('code-error');
     if (errEl) errEl.textContent = '';
 
-    // The invite code is qr_token.replace(/-/g,'').slice(0,6).toUpperCase()
-    // Match by the first 6 chars of qr_token (stored without dashes)
-    const { data: matches, error } = await sb
-      .from('ravers')
-      .select('qr_token')
-      .filter('qr_token', 'not.is', null)
-      .limit(200); // fetch and filter client-side (avoids complex DB regex)
+    const { data: results, error } = await sb.rpc('find_raver_by_invite_code', { p_code: code });
+    const match = results?.[0];
 
-    const match = (matches || []).find(r =>
-      r.qr_token && r.qr_token.replace(/-/g,'').slice(0,6).toUpperCase() === code
-    );
-
-    if (error || !match) {
+    if (error || !match?.qr_token) {
       if (errEl) errEl.textContent = '⚠️ Code not found or already used.';
       if (btn) btn.disabled = false;
       return;
@@ -6440,7 +6438,7 @@
     if (crew.status === 'secret') {
       showToast(`✅ ${raver.name.split(' ')[0]} added — they won't be notified until you go Recruiting`);
     } else {
-      const addMsg = `🎉 You've been added to ${crew.name}! The squad is forming — scan your QR code or enter your invite code to claim your spot!`;
+      const addMsg = `🎉 ${raver.name.split(' ')[0]} has been added to ${crew.name}! Share their QR code or invite link so they can claim their spot.`;
       showToast(`✅ ${raver.name.split(' ')[0]} added to ${crew.name}`);
       addNotification(addMsg);
     }
@@ -8142,6 +8140,7 @@
       // Mark as "you" when saving during onboarding
       if (isOnboarding) r.isYou = true;
       squad.push(r);
+      const pendingCrew = _pendingAddToCrew; // capture before closeProfileEditor nulls it
       closeProfileEditor();
       renderSquad(); renderCrews(); renderEvents();
       if (r.isYou) {
@@ -8150,9 +8149,8 @@
 
       if (isOnboarding) {
         maybeAdvanceOnboarding(r.name);
-      } else if (_pendingAddToCrew) {
-        const crewId = _pendingAddToCrew;
-        _pendingAddToCrew = null;
+      } else if (pendingCrew) {
+        const crewId = pendingCrew;
         const crew = crews.find(c => String(c.id) === String(crewId));
         if (crew) {
           crew.squadIds.push(r.id);
