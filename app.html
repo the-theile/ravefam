@@ -1055,6 +1055,29 @@
   }
   .modal-overlay.open .modal { transform: scale(1); }
 
+  /* Location autocomplete */
+  .loc-autocomplete-wrap { position: relative; }
+  .loc-dropdown {
+    position: absolute;
+    top: calc(100% + 4px); left: 0; right: 0;
+    background: var(--surface2);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+    z-index: 200;
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.55);
+    display: none;
+  }
+  .loc-item {
+    padding: 10px 14px;
+    font-size: 0.86rem;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    transition: background 0.1s;
+  }
+  .loc-item:last-child { border-bottom: none; }
+  .loc-item:hover, .loc-item.loc-active { background: rgba(255,45,120,0.12); }
+
   .modal-title {
     font-family: 'Outfit', sans-serif;
     font-weight: 700;
@@ -7418,6 +7441,79 @@
     list.innerHTML = html;
   }
 
+  // ===== Location autocomplete (Nominatim / OpenStreetMap) =====
+  let _locTimer = null;
+  let _locIdx = -1;
+
+  function locSearchDebounce(q) {
+    clearTimeout(_locTimer);
+    _locIdx = -1;
+    if (q.length < 2) { closeLoc(); return; }
+    _locTimer = setTimeout(() => locSearch(q), 320);
+  }
+
+  async function locSearch(q) {
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&addressdetails=1&limit=8&featuretype=city&accept-language=en`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const dropdown = document.getElementById('loc-dropdown');
+      if (!dropdown) return;
+
+      const seen = new Set();
+      const items = [];
+      for (const d of data) {
+        const a = d.address || {};
+        const city    = a.city || a.town || a.village || a.municipality || d.display_name.split(',')[0].trim();
+        const state   = a.state || a.region || '';
+        const country = a.country || '';
+        const label   = [city, state, country].filter(Boolean).join(', ');
+        if (!seen.has(label)) { seen.add(label); items.push(label); }
+        if (items.length >= 6) break;
+      }
+
+      if (items.length === 0) { closeLoc(); return; }
+      dropdown.style.display = 'block';
+      dropdown.innerHTML = items.map((label, i) =>
+        `<div class="loc-item" data-idx="${i}" onmousedown="pickLoc('${label.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${label}</div>`
+      ).join('');
+      _locIdx = -1;
+    } catch(e) { closeLoc(); }
+  }
+
+  function pickLoc(val) {
+    const inp = document.getElementById('fe-loc');
+    if (inp) inp.value = val;
+    closeLoc();
+  }
+
+  function closeLoc() {
+    const d = document.getElementById('loc-dropdown');
+    if (d) d.style.display = 'none';
+    _locIdx = -1;
+  }
+
+  function locKeydown(e) {
+    const dropdown = document.getElementById('loc-dropdown');
+    if (!dropdown || dropdown.style.display === 'none') return;
+    const items = dropdown.querySelectorAll('.loc-item');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      _locIdx = Math.min(_locIdx + 1, items.length - 1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      _locIdx = Math.max(_locIdx - 1, 0);
+    } else if (e.key === 'Enter' && _locIdx >= 0) {
+      e.preventDefault();
+      items[_locIdx]?.dispatchEvent(new MouseEvent('mousedown'));
+      return;
+    } else if (e.key === 'Escape') {
+      closeLoc(); return;
+    } else { return; }
+    items.forEach((el, i) => el.classList.toggle('loc-active', i === _locIdx));
+    items[_locIdx]?.scrollIntoView({ block: 'nearest' });
+  }
+
   // ===== Rave editor (create / edit / delete a catalog item) =====
   let editingFestivalId = null;
 
@@ -7433,7 +7529,17 @@
         <label class="form-label">Date</label>
         <input class="form-input" id="fe-date" type="date" value="${f?.date || ''}" style="color-scheme:dark;">
       </div>
-      ${fieldRow('Location','fe-loc', f?.location, 'e.g. Amsterdam, NL')}
+      <div class="form-group">
+        <label class="form-label">Location</label>
+        <div class="loc-autocomplete-wrap">
+          <input class="form-input" id="fe-loc" value="${(f?.location||'').replace(/"/g,'&quot;')}"
+            placeholder="e.g. Amsterdam, NL" autocomplete="off"
+            oninput="locSearchDebounce(this.value)"
+            onkeydown="locKeydown(event)"
+            onblur="setTimeout(closeLoc,200)">
+          <div class="loc-dropdown" id="loc-dropdown"></div>
+        </div>
+      </div>
       ${f ? `<div class="fest-goers-note">${goers.length ? goers.length + ' tribe member' + (goers.length!==1?'s':'') + ' linked: ' + goers.map(g=>g.name.split(' ')[0]).join(', ') : 'No tribe members linked yet'}</div>` : ''}
       <div class="modal-actions">
         ${f ? `<button class="btn btn-ghost" style="color:var(--neon-pink);" onclick="showDeleteRaveConfirm()">Delete</button>` : ''}
