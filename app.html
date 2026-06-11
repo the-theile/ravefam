@@ -3036,6 +3036,13 @@
   }
   .intercept-skip:hover { color: var(--text); }
 
+  /* ── Welcome Back Popup ── */
+  @keyframes wbpPulse {
+    0%, 100% { text-shadow: 0 0 8px rgba(57,255,20,0.5); }
+    50%       { text-shadow: 0 0 22px rgba(57,255,20,0.95); }
+  }
+  #welcome-back-overlay { z-index: 1100; }
+
 </style>
 </head>
 <body>
@@ -3449,6 +3456,74 @@
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeConfirm()">Cancel</button>
       <button class="btn btn-primary" id="confirm-ok-btn">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Welcome Back Modal -->
+<div class="modal-overlay" id="welcome-back-overlay" onclick="if(event.target===this)closeWelcomePopup()">
+  <div class="modal" id="welcome-back-modal" style="padding:0;overflow:hidden;max-width:400px;">
+    <div id="wbp-header" style="
+      background:linear-gradient(135deg,#BF00FF 0%,#FF2D78 60%,#FF6B35 100%);
+      padding:28px 24px 20px;text-align:center;
+    ">
+      <div id="wbp-emoji" style="font-size:2.6rem;line-height:1;margin-bottom:10px;">🎛️</div>
+      <div id="wbp-greeting" style="
+        font-family:'Outfit',sans-serif;font-weight:800;font-size:1.25rem;
+        color:#fff;letter-spacing:-0.3px;
+      "></div>
+      <div id="wbp-last-rave" style="
+        margin-top:6px;font-size:0.8rem;color:rgba(255,255,255,0.7);
+        font-family:'DM Sans',sans-serif;
+      "></div>
+    </div>
+    <div style="padding:22px 24px 24px;">
+      <div id="wbp-fest-block">
+        <div style="
+          font-size:0.7rem;text-transform:uppercase;letter-spacing:1px;
+          color:var(--muted);font-family:'Outfit',sans-serif;font-weight:600;
+          margin-bottom:6px;
+        ">Next Rave</div>
+        <div id="wbp-fest-name" style="
+          font-family:'Outfit',sans-serif;font-weight:800;font-size:1.1rem;
+          color:var(--text);margin-bottom:2px;
+        "></div>
+        <div id="wbp-fest-location" style="font-size:0.82rem;color:var(--muted);margin-bottom:14px;"></div>
+        <div id="wbp-countdown" style="
+          display:inline-flex;align-items:center;gap:8px;
+          background:rgba(57,255,20,0.12);border:1px solid rgba(57,255,20,0.3);
+          border-radius:100px;padding:8px 18px;margin-bottom:16px;
+        ">
+          <span id="wbp-days" style="
+            font-family:'Outfit',sans-serif;font-weight:900;font-size:1.6rem;
+            color:var(--neon-green);animation:wbpPulse 2s ease-in-out infinite;
+          "></span>
+          <span style="font-size:0.82rem;color:var(--neon-green);font-family:'DM Sans',sans-serif;">days away</span>
+        </div>
+        <div id="wbp-crew" style="display:none;">
+          <div style="
+            font-size:0.7rem;text-transform:uppercase;letter-spacing:1px;
+            color:var(--muted);font-family:'Outfit',sans-serif;font-weight:600;
+            margin-bottom:8px;
+          ">Your Fam Going</div>
+          <div id="wbp-crew-avatars" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;"></div>
+        </div>
+      </div>
+      <div id="wbp-empty" style="display:none;text-align:center;padding:8px 0 12px;">
+        <div style="font-size:2rem;margin-bottom:8px;">🎟️</div>
+        <div style="
+          font-family:'Outfit',sans-serif;font-weight:700;font-size:1rem;
+          color:var(--text);margin-bottom:6px;
+        ">No fests lined up yet</div>
+        <div style="font-size:0.85rem;color:var(--muted);margin-bottom:18px;line-height:1.5;">
+          Time to fix that. Find your next rave and mark yourself going.
+        </div>
+        <button class="btn btn-ghost" style="width:100%;"
+          onclick="closeWelcomePopup();switchTab('events')">Browse Events 🗓️</button>
+      </div>
+      <button id="wbp-cta" class="btn btn-primary"
+        style="width:100%;margin-top:16px;font-weight:700;"
+        onclick="closeWelcomePopup()">Let's go! 🔥</button>
     </div>
   </div>
 </div>
@@ -4657,6 +4732,8 @@
     } else if (me && !me.handle) {
       // Has a profile but never set a handle — require it now
       setTimeout(showHandlePicker, 400);
+    } else if (me && me.handle) {
+      setTimeout(showWelcomePopup, 600);
     }
   }
 
@@ -4830,6 +4907,87 @@
     // Load community genre + artist pools (non-blocking)
     dbLoadCommunityGenres().catch(() => {});
     dbLoadCommunityArtists().catch(() => {});
+  }
+
+  // ===== WELCOME BACK POPUP =====
+  const WBP_GREETINGS = [
+    ['🔊', "The bass missed you."],
+    ['🕺', "Your vibe is needed on the floor."],
+    ['🌀', "The drop hits harder when you're here."],
+    ['🎪', "The crew was wondering where you went."],
+    ['✨', "Welcome back to the fam."],
+    ['🔥', "You're back. The party can start."],
+    ['💜', "Miss us? We missed you more."],
+    ['🎵', "Back in the rave? Let's gooo."],
+  ];
+
+  function showWelcomePopup() {
+    const me = squad.find(r => r.isYou);
+    if (!me || !me.handle) return;
+
+    const todayKey = `ravefam_welcome_${currentUser.id}_${new Date().toISOString().slice(0,10)}`;
+    if (localStorage.getItem(todayKey)) return;
+    localStorage.setItem(todayKey, '1');
+
+    const [emoji, msg] = WBP_GREETINGS[Math.floor(Math.random() * WBP_GREETINGS.length)];
+    document.getElementById('wbp-emoji').textContent = emoji;
+    document.getElementById('wbp-greeting').textContent = msg;
+
+    const lastRave = raverPast(me)[0];
+    document.getElementById('wbp-last-rave').textContent = lastRave
+      ? `It's been ${Math.round((TODAY - lastRave._d) / 86400000)} days since ${lastRave.name}`
+      : "First time here — welcome to the fam 🎉";
+
+    const next = raverUpcoming(me)[0];
+    const festBlock = document.getElementById('wbp-fest-block');
+    const emptyBlock = document.getElementById('wbp-empty');
+    const ctaBtn = document.getElementById('wbp-cta');
+
+    if (next) {
+      festBlock.style.display = '';
+      emptyBlock.style.display = 'none';
+      ctaBtn.style.display = '';
+      document.getElementById('wbp-fest-name').textContent = next.name;
+      document.getElementById('wbp-fest-location').textContent = next.location ? `📍 ${next.location}` : '';
+      const days = Math.max(0, Math.round((next._d - TODAY) / 86400000));
+      document.getElementById('wbp-days').textContent = days === 0 ? 'TODAY' : days;
+
+      const goers = festivalGoers(next.id).filter(r => !r.isYou);
+      const crewDiv = document.getElementById('wbp-crew');
+      if (goers.length) {
+        crewDiv.style.display = '';
+        const shown = goers.slice(0, 5);
+        const extra = goers.length - shown.length;
+        document.getElementById('wbp-crew-avatars').innerHTML =
+          shown.map(r => `<div style="
+            width:32px;height:32px;border-radius:50%;
+            background:${r.gradient || 'var(--neon-pink)'};
+            border:2px solid var(--bg);
+            display:flex;align-items:center;justify-content:center;
+            font-size:0.7rem;font-weight:700;color:#fff;font-family:'Outfit',sans-serif;
+            overflow:hidden;flex-shrink:0;
+          ">${r.avatarUrl
+            ? `<img src="${r.avatarUrl}" style="width:100%;height:100%;object-fit:cover;" loading="lazy">`
+            : initials(r.name)
+          }</div>`).join('')
+          + (extra > 0 ? `<div style="
+            font-size:0.78rem;color:var(--muted);font-family:'DM Sans',sans-serif;
+            margin-left:4px;align-self:center;
+          ">+${extra} more</div>` : '');
+      } else {
+        crewDiv.style.display = 'none';
+      }
+    } else {
+      festBlock.style.display = 'none';
+      emptyBlock.style.display = '';
+      ctaBtn.style.display = 'none';
+    }
+
+    document.getElementById('welcome-back-overlay').classList.add('open');
+  }
+
+  function closeWelcomePopup() {
+    document.getElementById('welcome-back-overlay').classList.remove('open');
   }
 
   // ===== SUPABASE WRITE HELPERS =====
