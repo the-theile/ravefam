@@ -7634,6 +7634,14 @@
       ? fieldRow('Handle','pf-handle', r?.handle, 'e.g. @samraves')
       : claimedHandle;
 
+    const _existingArtists = (r?.favArtists || []).map(a => a.toLowerCase());
+    const _artistSuggestions = allArtistSuggestions().filter(a => !_existingArtists.includes(a.toLowerCase())).slice(0, 16);
+    const _artistSuggestHtml = _artistSuggestions.length ? `
+      <div class="genre-suggest-label">Suggestions</div>
+      <div class="genre-suggest-cloud">
+        ${_artistSuggestions.map(a => `<span class="genre-suggest-chip" style="--chip-col:${artistColor(a)};" onclick="addArtistSuggestion('${a.replace(/'/g,"\\'")}',this)">+ ${a}</span>`).join('')}
+      </div>` : '';
+
     document.getElementById('profile-edit-modal').innerHTML = `
       <div class="modal-title">${r ? '✏️ Edit ' + r.name : '✨ Your Raver Profile'}</div>
       ${fieldRow('Name','pf-name', r?.name, 'e.g. Sam P.')}
@@ -7654,7 +7662,11 @@
         </div>
         <div class="vibe-custom-chips" id="genre-custom-chips"></div>
       </div>
-      ${fieldRow('Favorite Artists (comma separated)','pf-favs', r?.favArtists?.join(', '), 'Amelie Lens, Peggy Gou')}
+      <div class="form-group">
+        <label class="form-label">🎵 Favourite Artists</label>
+        <input class="form-input" id="pf-favs" value="${(r?.favArtists?.join(', ')||'').replace(/"/g,'&quot;')}" placeholder="Amelie Lens, Peggy Gou">
+        ${_artistSuggestHtml}
+      </div>
 
       <div class="form-group vibe-tags-section">
         <label class="form-label">⚡ Vibe Tags</label>
