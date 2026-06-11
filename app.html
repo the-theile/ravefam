@@ -978,6 +978,81 @@
   /* Editable textarea in modal */
   textarea.form-input { resize: vertical; min-height: 70px; font-family: 'DM Sans', sans-serif; }
 
+  /* Ko-fi support widget (checklist page) */
+  .spt-support-bar {
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 16px;
+    padding: 16px 16px 12px;
+    width: 100%; max-width: 400px; box-sizing: border-box;
+  }
+  .spt-support-title {
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.72rem; font-weight: 700;
+    letter-spacing: 3px; text-transform: uppercase;
+    color: var(--muted); text-align: center; margin-bottom: 12px;
+  }
+  .spt-emoji-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; }
+  .spt-emoji-card {
+    background: var(--bg);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 12px; padding: 8px 4px;
+    text-align: center; cursor: pointer;
+    transition: all 0.2s; aspect-ratio: 1/1;
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+  }
+  .spt-emoji-card:hover {
+    border-color: rgba(191,0,255,0.5);
+    transform: scale(1.08) rotate(4deg);
+    box-shadow: 0 0 14px rgba(191,0,255,0.35);
+  }
+  .spt-emoji-card .e-ico { font-size: 1.7em; margin-bottom: 3px; }
+  .spt-emoji-card .e-lbl {
+    font-family: 'Outfit', sans-serif; font-weight: 600;
+    font-size: 0.6em; color: var(--muted); line-height: 1.1;
+  }
+  .spt-modal {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.85);
+    justify-content: center; align-items: center; z-index: 9500;
+  }
+  .spt-modal-box {
+    background: var(--surface);
+    border: 2px solid var(--neon-purple);
+    border-radius: 20px; padding: 28px 24px;
+    max-width: 300px; width: 90%; text-align: center;
+    box-shadow: 0 0 40px rgba(191,0,255,0.25);
+  }
+  .spt-modal-box .spt-emoji { font-size: 3.5rem; margin-bottom: 8px; display: block; }
+  .spt-progress-wrap {
+    height: 8px; background: rgba(255,255,255,0.08);
+    border-radius: 999px; margin: 12px 0;
+  }
+  .spt-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--neon-purple), rgba(191,0,255,0.6));
+    border-radius: 999px; transition: width 0.9s ease;
+  }
+  .spt-donate-btn {
+    background: var(--neon-purple); color: #fff; border: none;
+    padding: 11px 24px; font-size: 0.95rem;
+    border-radius: 50px; cursor: pointer;
+    font-family: 'Outfit', sans-serif; font-weight: 700;
+    width: 100%; margin-top: 14px; transition: background 0.2s;
+  }
+  .spt-donate-btn:hover { background: rgba(191,0,255,0.7); }
+  .spt-close-btn {
+    margin-top: 8px; background: transparent;
+    border: 1px solid rgba(255,255,255,0.08); color: var(--muted);
+    padding: 8px 20px; border-radius: 50px; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; font-size: 0.85rem;
+  }
+  @media (max-width: 520px) {
+    .spt-emoji-grid { gap: 6px; }
+    .spt-emoji-card .e-ico { font-size: 1.45em; }
+  }
+
   /* Checklist page */
   .checklist-section { margin-bottom: 28px; }
   .checklist-section-title {
@@ -3246,6 +3321,15 @@
           <span style="width:6px;height:6px;border-radius:50%;background:var(--neon-pink);animation:pulse 2s infinite;display:inline-block;"></span>
           In development
         </div>
+
+        <div style="margin-top:32px;width:100%;max-width:400px;text-align:left;">
+          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.1rem;color:#fff;margin-bottom:6px;text-align:center;">Keep the party going ☕</div>
+          <div style="font-size:0.82rem;color:var(--muted);margin-bottom:14px;line-height:1.6;text-align:center;">RaveFAM is free, passion-built, and fuelled by the community. If it's added to your rave life, this is how you keep the lights on.</div>
+          <div class="spt-support-bar">
+            <div class="spt-support-title">Pick your vibe &amp; support the build</div>
+            <div class="spt-emoji-grid" id="spt-emoji-grid"></div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -3416,6 +3500,29 @@
 
 <!-- Toast -->
 <div class="toast" id="toast"></div>
+
+<!-- Ko-fi progress modal -->
+<div id="sptProgressModal" class="spt-modal">
+  <div class="spt-modal-box">
+    <span id="sptMEmoji" class="spt-emoji"></span>
+    <h3 id="sptMLabel" style="margin:0 0 6px;color:#fff;font-family:'Syne',sans-serif;font-size:1.1rem;"></h3>
+    <div class="spt-progress-wrap"><div id="sptMBar" class="spt-progress-bar" style="width:0%"></div></div>
+    <div id="sptMCount" style="font-size:0.85rem;color:var(--muted);margin-bottom:6px;"></div>
+    <p id="sptMMsg" style="font-size:0.82rem;color:rgba(255,255,255,0.6);margin:6px 0 0;"></p>
+    <button id="sptDonateBtn" class="spt-donate-btn">☕ Donate on Ko-fi</button>
+    <button onclick="closeSptModal()" class="spt-close-btn">Close</button>
+  </div>
+</div>
+
+<!-- Ko-fi prank modal -->
+<div id="sptPrankModal" class="spt-modal">
+  <div class="spt-modal-box" style="border-color:rgba(220,38,38,0.6);">
+    <span style="font-size:4.5rem;display:block;margin-bottom:8px;">🚓</span>
+    <h3 style="color:#f87171;font-family:'Syne',sans-serif;">BUSTED!</h3>
+    <p style="font-size:0.88rem;color:rgba(255,255,255,0.65);">❄️ Caught in the snow zone — better luck next time, raver! 😂</p>
+    <button onclick="closeSptPrank()" class="spt-donate-btn" style="background:#dc2626;">Escape</button>
+  </div>
+</div>
 
 <!-- Photo Lightbox -->
 <div id="photo-lightbox" class="photo-lightbox" onclick="closePhotoLightbox()">
@@ -8303,6 +8410,81 @@
   // Initialise badge on load
   document.addEventListener('DOMContentLoaded', updateNotifBadge);
 
+</script>
+<script>
+(function() {
+  const KOFI = 'ravefam';
+  const OPTS = [
+    { e:'🍺', l:'Beer',         m:'🍺 Beer fund',             u:'beers',    msg:'Fuel the party — more beers for the crew! 🍻' },
+    { e:'🤖', l:'AI Time',      m:'🤖 More AI features',       u:'boosts',   msg:"Crank up the AI — let's build wilder vibes! 🤖⚡" },
+    { e:'🎟️', l:'Festival',     m:'🎟️ Festival / show ticket', u:'tickets',  msg:'Stack those festival tickets — rave season incoming! 🎉' },
+    { e:'🍭', l:'Kandi',        m:'🍭 Kandi candy',            u:'pieces',   msg:'Trade more kandi — spread the PLUR! 🍭✨' },
+    { e:'❄️', l:'Snow',         isPrank: true },
+    { e:'🌿', l:'Flowers',      m:'🌿 Flowers / plants',       u:'bouquets', msg:'Grow the garden — more flowers for the festival! 🌸' },
+    { e:'🕺', l:'Rave Fits',    m:'🕺 Rave Fits',             u:'fits',     msg:'Outfit the dancefloor — drop more rave fits! 🕺💃' },
+    { e:'❤️', l:'Just Because', m:'❤️ Just because',          u:'hearts',   msg:'Pure love for the vibe — keep the good energy flowing! ❤️' },
+  ];
+  const LS_KEY = 'spt_progress';
+  let prog = {};
+
+  function loadLS() { try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch(e) { return {}; } }
+  function saveLS(data) { try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch(e) {} }
+
+  function mergeProgress(base) {
+    const ls = loadLS();
+    OPTS.forEach(o => {
+      if (o.isPrank) return;
+      prog[o.e] = ls[o.e] || base[o.e] || { current: 0, goal: 10 };
+    });
+  }
+
+  function bumpAndSave(emoji) {
+    const d = prog[emoji] || { current: 0, goal: 10 };
+    d.current = (d.current || 0) + 1;
+    if (d.current >= d.goal) d.goal = Math.ceil(d.goal * 1.1);
+    prog[emoji] = d;
+    const ls = loadLS();
+    ls[emoji] = d;
+    saveLS(ls);
+    return d;
+  }
+
+  fetch('progress.json').then(r => r.ok ? r.json() : {}).then(d => { mergeProgress(d); buildGrid(); }).catch(() => { mergeProgress({}); buildGrid(); });
+
+  function buildGrid() {
+    const grid = document.getElementById('spt-emoji-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    OPTS.forEach(o => {
+      const card = document.createElement('div');
+      card.className = 'spt-emoji-card';
+      card.innerHTML = `<span class="e-ico">${o.e}</span><div class="e-lbl">${o.l}</div>`;
+      card.onclick = () => o.isPrank ? showSptPrank() : showSptModal(o);
+      grid.appendChild(card);
+    });
+  }
+
+  window.showSptModal = function(o) {
+    const d = prog[o.e] || { current: 0, goal: 10 };
+    const pct = Math.min(Math.round((d.current / d.goal) * 100), 100);
+    document.getElementById('sptMEmoji').textContent = o.e;
+    document.getElementById('sptMLabel').textContent = o.l;
+    document.getElementById('sptMBar').style.width = pct + '%';
+    document.getElementById('sptMCount').textContent = `${d.current} / ${d.goal} ${o.u}`;
+    document.getElementById('sptMMsg').textContent = o.msg;
+    document.getElementById('sptDonateBtn').onclick = () => {
+      const nd = bumpAndSave(o.e);
+      document.getElementById('sptMBar').style.width = Math.min(Math.round((nd.current / nd.goal) * 100), 100) + '%';
+      document.getElementById('sptMCount').textContent = `${nd.current} / ${nd.goal} ${o.u}`;
+      window.open(`https://ko-fi.com/${KOFI}?message=${encodeURIComponent(o.m)}`, '_blank');
+      closeSptModal();
+    };
+    document.getElementById('sptProgressModal').style.display = 'flex';
+  };
+  window.showSptPrank  = () => document.getElementById('sptPrankModal').style.display = 'flex';
+  window.closeSptModal = () => document.getElementById('sptProgressModal').style.display = 'none';
+  window.closeSptPrank = () => document.getElementById('sptPrankModal').style.display = 'none';
+})();
 </script>
 <script defer src="/_vercel/insights/script.js"></script>
 </body>
