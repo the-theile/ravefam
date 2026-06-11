@@ -552,6 +552,38 @@
   }
   .going-label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
 
+  /* Raves search */
+  .rave-search-wrap { position: relative; margin-bottom: 16px; }
+  .rave-search {
+    width: 100%; box-sizing: border-box;
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 10px 14px 10px 38px;
+    color: var(--text);
+    font-size: 0.9rem;
+    font-family: 'Outfit', sans-serif;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .rave-search:focus { border-color: rgba(0,245,255,0.5); }
+  .rave-search::placeholder { color: var(--muted); }
+  .rave-search-icon {
+    position: absolute; left: 13px; top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.85rem; pointer-events: none;
+  }
+
+  /* Going glow — you've marked yourself as attending */
+  .event-item-going {
+    border-color: rgba(57,255,20,0.4) !important;
+    box-shadow: 0 0 20px rgba(57,255,20,0.1);
+  }
+  .event-item-going:hover {
+    border-color: rgba(57,255,20,0.65) !important;
+    box-shadow: 0 0 28px rgba(57,255,20,0.18);
+  }
+
   /* Members page */
   .raver-search-wrap { position: relative; margin-bottom: 16px; }
   .raver-search {
@@ -3118,6 +3150,10 @@
       <div class="section-header">
         <div class="section-title">Raves</div>
         <button class="btn btn-ghost" style="font-size:0.78rem;" onclick="openRaveEditor()">+ Add Rave</button>
+      </div>
+      <div class="rave-search-wrap">
+        <span class="rave-search-icon">🔍</span>
+        <input class="rave-search" id="rave-search" type="text" placeholder="Search raves…" oninput="renderEvents()" autocomplete="off">
       </div>
       <div class="events-list" id="events-list">
         <!-- rendered by JS from the festivals catalog -->
@@ -7614,9 +7650,16 @@
     const list = document.getElementById('events-list');
     if (!list) return;
 
+    const query = (document.getElementById('rave-search')?.value || '').toLowerCase().trim();
+
     const withDates = festivals.map((f, idx) => ({ ...f, _d: festDate(f), _idx: idx }));
-    const up = withDates.filter(f => f._d && f._d >= TODAY).sort((a,b) => a._d - b._d);
-    const past = withDates.filter(f => !f._d || f._d < TODAY).sort((a,b) => (b._d||0) - (a._d||0));
+    const filtered = query
+      ? withDates.filter(f =>
+          f.name.toLowerCase().includes(query) ||
+          (f.location || '').toLowerCase().includes(query))
+      : withDates;
+    const up = filtered.filter(f => f._d && f._d >= TODAY).sort((a,b) => a._d - b._d);
+    const past = filtered.filter(f => !f._d || f._d < TODAY).sort((a,b) => (b._d||0) - (a._d||0));
 
     const card = (f) => {
       const color = festColor(f);
@@ -7633,7 +7676,7 @@
       const toggleBtn = `<button class="going-toggle${youGoing ? ' going-toggle-active' : ''}" data-fest-id="${f.id}" onclick="event.stopPropagation(); toggleGoingToFest(this.dataset.festId)">${youGoing ? '✓ Going' : '＋ Going'}</button>`;
 
       return `
-        <div class="event-item event-item-clickable" data-fest-id="${f.id}" onclick="activeFestId=this.dataset.festId; openRaveEditor(this.dataset.festId)" title="Tap to edit ${f.name}">
+        <div class="event-item event-item-clickable${youGoing ? ' event-item-going' : ''}" data-fest-id="${f.id}" onclick="activeFestId=this.dataset.festId; openRaveEditor(this.dataset.festId)" title="Tap to edit ${f.name}">
           <div class="event-date">
             <div class="event-day" style="color:${color}">${day}</div>
             <div class="event-month">${mon}</div>
@@ -7655,7 +7698,9 @@
     let html = '';
     if (up.length) html += `<div class="fest-group-label" style="margin:4px 0 10px;">🔜 Upcoming</div>` + up.map(card).join('');
     if (past.length) html += `<div class="fest-group-label" style="margin:22px 0 10px;">📼 Past</div>` + past.map(card).join('');
-    if (!up.length && !past.length) html = '<div class="fest-empty" style="padding:20px;text-align:center;">No raves yet — add a festival, club night, or that warehouse party on Saturday.</div>';
+    if (!up.length && !past.length) html = query
+      ? `<div class="fest-empty" style="padding:20px;text-align:center;color:var(--muted);">No raves found for "${query}"</div>`
+      : '<div class="fest-empty" style="padding:20px;text-align:center;">No raves yet — add a festival, club night, or that warehouse party on Saturday.</div>';
     list.innerHTML = html;
   }
 
