@@ -553,43 +553,73 @@
   .going-label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
 
   /* Members page */
-  .members-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+  .raver-search-wrap { position: relative; margin-bottom: 16px; }
+  .raver-search {
+    width: 100%; box-sizing: border-box;
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 10px 14px 10px 38px;
+    color: var(--text);
+    font-size: 0.9rem;
+    font-family: 'Outfit', sans-serif;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .raver-search:focus { border-color: rgba(255,45,120,0.5); }
+  .raver-search::placeholder { color: var(--muted); }
+  .raver-search-icon {
+    position: absolute; left: 13px; top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.85rem; pointer-events: none;
+  }
+
+  .members-grid { display: flex; flex-direction: column; gap: 12px; }
 
   .member-card {
     background: var(--surface);
     border: 1px solid rgba(255,255,255,0.07);
     border-radius: 16px;
-    padding: 20px;
-    text-align: center;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
     transition: all 0.2s;
     cursor: pointer;
     position: relative;
   }
-  .member-card:hover { transform: translateY(-3px); border-color: rgba(255,255,255,0.15); }
+  .member-card:hover { transform: translateX(3px); border-color: rgba(255,255,255,0.14); }
 
   .member-avatar {
     width: 56px; height: 56px;
     border-radius: 50%;
-    margin: 0 auto 12px;
+    flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;
     font-family: 'Outfit', sans-serif;
     font-weight: 800;
     font-size: 1.3rem;
     border: 3px solid rgba(255,255,255,0.1);
   }
+  .member-divider {
+    width: 3px; height: 44px;
+    border-radius: 100px;
+    flex-shrink: 0;
+  }
+  .member-info { flex: 1; min-width: 0; }
   .member-name {
     font-family: 'Outfit', sans-serif;
     font-weight: 700;
     font-size: 0.95rem;
-    margin-bottom: 4px;
+    margin-bottom: 3px;
   }
-  .member-handle { font-size: 0.75rem; color: var(--muted); margin-bottom: 6px; }
-  .member-crew { font-size: 0.72rem; color: var(--muted); margin-bottom: 8px; }
+  .member-handle { font-size: 0.75rem; color: var(--muted); margin-bottom: 5px; }
+  .member-crew { font-size: 0.72rem; color: var(--muted); margin-bottom: 6px; }
   .member-next-fest {
     font-size: 0.7rem; color: var(--neon-green); font-family: 'Outfit', sans-serif;
-    font-weight: 600; margin-bottom: 10px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+    font-weight: 600; margin-bottom: 6px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
+  .member-base { font-size: 0.7rem; color: var(--muted); margin-bottom: 6px; }
   .member-card-you {
     border-color: rgba(255,45,120,0.45) !important;
     box-shadow: 0 0 22px rgba(255,45,120,0.12);
@@ -605,7 +635,13 @@
   }
   .member-edit-btn:hover { background: rgba(255,45,120,0.2); border-color: rgba(255,45,120,0.4); }
 
-  .member-tags { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; }
+  .member-photos { flex-shrink: 0; }
+  .member-photos .our-photo-slot { width: 76px; padding: 4px 4px 16px; }
+  .member-photos .our-photo-slot img { width: 68px; height: 68px; }
+  .member-photos .our-photos-slots { gap: 8px; }
+  .member-photos .our-photo-label { font-size: 0.5rem; margin-top: 4px; }
+
+  .member-tags { display: flex; flex-wrap: wrap; gap: 5px; }
   .tag {
     font-size: 0.65rem;
     padding: 3px 8px;
@@ -613,7 +649,6 @@
     font-weight: 600;
     font-family: 'Outfit', sans-serif;
   }
-  .member-base { font-size: 0.7rem; color: var(--muted); margin-bottom: 10px; }
 
   /* Profile page */
   .profile-back {
@@ -2919,6 +2954,10 @@
       <div class="section-header">
         <div class="section-title">Your Ravers</div>
         <button class="btn btn-ghost" style="font-size:0.78rem;" onclick="openProfileEditor()">+ Add Raver</button>
+      </div>
+      <div class="raver-search-wrap">
+        <span class="raver-search-icon">🔍</span>
+        <input class="raver-search" id="raver-search" type="text" placeholder="Search ravers…" oninput="renderSquad()" autocomplete="off">
       </div>
       <div class="members-grid" id="members-grid">
         <!-- rendered by JS -->
@@ -6190,11 +6229,31 @@
     return raverFestivals(r).filter(f => f._d < TODAY).sort((a,b) => b._d - a._d);
   }
 
+  function ourPhotoCardHTML(viewingRaverId) {
+    const keys = ourPhotoKeys(viewingRaverId);
+    if (!keys) return '';
+    const myPhoto    = localStorage.getItem(keys.mine);
+    const theirPhoto = localStorage.getItem(keys.theirs);
+    if (!myPhoto && !theirPhoto) return '';
+    const slots = [];
+    if (myPhoto)    slots.push(`<div class="our-photo-slot"><img src="${myPhoto}" alt=""></div>`);
+    if (theirPhoto) slots.push(`<div class="our-photo-slot" style="transform:rotate(2deg);"><img src="${theirPhoto}" alt=""></div>`);
+    return `<div class="member-photos"><div class="our-photos-col"><div class="our-photos-slots">${slots.join('')}</div><div class="our-photo-label">✦ our memory ✦</div></div></div>`;
+  }
+
   function renderSquad() {
     const grid = document.getElementById('members-grid');
     grid.innerHTML = '';
-    // Pin "You" card first, then everyone else
-    const sorted = [...squad].sort((a, b) => (b.isYou ? 1 : 0) - (a.isYou ? 1 : 0));
+    const query = (document.getElementById('raver-search')?.value || '').toLowerCase().trim();
+    // Pin "You" card first, then everyone else alphabetically, then filter by search
+    const sorted = [...squad]
+      .sort((a, b) => (b.isYou ? 1 : 0) - (a.isYou ? 1 : 0))
+      .filter(r => !query
+        || r.name.toLowerCase().includes(query)
+        || (r.handle||'').toLowerCase().includes(query)
+        || (r.crew||'').toLowerCase().includes(query)
+        || (r.base||'').toLowerCase().includes(query));
+
     sorted.forEach(r => {
       const card = document.createElement('div');
       card.className = 'member-card' + (r.isYou ? ' member-card-you' : '');
@@ -6207,7 +6266,7 @@
 
       const crewLine = r.crew
         ? `<div class="member-crew">👥 ${r.crew}</div>`
-        : `<div class="member-crew" style="visibility:hidden;">—</div>`;
+        : '';
 
       const allVibes = [...(r.vibeTags||[]), ...(r.customVibeTags||[])];
       const miniVibes = allVibes.slice(0,3).map((v, i) => {
@@ -6215,24 +6274,34 @@
         return vibeTagHTML(v, isCustom, true);
       }).join('');
 
+      const photosHTML = r.isYou ? '' : ourPhotoCardHTML(r.id);
+
+      // Use gradient for the divider accent
+      const dividerBg = r.isYou ? 'var(--neon-pink)' : r.gradient || 'rgba(255,255,255,0.15)';
+
       card.innerHTML = `
         ${r.isYou ? `<button class="member-edit-btn" onclick="event.stopPropagation();openOwnProfileEditor()" title="Edit your profile">✏️</button>` : ''}
         ${raverAvatarHTML(r.avatarUrl, r.gradient, r.name, 'member-avatar', '')}
-        <div class="member-name">${r.name}${r.isYou ? ' <span style="font-size:0.75rem;margin-right:2px;">👑</span><span style="font-size:0.7rem;color:var(--neon-pink);font-family:\'Outfit\',sans-serif;font-weight:700;">YOU</span>' : ''}</div>
-        <div class="member-handle">${r.handle}</div>
-        ${crewLine}
-        ${nextFestLine}
-        <div class="member-base">📍 ${r.base}</div>
-        ${miniVibes ? `<div class="member-vibes">${miniVibes}</div>` : ''}
+        <div class="member-divider" style="background:${dividerBg}"></div>
+        <div class="member-info">
+          <div class="member-name">${r.name}${r.isYou ? ' <span style="font-size:0.75rem;margin-right:2px;">👑</span><span style="font-size:0.7rem;color:var(--neon-pink);font-family:\'Outfit\',sans-serif;font-weight:700;">YOU</span>' : ''}</div>
+          <div class="member-handle">${r.handle}</div>
+          ${crewLine}
+          ${nextFestLine}
+          <div class="member-base">📍 ${r.base}</div>
+          ${miniVibes ? `<div class="member-vibes">${miniVibes}</div>` : ''}
+        </div>
+        ${photosHTML}
       `;
       grid.appendChild(card);
     });
+
     // Add-raver card
     const add = document.createElement('div');
     add.className = 'member-card';
-    add.style.cssText = 'border:2px dashed rgba(255,255,255,0.1);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--muted);';
+    add.style.cssText = 'border:2px dashed rgba(255,255,255,0.1);justify-content:center;gap:10px;color:var(--muted);';
     add.onclick = () => openProfileEditor();
-    add.innerHTML = `<div style="font-size:1.8rem">+</div><div style="font-family:'Outfit',sans-serif;font-weight:700;font-size:0.82rem;">Add Raver</div>`;
+    add.innerHTML = `<div style="font-size:1.5rem">+</div><div style="font-family:'Outfit',sans-serif;font-weight:700;font-size:0.82rem;">Add Raver</div>`;
     grid.appendChild(add);
   }
 
