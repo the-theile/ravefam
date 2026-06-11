@@ -1749,6 +1749,47 @@
     .our-photo-countdown-row { flex-direction: column; }
     .our-photo-countdown-row .countdown-banner { width: 100%; }
   }
+
+  /* Photo lightbox */
+  .photo-lightbox {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.88);
+    z-index: 9999;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.25s;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  .photo-lightbox.open { opacity: 1; pointer-events: all; }
+  .photo-lightbox-card {
+    background: #f0ece4;
+    padding: 12px 12px 44px;
+    border-radius: 2px;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.8), 4px 8px 24px rgba(0,0,0,0.5);
+    transform: rotate(-1.5deg) scale(0.88);
+    transition: transform 0.3s cubic-bezier(0.34, 1.4, 0.64, 1);
+    max-width: 85vw;
+  }
+  .photo-lightbox.open .photo-lightbox-card { transform: rotate(-1.5deg) scale(1); }
+  .photo-lightbox-img {
+    display: block;
+    width: min(72vw, 420px);
+    height: min(72vw, 420px);
+    object-fit: cover;
+    border-radius: 1px;
+  }
+  .photo-lightbox-label {
+    text-align: center;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 800;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: rgba(0,0,0,0.4);
+    margin-top: 12px;
+  }
+
   /* standalone (no countdown) */
   .our-photos-standalone {
     display: flex; align-items: center; gap: 14px;
@@ -3375,6 +3416,14 @@
 
 <!-- Toast -->
 <div class="toast" id="toast"></div>
+
+<!-- Photo Lightbox -->
+<div id="photo-lightbox" class="photo-lightbox" onclick="closePhotoLightbox()">
+  <div class="photo-lightbox-card" onclick="event.stopPropagation()">
+    <img id="photo-lightbox-img" src="" alt="Memory photo" class="photo-lightbox-img">
+    <div class="photo-lightbox-label">✦ our memory ✦</div>
+  </div>
+</div>
 
 
 
@@ -5046,7 +5095,7 @@
 
     const mySlot = myPhoto
       ? `<div class="our-photo-slot">
-           <img src="${myPhoto}" alt="Your photo">
+           <img src="${myPhoto}" alt="Your photo" style="cursor:zoom-in;" onclick="openPhotoLightbox(this.src)">
            <button class="our-photo-remove" data-viewing="${viewingRaverId}" data-slot="mine"
              onclick="removeOurPhoto(this.dataset.viewing,'mine')" title="Remove">✕</button>
          </div>`
@@ -5062,7 +5111,7 @@
 
     const theirSlot = theirPhoto
       ? `<div class="our-photo-slot" style="transform:rotate(2deg);">
-           <img src="${theirPhoto}" alt="Their photo">
+           <img src="${theirPhoto}" alt="Their photo" style="cursor:zoom-in;" onclick="openPhotoLightbox(this.src)">
          </div>`
       : `<div class="our-photo-slot" style="transform:rotate(2deg);">
            <div class="our-photo-slot-empty"></div>
@@ -5093,6 +5142,17 @@
       showToast('⚠️ Could not save — try a smaller photo');
     }
   }
+
+  function openPhotoLightbox(src) {
+    document.getElementById('photo-lightbox-img').src = src;
+    document.getElementById('photo-lightbox').classList.add('open');
+  }
+  function closePhotoLightbox() {
+    document.getElementById('photo-lightbox').classList.remove('open');
+  }
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closePhotoLightbox();
+  });
 
   function removeOurPhoto(viewingRaverId, slot) {
     showPhotoConfirm({
