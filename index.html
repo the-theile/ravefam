@@ -1722,22 +1722,48 @@
     { e:'🕺', l:'Rave Fits',    m:'🕺 Rave Fits',              u:'fits',     msg:'Outfit the dancefloor — drop more rave fits! 🕺💃' },
     { e:'❤️', l:'Just Because', m:'❤️ Just because',           u:'hearts',   msg:'Pure love for the vibe — keep the good energy flowing! ❤️' },
   ];
+  const LS_KEY = 'spt_progress';
   let prog = {};
-  fetch('progress.json').then(r => r.ok ? r.json() : {}).then(d => { prog = d; buildGrid(); }).catch(() => buildGrid());
+
+  function loadLS() { try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch(e) { return {}; } }
+  function saveLS(data) { try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch(e) {} }
+
+  function mergeProgress(base) {
+    const ls = loadLS();
+    OPTS.forEach(o => {
+      if (o.isPrank) return;
+      prog[o.e] = ls[o.e] || base[o.e] || { current: 0, goal: 10 };
+    });
+  }
+
+  function bumpAndSave(emoji) {
+    const d = prog[emoji] || { current: 0, goal: 10 };
+    d.current = (d.current || 0) + 1;
+    if (d.current >= d.goal) d.goal = Math.ceil(d.goal * 1.1);
+    prog[emoji] = d;
+    const ls = loadLS();
+    ls[emoji] = d;
+    saveLS(ls);
+    return d;
+  }
+
+  fetch('progress.json').then(r => r.ok ? r.json() : {}).then(d => { mergeProgress(d); buildGrid(); }).catch(() => { mergeProgress({}); buildGrid(); });
+
   function buildGrid() {
     const grid = document.getElementById('spt-emoji-grid');
     if (!grid) return;
     grid.innerHTML = '';
     OPTS.forEach(o => {
-      const d = prog[o.e] || { current: 0, goal: 10 };
       const card = document.createElement('div');
       card.className = 'emoji-card';
       card.innerHTML = `<span class="e-ico">${o.e}</span><div class="e-lbl">${o.l}</div>`;
-      card.onclick = () => o.isPrank ? showSptPrank() : showSptModal(o, d);
+      card.onclick = () => o.isPrank ? showSptPrank() : showSptModal(o);
       grid.appendChild(card);
     });
   }
-  window.showSptModal = function(o, d) {
+
+  window.showSptModal = function(o) {
+    const d = prog[o.e] || { current: 0, goal: 10 };
     const pct = Math.min(Math.round((d.current / d.goal) * 100), 100);
     document.getElementById('sptMEmoji').textContent = o.e;
     document.getElementById('sptMLabel').textContent = o.l;
@@ -1745,6 +1771,9 @@
     document.getElementById('sptMCount').textContent = `${d.current} / ${d.goal} ${o.u}`;
     document.getElementById('sptMMsg').textContent = o.msg;
     document.getElementById('sptDonateBtn').onclick = () => {
+      const nd = bumpAndSave(o.e);
+      document.getElementById('sptMBar').style.width = Math.min(Math.round((nd.current / nd.goal) * 100), 100) + '%';
+      document.getElementById('sptMCount').textContent = `${nd.current} / ${nd.goal} ${o.u}`;
       window.open(`https://ko-fi.com/${KOFI}?message=${encodeURIComponent(o.m)}`, '_blank');
       closeSptModal();
     };
