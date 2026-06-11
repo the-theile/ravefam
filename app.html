@@ -7287,6 +7287,12 @@
         </div>
 
         <div class="profile-section">
+          <h3>📱 Contact</h3>
+          ${fieldRow('Instagram','pf-instagram', r.instagram, '@samraves')}
+          ${fieldRow('Phone','pf-phone', r.phone, '+44 7700 900000')}
+        </div>
+
+        <div class="profile-section">
           <h3>⚡ Vibe Tags</h3>
           <div class="vibe-tag-cloud" id="vibe-preset-cloud">
             ${VIBE_PRESETS.map(p => {
@@ -7328,12 +7334,6 @@
         <div class="profile-section">
           <h3>🎟️ Festivals</h3>
           <div id="fest-picker"></div>
-        </div>
-
-        <div class="profile-section">
-          <h3>📱 Contact</h3>
-          ${fieldRow('Instagram','pf-instagram', r.instagram, '@samraves')}
-          ${fieldRow('Phone','pf-phone', r.phone, '+44 7700 900000')}
         </div>
 
         <div class="profile-section">
@@ -7647,6 +7647,24 @@
       ${fieldRow('Name','pf-name', r?.name, 'e.g. Sam P.')}
       ${handleField}
       ${fieldRow('Home Base','pf-base', r?.base, 'e.g. Berlin, DE')}
+      ${fieldRow('Instagram','pf-instagram', r?.instagram, 'e.g. @samraves')}
+      ${fieldRow('Phone Number','pf-phone', r?.phone, 'e.g. +44 7700 900000')}
+      <div class="form-group vibe-tags-section">
+        <label class="form-label">⚡ Vibe Tags</label>
+        <div class="vibe-tag-cloud" id="vibe-preset-cloud">
+          ${VIBE_PRESETS.map(p => {
+            const picked = (r?.vibeTags || []).includes(p.id) ? ' picked' : '';
+            const pickedStyle = picked ? `style="border-color:${p.color};background:rgba(255,255,255,0.08);color:${p.color};box-shadow:0 0 14px -4px ${p.color};"` : `style="color:${p.color};"`;
+            return `<span class="vibe-preset${picked}" ${pickedStyle} onclick="toggleVibePick('${p.id}', this)"><span class="vt-icon">${p.icon}</span>${p.label}</span>`;
+          }).join('')}
+        </div>
+        <div class="vibe-custom-row">
+          <input class="vibe-custom-input" id="vibe-custom-input" placeholder="Add your own vibe tag…" maxlength="30"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();addCustomVibe();}">
+          <button type="button" class="vibe-add-btn" onclick="addCustomVibe()">Add</button>
+        </div>
+        <div class="vibe-custom-chips" id="vibe-custom-chips"></div>
+      </div>
       <div class="form-group">
         <label class="form-label">🎶 Genres</label>
         <div class="genre-preset-cloud" id="genre-preset-cloud">
@@ -7667,31 +7685,10 @@
         <input class="form-input" id="pf-favs" value="${(r?.favArtists?.join(', ')||'').replace(/"/g,'&quot;')}" placeholder="Amelie Lens, Peggy Gou">
         ${_artistSuggestHtml}
       </div>
-
-      <div class="form-group vibe-tags-section">
-        <label class="form-label">⚡ Vibe Tags</label>
-        <div class="vibe-tag-cloud" id="vibe-preset-cloud">
-          ${VIBE_PRESETS.map(p => {
-            const picked = (r?.vibeTags || []).includes(p.id) ? ' picked' : '';
-            const pickedStyle = picked ? `style="border-color:${p.color};background:rgba(255,255,255,0.08);color:${p.color};box-shadow:0 0 14px -4px ${p.color};"` : `style="color:${p.color};"`;
-            return `<span class="vibe-preset${picked}" ${pickedStyle} onclick="toggleVibePick('${p.id}', this)"><span class="vt-icon">${p.icon}</span>${p.label}</span>`;
-          }).join('')}
-        </div>
-        <div class="vibe-custom-row">
-          <input class="vibe-custom-input" id="vibe-custom-input" placeholder="Add your own vibe tag…" maxlength="30"
-            onkeydown="if(event.key==='Enter'){event.preventDefault();addCustomVibe();}">
-          <button type="button" class="vibe-add-btn" onclick="addCustomVibe()">Add</button>
-        </div>
-        <div class="vibe-custom-chips" id="vibe-custom-chips"></div>
-      </div>
-
       <div class="form-group">
         <label class="form-label">🎟️ Festivals</label>
         <div id="fest-picker"></div>
       </div>
-
-      ${fieldRow('Instagram','pf-instagram', r?.instagram, 'e.g. @samraves')}
-      ${fieldRow('Phone Number','pf-phone', r?.phone, 'e.g. +44 7700 900000')}
       ${isOwnProfile ? '' : fieldRow('How We Met','pf-met', r?.metStory, 'Where did your paths cross?', true)}
       ${fieldRow('Notes','pf-notes', r?.notes, isOwnProfile ? "Anything about yourself…" : "What's their vibe?", true)}
       ${isOwnProfile ? `
