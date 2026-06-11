@@ -696,8 +696,17 @@
   .profile-note { font-size: 0.9rem; line-height: 1.6; color: var(--text); white-space: pre-wrap; }
   .fav-chips { display: flex; flex-wrap: wrap; gap: 7px; }
   .fav-chip {
+    display: inline-flex; align-items: center; gap: 3px;
     font-size: 0.8rem; padding: 5px 12px; border-radius: 100px;
-    background: rgba(255,45,120,0.12); color: var(--neon-pink); font-weight: 500;
+    font-family: 'Outfit', sans-serif; font-weight: 700;
+    border: 1.5px solid color-mix(in srgb, var(--chip-col, var(--neon-pink)) 40%, transparent);
+    color: var(--chip-col, var(--neon-pink));
+    background: color-mix(in srgb, var(--chip-col, var(--neon-pink)) 12%, transparent);
+    animation: chipGlow 3s ease-in-out infinite;
+  }
+  @keyframes chipGlow {
+    0%, 100% { box-shadow: 0 0 7px -3px currentColor; }
+    50%       { box-shadow: 0 0 16px -1px currentColor; }
   }
   .profile-actions { display: flex; gap: 10px; margin: 4px 0 12px; }
 
@@ -1668,18 +1677,28 @@
   /* ===== Genre Presets ===== */
   .genre-preset-cloud { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
   .genre-preset {
+    --chip-col: #888;
+    display: inline-flex; align-items: center; justify-content: center; min-height: 40px;
     padding: 5px 13px; border-radius: 100px;
     font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.75rem;
-    cursor: pointer; border: 1.5px solid rgba(255,255,255,0.12);
-    background: rgba(255,255,255,0.04); color: var(--muted);
+    cursor: pointer;
+    border: 1.5px solid color-mix(in srgb, var(--chip-col) 28%, transparent);
+    color: color-mix(in srgb, var(--chip-col) 58%, transparent);
+    background: transparent;
     transition: all 0.18s cubic-bezier(0.34,1.4,0.64,1);
     user-select: none;
   }
-  .genre-preset:hover { border-color: rgba(0,245,255,0.4); color: var(--neon-cyan); transform: translateY(-1px); }
+  .genre-preset:hover {
+    border-color: color-mix(in srgb, var(--chip-col) 65%, transparent);
+    color: color-mix(in srgb, var(--chip-col) 92%, transparent);
+    transform: translateY(-1px);
+  }
   .genre-preset.picked {
-    border-color: var(--neon-cyan); background: rgba(0,245,255,0.1);
-    color: var(--neon-cyan); transform: translateY(-1px);
-    box-shadow: 0 0 10px -4px var(--neon-cyan);
+    border-color: var(--chip-col);
+    background: color-mix(in srgb, var(--chip-col) 14%, transparent);
+    color: var(--chip-col);
+    transform: translateY(-1px);
+    box-shadow: 0 0 12px -3px var(--chip-col);
   }
   /* Inline suggestion chips on profile view */
   .genre-suggest-label { font-size: 0.68rem; color: var(--muted); margin: 8px 0 5px; font-family: 'Outfit', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; }
@@ -1687,11 +1706,18 @@
   .genre-suggest-chip {
     padding: 3px 11px; border-radius: 100px;
     font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.7rem;
-    cursor: pointer; border: 1px dashed rgba(0,245,255,0.25);
-    background: rgba(0,245,255,0.05); color: var(--muted);
+    cursor: pointer;
+    border: 1px dashed color-mix(in srgb, var(--chip-col, var(--neon-cyan)) 38%, transparent);
+    color: color-mix(in srgb, var(--chip-col, var(--neon-cyan)) 62%, transparent);
+    background: color-mix(in srgb, var(--chip-col, var(--neon-cyan)) 7%, transparent);
     transition: all 0.15s;
   }
-  .genre-suggest-chip:hover { border-color: var(--neon-cyan); color: var(--neon-cyan); background: rgba(0,245,255,0.1); }
+  .genre-suggest-chip:hover {
+    border-color: var(--chip-col, var(--neon-cyan));
+    color: var(--chip-col, var(--neon-cyan));
+    background: color-mix(in srgb, var(--chip-col, var(--neon-cyan)) 15%, transparent);
+    transform: translateY(-1px);
+  }
 
   @keyframes scanAuthGlow {
     from { box-shadow: 0 0 32px rgba(255,45,120,0.4), 0 0 60px rgba(0,245,255,0.2), 0 4px 20px rgba(0,0,0,0.35); }
@@ -5955,6 +5981,24 @@
     'IDM','Experimental','Rave','Hardcore','Noise',
   ];
 
+  const GENRE_FAMILY_COLORS = {
+    'House':'#FFB800','Deep House':'#FFB800','Tech House':'#FFB800',
+    'Micro House':'#FFB800','Afro House':'#FFB800','Minimal':'#FFB800',
+    'Techno':'#FF3355','Hard Techno':'#FF3355','Industrial':'#FF3355',
+    'Hardcore':'#FF3355','Noise':'#FF3355',
+    'Drum & Bass':'#BF00FF','Jungle':'#BF00FF','UK Garage':'#BF00FF',
+    'Dubstep':'#BF00FF','Grime':'#BF00FF','Breaks':'#BF00FF',
+    'Trance':'#39FF14','Psytrance':'#39FF14','Progressive':'#39FF14','Melodic Techno':'#39FF14',
+    'Ambient':'#00F5FF','IDM':'#00F5FF','Experimental':'#00F5FF','Electro':'#00F5FF',
+    'Disco':'#FF2D78','Funk':'#FF2D78','Soul':'#FF2D78','Rave':'#FF2D78',
+  };
+  function genreColor(g) { return GENRE_FAMILY_COLORS[g] || '#00F5FF'; }
+  const _ARTIST_PAL = ['#FF3355','#FFB800','#00F5FF','#BF00FF','#39FF14','#FF2D78'];
+  function artistColor(name) {
+    let h = 0; for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+    return _ARTIST_PAL[h % _ARTIST_PAL.length];
+  }
+
   function getPreset(id) { return VIBE_PRESETS.find(v => v.id === id); }
 
   function vibeTagHTML(vtId, isCustom, mini) {
@@ -6174,11 +6218,13 @@
     // Inline tag chips (removable for own profile, add-input for all)
     const blockedTags = r.blockedTags || [];
     function tagChip(val, field) {
+      const col = field === 'genres' ? genreColor(val) : artistColor(val);
+      const cs = `--chip-col:${col};`;
       if (r.isYou) {
-        return `<span class="fav-chip tag-removable">${val}<button class="tag-remove-btn" title="Remove"
+        return `<span class="fav-chip tag-removable" style="${cs}">${val}<button class="tag-remove-btn" title="Remove"
           onclick="showConfirm('Remove tag?','Remove \'${val.replace(/'/g,"\\'")}\'?','Remove',()=>removeTag('${r.id}','${field}','${val.replace(/'/g,"\\'")}'))">&nbsp;✕</button></span>`;
       }
-      return `<span class="fav-chip">${val}</span>`;
+      return `<span class="fav-chip" style="${cs}">${val}</span>`;
     }
     const addTagInput = (field, placeholder) => `
       <input class="tag-add-input" id="tag-input-${field}" placeholder="${placeholder}"
@@ -6261,7 +6307,7 @@
       const artistSuggestHtml = artistSuggestions.length ? `
         <div class="genre-suggest-label">Suggestions</div>
         <div class="genre-suggest-cloud">
-          ${artistSuggestions.map(a => `<span class="genre-suggest-chip" onclick="addArtistSuggestion('${a.replace(/'/g,"\\'")}',this)">+ ${a}</span>`).join('')}
+          ${artistSuggestions.map(a => `<span class="genre-suggest-chip" style="--chip-col:${artistColor(a)};" onclick="addArtistSuggestion('${a.replace(/'/g,"\\'")}',this)">+ ${a}</span>`).join('')}
         </div>` : '';
 
       profilePage.innerHTML = `
@@ -6303,7 +6349,7 @@
           <div class="genre-preset-cloud" id="genre-preset-cloud">
             ${allGenrePresets().map(g => {
               const picked = (r.genres || []).map(x=>x.toLowerCase()).includes(g.toLowerCase()) ? ' picked' : '';
-              return `<span class="genre-preset${picked}" onclick="toggleGenrePick('${g.replace(/'/g,"\\'").replace(/"/g,'&quot;')}', this)">${g}</span>`;
+              return `<span class="genre-preset${picked}" style="--chip-col:${genreColor(g)};" onclick="toggleGenrePick('${g.replace(/'/g,"\\'").replace(/"/g,'&quot;')}', this)">${g}</span>`;
             }).join('')}
           </div>
           <div class="vibe-custom-row">
@@ -6424,7 +6470,7 @@
             return suggestions.length ? `
               <div class="genre-suggest-label">Suggestions</div>
               <div class="genre-suggest-cloud">
-                ${suggestions.map(g => `<span class="genre-suggest-chip" onclick="addTag('${r.id}','genres','${g.replace(/'/g,"\\'")}');return false;">+ ${g}</span>`).join('')}
+                ${suggestions.map(g => `<span class="genre-suggest-chip" style="--chip-col:${genreColor(g)};" onclick="addTag('${r.id}','genres','${g.replace(/'/g,"\\'")}');return false;">+ ${g}</span>`).join('')}
               </div>` : '';
           })() : ''}
           ${r.isYou ? addTagInput('genres', '+ custom genre') : ''}
@@ -6626,7 +6672,7 @@
         <div class="genre-preset-cloud" id="genre-preset-cloud">
           ${allGenrePresets().map(g => {
             const picked = (r?.genres || []).map(x=>x.toLowerCase()).includes(g.toLowerCase()) ? ' picked' : '';
-            return `<span class="genre-preset${picked}" onclick="toggleGenrePick('${g.replace(/'/g,"\\'").replace(/"/g,'&quot;')}', this)">${g}</span>`;
+            return `<span class="genre-preset${picked}" style="--chip-col:${genreColor(g)};" onclick="toggleGenrePick('${g.replace(/'/g,"\\'").replace(/"/g,'&quot;')}', this)">${g}</span>`;
           }).join('')}
         </div>
         <div class="vibe-custom-row">
