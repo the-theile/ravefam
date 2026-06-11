@@ -798,6 +798,100 @@
   .qrs-manual-link:hover { color: var(--cyan); }
 
   #qrs-canvas { display: none; }
+
+  /* ── Support / Ko-fi widget ── */
+  #support-section { padding: 40px 20px 10px; }
+  .support-bar {
+    background: rgba(255,255,255,0.04);
+    border-radius: 20px;
+    padding: 16px 16px 12px;
+    margin: 0 auto;
+    max-width: 600px;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .support-title {
+    text-align: center;
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .emoji-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  .emoji-card {
+    background: rgba(255,255,255,0.06);
+    border: 1.5px solid transparent;
+    border-radius: 14px;
+    padding: 8px 4px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s;
+    aspect-ratio: 1 / 1;
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+  }
+  .emoji-card:hover {
+    transform: scale(1.12) rotate(5deg);
+    border-color: var(--pink);
+    box-shadow: 0 0 18px rgba(255,45,120,0.4);
+  }
+  .emoji-card .e-ico { font-size: 1.8em; margin-bottom: 3px; }
+  .emoji-card .e-lbl {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.62em;
+    color: rgba(255,255,255,0.65);
+    line-height: 1.1;
+  }
+  .spt-modal {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.85); justify-content: center; align-items: center;
+    z-index: 9000;
+  }
+  .spt-modal-box {
+    background: #0d0d1a;
+    border: 2px solid rgba(255,45,120,0.5);
+    border-radius: 24px;
+    padding: 28px 24px;
+    max-width: 320px; width: 90%;
+    text-align: center;
+    box-shadow: 0 0 40px rgba(255,45,120,0.3);
+  }
+  .spt-modal-box .spt-emoji { font-size: 4rem; margin-bottom: 10px; display: block; }
+  .spt-progress-wrap {
+    height: 10px; background: rgba(255,255,255,0.08);
+    border-radius: 999px; margin: 14px 0;
+  }
+  .spt-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--pink), var(--green));
+    border-radius: 999px; transition: width 0.9s ease;
+  }
+  .spt-donate-btn {
+    background: linear-gradient(135deg, var(--pink), #BF00FF);
+    color: #fff; border: none;
+    padding: 12px 28px; font-size: 1rem;
+    border-radius: 50px; cursor: pointer;
+    font-family: 'Outfit', sans-serif; font-weight: 700;
+    width: 100%; margin-top: 16px;
+  }
+  .spt-close-btn {
+    margin-top: 10px; background: transparent;
+    border: 1.5px solid rgba(255,255,255,0.15);
+    color: var(--muted); padding: 9px 22px;
+    border-radius: 50px; cursor: pointer;
+    font-family: 'Outfit', sans-serif;
+  }
+  @media (max-width: 520px) {
+    .emoji-grid { gap: 6px; }
+    .emoji-card .e-ico { font-size: 1.55em; }
+  }
 </style>
 </head>
 <body>
@@ -1257,6 +1351,37 @@
   </div>
 </section>
 
+<!-- SUPPORT / KO-FI WIDGET -->
+<section id="support-section" class="z">
+  <div class="support-bar">
+    <div class="support-title">☕ pick your vibe &amp; support the build</div>
+    <div class="emoji-grid" id="spt-emoji-grid"></div>
+  </div>
+</section>
+
+<!-- Progress modal -->
+<div id="sptProgressModal" class="spt-modal">
+  <div class="spt-modal-box">
+    <span id="sptMEmoji" class="spt-emoji"></span>
+    <h3 id="sptMLabel" style="margin:0 0 6px;color:#fff;font-family:'Syne',sans-serif;font-size:1.2rem;"></h3>
+    <div class="spt-progress-wrap"><div id="sptMBar" class="spt-progress-bar" style="width:0%"></div></div>
+    <div id="sptMCount" style="font-family:'Outfit',sans-serif;font-size:0.9rem;color:var(--muted);margin-bottom:8px;"></div>
+    <p id="sptMMsg" style="font-family:'Outfit',sans-serif;font-size:0.85rem;color:rgba(255,255,255,0.7);margin:8px 0 0;"></p>
+    <button id="sptDonateBtn" class="spt-donate-btn">☕ Donate on Ko-fi</button>
+    <button onclick="closeSptModal()" class="spt-close-btn">Close</button>
+  </div>
+</div>
+
+<!-- Prank modal (❄️ Snow) -->
+<div id="sptPrankModal" class="spt-modal">
+  <div class="spt-modal-box" style="border-color:rgba(255,60,60,0.6);">
+    <span style="font-size:5rem;display:block;margin-bottom:8px;">🚓</span>
+    <h3 style="color:#ff4444;font-family:'Syne',sans-serif;">BUSTED!</h3>
+    <p style="font-family:'Outfit',sans-serif;color:rgba(255,255,255,0.7);">❄️ Caught in the snow zone — better luck next time, raver! 😂</p>
+    <button onclick="closeSptPrank()" class="spt-donate-btn" style="background:#ff4444;">Escape</button>
+  </div>
+</div>
+
 <!-- FOOTER -->
 <footer class="z">
   <div class="footer-logo">
@@ -1581,6 +1706,53 @@
       closeQrScanner();
     }
   });
+})();
+
+// ── Ko-fi support widget ──────────────────────────────────
+(function() {
+  const KOFI = 'ravefam';
+  const OPTS = [
+    { e:'🍺', l:'Beer',         m:'🍺 Beer fund',              u:'beers',    msg:'Fuel the party — more beers for the crew! 🍻' },
+    { e:'🤖', l:'AI Time',      m:'🤖 More AI features',        u:'boosts',   msg:"Crank up the AI — let's build wilder vibes! 🤖⚡" },
+    { e:'🎟️', l:'Festival',     m:'🎟️ Festival / show ticket',  u:'tickets',  msg:'Stack those festival tickets — rave season incoming! 🎉' },
+    { e:'⚡',  l:'Kilowatts',   m:'⚡ Kilowatts / energy',      u:'kW',       msg:'Power the lights & bass — drop more kilowatts! ⚡🔊' },
+    { e:'🍭', l:'Kandi',        m:'🍭 Kandi candy',             u:'pieces',   msg:'Trade more kandi — spread the PLUR! 🍭✨' },
+    { e:'❄️', l:'Snow',         isPrank: true },
+    { e:'🌿', l:'Flowers',      m:'🌿 Flowers / plants',        u:'bouquets', msg:'Grow the garden — more flowers for the festival! 🌸' },
+    { e:'🕺', l:'Rave Fits',    m:'🕺 Rave Fits',              u:'fits',     msg:'Outfit the dancefloor — drop more rave fits! 🕺💃' },
+    { e:'❤️', l:'Just Because', m:'❤️ Just because',           u:'hearts',   msg:'Pure love for the vibe — keep the good energy flowing! ❤️' },
+  ];
+  let prog = {};
+  fetch('progress.json').then(r => r.ok ? r.json() : {}).then(d => { prog = d; buildGrid(); }).catch(() => buildGrid());
+  function buildGrid() {
+    const grid = document.getElementById('spt-emoji-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    OPTS.forEach(o => {
+      const d = prog[o.e] || { current: 0, goal: 10 };
+      const card = document.createElement('div');
+      card.className = 'emoji-card';
+      card.innerHTML = `<span class="e-ico">${o.e}</span><div class="e-lbl">${o.l}</div>`;
+      card.onclick = () => o.isPrank ? showSptPrank() : showSptModal(o, d);
+      grid.appendChild(card);
+    });
+  }
+  window.showSptModal = function(o, d) {
+    const pct = Math.min(Math.round((d.current / d.goal) * 100), 100);
+    document.getElementById('sptMEmoji').textContent = o.e;
+    document.getElementById('sptMLabel').textContent = o.l;
+    document.getElementById('sptMBar').style.width = pct + '%';
+    document.getElementById('sptMCount').textContent = `${d.current} / ${d.goal} ${o.u}`;
+    document.getElementById('sptMMsg').textContent = o.msg;
+    document.getElementById('sptDonateBtn').onclick = () => {
+      window.open(`https://ko-fi.com/${KOFI}?message=${encodeURIComponent(o.m)}`, '_blank');
+      closeSptModal();
+    };
+    document.getElementById('sptProgressModal').style.display = 'flex';
+  };
+  window.showSptPrank  = () => document.getElementById('sptPrankModal').style.display = 'flex';
+  window.closeSptModal = () => document.getElementById('sptProgressModal').style.display = 'none';
+  window.closeSptPrank = () => document.getElementById('sptPrankModal').style.display = 'none';
 })();
 </script>
 
