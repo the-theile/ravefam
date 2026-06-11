@@ -2708,6 +2708,16 @@
     flex-direction: column;
     align-items: center;
   }
+  .scanner-subtitle {
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.82rem;
+    color: var(--muted);
+    text-align: center;
+    padding: 0 24px 14px;
+    max-width: 480px;
+    width: 100%;
+    line-height: 1.5;
+  }
   .code-input-label {
     font-family: 'Outfit', sans-serif;
     font-weight: 600;
@@ -2715,8 +2725,40 @@
     text-transform: uppercase;
     letter-spacing: 0.8px;
     color: var(--muted);
-    margin-bottom: 16px;
+    margin-bottom: 6px;
     text-align: center;
+  }
+  .code-input-hint {
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.76rem;
+    color: var(--muted);
+    text-align: center;
+    margin-bottom: 16px;
+    line-height: 1.4;
+    opacity: 0.65;
+  }
+  .qr-steps {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    margin: 10px 0 16px;
+    flex-wrap: wrap;
+  }
+  .qr-step {
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--muted);
+    background: rgba(255,255,255,0.06);
+    border-radius: 20px;
+    padding: 4px 10px;
+    white-space: nowrap;
+  }
+  .qr-step-arrow {
+    font-size: 0.68rem;
+    color: var(--muted);
+    opacity: 0.4;
   }
   .otp-boxes {
     display: flex;
@@ -3734,6 +3776,7 @@
       <button class="scanner-tab active" id="stab-camera" onclick="switchScannerTab('camera')">📷 Scan QR</button>
       <button class="scanner-tab"        id="stab-code"   onclick="switchScannerTab('code')">🔢 Enter Code</button>
     </div>
+    <div class="scanner-subtitle" id="scanner-subtitle">Point your camera at the QR your crew leader is showing you — you're added to the crew instantly.</div>
 
     <!-- Camera pane -->
     <div id="scanner-pane-camera" style="width:100%;display:flex;flex-direction:column;align-items:center;">
@@ -3759,7 +3802,8 @@
 
     <!-- Code entry pane -->
     <div id="scanner-pane-code" class="code-input-wrap" style="display:none;">
-      <div class="code-input-label">Enter your 6-character invite code</div>
+      <div class="code-input-label">Enter your invite code</div>
+      <div class="code-input-hint">Ask your crew leader for the 6-character code — enter it below to join instantly</div>
       <div class="otp-boxes" id="otp-boxes">
         <input class="otp-box" maxlength="1" data-idx="0" oninput="otpInput(this)" onkeydown="otpKeydown(event,this)" autocomplete="off" inputmode="text" spellcheck="false">
         <input class="otp-box" maxlength="1" data-idx="1" oninput="otpInput(this)" onkeydown="otpKeydown(event,this)" autocomplete="off" inputmode="text" spellcheck="false">
@@ -4304,15 +4348,22 @@
 
     document.getElementById('qr-modal').innerHTML = `
       <div class="qr-color-bar" style="background:${gradient}"></div>
-      <div class="modal-title" style="margin-bottom:4px;">Share with ${r.name.split(' ')[0]}</div>
-      <div class="qr-hint">Scan the QR or share the invite code below.</div>
+      <div class="modal-title" style="margin-bottom:4px;">Invite ${r.name.split(' ')[0]}</div>
+      <div class="qr-hint">Show this QR or share the code — they're added to your crew instantly. No account needed first.</div>
       <div class="qr-canvas-wrap" id="qr-canvas-wrap" style="min-width:200px;min-height:200px;display:flex;align-items:center;justify-content:center;">
         <div style="color:var(--muted);font-size:0.78rem;">Generating…</div>
       </div>
-      <div style="margin:14px 0 6px;">
-        <div style="font-family:'Outfit',sans-serif;font-weight:600;font-size:0.66rem;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);margin-bottom:6px;">Invite Code</div>
+      <div class="qr-steps">
+        <span class="qr-step">📱 Show QR</span>
+        <span class="qr-step-arrow">→</span>
+        <span class="qr-step">📷 They scan</span>
+        <span class="qr-step-arrow">→</span>
+        <span class="qr-step">⚡ Instantly in</span>
+      </div>
+      <div style="margin:0 0 6px;">
+        <div style="font-family:'Outfit',sans-serif;font-weight:600;font-size:0.66rem;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);margin-bottom:6px;">Or share the invite code</div>
         <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:2rem;letter-spacing:0.14em;color:#fff;text-shadow:0 0 20px ${color}88;">${inviteCode}</div>
-        <div style="font-size:0.7rem;color:var(--muted);margin-top:2px;">Type this on sign-up to join</div>
+        <div style="font-size:0.7rem;color:var(--muted);margin-top:2px;">They enter this at ravefam.com or on sign-up</div>
       </div>
       <div style="display:flex;gap:10px;justify-content:center;margin-top:14px;">
         <button class="qr-copy-btn" onclick="copyClaimLink('${claimUrl}')">📋 Copy link</button>
@@ -4388,13 +4439,16 @@
     const codePane   = document.getElementById('scanner-pane-code');
     if (!cameraPane || !codePane) return;
 
+    const subtitleEl = document.getElementById('scanner-subtitle');
     if (tab === 'camera') {
       cameraPane.style.display = 'flex';
       codePane.style.display   = 'none';
+      if (subtitleEl) subtitleEl.textContent = 'Point your camera at the QR your crew leader is showing you — you\'re added to the crew instantly.';
       startCamera();
     } else {
       cameraPane.style.display = 'none';
       codePane.style.display   = 'flex';
+      if (subtitleEl) subtitleEl.textContent = 'Got a code from your crew leader? Type it in — you\'re added to the crew instantly.';
       stopCamera();
       setTimeout(() => {
         const first = document.querySelector('.otp-box[data-idx="0"]');
