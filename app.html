@@ -505,24 +505,19 @@
     margin-bottom: 3px;
   }
   .event-meta { font-size: 0.78rem; color: var(--muted); }
-  .going-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
-  .going-chip {
-    font-size: 0.72rem;
-    font-weight: 600;
-    font-family: 'Outfit', sans-serif;
-    padding: 3px 10px;
-    border-radius: 100px;
-    background: rgba(57,255,20,0.1);
-    color: var(--neon-green);
-    border: 1px solid rgba(57,255,20,0.2);
+  /* Stacked avatar row replacing name chips */
+  .going-avatars { display: flex; align-items: center; margin-top: 9px; }
+  .going-avatar {
     cursor: pointer;
-    transition: all 0.15s;
+    transition: transform 0.15s;
+    position: relative;
   }
-  .going-chip:hover { background: rgba(57,255,20,0.22); border-color: var(--neon-green); }
+  .going-avatar:hover { transform: scale(1.15) translateY(-2px); z-index: 10; }
 
   .going-toggle {
     display: inline-flex;
     align-items: center;
+    gap: 5px;
     margin-top: 8px;
     font-size: 0.72rem;
     font-family: 'Outfit', sans-serif;
@@ -537,7 +532,14 @@
     letter-spacing: 0.02em;
   }
   .going-toggle:hover { border-color: #39FF14; color: #39FF14; }
-  .going-toggle-active { border-color: #39FF14 !important; color: #39FF14 !important; background: rgba(57,255,20,0.09) !important; }
+  .going-toggle-active {
+    border-color: #39FF14 !important;
+    color: #39FF14 !important;
+    background: rgba(57,255,20,0.09) !important;
+    font-size: 0.8rem !important;
+    padding: 5px 13px !important;
+    letter-spacing: 0.03em !important;
+  }
 
   .event-crew-going {
     display: flex;
@@ -7668,12 +7670,26 @@
       const goers = festivalGoers(f.id);
       const isUpcoming = f._d && f._d >= TODAY;
       const metaLine = `📍 ${f.location || 'Location TBD'}` + (isUpcoming ? ` · ⏳ ${countdownLabel(f._d)}` : (f._d ? ` · ${f._d.getFullYear()}` : ''));
-      const chips = goers.length
-        ? goers.map(w => `<span class="going-chip" data-raver-id="${w.id}" onclick="event.stopPropagation(); openProfile(this.dataset.raverId)" title="View ${w.name}'s profile">${w.name.split(' ')[0]}</span>`).join('')
-        : '<span class="fest-empty" style="font-size:0.74rem;">Nobody from the tribe yet</span>';
       const you = squad.find(r => r.isYou);
       const youGoing = you && (you.festIds || []).some(fid => String(fid) === String(f.id));
-      const toggleBtn = `<button class="going-toggle${youGoing ? ' going-toggle-active' : ''}" data-fest-id="${f.id}" onclick="event.stopPropagation(); toggleGoingToFest(this.dataset.festId)">${youGoing ? '✓ Going' : '＋ Going'}</button>`;
+
+      // Stacked avatar chips replacing name-text pills
+      let avatarChips;
+      if (goers.length) {
+        const shown = goers.slice(0, 5);
+        avatarChips = shown.map(w => {
+          const bg = w.avatarUrl ? 'transparent;overflow:hidden;padding:0' : extractFirstColor(w.gradient);
+          const inner = w.avatarUrl
+            ? `<img src="${w.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${initials(w.name)}">`
+            : initials(w.name).toUpperCase();
+          return `<div class="avatar going-avatar" style="background:${bg};" data-raver-id="${w.id}" onclick="event.stopPropagation(); openProfile(this.dataset.raverId)" title="${w.name}">${inner}</div>`;
+        }).join('');
+        if (goers.length > 5) avatarChips += `<div class="avatar avatar-count">+${goers.length - 5}</div>`;
+      } else {
+        avatarChips = '<span style="font-size:0.74rem;color:var(--muted);">Nobody from the tribe yet</span>';
+      }
+
+      const toggleBtn = `<button class="going-toggle${youGoing ? ' going-toggle-active' : ''}" data-fest-id="${f.id}" onclick="event.stopPropagation(); toggleGoingToFest(this.dataset.festId)">${youGoing ? '🎟️ Going' : '＋ Going'}</button>`;
 
       return `
         <div class="event-item event-item-clickable${youGoing ? ' event-item-going' : ''}" data-fest-id="${f.id}" onclick="activeFestId=this.dataset.festId; openRaveEditor(this.dataset.festId)" title="Tap to edit ${f.name}">
@@ -7685,7 +7701,7 @@
           <div class="event-info">
             <div class="event-name">${f.name} <span class="fest-edit-hint">✏️</span></div>
             <div class="event-meta">${metaLine}</div>
-            <div class="going-chips">${chips}</div>
+            <div class="going-avatars">${avatarChips}</div>
             ${toggleBtn}
           </div>
           <div class="event-crew-going">
