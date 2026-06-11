@@ -625,28 +625,59 @@
   }
   .profile-back:hover { color: var(--neon-pink); }
 
+  /* ===== Profile Hero (view mode) ===== */
+  .profile-hero-banner {
+    height: 80px;
+    border-radius: 20px 20px 0 0;
+    position: relative; overflow: hidden;
+  }
+  .profile-hero-banner::after {
+    content: ''; position: absolute; inset: 0;
+    background: rgba(0,0,0,0.18);
+  }
+  .profile-hero-body {
+    display: flex; gap: 14px;
+    padding: 0 18px 18px;
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-top: none;
+    border-radius: 0 0 20px 20px;
+    margin-bottom: 18px;
+    align-items: flex-end;
+  }
+  .profile-avatar-ring {
+    margin-top: -46px; flex-shrink: 0;
+    width: 116px; height: 116px; border-radius: 50%;
+    padding: 3px;
+    background: conic-gradient(#FF2D78, #BF00FF, #00F5FF, #39FF14, #FFB800, #FF2D78);
+    animation: ringRotate 3s linear infinite;
+    position: relative; z-index: 1;
+  }
+  @keyframes ringRotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  .profile-avatar {
+    width: 110px; height: 110px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 2.2rem;
+    flex-shrink: 0; border: none;
+  }
+  .profile-avatar-photo { width: 110px; height: 110px; border-radius: 50%; object-fit: cover; display: block; }
+  .profile-id { flex: 1; padding-top: 10px; min-width: 0; }
+  .profile-id h2 {
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 1.35rem; color: #fff;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .profile-handle { color: var(--muted); font-size: 0.88rem; margin: 2px 0 6px; }
+  .profile-base-line { font-size: 0.82rem; color: var(--text); }
+  /* Keep old .profile-hero for EDIT mode only */
   .profile-hero {
     display: flex; align-items: center; gap: 20px;
     background: var(--surface);
     border: 1px solid rgba(255,255,255,0.07);
     border-radius: 20px;
-    padding: 24px;
-    margin-bottom: 18px;
-    position: relative;
-    overflow: hidden;
+    padding: 24px; margin-bottom: 18px;
+    position: relative; overflow: hidden;
   }
   .profile-hero-bar { position: absolute; top: 0; left: 0; right: 0; height: 5px; }
-  .profile-avatar {
-    width: 84px; height: 84px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 2rem;
-    flex-shrink: 0; border: 3px solid rgba(255,255,255,0.12);
-  }
-  .profile-id h2 {
-    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 1.5rem; color: #fff;
-  }
-  .profile-handle { color: var(--muted); font-size: 0.9rem; margin: 2px 0 8px; }
-  .profile-base-line { font-size: 0.85rem; color: var(--text); }
 
   /* ===== Inline profile edit mode ===== */
   .profile-hero.edit-mode { border-color: rgba(0,245,255,0.2); }
@@ -665,8 +696,8 @@
   /* Profile page form-input override: 16px minimum to prevent iOS Safari zoom */
   #page-profile .form-input { font-size: 16px; }
   /* Touch targets for interactive chips */
-  .vibe-preset { min-height: 40px; }
-  .genre-preset { min-height: 40px; }
+  .vibe-preset { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; }
+  .genre-preset { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; }
   .fest-check { min-height: 44px; }
   @media (max-width: 480px) {
     .profile-hero.edit-mode { flex-direction: column; text-align: center; }
@@ -676,9 +707,12 @@
   .profile-section {
     background: var(--surface);
     border: 1px solid rgba(255,255,255,0.07);
+    border-top: 2px solid var(--section-glow, rgba(255,255,255,0.1));
     border-radius: 16px;
     padding: 20px;
     margin-bottom: 14px;
+    box-shadow: 0 -2px 18px -6px var(--section-glow, transparent),
+                0 2px 12px rgba(0,0,0,0.25);
   }
   .profile-section h3 {
     font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.78rem;
@@ -696,8 +730,17 @@
   .profile-note { font-size: 0.9rem; line-height: 1.6; color: var(--text); white-space: pre-wrap; }
   .fav-chips { display: flex; flex-wrap: wrap; gap: 7px; }
   .fav-chip {
+    display: inline-flex; align-items: center; gap: 3px;
     font-size: 0.8rem; padding: 5px 12px; border-radius: 100px;
-    background: rgba(255,45,120,0.12); color: var(--neon-pink); font-weight: 500;
+    font-family: 'Outfit', sans-serif; font-weight: 700;
+    border: 1.5px solid color-mix(in srgb, var(--chip-col, var(--neon-pink)) 40%, transparent);
+    color: var(--chip-col, var(--neon-pink));
+    background: color-mix(in srgb, var(--chip-col, var(--neon-pink)) 12%, transparent);
+    animation: chipGlow 3s ease-in-out infinite;
+  }
+  @keyframes chipGlow {
+    0%, 100% { box-shadow: 0 0 7px -3px currentColor; }
+    50%       { box-shadow: 0 0 16px -1px currentColor; }
   }
   .profile-actions { display: flex; gap: 10px; margin: 4px 0 12px; }
 
@@ -775,25 +818,74 @@
   }
   .add-fest-btn:hover { background: rgba(255,45,120,0.18); }
 
-  /* Rave picker (checkboxes) in profile editor */
+  /* ===== Rave picker (new chip + search design) ===== */
   .fest-picker-hint { font-size: 0.74rem; color: var(--muted); margin-bottom: 10px; line-height: 1.45; }
-  .fest-group-label {
+  .fest-section-label {
     font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.66rem;
     text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted);
-    margin: 12px 0 7px;
+    margin: 4px 0 8px;
   }
-  .fest-check {
-    display: flex; align-items: center; gap: 10px;
-    padding: 10px 12px; border-radius: 10px; cursor: pointer;
-    background: rgba(255,255,255,0.04); margin-bottom: 6px;
-    border: 1px solid rgba(255,255,255,0.07);
-    transition: background 0.15s, border-color 0.15s;
+  /* Selected chips row */
+  .fest-selected-wrap { display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; margin-bottom: 14px; }
+  .fest-sel-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 10px 4px 12px; border-radius: 100px;
+    font-family: 'Outfit', sans-serif; font-size: 0.78rem; font-weight: 700;
+    border: 1.5px solid color-mix(in srgb, var(--chip-col, var(--neon-green)) 45%, transparent);
+    color: var(--chip-col, var(--neon-green));
+    background: color-mix(in srgb, var(--chip-col, var(--neon-green)) 12%, transparent);
+    animation: chipGlow 3s ease-in-out infinite;
   }
-  .fest-check:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.14); }
-  .fest-check:has(input:checked) { background: rgba(57,255,20,0.07); border-color: rgba(57,255,20,0.25); }
-  .fest-check input { width: 18px; height: 18px; accent-color: var(--neon-green); flex-shrink: 0; cursor: pointer; }
-  .fest-check-name { font-size: 0.88rem; font-weight: 600; color: var(--text); flex: 1; line-height: 1.35; }
-  .fest-check-meta { font-size: 0.76rem; color: var(--muted); font-weight: 400; }
+  /* Upcoming quick-tap chips */
+  .fest-quick-cloud { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .fest-quick-chip {
+    --chip-col: #39FF14;
+    display: inline-flex; align-items: center; gap: 0; min-height: 34px;
+    padding: 4px 11px; border-radius: 100px;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.75rem;
+    cursor: pointer;
+    border: 1.5px solid color-mix(in srgb, var(--chip-col) 30%, transparent);
+    color: color-mix(in srgb, var(--chip-col) 62%, transparent);
+    background: transparent;
+    transition: all 0.15s; user-select: none;
+  }
+  .fest-quick-chip:hover {
+    border-color: color-mix(in srgb, var(--chip-col) 65%, transparent);
+    color: color-mix(in srgb, var(--chip-col) 92%, transparent);
+    transform: translateY(-1px);
+  }
+  .fest-quick-chip.picked {
+    border-color: var(--chip-col);
+    background: color-mix(in srgb, var(--chip-col) 14%, transparent);
+    color: var(--chip-col);
+    box-shadow: 0 0 10px -3px var(--chip-col);
+  }
+  .fest-quick-date { font-size: 0.65rem; opacity: 0.7; margin-left: 4px; }
+  /* Search */
+  .fest-search-wrap { position: relative; }
+  .fest-search-dropdown {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
+    background: #12121e; border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px; overflow: hidden;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.5);
+  }
+  .fest-search-item {
+    display: flex; flex-direction: column; padding: 9px 14px; cursor: pointer;
+    border-bottom: 1px solid rgba(255,255,255,0.06); transition: background 0.12s;
+  }
+  .fest-search-item:last-child { border-bottom: none; }
+  .fest-search-item:hover, .fest-search-item:active { background: rgba(255,255,255,0.08); }
+  .fest-search-name { font-size: 0.85rem; font-weight: 600; color: var(--text); }
+  .fest-search-meta { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
+  /* Add new rave — Going/Been toggle */
+  .nf-gb-toggle { display: flex; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; overflow: hidden; flex-shrink: 0; }
+  .nf-gb-btn {
+    padding: 8px 13px; border: none; cursor: pointer; background: transparent;
+    font-family: 'Outfit', sans-serif; font-size: 0.75rem; font-weight: 700;
+    color: var(--muted); transition: all 0.15s;
+  }
+  .nf-gb-btn.active.nf-going { background: rgba(57,255,20,0.15); color: var(--neon-green); }
+  .nf-gb-btn.active.nf-been  { background: rgba(0,245,255,0.15); color: var(--neon-cyan); }
 
   /* Location line on profile fest rows */
   .fest-loc { display: block; font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
@@ -1492,112 +1584,84 @@
     display: flex; gap: 8px; margin-top: 8px;
   }
 
-  /* Our Photo — side-by-side with countdown */
+  /* Our Photo — Polaroid style */
   .our-photo-countdown-row {
-    display: flex;
-    gap: 10px;
-    align-items: stretch;
-    margin-bottom: 16px;
+    display: flex; gap: 10px; align-items: stretch; margin-bottom: 16px;
   }
-  .our-photo-countdown-row .countdown-banner {
-    flex: 1;
-    margin-bottom: 0;
-  }
+  .our-photo-countdown-row .countdown-banner { flex: 1; margin-bottom: 0; }
   .our-photos-col {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    flex-shrink: 0;
-    align-items: center;
+    display: flex; flex-direction: column;
+    gap: 6px; flex-shrink: 0; align-items: center;
   }
-  .our-photos-slots {
-    display: flex;
-    flex-direction: row;
-    gap: 6px;
-  }
+  .our-photos-slots { display: flex; flex-direction: row; gap: 10px; }
   .our-photo-label {
-    font-family: 'Outfit', sans-serif; font-weight: 700;
-    font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.8px;
-    color: var(--muted); line-height: 1; text-align: center;
+    font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.6rem;
+    text-transform: uppercase; letter-spacing: 2px;
+    color: rgba(255,255,255,0.5); text-align: center;
   }
+  /* Polaroid frame */
   .our-photo-slot {
-    position: relative;
-    width: 140px;
+    position: relative; width: 120px;
+    background: #f0ece4;
+    padding: 6px 6px 22px;
+    border-radius: 2px;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.7), 2px 3px 8px rgba(0,0,0,0.4);
   }
+  .our-photo-slot:first-child { transform: rotate(-2.5deg); }
+  .our-photo-slot:nth-child(2) { transform: rotate(2deg); }
   .our-photo-slot img {
-    width: 140px; height: 140px;
-    object-fit: cover; border-radius: 12px; display: block;
-    border: 2px solid rgba(255,255,255,0.1);
+    width: 108px; height: 108px; object-fit: cover;
+    border-radius: 1px; display: block;
   }
   .our-photo-slot-empty {
-    width: 140px; height: 140px;
-    border-radius: 12px;
-    border: 1px dashed rgba(255,255,255,0.12);
-    position: relative;
-    overflow: hidden;
-    background: linear-gradient(135deg, rgba(0,207,255,0.06) 0%, rgba(57,255,20,0.04) 50%, rgba(255,45,120,0.06) 100%);
+    width: 108px; height: 108px; border-radius: 1px;
+    background: linear-gradient(135deg,rgba(255,45,120,0.08) 0%,rgba(57,255,20,0.06) 50%,rgba(0,207,255,0.08) 100%);
+    border: 1px dashed rgba(0,0,0,0.12);
   }
   .our-photo-remove {
     position: absolute; top: 4px; right: 4px;
     width: 20px; height: 20px;
-    background: rgba(0,0,0,0.75);
-    border: none; border-radius: 50%;
-    color: rgba(255,255,255,0.85); font-size: 0.55rem;
-    cursor: pointer;
+    background: rgba(0,0,0,0.6); border: none; border-radius: 50%;
+    color: #fff; font-size: 0.55rem; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
-    opacity: 0; transition: opacity 0.15s;
-    padding: 0;
+    opacity: 0; transition: opacity 0.15s; padding: 0;
   }
   .our-photo-slot:hover .our-photo-remove { opacity: 1; }
   @media (max-width: 640px) { .our-photo-remove { opacity: 1; } }
+  /* Upload (add) button — Polaroid frame with dashed film area */
   .our-photo-add {
-    width: 140px; height: 140px;
-    border: 2px dashed rgba(255,255,255,0.14);
-    border-radius: 12px;
+    background: #f0ece4;
+    padding: 6px 6px 22px;
+    border-radius: 2px;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.7), 2px 3px 8px rgba(0,0,0,0.4);
     display: flex; align-items: center; justify-content: center;
-    cursor: pointer;
-    color: var(--muted); font-size: 1.6rem;
-    transition: all 0.18s;
-    background: linear-gradient(135deg, rgba(255,45,120,0.07) 0%, rgba(57,255,20,0.05) 50%, rgba(0,207,255,0.07) 100%);
+    cursor: pointer; width: 120px; height: 136px;
+    position: relative; border: none;
+    transform: rotate(-2.5deg); transition: transform 0.2s;
   }
-  .our-photo-add:hover { border-color: var(--neon-pink); color: var(--neon-pink); background: rgba(255,45,120,0.08); }
-  @media (max-width: 400px) {
-    .our-photo-slot { width: 88px; }
-    .our-photo-slot img { width: 88px; height: 88px; }
-    .our-photo-slot-empty { width: 88px; height: 88px; }
-    .our-photo-add { width: 88px; height: 88px; }
+  .our-photo-add:hover { transform: rotate(-1deg) scale(1.04); }
+  .our-photo-add-inner {
+    width: 108px; height: 108px;
+    border: 2px dashed rgba(0,0,0,0.2); border-radius: 1px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 4px;
+    background: linear-gradient(135deg,rgba(255,45,120,0.08) 0%,rgba(57,255,20,0.06) 50%,rgba(0,207,255,0.08) 100%);
   }
+  .our-photo-add-icon { font-size: 1.4rem; opacity: 0.5; }
+  .our-photo-add-text { font-size: 0.55rem; font-family:'Outfit',sans-serif; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:rgba(0,0,0,0.35); }
   @media (max-width: 640px) {
-    .our-photo-countdown-row {
-      flex-direction: column;
-    }
-    .our-photo-countdown-row .countdown-banner {
-      width: 100%;
-    }
+    .our-photo-countdown-row { flex-direction: column; }
+    .our-photo-countdown-row .countdown-banner { width: 100%; }
   }
   /* standalone (no countdown) */
   .our-photos-standalone {
-    display: flex; align-items: center; gap: 10px;
+    display: flex; align-items: center; gap: 14px;
     background: var(--surface);
     border: 1px solid rgba(255,255,255,0.07);
     border-radius: 16px;
-    padding: 14px 16px;
-    margin-bottom: 14px;
+    padding: 18px 16px; margin-bottom: 14px;
   }
-  .our-photos-standalone .our-photos-col {
-    flex-direction: row;
-    width: auto;
-    gap: 8px;
-  }
-  .our-photos-standalone .our-photo-slot img,
-  .our-photos-standalone .our-photo-add {
-    width: 68px; height: 68px;
-  }
-  .our-photos-standalone-label {
-    font-family: 'Outfit', sans-serif; font-weight: 700;
-    font-size: 0.72rem; color: var(--muted);
-    text-transform: uppercase; letter-spacing: 1px;
-  }
+  .our-photos-standalone .our-photos-col { flex-direction: row; width: auto; gap: 10px; }
 
   /* ===== Vibe Tags ===== */
   .vibe-tags-section { margin-top: 14px; }
@@ -1668,18 +1732,28 @@
   /* ===== Genre Presets ===== */
   .genre-preset-cloud { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
   .genre-preset {
+    --chip-col: #888;
+    display: inline-flex; align-items: center; justify-content: center; min-height: 40px;
     padding: 5px 13px; border-radius: 100px;
     font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.75rem;
-    cursor: pointer; border: 1.5px solid rgba(255,255,255,0.12);
-    background: rgba(255,255,255,0.04); color: var(--muted);
+    cursor: pointer;
+    border: 1.5px solid color-mix(in srgb, var(--chip-col) 28%, transparent);
+    color: color-mix(in srgb, var(--chip-col) 58%, transparent);
+    background: transparent;
     transition: all 0.18s cubic-bezier(0.34,1.4,0.64,1);
     user-select: none;
   }
-  .genre-preset:hover { border-color: rgba(0,245,255,0.4); color: var(--neon-cyan); transform: translateY(-1px); }
+  .genre-preset:hover {
+    border-color: color-mix(in srgb, var(--chip-col) 65%, transparent);
+    color: color-mix(in srgb, var(--chip-col) 92%, transparent);
+    transform: translateY(-1px);
+  }
   .genre-preset.picked {
-    border-color: var(--neon-cyan); background: rgba(0,245,255,0.1);
-    color: var(--neon-cyan); transform: translateY(-1px);
-    box-shadow: 0 0 10px -4px var(--neon-cyan);
+    border-color: var(--chip-col);
+    background: color-mix(in srgb, var(--chip-col) 14%, transparent);
+    color: var(--chip-col);
+    transform: translateY(-1px);
+    box-shadow: 0 0 12px -3px var(--chip-col);
   }
   /* Inline suggestion chips on profile view */
   .genre-suggest-label { font-size: 0.68rem; color: var(--muted); margin: 8px 0 5px; font-family: 'Outfit', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; }
@@ -1687,11 +1761,18 @@
   .genre-suggest-chip {
     padding: 3px 11px; border-radius: 100px;
     font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.7rem;
-    cursor: pointer; border: 1px dashed rgba(0,245,255,0.25);
-    background: rgba(0,245,255,0.05); color: var(--muted);
+    cursor: pointer;
+    border: 1px dashed color-mix(in srgb, var(--chip-col, var(--neon-cyan)) 38%, transparent);
+    color: color-mix(in srgb, var(--chip-col, var(--neon-cyan)) 62%, transparent);
+    background: color-mix(in srgb, var(--chip-col, var(--neon-cyan)) 7%, transparent);
     transition: all 0.15s;
   }
-  .genre-suggest-chip:hover { border-color: var(--neon-cyan); color: var(--neon-cyan); background: rgba(0,245,255,0.1); }
+  .genre-suggest-chip:hover {
+    border-color: var(--chip-col, var(--neon-cyan));
+    color: var(--chip-col, var(--neon-cyan));
+    background: color-mix(in srgb, var(--chip-col, var(--neon-cyan)) 15%, transparent);
+    transform: translateY(-1px);
+  }
 
   @keyframes scanAuthGlow {
     from { box-shadow: 0 0 32px rgba(255,45,120,0.4), 0 0 60px rgba(0,245,255,0.2), 0 4px 20px rgba(0,0,0,0.35); }
@@ -4681,25 +4762,30 @@
            <button class="our-photo-remove" data-viewing="${viewingRaverId}" data-slot="mine"
              onclick="removeOurPhoto(this.dataset.viewing,'mine')" title="Remove">✕</button>
          </div>`
-      : `<label class="our-photo-add" title="Add our photo">
-           +
+      : `<label class="our-photo-add" title="Add a photo of you two">
+           <div class="our-photo-add-inner">
+             <span class="our-photo-add-icon">📷</span>
+             <span class="our-photo-add-text">Add photo</span>
+           </div>
            <input type="file" accept="image/*" style="display:none"
              data-viewing="${viewingRaverId}"
              onchange="handleOurPhotoUpload(event,'${viewingRaverId}','mine')">
          </label>`;
 
     const theirSlot = theirPhoto
-      ? `<div class="our-photo-slot"><img src="${theirPhoto}" alt="Their photo"></div>`
-      : '';
+      ? `<div class="our-photo-slot" style="transform:rotate(2deg);">
+           <img src="${theirPhoto}" alt="Their photo">
+         </div>`
+      : `<div class="our-photo-slot" style="transform:rotate(2deg);">
+           <div class="our-photo-slot-empty"></div>
+         </div>`;
 
-    const theirSlotOrEmpty = theirSlot ||
-      `<div class="our-photo-slot our-photo-slot-empty"></div>`;
     return `<div class="our-photos-col">
       <div class="our-photos-slots">
         ${mySlot}
-        ${theirSlotOrEmpty}
+        ${theirSlot}
       </div>
-      <div class="our-photo-label">📸 Our Photo</div>
+      <div class="our-photo-label">✦ our memory ✦</div>
     </div>`;
   }
 
@@ -5940,12 +6026,10 @@
 
   // ===== Artist Suggestions — starter list; community-added artists append at runtime =====
   const ARTIST_SUGGESTIONS = [
-    'Amelie Lens','Charlotte de Witte','Peggy Gou','Honey Dijon','Anz','Avalon Emerson',
-    'Rebekah','Paula Temple','DJ Harvey','Moodymann','Kerri Chandler','DJ Koze',
-    'Floating Points','Four Tet','Jon Hopkins','Bonobo','BICEP','Midland',
-    'Ben UFO','Burial','Objekt','Blawan','DJ Stingray','KiNK','Move D',
-    'Richie Hawtin','Jeff Mills','Marcel Dettmann','Ben Klock','Caribou',
-    'Factory Floor','Actress','Shackleton','Surgeon',
+    'Martin Garrix','David Guetta','Tiësto','Calvin Harris','Marshmello',
+    'The Chainsmokers','Skrillex','Diplo','Zedd','Deadmau5',
+    'Swedish House Mafia','Afrojack','Hardwell','Armin van Buuren','Kygo',
+    'Illenium','Fisher','John Summit','Fred Again..','Eric Prydz',
   ];
 
   // ===== Genre Presets =====
@@ -5956,6 +6040,24 @@
     'Disco','Funk','Soul','Afro House','Melodic Techno','Electro',
     'IDM','Experimental','Rave','Hardcore','Noise',
   ];
+
+  const GENRE_FAMILY_COLORS = {
+    'House':'#FFB800','Deep House':'#FFB800','Tech House':'#FFB800',
+    'Micro House':'#FFB800','Afro House':'#FFB800','Minimal':'#FFB800',
+    'Techno':'#FF3355','Hard Techno':'#FF3355','Industrial':'#FF3355',
+    'Hardcore':'#FF3355','Noise':'#FF3355',
+    'Drum & Bass':'#BF00FF','Jungle':'#BF00FF','UK Garage':'#BF00FF',
+    'Dubstep':'#BF00FF','Grime':'#BF00FF','Breaks':'#BF00FF',
+    'Trance':'#39FF14','Psytrance':'#39FF14','Progressive':'#39FF14','Melodic Techno':'#39FF14',
+    'Ambient':'#00F5FF','IDM':'#00F5FF','Experimental':'#00F5FF','Electro':'#00F5FF',
+    'Disco':'#FF2D78','Funk':'#FF2D78','Soul':'#FF2D78','Rave':'#FF2D78',
+  };
+  function genreColor(g) { return GENRE_FAMILY_COLORS[g] || '#00F5FF'; }
+  const _ARTIST_PAL = ['#FF3355','#FFB800','#00F5FF','#BF00FF','#39FF14','#FF2D78'];
+  function artistColor(name) {
+    let h = 0; for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+    return _ARTIST_PAL[h % _ARTIST_PAL.length];
+  }
 
   function getPreset(id) { return VIBE_PRESETS.find(v => v.id === id); }
 
@@ -6176,11 +6278,13 @@
     // Inline tag chips (removable for own profile, add-input for all)
     const blockedTags = r.blockedTags || [];
     function tagChip(val, field) {
+      const col = field === 'genres' ? genreColor(val) : artistColor(val);
+      const cs = `--chip-col:${col};`;
       if (r.isYou) {
-        return `<span class="fav-chip tag-removable">${val}<button class="tag-remove-btn" title="Remove"
+        return `<span class="fav-chip tag-removable" style="${cs}">${val}<button class="tag-remove-btn" title="Remove"
           onclick="showConfirm('Remove tag?','Remove \'${val.replace(/'/g,"\\'")}\'?','Remove',()=>removeTag('${r.id}','${field}','${val.replace(/'/g,"\\'")}'))">&nbsp;✕</button></span>`;
       }
-      return `<span class="fav-chip">${val}</span>`;
+      return `<span class="fav-chip" style="${cs}">${val}</span>`;
     }
     const addTagInput = (field, placeholder) => `
       <input class="tag-add-input" id="tag-input-${field}" placeholder="${placeholder}"
@@ -6263,7 +6367,7 @@
       const artistSuggestHtml = artistSuggestions.length ? `
         <div class="genre-suggest-label">Suggestions</div>
         <div class="genre-suggest-cloud">
-          ${artistSuggestions.map(a => `<span class="genre-suggest-chip" onclick="addArtistSuggestion('${a.replace(/'/g,"\\'")}',this)">+ ${a}</span>`).join('')}
+          ${artistSuggestions.map(a => `<span class="genre-suggest-chip" style="--chip-col:${artistColor(a)};" onclick="addArtistSuggestion('${a.replace(/'/g,"\\'")}',this)">+ ${a}</span>`).join('')}
         </div>` : '';
 
       profilePage.innerHTML = `
@@ -6305,7 +6409,7 @@
           <div class="genre-preset-cloud" id="genre-preset-cloud">
             ${allGenrePresets().map(g => {
               const picked = (r.genres || []).map(x=>x.toLowerCase()).includes(g.toLowerCase()) ? ' picked' : '';
-              return `<span class="genre-preset${picked}" onclick="toggleGenrePick('${g.replace(/'/g,"\\'").replace(/"/g,'&quot;')}', this)">${g}</span>`;
+              return `<span class="genre-preset${picked}" style="--chip-col:${genreColor(g)};" onclick="toggleGenrePick('${g.replace(/'/g,"\\'").replace(/"/g,'&quot;')}', this)">${g}</span>`;
             }).join('')}
           </div>
           <div class="vibe-custom-row">
@@ -6324,20 +6428,7 @@
 
         <div class="profile-section">
           <h3>🎟️ Festivals</h3>
-          <div class="fest-picker-hint">Tick the raves they're going to or have been to. Going vs. been is set automatically by date.</div>
           <div id="fest-picker"></div>
-          <div id="new-fest-form" style="display:none;">
-            <div class="fest-edit-row" style="margin-top:8px;">
-              <input class="form-input" id="nf-name" placeholder="e.g. Dekmantel or Village Underground Fri" style="flex:2;">
-              <input class="form-input" id="nf-date" type="date" style="flex:1.3;color-scheme:dark;">
-            </div>
-            <input class="form-input" id="nf-loc" placeholder="Location (e.g. Berlin, DE)" style="margin-top:8px;">
-            <div style="display:flex;gap:8px;margin-top:8px;">
-              <button type="button" class="btn btn-ghost" style="flex:1;padding:9px;font-size:0.8rem;" onclick="hideNewFest()">Cancel</button>
-              <button type="button" class="btn btn-primary" style="flex:1;padding:9px;font-size:0.8rem;" onclick="createFestivalInline()">Add Rave</button>
-            </div>
-          </div>
-          <button type="button" class="add-fest-btn" id="show-new-fest-btn" onclick="showNewFest()">+ Add a new rave</button>
         </div>
 
         <div class="profile-section">
@@ -6385,11 +6476,15 @@
       renderCustomGenres();
     } else {
       profilePage.classList.remove('profile-edit-mode');
+      const _STAGE_PAL = ['#FF2D78','#BF00FF','#00F5FF','#39FF14','#FFB800','#FF3355'];
+      const sg = (i) => `--section-glow:${_STAGE_PAL[i % _STAGE_PAL.length]};`;
       profilePage.innerHTML = `
         <button class="profile-back" onclick="backToSquad()">← Back to Squad</button>
-        <div class="profile-hero">
-          <div class="profile-hero-bar" style="background:${r.gradient}"></div>
-          ${avatarEl}
+        <div class="profile-hero-banner" style="background:${r.gradient}"></div>
+        <div class="profile-hero-body">
+          <div class="profile-avatar-ring">
+            ${avatarEl}
+          </div>
           <div class="profile-id">
             <h2>${r.isYou ? '👑 ' : ''}${r.name}${r.isYou ? ' <span style="font-size:0.9rem;color:var(--muted)">(You)</span>' : ''}</h2>
             <div class="profile-handle">${r.handle}</div>
@@ -6406,7 +6501,7 @@
 
         ${connectBlock}
 
-        <div class="profile-section">
+        <div class="profile-section" style="${sg(0)}">
           <h3>⚡ Vibe Tags</h3>
           ${(() => {
             const presetVibes = (r.vibeTags||[]).map(v => vibeTagHTML(v, false, false)).join('');
@@ -6417,7 +6512,7 @@
           })()}
         </div>
 
-        <div class="profile-section">
+        <div class="profile-section" style="${sg(1)}">
           <h3>🎶 Genres</h3>
           <div class="tag-edit-wrap">${genreChips}</div>
           ${r.isYou ? (() => {
@@ -6426,39 +6521,39 @@
             return suggestions.length ? `
               <div class="genre-suggest-label">Suggestions</div>
               <div class="genre-suggest-cloud">
-                ${suggestions.map(g => `<span class="genre-suggest-chip" onclick="addTag('${r.id}','genres','${g.replace(/'/g,"\\'")}');return false;">+ ${g}</span>`).join('')}
+                ${suggestions.map(g => `<span class="genre-suggest-chip" style="--chip-col:${genreColor(g)};" onclick="addTag('${r.id}','genres','${g.replace(/'/g,"\\'")}');return false;">+ ${g}</span>`).join('')}
               </div>` : '';
           })() : ''}
-          ${addTagInput('genres', '+ custom genre')}
+          ${r.isYou ? addTagInput('genres', '+ custom genre') : ''}
         </div>
 
-        <div class="profile-section">
+        <div class="profile-section" style="${sg(2)}">
           <h3>🎵 Favourite Artists</h3>
           <div class="tag-edit-wrap">${favChips}</div>
-          ${addTagInput('favArtists', '+ artist')}
+          ${r.isYou ? addTagInput('favArtists', '+ artist') : ''}
         </div>
 
-        <div class="profile-section">
+        <div class="profile-section" style="${sg(3)}">
           <h3>🎟️ Festivals — Going To</h3>
           ${festListUpcoming}
         </div>
 
-        <div class="profile-section">
+        <div class="profile-section" style="${sg(4)}">
           <h3>✅ Festivals — Been To</h3>
           ${festListPast}
         </div>
 
-        <div class="profile-section">
+        <div class="profile-section" style="${sg(5)}">
           <h3>👥 Go-To Crew</h3>
           <div class="profile-note">${r.crew || '<span class="fest-empty">Not set</span>'}</div>
         </div>
 
-        <div class="profile-section">
+        <div class="profile-section" style="${sg(0)}">
           <h3>🤝 How We Met</h3>
           <div class="profile-note">${r.metStory || '<span class="fest-empty">No story logged yet</span>'}</div>
         </div>
 
-        <div class="profile-section">
+        <div class="profile-section" style="${sg(1)}">
           <h3>📝 Notes</h3>
           ${r.isYou ? `<div class="profile-note">${r.notes || '<span class="fest-empty">No notes yet</span>'}</div>` : (() => {
             const savedNotes = localStorage.getItem('viewer_notes_' + r.id) || '';
@@ -6628,7 +6723,7 @@
         <div class="genre-preset-cloud" id="genre-preset-cloud">
           ${allGenrePresets().map(g => {
             const picked = (r?.genres || []).map(x=>x.toLowerCase()).includes(g.toLowerCase()) ? ' picked' : '';
-            return `<span class="genre-preset${picked}" onclick="toggleGenrePick('${g.replace(/'/g,"\\'").replace(/"/g,'&quot;')}', this)">${g}</span>`;
+            return `<span class="genre-preset${picked}" style="--chip-col:${genreColor(g)};" onclick="toggleGenrePick('${g.replace(/'/g,"\\'").replace(/"/g,'&quot;')}', this)">${g}</span>`;
           }).join('')}
         </div>
         <div class="vibe-custom-row">
@@ -6659,20 +6754,7 @@
 
       <div class="form-group">
         <label class="form-label">🎟️ Festivals</label>
-        <div class="fest-picker-hint">Tick the raves they're going to or have been to — festivals, club nights, warehouse parties, whatever. Going vs. been is set automatically by date.</div>
         <div id="fest-picker"></div>
-        <div id="new-fest-form" style="display:none;">
-          <div class="fest-edit-row" style="margin-top:8px;">
-            <input class="form-input" id="nf-name" placeholder="e.g. Dekmantel or Village Underground Fri" style="flex:2;">
-            <input class="form-input" id="nf-date" type="date" style="flex:1.3;color-scheme:dark;">
-          </div>
-          <input class="form-input" id="nf-loc" placeholder="Location (e.g. Berlin, DE)" style="margin-top:8px;">
-          <div style="display:flex;gap:8px;margin-top:8px;">
-            <button type="button" class="btn btn-ghost" style="flex:1;padding:9px;font-size:0.8rem;" onclick="hideNewFest()">Cancel</button>
-            <button type="button" class="btn btn-primary" style="flex:1;padding:9px;font-size:0.8rem;" onclick="createFestivalInline()">Add Rave</button>
-          </div>
-        </div>
-        <button type="button" class="add-fest-btn" id="show-new-fest-btn" onclick="showNewFest()">+ Add a new rave</button>
       </div>
 
       ${fieldRow('Instagram','pf-instagram', r?.instagram, 'e.g. @samraves')}
@@ -6768,66 +6850,219 @@
     ).join('');
   }
 
-  // Render the festival picker (sorted: upcoming first, then past)
   function renderFestPicker() {
     const box = document.getElementById('fest-picker');
     if (!box) return;
-    const withDates = festivals.map(f => ({ ...f, _d: festDate(f) }));
-    const up = withDates.filter(f => f._d && f._d >= TODAY).sort((a,b) => a._d - b._d);
-    const past = withDates.filter(f => !f._d || f._d < TODAY).sort((a,b) => (b._d||0) - (a._d||0));
 
-    const row = (f) => {
-      const checked = editingFestIds.has(f.id) || [...editingFestIds].some(id => String(id) === String(f.id)) ? 'checked' : '';
-      const when = f._d ? `${f._d.getDate()} ${MON_SHORT[f._d.getMonth()]} ${f._d.getFullYear()}` : '';
-      const meta = [when, f.location].filter(Boolean).join(' · ');
-      return `
-        <label class="fest-check">
-          <input type="checkbox" ${checked} data-fid="${f.id}" onchange="toggleFestPick(this.dataset.fid, this.checked)">
-          <span class="fest-check-name">${f.name}${meta ? `<span class="fest-check-meta"> · ${meta}</span>` : ''}</span>
-        </label>`;
-    };
+    // Selected chips
+    const selFests = [...editingFestIds]
+      .map(id => festivals.find(f => String(f.id) === String(id))).filter(Boolean);
+    const selHtml = selFests.length
+      ? selFests.map(f => {
+          const d = festDate(f);
+          const col = (d && d >= TODAY) ? '#39FF14' : '#00F5FF';
+          return `<span class="fest-sel-chip" style="--chip-col:${col};">${f.name}<button class="tag-remove-btn" onclick="festRemoveSel('${f.id}')">✕</button></span>`;
+        }).join('')
+      : `<span class="fest-empty" style="font-size:0.78rem;">No raves added yet — tap below to add</span>`;
 
-    let html = '';
-    if (up.length) html += `<div class="fest-group-label">Upcoming</div>` + up.map(row).join('');
-    if (past.length) html += `<div class="fest-group-label">Past</div>` + past.map(row).join('');
-    if (!up.length && !past.length) html = '<div class="fest-empty">Nothing yet — add a festival, club night, or local show below.</div>';
-    box.innerHTML = html;
+    // Upcoming quick-tap chips (next 10)
+    const upcoming = festivals
+      .map(f => ({ ...f, _d: festDate(f) }))
+      .filter(f => f._d && f._d >= TODAY)
+      .sort((a, b) => a._d - b._d)
+      .slice(0, 10);
+    const upHtml = upcoming.length
+      ? upcoming.map(f => {
+          const isPicked = editingFestIds.has(f.id) || [...editingFestIds].some(id => String(id) === String(f.id));
+          const when = `${f._d.getDate()} ${MON_SHORT[f._d.getMonth()]}`;
+          return `<span class="fest-quick-chip${isPicked ? ' picked' : ''}" data-fid="${f.id}" onclick="festToggleQuick('${f.id}',this)">${f.name}<span class="fest-quick-date">${when}</span></span>`;
+        }).join('')
+      : `<span class="fest-empty" style="font-size:0.78rem;">No upcoming raves in catalog yet</span>`;
+
+    box.innerHTML = `
+      <div class="fest-selected-wrap" id="fest-sel-wrap">${selHtml}</div>
+      <div class="fest-section-label">🔜 Upcoming</div>
+      <div class="fest-quick-cloud">${upHtml}</div>
+      <div class="fest-search-wrap">
+        <input class="form-input" id="fest-search-input" placeholder="🔍 Search all raves…" autocomplete="off" style="font-size:16px;"
+          oninput="festSearchInput(this.value)" onfocus="festSearchInput(this.value)"
+          onblur="setTimeout(()=>{const d=document.getElementById('fest-search-results');if(d)d.style.display='none';},200)">
+        <div id="fest-search-results" class="fest-search-dropdown" style="display:none;"></div>
+      </div>
+      <button type="button" class="add-fest-btn" id="show-new-fest-btn" onclick="showNewFest()" style="margin-top:10px;">+ Add new rave</button>
+      <div id="new-fest-form" style="display:none;margin-top:12px;">
+        <div style="position:relative;">
+          <input class="form-input" id="nf-name" placeholder="Rave name (e.g. Dekmantel)" autocomplete="off" style="margin-bottom:4px;font-size:16px;" oninput="nfNameSuggest(this.value)">
+          <div id="nf-name-results" class="fest-search-dropdown" style="display:none;"></div>
+        </div>
+        <div style="display:flex;gap:8px;margin:8px 0;">
+          <input class="form-input" id="nf-date" type="date" style="flex:1;color-scheme:dark;font-size:16px;">
+          <div class="nf-gb-toggle">
+            <button type="button" class="nf-gb-btn nf-going active" id="nf-going-btn" onclick="setNfGoing(true)">Going</button>
+            <button type="button" class="nf-gb-btn nf-been" id="nf-been-btn" onclick="setNfGoing(false)">Been</button>
+          </div>
+        </div>
+        <input class="form-input" id="nf-loc" placeholder="Location (e.g. Berlin, DE)" style="margin-bottom:10px;font-size:16px;">
+        <div style="display:flex;gap:8px;">
+          <button type="button" class="btn btn-ghost" style="flex:1;padding:9px;font-size:0.8rem;" onclick="hideNewFest()">Cancel</button>
+          <button type="button" class="btn btn-primary" style="flex:2;padding:9px;font-size:0.8rem;" onclick="createFestivalInline()">Add Rave 🎉</button>
+        </div>
+      </div>`;
   }
 
-  function toggleFestPick(id, on) {
-    // Store as the original type if possible; fall back to string from dataset
+  function renderFestSelected() {
+    const wrap = document.getElementById('fest-sel-wrap');
+    if (!wrap) return;
+    const selFests = [...editingFestIds]
+      .map(id => festivals.find(f => String(f.id) === String(id))).filter(Boolean);
+    wrap.innerHTML = selFests.length
+      ? selFests.map(f => {
+          const d = festDate(f);
+          const col = (d && d >= TODAY) ? '#39FF14' : '#00F5FF';
+          return `<span class="fest-sel-chip" style="--chip-col:${col};">${f.name}<button class="tag-remove-btn" onclick="festRemoveSel('${f.id}')">✕</button></span>`;
+        }).join('')
+      : `<span class="fest-empty" style="font-size:0.78rem;">No raves added yet — tap below to add</span>`;
+  }
+
+  function festToggleQuick(id, el) {
     const fest = festivals.find(f => String(f.id) === String(id));
     const key = fest ? fest.id : id;
-    if (on) editingFestIds.add(key); else editingFestIds.delete(key);
+    const picked = editingFestIds.has(key) || [...editingFestIds].some(eid => String(eid) === String(id));
+    if (picked) {
+      editingFestIds.delete(key);
+      [...editingFestIds].forEach(eid => { if (String(eid) === String(id)) editingFestIds.delete(eid); });
+      el.classList.remove('picked');
+    } else {
+      editingFestIds.add(key);
+      el.classList.add('picked');
+    }
+    renderFestSelected();
+  }
+
+  function festRemoveSel(id) {
+    const fest = festivals.find(f => String(f.id) === String(id));
+    const key = fest ? fest.id : id;
+    editingFestIds.delete(key);
+    [...editingFestIds].forEach(eid => { if (String(eid) === String(id)) editingFestIds.delete(eid); });
+    renderFestSelected();
+    const chip = document.querySelector(`.fest-quick-chip[data-fid="${id}"]`);
+    if (chip) chip.classList.remove('picked');
+  }
+
+  function festSearchInput(q) {
+    const results = document.getElementById('fest-search-results');
+    if (!results) return;
+    const query = (q || '').trim().toLowerCase();
+    if (!query) { results.style.display = 'none'; return; }
+    const matches = festivals
+      .filter(f => f.name.toLowerCase().includes(query) || (f.location || '').toLowerCase().includes(query))
+      .filter(f => !editingFestIds.has(f.id) && ![...editingFestIds].some(eid => String(eid) === String(f.id)))
+      .slice(0, 8);
+    if (!matches.length) { results.style.display = 'none'; return; }
+    results.innerHTML = matches.map(f => {
+      const d = festDate(f);
+      const when = d ? `${d.getDate()} ${MON_SHORT[d.getMonth()]} ${d.getFullYear()}` : '';
+      const meta = [when, f.location].filter(Boolean).join(' · ');
+      return `<div class="fest-search-item" onmousedown="festPickFromSearch('${f.id}')">
+        <span class="fest-search-name">${f.name}</span>
+        ${meta ? `<span class="fest-search-meta">${meta}</span>` : ''}
+      </div>`;
+    }).join('');
+    results.style.display = 'block';
+  }
+
+  function festPickFromSearch(id) {
+    const fest = festivals.find(f => String(f.id) === String(id));
+    if (!fest) return;
+    editingFestIds.add(fest.id);
+    renderFestSelected();
+    const inp = document.getElementById('fest-search-input');
+    if (inp) inp.value = '';
+    const res = document.getElementById('fest-search-results');
+    if (res) res.style.display = 'none';
+    const chip = document.querySelector(`.fest-quick-chip[data-fid="${id}"]`);
+    if (chip) chip.classList.add('picked');
+  }
+
+  function nfNameSuggest(q) {
+    const results = document.getElementById('nf-name-results');
+    if (!results) return;
+    const query = (q || '').trim().toLowerCase();
+    if (!query) { results.innerHTML = ''; results.style.display = 'none'; return; }
+    const matches = festivals.filter(f => f.name.toLowerCase().includes(query)).slice(0, 5);
+    if (!matches.length) { results.innerHTML = ''; results.style.display = 'none'; return; }
+    results.innerHTML = matches.map(f => {
+      const d = festDate(f);
+      const when = d ? `${d.getDate()} ${MON_SHORT[d.getMonth()]} ${d.getFullYear()}` : '';
+      const meta = [when, f.location].filter(Boolean).join(' · ');
+      return `<div class="fest-search-item" onmousedown="nfPickExisting('${f.id}')">
+        <span class="fest-search-name">${f.name}</span>
+        ${meta ? `<span class="fest-search-meta">${meta}</span>` : ''}
+      </div>`;
+    }).join('');
+    results.style.display = 'block';
+  }
+
+  function nfPickExisting(id) {
+    const fest = festivals.find(f => String(f.id) === String(id));
+    if (!fest) return;
+    editingFestIds.add(fest.id);
+    renderFestSelected();
+    hideNewFest();
+    const chip = document.querySelector(`.fest-quick-chip[data-fid="${id}"]`);
+    if (chip) chip.classList.add('picked');
+    showToast(`Added ${fest.name} ✓`);
+  }
+
+  let nfIsGoing = true;
+  function setNfGoing(going) {
+    nfIsGoing = going;
+    document.getElementById('nf-going-btn')?.classList.toggle('active', going);
+    document.getElementById('nf-been-btn')?.classList.toggle('active', !going);
+    const dateInput = document.getElementById('nf-date');
+    if (dateInput && !dateInput.value) {
+      if (!going) {
+        const d = new Date(TODAY); d.setDate(d.getDate() - 1);
+        dateInput.value = d.toISOString().slice(0, 10);
+      }
+    }
   }
 
   function showNewFest() {
-    document.getElementById('new-fest-form').style.display = 'block';
-    document.getElementById('show-new-fest-btn').style.display = 'none';
+    nfIsGoing = true;
+    const form = document.getElementById('new-fest-form');
+    const btn = document.getElementById('show-new-fest-btn');
+    if (form) form.style.display = 'block';
+    if (btn) btn.style.display = 'none';
   }
   function hideNewFest() {
-    document.getElementById('new-fest-form').style.display = 'none';
-    document.getElementById('show-new-fest-btn').style.display = 'block';
-    document.getElementById('nf-name').value = '';
-    document.getElementById('nf-date').value = '';
-    document.getElementById('nf-loc').value = '';
+    const form = document.getElementById('new-fest-form');
+    const btn = document.getElementById('show-new-fest-btn');
+    if (form) form.style.display = 'none';
+    if (btn) btn.style.display = 'block';
+    const nfName = document.getElementById('nf-name'); if (nfName) nfName.value = '';
+    const nfDate = document.getElementById('nf-date'); if (nfDate) nfDate.value = '';
+    const nfLoc  = document.getElementById('nf-loc');  if (nfLoc)  nfLoc.value  = '';
+    const nfNR   = document.getElementById('nf-name-results'); if (nfNR) { nfNR.innerHTML = ''; nfNR.style.display = 'none'; }
+    nfIsGoing = true;
   }
 
   function createFestivalInline() {
     const name = val('nf-name');
-    const date = document.getElementById('nf-date').value;
+    let date = document.getElementById('nf-date').value;
     const loc = val('nf-loc');
     if (!name) { showToast('Rave needs a name ✍️'); return; }
-    if (!date) { showToast('Pick a date 📅'); return; }
-
-    // De-dupe: if a festival with this name exists, reuse it
+    if (!date) {
+      const d = new Date(TODAY); d.setDate(d.getDate() + (nfIsGoing ? 1 : -1));
+      date = d.toISOString().slice(0, 10);
+    }
     let fest = findFestivalByName(name);
     if (fest) {
-      showToast(`"${fest.name}" already exists — ticked it for you`);
+      showToast(`"${fest.name}" already exists — added ✓`);
     } else {
       fest = { id: ++festSeq, name, date, location: loc };
       festivals.push(fest);
-      showToast(`🎉 Created ${name}`);
+      showToast(`🎉 Added ${name}`);
     }
     editingFestIds.add(fest.id);
     hideNewFest();
