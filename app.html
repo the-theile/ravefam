@@ -4602,19 +4602,10 @@
     const errEl = document.getElementById('code-error');
     if (errEl) errEl.textContent = '';
 
-    // The invite code is qr_token.replace(/-/g,'').slice(0,6).toUpperCase()
-    // Match by the first 6 chars of qr_token (stored without dashes)
-    const { data: matches, error } = await sb
-      .from('ravers')
-      .select('qr_token')
-      .filter('qr_token', 'not.is', null)
-      .limit(200); // fetch and filter client-side (avoids complex DB regex)
+    const { data: results, error } = await sb.rpc('find_raver_by_invite_code', { p_code: code });
+    const match = results?.[0];
 
-    const match = (matches || []).find(r =>
-      r.qr_token && r.qr_token.replace(/-/g,'').slice(0,6).toUpperCase() === code
-    );
-
-    if (error || !match) {
+    if (error || !match?.qr_token) {
       if (errEl) errEl.textContent = '⚠️ Code not found or already used.';
       if (btn) btn.disabled = false;
       return;
