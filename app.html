@@ -784,25 +784,74 @@
   }
   .add-fest-btn:hover { background: rgba(255,45,120,0.18); }
 
-  /* Rave picker (checkboxes) in profile editor */
+  /* ===== Rave picker (new chip + search design) ===== */
   .fest-picker-hint { font-size: 0.74rem; color: var(--muted); margin-bottom: 10px; line-height: 1.45; }
-  .fest-group-label {
+  .fest-section-label {
     font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.66rem;
     text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted);
-    margin: 12px 0 7px;
+    margin: 4px 0 8px;
   }
-  .fest-check {
-    display: flex; align-items: center; gap: 10px;
-    padding: 10px 12px; border-radius: 10px; cursor: pointer;
-    background: rgba(255,255,255,0.04); margin-bottom: 6px;
-    border: 1px solid rgba(255,255,255,0.07);
-    transition: background 0.15s, border-color 0.15s;
+  /* Selected chips row */
+  .fest-selected-wrap { display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; margin-bottom: 14px; }
+  .fest-sel-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 10px 4px 12px; border-radius: 100px;
+    font-family: 'Outfit', sans-serif; font-size: 0.78rem; font-weight: 700;
+    border: 1.5px solid color-mix(in srgb, var(--chip-col, var(--neon-green)) 45%, transparent);
+    color: var(--chip-col, var(--neon-green));
+    background: color-mix(in srgb, var(--chip-col, var(--neon-green)) 12%, transparent);
+    animation: chipGlow 3s ease-in-out infinite;
   }
-  .fest-check:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.14); }
-  .fest-check:has(input:checked) { background: rgba(57,255,20,0.07); border-color: rgba(57,255,20,0.25); }
-  .fest-check input { width: 18px; height: 18px; accent-color: var(--neon-green); flex-shrink: 0; cursor: pointer; }
-  .fest-check-name { font-size: 0.88rem; font-weight: 600; color: var(--text); flex: 1; line-height: 1.35; }
-  .fest-check-meta { font-size: 0.76rem; color: var(--muted); font-weight: 400; }
+  /* Upcoming quick-tap chips */
+  .fest-quick-cloud { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .fest-quick-chip {
+    --chip-col: #39FF14;
+    display: inline-flex; align-items: center; gap: 0; min-height: 34px;
+    padding: 4px 11px; border-radius: 100px;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.75rem;
+    cursor: pointer;
+    border: 1.5px solid color-mix(in srgb, var(--chip-col) 30%, transparent);
+    color: color-mix(in srgb, var(--chip-col) 62%, transparent);
+    background: transparent;
+    transition: all 0.15s; user-select: none;
+  }
+  .fest-quick-chip:hover {
+    border-color: color-mix(in srgb, var(--chip-col) 65%, transparent);
+    color: color-mix(in srgb, var(--chip-col) 92%, transparent);
+    transform: translateY(-1px);
+  }
+  .fest-quick-chip.picked {
+    border-color: var(--chip-col);
+    background: color-mix(in srgb, var(--chip-col) 14%, transparent);
+    color: var(--chip-col);
+    box-shadow: 0 0 10px -3px var(--chip-col);
+  }
+  .fest-quick-date { font-size: 0.65rem; opacity: 0.7; margin-left: 4px; }
+  /* Search */
+  .fest-search-wrap { position: relative; }
+  .fest-search-dropdown {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
+    background: #12121e; border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px; overflow: hidden;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.5);
+  }
+  .fest-search-item {
+    display: flex; flex-direction: column; padding: 9px 14px; cursor: pointer;
+    border-bottom: 1px solid rgba(255,255,255,0.06); transition: background 0.12s;
+  }
+  .fest-search-item:last-child { border-bottom: none; }
+  .fest-search-item:hover, .fest-search-item:active { background: rgba(255,255,255,0.08); }
+  .fest-search-name { font-size: 0.85rem; font-weight: 600; color: var(--text); }
+  .fest-search-meta { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
+  /* Add new rave — Going/Been toggle */
+  .nf-gb-toggle { display: flex; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; overflow: hidden; flex-shrink: 0; }
+  .nf-gb-btn {
+    padding: 8px 13px; border: none; cursor: pointer; background: transparent;
+    font-family: 'Outfit', sans-serif; font-size: 0.75rem; font-weight: 700;
+    color: var(--muted); transition: all 0.15s;
+  }
+  .nf-gb-btn.active.nf-going { background: rgba(57,255,20,0.15); color: var(--neon-green); }
+  .nf-gb-btn.active.nf-been  { background: rgba(0,245,255,0.15); color: var(--neon-cyan); }
 
   /* Location line on profile fest rows */
   .fest-loc { display: block; font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
@@ -6368,20 +6417,7 @@
 
         <div class="profile-section">
           <h3>🎟️ Festivals</h3>
-          <div class="fest-picker-hint">Tick the raves they're going to or have been to. Going vs. been is set automatically by date.</div>
           <div id="fest-picker"></div>
-          <div id="new-fest-form" style="display:none;">
-            <div class="fest-edit-row" style="margin-top:8px;">
-              <input class="form-input" id="nf-name" placeholder="e.g. Dekmantel or Village Underground Fri" style="flex:2;">
-              <input class="form-input" id="nf-date" type="date" style="flex:1.3;color-scheme:dark;">
-            </div>
-            <input class="form-input" id="nf-loc" placeholder="Location (e.g. Berlin, DE)" style="margin-top:8px;">
-            <div style="display:flex;gap:8px;margin-top:8px;">
-              <button type="button" class="btn btn-ghost" style="flex:1;padding:9px;font-size:0.8rem;" onclick="hideNewFest()">Cancel</button>
-              <button type="button" class="btn btn-primary" style="flex:1;padding:9px;font-size:0.8rem;" onclick="createFestivalInline()">Add Rave</button>
-            </div>
-          </div>
-          <button type="button" class="add-fest-btn" id="show-new-fest-btn" onclick="showNewFest()">+ Add a new rave</button>
         </div>
 
         <div class="profile-section">
@@ -6703,20 +6739,7 @@
 
       <div class="form-group">
         <label class="form-label">🎟️ Festivals</label>
-        <div class="fest-picker-hint">Tick the raves they're going to or have been to — festivals, club nights, warehouse parties, whatever. Going vs. been is set automatically by date.</div>
         <div id="fest-picker"></div>
-        <div id="new-fest-form" style="display:none;">
-          <div class="fest-edit-row" style="margin-top:8px;">
-            <input class="form-input" id="nf-name" placeholder="e.g. Dekmantel or Village Underground Fri" style="flex:2;">
-            <input class="form-input" id="nf-date" type="date" style="flex:1.3;color-scheme:dark;">
-          </div>
-          <input class="form-input" id="nf-loc" placeholder="Location (e.g. Berlin, DE)" style="margin-top:8px;">
-          <div style="display:flex;gap:8px;margin-top:8px;">
-            <button type="button" class="btn btn-ghost" style="flex:1;padding:9px;font-size:0.8rem;" onclick="hideNewFest()">Cancel</button>
-            <button type="button" class="btn btn-primary" style="flex:1;padding:9px;font-size:0.8rem;" onclick="createFestivalInline()">Add Rave</button>
-          </div>
-        </div>
-        <button type="button" class="add-fest-btn" id="show-new-fest-btn" onclick="showNewFest()">+ Add a new rave</button>
       </div>
 
       ${fieldRow('Instagram','pf-instagram', r?.instagram, 'e.g. @samraves')}
@@ -6812,66 +6835,219 @@
     ).join('');
   }
 
-  // Render the festival picker (sorted: upcoming first, then past)
   function renderFestPicker() {
     const box = document.getElementById('fest-picker');
     if (!box) return;
-    const withDates = festivals.map(f => ({ ...f, _d: festDate(f) }));
-    const up = withDates.filter(f => f._d && f._d >= TODAY).sort((a,b) => a._d - b._d);
-    const past = withDates.filter(f => !f._d || f._d < TODAY).sort((a,b) => (b._d||0) - (a._d||0));
 
-    const row = (f) => {
-      const checked = editingFestIds.has(f.id) || [...editingFestIds].some(id => String(id) === String(f.id)) ? 'checked' : '';
-      const when = f._d ? `${f._d.getDate()} ${MON_SHORT[f._d.getMonth()]} ${f._d.getFullYear()}` : '';
-      const meta = [when, f.location].filter(Boolean).join(' · ');
-      return `
-        <label class="fest-check">
-          <input type="checkbox" ${checked} data-fid="${f.id}" onchange="toggleFestPick(this.dataset.fid, this.checked)">
-          <span class="fest-check-name">${f.name}${meta ? `<span class="fest-check-meta"> · ${meta}</span>` : ''}</span>
-        </label>`;
-    };
+    // Selected chips
+    const selFests = [...editingFestIds]
+      .map(id => festivals.find(f => String(f.id) === String(id))).filter(Boolean);
+    const selHtml = selFests.length
+      ? selFests.map(f => {
+          const d = festDate(f);
+          const col = (d && d >= TODAY) ? '#39FF14' : '#00F5FF';
+          return `<span class="fest-sel-chip" style="--chip-col:${col};">${f.name}<button class="tag-remove-btn" onclick="festRemoveSel('${f.id}')">✕</button></span>`;
+        }).join('')
+      : `<span class="fest-empty" style="font-size:0.78rem;">No raves added yet — tap below to add</span>`;
 
-    let html = '';
-    if (up.length) html += `<div class="fest-group-label">Upcoming</div>` + up.map(row).join('');
-    if (past.length) html += `<div class="fest-group-label">Past</div>` + past.map(row).join('');
-    if (!up.length && !past.length) html = '<div class="fest-empty">Nothing yet — add a festival, club night, or local show below.</div>';
-    box.innerHTML = html;
+    // Upcoming quick-tap chips (next 10)
+    const upcoming = festivals
+      .map(f => ({ ...f, _d: festDate(f) }))
+      .filter(f => f._d && f._d >= TODAY)
+      .sort((a, b) => a._d - b._d)
+      .slice(0, 10);
+    const upHtml = upcoming.length
+      ? upcoming.map(f => {
+          const isPicked = editingFestIds.has(f.id) || [...editingFestIds].some(id => String(id) === String(f.id));
+          const when = `${f._d.getDate()} ${MON_SHORT[f._d.getMonth()]}`;
+          return `<span class="fest-quick-chip${isPicked ? ' picked' : ''}" data-fid="${f.id}" onclick="festToggleQuick('${f.id}',this)">${f.name}<span class="fest-quick-date">${when}</span></span>`;
+        }).join('')
+      : `<span class="fest-empty" style="font-size:0.78rem;">No upcoming raves in catalog yet</span>`;
+
+    box.innerHTML = `
+      <div class="fest-selected-wrap" id="fest-sel-wrap">${selHtml}</div>
+      <div class="fest-section-label">🔜 Upcoming</div>
+      <div class="fest-quick-cloud">${upHtml}</div>
+      <div class="fest-search-wrap">
+        <input class="form-input" id="fest-search-input" placeholder="🔍 Search all raves…" autocomplete="off" style="font-size:16px;"
+          oninput="festSearchInput(this.value)" onfocus="festSearchInput(this.value)"
+          onblur="setTimeout(()=>{const d=document.getElementById('fest-search-results');if(d)d.style.display='none';},200)">
+        <div id="fest-search-results" class="fest-search-dropdown" style="display:none;"></div>
+      </div>
+      <button type="button" class="add-fest-btn" id="show-new-fest-btn" onclick="showNewFest()" style="margin-top:10px;">+ Add new rave</button>
+      <div id="new-fest-form" style="display:none;margin-top:12px;">
+        <div style="position:relative;">
+          <input class="form-input" id="nf-name" placeholder="Rave name (e.g. Dekmantel)" autocomplete="off" style="margin-bottom:4px;font-size:16px;" oninput="nfNameSuggest(this.value)">
+          <div id="nf-name-results" class="fest-search-dropdown" style="display:none;"></div>
+        </div>
+        <div style="display:flex;gap:8px;margin:8px 0;">
+          <input class="form-input" id="nf-date" type="date" style="flex:1;color-scheme:dark;font-size:16px;">
+          <div class="nf-gb-toggle">
+            <button type="button" class="nf-gb-btn nf-going active" id="nf-going-btn" onclick="setNfGoing(true)">Going</button>
+            <button type="button" class="nf-gb-btn nf-been" id="nf-been-btn" onclick="setNfGoing(false)">Been</button>
+          </div>
+        </div>
+        <input class="form-input" id="nf-loc" placeholder="Location (e.g. Berlin, DE)" style="margin-bottom:10px;font-size:16px;">
+        <div style="display:flex;gap:8px;">
+          <button type="button" class="btn btn-ghost" style="flex:1;padding:9px;font-size:0.8rem;" onclick="hideNewFest()">Cancel</button>
+          <button type="button" class="btn btn-primary" style="flex:2;padding:9px;font-size:0.8rem;" onclick="createFestivalInline()">Add Rave 🎉</button>
+        </div>
+      </div>`;
   }
 
-  function toggleFestPick(id, on) {
-    // Store as the original type if possible; fall back to string from dataset
+  function renderFestSelected() {
+    const wrap = document.getElementById('fest-sel-wrap');
+    if (!wrap) return;
+    const selFests = [...editingFestIds]
+      .map(id => festivals.find(f => String(f.id) === String(id))).filter(Boolean);
+    wrap.innerHTML = selFests.length
+      ? selFests.map(f => {
+          const d = festDate(f);
+          const col = (d && d >= TODAY) ? '#39FF14' : '#00F5FF';
+          return `<span class="fest-sel-chip" style="--chip-col:${col};">${f.name}<button class="tag-remove-btn" onclick="festRemoveSel('${f.id}')">✕</button></span>`;
+        }).join('')
+      : `<span class="fest-empty" style="font-size:0.78rem;">No raves added yet — tap below to add</span>`;
+  }
+
+  function festToggleQuick(id, el) {
     const fest = festivals.find(f => String(f.id) === String(id));
     const key = fest ? fest.id : id;
-    if (on) editingFestIds.add(key); else editingFestIds.delete(key);
+    const picked = editingFestIds.has(key) || [...editingFestIds].some(eid => String(eid) === String(id));
+    if (picked) {
+      editingFestIds.delete(key);
+      [...editingFestIds].forEach(eid => { if (String(eid) === String(id)) editingFestIds.delete(eid); });
+      el.classList.remove('picked');
+    } else {
+      editingFestIds.add(key);
+      el.classList.add('picked');
+    }
+    renderFestSelected();
+  }
+
+  function festRemoveSel(id) {
+    const fest = festivals.find(f => String(f.id) === String(id));
+    const key = fest ? fest.id : id;
+    editingFestIds.delete(key);
+    [...editingFestIds].forEach(eid => { if (String(eid) === String(id)) editingFestIds.delete(eid); });
+    renderFestSelected();
+    const chip = document.querySelector(`.fest-quick-chip[data-fid="${id}"]`);
+    if (chip) chip.classList.remove('picked');
+  }
+
+  function festSearchInput(q) {
+    const results = document.getElementById('fest-search-results');
+    if (!results) return;
+    const query = (q || '').trim().toLowerCase();
+    if (!query) { results.style.display = 'none'; return; }
+    const matches = festivals
+      .filter(f => f.name.toLowerCase().includes(query) || (f.location || '').toLowerCase().includes(query))
+      .filter(f => !editingFestIds.has(f.id) && ![...editingFestIds].some(eid => String(eid) === String(f.id)))
+      .slice(0, 8);
+    if (!matches.length) { results.style.display = 'none'; return; }
+    results.innerHTML = matches.map(f => {
+      const d = festDate(f);
+      const when = d ? `${d.getDate()} ${MON_SHORT[d.getMonth()]} ${d.getFullYear()}` : '';
+      const meta = [when, f.location].filter(Boolean).join(' · ');
+      return `<div class="fest-search-item" onmousedown="festPickFromSearch('${f.id}')">
+        <span class="fest-search-name">${f.name}</span>
+        ${meta ? `<span class="fest-search-meta">${meta}</span>` : ''}
+      </div>`;
+    }).join('');
+    results.style.display = 'block';
+  }
+
+  function festPickFromSearch(id) {
+    const fest = festivals.find(f => String(f.id) === String(id));
+    if (!fest) return;
+    editingFestIds.add(fest.id);
+    renderFestSelected();
+    const inp = document.getElementById('fest-search-input');
+    if (inp) inp.value = '';
+    const res = document.getElementById('fest-search-results');
+    if (res) res.style.display = 'none';
+    const chip = document.querySelector(`.fest-quick-chip[data-fid="${id}"]`);
+    if (chip) chip.classList.add('picked');
+  }
+
+  function nfNameSuggest(q) {
+    const results = document.getElementById('nf-name-results');
+    if (!results) return;
+    const query = (q || '').trim().toLowerCase();
+    if (!query) { results.innerHTML = ''; results.style.display = 'none'; return; }
+    const matches = festivals.filter(f => f.name.toLowerCase().includes(query)).slice(0, 5);
+    if (!matches.length) { results.innerHTML = ''; results.style.display = 'none'; return; }
+    results.innerHTML = matches.map(f => {
+      const d = festDate(f);
+      const when = d ? `${d.getDate()} ${MON_SHORT[d.getMonth()]} ${d.getFullYear()}` : '';
+      const meta = [when, f.location].filter(Boolean).join(' · ');
+      return `<div class="fest-search-item" onmousedown="nfPickExisting('${f.id}')">
+        <span class="fest-search-name">${f.name}</span>
+        ${meta ? `<span class="fest-search-meta">${meta}</span>` : ''}
+      </div>`;
+    }).join('');
+    results.style.display = 'block';
+  }
+
+  function nfPickExisting(id) {
+    const fest = festivals.find(f => String(f.id) === String(id));
+    if (!fest) return;
+    editingFestIds.add(fest.id);
+    renderFestSelected();
+    hideNewFest();
+    const chip = document.querySelector(`.fest-quick-chip[data-fid="${id}"]`);
+    if (chip) chip.classList.add('picked');
+    showToast(`Added ${fest.name} ✓`);
+  }
+
+  let nfIsGoing = true;
+  function setNfGoing(going) {
+    nfIsGoing = going;
+    document.getElementById('nf-going-btn')?.classList.toggle('active', going);
+    document.getElementById('nf-been-btn')?.classList.toggle('active', !going);
+    const dateInput = document.getElementById('nf-date');
+    if (dateInput && !dateInput.value) {
+      if (!going) {
+        const d = new Date(TODAY); d.setDate(d.getDate() - 1);
+        dateInput.value = d.toISOString().slice(0, 10);
+      }
+    }
   }
 
   function showNewFest() {
-    document.getElementById('new-fest-form').style.display = 'block';
-    document.getElementById('show-new-fest-btn').style.display = 'none';
+    nfIsGoing = true;
+    const form = document.getElementById('new-fest-form');
+    const btn = document.getElementById('show-new-fest-btn');
+    if (form) form.style.display = 'block';
+    if (btn) btn.style.display = 'none';
   }
   function hideNewFest() {
-    document.getElementById('new-fest-form').style.display = 'none';
-    document.getElementById('show-new-fest-btn').style.display = 'block';
-    document.getElementById('nf-name').value = '';
-    document.getElementById('nf-date').value = '';
-    document.getElementById('nf-loc').value = '';
+    const form = document.getElementById('new-fest-form');
+    const btn = document.getElementById('show-new-fest-btn');
+    if (form) form.style.display = 'none';
+    if (btn) btn.style.display = 'block';
+    const nfName = document.getElementById('nf-name'); if (nfName) nfName.value = '';
+    const nfDate = document.getElementById('nf-date'); if (nfDate) nfDate.value = '';
+    const nfLoc  = document.getElementById('nf-loc');  if (nfLoc)  nfLoc.value  = '';
+    const nfNR   = document.getElementById('nf-name-results'); if (nfNR) { nfNR.innerHTML = ''; nfNR.style.display = 'none'; }
+    nfIsGoing = true;
   }
 
   function createFestivalInline() {
     const name = val('nf-name');
-    const date = document.getElementById('nf-date').value;
+    let date = document.getElementById('nf-date').value;
     const loc = val('nf-loc');
     if (!name) { showToast('Rave needs a name ✍️'); return; }
-    if (!date) { showToast('Pick a date 📅'); return; }
-
-    // De-dupe: if a festival with this name exists, reuse it
+    if (!date) {
+      const d = new Date(TODAY); d.setDate(d.getDate() + (nfIsGoing ? 1 : -1));
+      date = d.toISOString().slice(0, 10);
+    }
     let fest = findFestivalByName(name);
     if (fest) {
-      showToast(`"${fest.name}" already exists — ticked it for you`);
+      showToast(`"${fest.name}" already exists — added ✓`);
     } else {
       fest = { id: ++festSeq, name, date, location: loc };
       festivals.push(fest);
-      showToast(`🎉 Created ${name}`);
+      showToast(`🎉 Added ${name}`);
     }
     editingFestIds.add(fest.id);
     hideNewFest();
