@@ -1454,13 +1454,16 @@
   .notif-drawer {
     position: fixed;
     top: 0; right: 0;
-    width: min(380px, 100%);
+    width: min(380px, 100vw);
+    max-width: 100vw;
     height: 100vh;
+    height: 100dvh;
     background: var(--surface);
     border-left: 1px solid rgba(255,255,255,0.08);
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    box-sizing: border-box;
     transform: translateX(100%);
     transition: transform 0.25s cubic-bezier(0.4,0,0.2,1);
     z-index: 301;
@@ -1471,16 +1474,23 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 20px 20px 16px;
+    padding: 16px 16px 14px;
     border-bottom: 1px solid rgba(255,255,255,0.07);
     flex-shrink: 0;
+    min-width: 0;
+    box-sizing: border-box;
   }
   .notif-drawer-title {
     font-family: 'Outfit', sans-serif;
     font-weight: 700;
     font-size: 1rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
   }
-  .notif-drawer-actions { display: flex; align-items: center; gap: 10px; }
+  .notif-drawer-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
   .notif-clear-btn {
     background: none;
     border: none;
@@ -1496,14 +1506,53 @@
     background: none;
     border: 1.5px solid rgba(255,255,255,0.1);
     border-radius: 8px;
-    width: 30px; height: 30px;
+    width: 32px; height: 32px;
     display: flex; align-items: center; justify-content: center;
     cursor: pointer;
     color: var(--muted);
     font-size: 1rem;
+    flex-shrink: 0;
     transition: color 0.15s, border-color 0.15s;
   }
   .notif-close-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.25); }
+  .notif-drawer-footer {
+    flex-shrink: 0;
+    display: flex;
+    gap: 10px;
+    padding: 14px 16px;
+    padding-bottom: max(14px, env(safe-area-inset-bottom));
+    border-top: 1px solid rgba(255,255,255,0.07);
+    box-sizing: border-box;
+  }
+  .notif-footer-btn {
+    flex: 1;
+    background: none;
+    border: 1.5px solid rgba(255,255,255,0.12);
+    border-radius: 100px;
+    padding: 9px 12px;
+    color: var(--muted);
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .notif-footer-btn:hover {
+    color: var(--text);
+    border-color: rgba(255,255,255,0.28);
+    background: rgba(255,255,255,0.04);
+  }
+  .notif-footer-btn.edit-btn:hover {
+    color: var(--neon-pink);
+    border-color: rgba(255,45,120,0.4);
+  }
+  .notif-footer-btn.pw-btn:hover {
+    color: var(--neon-cyan);
+    border-color: rgba(0,245,255,0.4);
+  }
 
   .notif-list {
     flex: 1;
@@ -3543,6 +3592,10 @@
         <div class="notif-empty-icon">🔔</div>
         No notifications yet — crew activity will show up here.
       </div>
+    </div>
+    <div class="notif-drawer-footer">
+      <button class="notif-footer-btn edit-btn" onclick="notifDrawerEditProfile()">✏️ Edit Profile</button>
+      <button class="notif-footer-btn pw-btn" onclick="notifDrawerChangePassword()">🔑 Password</button>
     </div>
   </div>
 </div>
@@ -8556,6 +8609,24 @@
 
   function closeNotifDrawer() {
     document.getElementById('notif-drawer-overlay').classList.remove('open');
+  }
+
+  function notifDrawerEditProfile() {
+    closeNotifDrawer();
+    const me = squad.find(r => r.isYou);
+    if (me) openProfileEditor(me.id);
+  }
+
+  function notifDrawerChangePassword() {
+    closeNotifDrawer();
+    const me = squad.find(r => r.isYou);
+    if (!me) return;
+    openProfileEditor(me.id);
+    setTimeout(() => {
+      const fields = document.getElementById('pw-change-fields');
+      if (fields && fields.style.display === 'none') togglePwChangeSection();
+      fields?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 350);
   }
 
   function clearAllNotifs() {
