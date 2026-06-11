@@ -648,6 +648,31 @@
   .profile-handle { color: var(--muted); font-size: 0.9rem; margin: 2px 0 8px; }
   .profile-base-line { font-size: 0.85rem; color: var(--text); }
 
+  /* ===== Inline profile edit mode ===== */
+  .profile-hero.edit-mode { border-color: rgba(0,245,255,0.2); }
+  .profile-edit-hero-input {
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 10px; padding: 7px 12px;
+    color: #fff; font-family: 'Outfit', sans-serif;
+    font-size: 16px; font-weight: 700;
+    width: 100%; outline: none; display: block;
+    transition: border-color 0.2s; margin-bottom: 6px;
+  }
+  .profile-edit-hero-input:focus { border-color: var(--neon-cyan); }
+  .profile-edit-hero-input.handle-input { font-weight: 400; color: var(--muted); }
+  .profile-edit-hero-input.base-input { font-weight: 400; color: var(--text); }
+  /* Profile page form-input override: 16px minimum to prevent iOS Safari zoom */
+  #page-profile .form-input { font-size: 16px; }
+  /* Touch targets for interactive chips */
+  .vibe-preset { min-height: 40px; }
+  .genre-preset { min-height: 40px; }
+  .fest-check { min-height: 44px; }
+  @media (max-width: 480px) {
+    .profile-hero.edit-mode { flex-direction: column; text-align: center; }
+    .profile-hero.edit-mode .profile-id { width: 100%; }
+  }
+
   .profile-section {
     background: var(--surface);
     border: 1px solid rgba(255,255,255,0.07);
@@ -4278,6 +4303,10 @@
         });
       }
     }
+
+    // Load community genre + artist pools (non-blocking)
+    dbLoadCommunityGenres().catch(() => {});
+    dbLoadCommunityArtists().catch(() => {});
   }
 
   // ===== SUPABASE WRITE HELPERS =====
@@ -5856,6 +5885,41 @@
 
   // ===== Vibe Tags — preset catalog =====
   const VIBE_PRESETS = [
+    // Priority picks (top 10)
+    { id:'vt-bassface',       label:'Bass Face Champion',           icon:'🔊', color:'#FF2D78', bg:'rgba(255,45,120,0.14)' },
+    { id:'vt-glittergremlin', label:'Glitter Gremlin',              icon:'✨', color:'#FFE600', bg:'rgba(255,230,0,0.14)' },
+    { id:'vt-phonemartyr',    label:'Phone Battery Martyr',         icon:'🔋', color:'#00F5FF', bg:'rgba(0,245,255,0.14)' },
+    { id:'vt-lostvibe',       label:'Lost But Vibing',              icon:'📍', color:'#39FF14', bg:'rgba(57,255,20,0.14)' },
+    { id:'vt-afterspirate',   label:'Afters Pirate',                icon:'🏴‍☠️', color:'#BF00FF', bg:'rgba(191,0,255,0.14)' },
+    { id:'vt-portaloo',       label:'Portaloo Philosopher',         icon:'🚽', color:'#FF6B35', bg:'rgba(255,107,53,0.14)' },
+    { id:'vt-sunburnt',       label:'Sunburnt Slay Queen',          icon:'🦞', color:'#FF2D78', bg:'rgba(255,45,120,0.14)' },
+    { id:'vt-nohydration',    label:'Hydration? Never Heard Of Her',icon:'💊', color:'#00F5FF', bg:'rgba(0,245,255,0.14)' },
+    { id:'vt-raincoat',       label:'Raincoat Raver',               icon:'🌧️', color:'#BF00FF', bg:'rgba(191,0,255,0.14)' },
+    { id:'vt-kebab',          label:'Midnight Kebab King',          icon:'🍔', color:'#FFE600', bg:'rgba(255,230,0,0.14)' },
+    // More new tags
+    { id:'vt-tent',           label:'Tent Fortress Architect',      icon:'⛺', color:'#FF6B35', bg:'rgba(255,107,53,0.14)' },
+    { id:'vt-khole',          label:'K-Hole Karaoke Star',          icon:'😵‍💫', color:'#BF00FF', bg:'rgba(191,0,255,0.14)' },
+    { id:'vt-microdose',      label:'Microdosing Mystic',           icon:'🍄', color:'#39FF14', bg:'rgba(57,255,20,0.14)' },
+    { id:'vt-lineupguru',     label:'Lineup Oracle',                icon:'🎟️', color:'#FFE600', bg:'rgba(255,230,0,0.14)' },
+    { id:'vt-silentdisco',    label:'Silent Disco Stalker',         icon:'🕺', color:'#00F5FF', bg:'rgba(0,245,255,0.14)' },
+    { id:'vt-contentfarmer',  label:'Festival Content Farmer',      icon:'🤳', color:'#FF2D78', bg:'rgba(255,45,120,0.14)' },
+    { id:'vt-sunglasses',     label:'Sunglasses After Dark',        icon:'🕶️', color:'#BF00FF', bg:'rgba(191,0,255,0.14)' },
+    { id:'vt-sunscreen',      label:'Sunscreen Sniper',             icon:'🧴', color:'#39FF14', bg:'rgba(57,255,20,0.14)' },
+    { id:'vt-kandi',          label:'Kandi Kid Convert',            icon:'🦋', color:'#FF2D78', bg:'rgba(255,45,120,0.14)' },
+    { id:'vt-duststorm',      label:'Dust Storm Devotee',           icon:'🏜️', color:'#FFE600', bg:'rgba(255,230,0,0.14)' },
+    { id:'vt-portawarrior',   label:'Portapotty Warrior',           icon:'🛡️', color:'#FF6B35', bg:'rgba(255,107,53,0.14)' },
+    { id:'vt-raindance',      label:'Rain Dance Refugee',           icon:'🌧️', color:'#00F5FF', bg:'rgba(0,245,255,0.14)' },
+    { id:'vt-blistered',      label:'Blistered But Blessed',        icon:'🥾', color:'#FF6B35', bg:'rgba(255,107,53,0.14)' },
+    { id:'vt-sockless',       label:'Sockless Legend',              icon:'🧦', color:'#39FF14', bg:'rgba(57,255,20,0.14)' },
+    { id:'vt-beergarden',     label:'Beer Garden Bandit',           icon:'🍺', color:'#FFE600', bg:'rgba(255,230,0,0.14)' },
+    { id:'vt-mirrorball',     label:'Mirrorball Magnet',            icon:'🪩', color:'#FF2D78', bg:'rgba(255,45,120,0.14)' },
+    { id:'vt-sweatequity',    label:'Sweat Equity Investor',        icon:'💦', color:'#00F5FF', bg:'rgba(0,245,255,0.14)' },
+    { id:'vt-tacotruck',      label:'Taco Truck Tracker',           icon:'🌮', color:'#FF6B35', bg:'rgba(255,107,53,0.14)' },
+    { id:'vt-vortex',         label:'Vortex Victim',                icon:'🌀', color:'#BF00FF', bg:'rgba(191,0,255,0.14)' },
+    { id:'vt-moshpityogi',    label:'Moshpit Yogi',                 icon:'🧘‍♀️', color:'#39FF14', bg:'rgba(57,255,20,0.14)' },
+    { id:'vt-offlineonline',  label:'Offline But Online',           icon:'📵', color:'#FF6B35', bg:'rgba(255,107,53,0.14)' },
+    { id:'vt-facepaint',      label:'Face Paint Casualty',          icon:'🤡', color:'#FF2D78', bg:'rgba(255,45,120,0.14)' },
+    // Original classics
     { id:'vt-mainstage',   label:'Mainstage Monster',        icon:'🎤', color:'#FF2D78', bg:'rgba(255,45,120,0.14)' },
     { id:'vt-bunker',      label:'Bunker Dweller',           icon:'🕳️', color:'#BF00FF', bg:'rgba(191,0,255,0.14)' },
     { id:'vt-sunrise',     label:'Sunrise Chaser',           icon:'🌅', color:'#FFE600', bg:'rgba(255,230,0,0.14)' },
@@ -5872,6 +5936,16 @@
     { id:'vt-setlist',     label:'Memorises Set Lists',      icon:'🧠', color:'#39FF14', bg:'rgba(57,255,20,0.14)' },
     { id:'vt-latenight',   label:'3AM Is Early',             icon:'🌙', color:'#BF00FF', bg:'rgba(191,0,255,0.14)' },
     { id:'vt-afterparty',  label:'Afterparty Legend',        icon:'🔑', color:'#FF2D78', bg:'rgba(255,45,120,0.14)' },
+  ];
+
+  // ===== Artist Suggestions — starter list; community-added artists append at runtime =====
+  const ARTIST_SUGGESTIONS = [
+    'Amelie Lens','Charlotte de Witte','Peggy Gou','Honey Dijon','Anz','Avalon Emerson',
+    'Rebekah','Paula Temple','DJ Harvey','Moodymann','Kerri Chandler','DJ Koze',
+    'Floating Points','Four Tet','Jon Hopkins','Bonobo','BICEP','Midland',
+    'Ben UFO','Burial','Objekt','Blawan','DJ Stingray','KiNK','Move D',
+    'Richie Hawtin','Jeff Mills','Marcel Dettmann','Ben Klock','Caribou',
+    'Factory Floor','Actress','Shackleton','Surgeon',
   ];
 
   // ===== Genre Presets =====
@@ -6061,7 +6135,7 @@
   }
 
   // ===== Dedicated profile page =====
-  function openProfile(id) {
+  function openProfile(id, editMode = false) {
     const r = getRaver(id);
     if (!r) return;
 
@@ -6175,95 +6249,232 @@
       photoCountdownBlock = '';
     }
 
-    document.getElementById('page-profile').innerHTML = `
-      <button class="profile-back" onclick="backToSquad()">← Back to Squad</button>
-      <div class="profile-hero">
-        <div class="profile-hero-bar" style="background:${r.gradient}"></div>
-        ${avatarEl}
-        <div class="profile-id">
-          <h2>${r.isYou ? '👑 ' : ''}${r.name}${r.isYou ? ' <span style="font-size:0.9rem;color:var(--muted)">(You)</span>' : ''}</h2>
-          <div class="profile-handle">${r.handle}</div>
-          <div class="profile-base-line">📍 Based in ${r.base}</div>
+    const profilePage = document.getElementById('page-profile');
+
+    if (editMode) {
+      const isOwnProfile = r.isYou;
+      const handleField = r.claimedBy && r.handle
+        ? `<div style="font-size:0.9rem;color:var(--muted);">${r.handle} <span style="font-size:0.7rem;color:var(--neon-green);">✓ Claimed</span></div>`
+        : (isOwnProfile
+            ? `<input class="profile-edit-hero-input handle-input" id="pf-handle" value="${(r.handle||'').replace(/"/g,'&quot;')}" placeholder="@handle">`
+            : `<div style="font-size:0.9rem;color:var(--muted);">${r.handle}</div>`);
+      const existingArtists = (r.favArtists || []).map(a => a.toLowerCase());
+      const artistSuggestions = allArtistSuggestions().filter(a => !existingArtists.includes(a.toLowerCase())).slice(0, 16);
+      const artistSuggestHtml = artistSuggestions.length ? `
+        <div class="genre-suggest-label">Suggestions</div>
+        <div class="genre-suggest-cloud">
+          ${artistSuggestions.map(a => `<span class="genre-suggest-chip" onclick="addArtistSuggestion('${a.replace(/'/g,"\\'")}',this)">+ ${a}</span>`).join('')}
+        </div>` : '';
+
+      profilePage.innerHTML = `
+        <button class="profile-back" data-raver-id="${r.id}" onclick="cancelProfileEdit(this.dataset.raverId)">← Cancel</button>
+        <div class="profile-hero edit-mode">
+          <div class="profile-hero-bar" style="background:${r.gradient}"></div>
+          ${avatarEl}
+          <div class="profile-id">
+            <input class="profile-edit-hero-input" id="pf-name" value="${(r.name||'').replace(/"/g,'&quot;')}" placeholder="Name">
+            ${handleField}
+            <input class="profile-edit-hero-input base-input" id="pf-base" value="${(r.base||'').replace(/"/g,'&quot;')}" placeholder="📍 Home base">
+          </div>
         </div>
-      </div>
 
-      ${photoCountdownBlock}
+        <div class="profile-actions" data-raver-id="${r.id}">
+          <button class="btn btn-ghost" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="cancelProfileEdit(this.dataset.raverId)">Cancel</button>
+          <button class="btn btn-primary" style="flex:2;padding:11px;" onclick="saveProfile()">Save Changes 🔥</button>
+        </div>
 
-      <div class="profile-actions" data-raver-id="${r.id}">
-        <button class="btn btn-primary" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="openProfileEditor(this.closest('[data-raver-id]').dataset.raverId)">✏️ Edit Profile</button>
-        ${(!r.isYou && isAdminUser()) ? `<button class="btn btn-ghost" style="padding:11px;color:var(--neon-pink);border-color:rgba(255,45,120,0.3);" data-raver-id="${r.id}" onclick="showDeleteRaverConfirm(this.dataset.raverId)">🗑️</button>` : ''}
-      </div>
+        <div class="profile-section">
+          <h3>⚡ Vibe Tags</h3>
+          <div class="vibe-tag-cloud" id="vibe-preset-cloud">
+            ${VIBE_PRESETS.map(p => {
+              const picked = (r.vibeTags || []).includes(p.id) ? ' picked' : '';
+              const pickedStyle = picked ? `style="border-color:${p.color};background:rgba(255,255,255,0.08);color:${p.color};box-shadow:0 0 14px -4px ${p.color};"` : `style="color:${p.color};"`;
+              return `<span class="vibe-preset${picked}" ${pickedStyle} onclick="toggleVibePick('${p.id}', this)"><span class="vt-icon">${p.icon}</span>${p.label}</span>`;
+            }).join('')}
+          </div>
+          <div class="vibe-custom-row" style="margin-top:10px;">
+            <input class="vibe-custom-input" id="vibe-custom-input" placeholder="Add your own vibe tag…" maxlength="30"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();addCustomVibe();}">
+            <button type="button" class="vibe-add-btn" onclick="addCustomVibe()">Add</button>
+          </div>
+          <div class="vibe-custom-chips" id="vibe-custom-chips"></div>
+        </div>
 
-      ${connectBlock}
+        <div class="profile-section">
+          <h3>🎶 Genres</h3>
+          <div class="genre-preset-cloud" id="genre-preset-cloud">
+            ${allGenrePresets().map(g => {
+              const picked = (r.genres || []).map(x=>x.toLowerCase()).includes(g.toLowerCase()) ? ' picked' : '';
+              return `<span class="genre-preset${picked}" onclick="toggleGenrePick('${g.replace(/'/g,"\\'").replace(/"/g,'&quot;')}', this)">${g}</span>`;
+            }).join('')}
+          </div>
+          <div class="vibe-custom-row">
+            <input class="vibe-custom-input" id="genre-custom-input" placeholder="Add your own genre…" maxlength="40"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();addCustomGenre();}">
+            <button type="button" class="vibe-add-btn" onclick="addCustomGenre()">Add</button>
+          </div>
+          <div class="vibe-custom-chips" id="genre-custom-chips"></div>
+        </div>
 
-      <div class="profile-section">
-        <h3>⚡ Vibe Tags</h3>
-        ${(() => {
-          const presetVibes = (r.vibeTags||[]).map(v => vibeTagHTML(v, false, false)).join('');
-          const customVibes = (r.customVibeTags||[]).map(v => vibeTagHTML(v, true, false)).join('');
-          return (presetVibes || customVibes)
-            ? `<div class="profile-vibes">${presetVibes}${customVibes}</div>`
-            : '<div class="fest-empty">No vibe tags yet — edit profile to add some</div>';
-        })()}
-      </div>
+        <div class="profile-section">
+          <h3>🎵 Favourite Artists</h3>
+          ${fieldRow('','pf-favs', r.favArtists?.join(', '), 'Amelie Lens, Peggy Gou')}
+          ${artistSuggestHtml}
+        </div>
 
-      <div class="profile-section">
-        <h3>🎶 Genres</h3>
-        <div class="tag-edit-wrap">${genreChips}</div>
-        ${r.isYou ? (() => {
-          const existing = (r.genres || []).map(x => x.toLowerCase());
-          const suggestions = GENRE_PRESETS.filter(g => !existing.includes(g.toLowerCase())).slice(0, 12);
-          return suggestions.length ? `
-            <div class="genre-suggest-label">Suggestions</div>
-            <div class="genre-suggest-cloud">
-              ${suggestions.map(g => `<span class="genre-suggest-chip" onclick="addTag('${r.id}','genres','${g.replace(/'/g,"\\'")}');return false;">+ ${g}</span>`).join('')}
-            </div>` : '';
-        })() : ''}
-        ${addTagInput('genres', '+ custom genre')}
-      </div>
+        <div class="profile-section">
+          <h3>🎟️ Festivals</h3>
+          <div class="fest-picker-hint">Tick the raves they're going to or have been to. Going vs. been is set automatically by date.</div>
+          <div id="fest-picker"></div>
+          <div id="new-fest-form" style="display:none;">
+            <div class="fest-edit-row" style="margin-top:8px;">
+              <input class="form-input" id="nf-name" placeholder="e.g. Dekmantel or Village Underground Fri" style="flex:2;">
+              <input class="form-input" id="nf-date" type="date" style="flex:1.3;color-scheme:dark;">
+            </div>
+            <input class="form-input" id="nf-loc" placeholder="Location (e.g. Berlin, DE)" style="margin-top:8px;">
+            <div style="display:flex;gap:8px;margin-top:8px;">
+              <button type="button" class="btn btn-ghost" style="flex:1;padding:9px;font-size:0.8rem;" onclick="hideNewFest()">Cancel</button>
+              <button type="button" class="btn btn-primary" style="flex:1;padding:9px;font-size:0.8rem;" onclick="createFestivalInline()">Add Rave</button>
+            </div>
+          </div>
+          <button type="button" class="add-fest-btn" id="show-new-fest-btn" onclick="showNewFest()">+ Add a new rave</button>
+        </div>
 
-      <div class="profile-section">
-        <h3>🎵 Favourite Artists</h3>
-        <div class="tag-edit-wrap">${favChips}</div>
-        ${addTagInput('favArtists', '+ artist')}
-      </div>
+        <div class="profile-section">
+          <h3>📱 Contact</h3>
+          ${fieldRow('Instagram','pf-instagram', r.instagram, '@samraves')}
+          ${fieldRow('Phone','pf-phone', r.phone, '+44 7700 900000')}
+        </div>
 
-      <div class="profile-section">
-        <h3>🎟️ Festivals — Going To</h3>
-        ${festListUpcoming}
-      </div>
+        <div class="profile-section">
+          <h3>👥 Go-To Crew</h3>
+          ${fieldRow('','pf-crew', r.crew, 'Your ride-or-die group name')}
+        </div>
 
-      <div class="profile-section">
-        <h3>✅ Festivals — Been To</h3>
-        ${festListPast}
-      </div>
+        ${!isOwnProfile ? `
+        <div class="profile-section">
+          <h3>🤝 How We Met</h3>
+          ${fieldRow('','pf-met', r.metStory, 'Where did your paths cross?', true)}
+        </div>` : ''}
 
-      <div class="profile-section">
-        <h3>👥 Go-To Crew</h3>
-        <div class="profile-note">${r.crew || '<span class="fest-empty">Not set</span>'}</div>
-      </div>
+        <div class="profile-section">
+          <h3>📝 Notes</h3>
+          ${fieldRow('','pf-notes', r.notes, isOwnProfile ? 'Anything about yourself…' : "What's their vibe?", true)}
+        </div>
 
-      <div class="profile-section">
-        <h3>🤝 How We Met</h3>
-        <div class="profile-note">${r.metStory || '<span class="fest-empty">No story logged yet</span>'}</div>
-      </div>
+        ${isOwnProfile ? `
+        <div class="profile-section">
+          <label class="form-label" style="cursor:pointer;user-select:none;display:block;margin-bottom:0;" onclick="togglePwChangeSection()">
+            🔑 Change Password
+            <span id="pw-change-toggle" style="font-size:0.75rem;color:var(--muted);font-weight:400;margin-left:6px;">▶ expand</span>
+          </label>
+          <div id="pw-change-fields" style="display:none;margin-top:10px;">
+            <input class="form-input" id="pf-new-password" type="password" placeholder="New password (min 6 chars)" autocomplete="new-password" style="margin-bottom:8px;">
+            <input class="form-input" id="pf-confirm-password" type="password" placeholder="Confirm new password" autocomplete="new-password" style="margin-bottom:10px;">
+            <button type="button" class="btn btn-ghost" id="pf-pw-btn" style="width:100%;font-size:0.85rem;" onclick="doProfilePasswordChange()">Update Password</button>
+          </div>
+        </div>` : ''}
 
-      <div class="profile-section">
-        <h3>📝 Notes</h3>
-        ${r.isYou ? `<div class="profile-note">${r.notes || '<span class="fest-empty">No notes yet</span>'}</div>` : (() => {
-          const savedNotes = localStorage.getItem('viewer_notes_' + r.id) || '';
-          return `<p style="font-size:0.72rem;color:var(--muted);margin-bottom:8px;line-height:1.4;">Private — only you can see this.</p>
-            <textarea id="viewer-notes-${r.id}" class="inline-notes-area"
-              placeholder="How you met, their vibe, things to remember..."
-              oninput="localStorage.setItem('viewer_notes_${r.id}',this.value);const s=document.getElementById('notes-saved-${r.id}');if(s){s.classList.add('show');clearTimeout(s._t);s._t=setTimeout(()=>s.classList.remove('show'),1400);}"
-            >${savedNotes}</textarea>
-            <div id="notes-saved-${r.id}" class="inline-notes-saved">Saved ✓</div>`;
-        })()}
-      </div>
-    `;
+        <div class="profile-actions" style="margin-top:8px;">
+          <button class="btn btn-ghost" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="cancelProfileEdit(this.dataset.raverId)">Cancel</button>
+          <button class="btn btn-primary" style="flex:2;padding:11px;" onclick="saveProfile()">Save Changes 🔥</button>
+        </div>
+      `;
+      renderFestPicker();
+      renderCustomVibeTags();
+      renderCustomGenres();
+    } else {
+      profilePage.classList.remove('profile-edit-mode');
+      profilePage.innerHTML = `
+        <button class="profile-back" onclick="backToSquad()">← Back to Squad</button>
+        <div class="profile-hero">
+          <div class="profile-hero-bar" style="background:${r.gradient}"></div>
+          ${avatarEl}
+          <div class="profile-id">
+            <h2>${r.isYou ? '👑 ' : ''}${r.name}${r.isYou ? ' <span style="font-size:0.9rem;color:var(--muted)">(You)</span>' : ''}</h2>
+            <div class="profile-handle">${r.handle}</div>
+            <div class="profile-base-line">📍 Based in ${r.base}</div>
+          </div>
+        </div>
+
+        ${photoCountdownBlock}
+
+        <div class="profile-actions" data-raver-id="${r.id}">
+          <button class="btn btn-primary" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="enterProfileEditMode(this.dataset.raverId)">✏️ Edit Profile</button>
+          ${(!r.isYou && isAdminUser()) ? `<button class="btn btn-ghost" style="padding:11px;color:var(--neon-pink);border-color:rgba(255,45,120,0.3);" data-raver-id="${r.id}" onclick="showDeleteRaverConfirm(this.dataset.raverId)">🗑️</button>` : ''}
+        </div>
+
+        ${connectBlock}
+
+        <div class="profile-section">
+          <h3>⚡ Vibe Tags</h3>
+          ${(() => {
+            const presetVibes = (r.vibeTags||[]).map(v => vibeTagHTML(v, false, false)).join('');
+            const customVibes = (r.customVibeTags||[]).map(v => vibeTagHTML(v, true, false)).join('');
+            return (presetVibes || customVibes)
+              ? `<div class="profile-vibes">${presetVibes}${customVibes}</div>`
+              : '<div class="fest-empty">No vibe tags yet — edit profile to add some</div>';
+          })()}
+        </div>
+
+        <div class="profile-section">
+          <h3>🎶 Genres</h3>
+          <div class="tag-edit-wrap">${genreChips}</div>
+          ${r.isYou ? (() => {
+            const existing = (r.genres || []).map(x => x.toLowerCase());
+            const suggestions = allGenrePresets().filter(g => !existing.includes(g.toLowerCase())).slice(0, 12);
+            return suggestions.length ? `
+              <div class="genre-suggest-label">Suggestions</div>
+              <div class="genre-suggest-cloud">
+                ${suggestions.map(g => `<span class="genre-suggest-chip" onclick="addTag('${r.id}','genres','${g.replace(/'/g,"\\'")}');return false;">+ ${g}</span>`).join('')}
+              </div>` : '';
+          })() : ''}
+          ${addTagInput('genres', '+ custom genre')}
+        </div>
+
+        <div class="profile-section">
+          <h3>🎵 Favourite Artists</h3>
+          <div class="tag-edit-wrap">${favChips}</div>
+          ${addTagInput('favArtists', '+ artist')}
+        </div>
+
+        <div class="profile-section">
+          <h3>🎟️ Festivals — Going To</h3>
+          ${festListUpcoming}
+        </div>
+
+        <div class="profile-section">
+          <h3>✅ Festivals — Been To</h3>
+          ${festListPast}
+        </div>
+
+        <div class="profile-section">
+          <h3>👥 Go-To Crew</h3>
+          <div class="profile-note">${r.crew || '<span class="fest-empty">Not set</span>'}</div>
+        </div>
+
+        <div class="profile-section">
+          <h3>🤝 How We Met</h3>
+          <div class="profile-note">${r.metStory || '<span class="fest-empty">No story logged yet</span>'}</div>
+        </div>
+
+        <div class="profile-section">
+          <h3>📝 Notes</h3>
+          ${r.isYou ? `<div class="profile-note">${r.notes || '<span class="fest-empty">No notes yet</span>'}</div>` : (() => {
+            const savedNotes = localStorage.getItem('viewer_notes_' + r.id) || '';
+            return `<p style="font-size:0.72rem;color:var(--muted);margin-bottom:8px;line-height:1.4;">Private — only you can see this.</p>
+              <textarea id="viewer-notes-${r.id}" class="inline-notes-area"
+                placeholder="How you met, their vibe, things to remember..."
+                oninput="localStorage.setItem('viewer_notes_${r.id}',this.value);const s=document.getElementById('notes-saved-${r.id}');if(s){s.classList.add('show');clearTimeout(s._t);s._t=setTimeout(()=>s.classList.remove('show'),1400);}"
+              >${savedNotes}</textarea>
+              <div id="notes-saved-${r.id}" class="inline-notes-saved">Saved ✓</div>`;
+          })()}
+        </div>
+      `;
+    }
     // Swap to profile page (hide nav active states; this is a sub-page)
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    document.getElementById('page-profile').classList.add('active');
+    profilePage.classList.add('active');
     window.scrollTo(0,0);
   }
 
@@ -6326,6 +6537,32 @@
     }
   }
 
+  // ===== Community genre / artist pools =====
+  let communityGenres = [];
+  let communityArtists = [];
+
+  function allGenrePresets() {
+    const lower = new Set(GENRE_PRESETS.map(g => g.toLowerCase()));
+    return [...GENRE_PRESETS, ...communityGenres.filter(g => !lower.has(g.toLowerCase()))];
+  }
+
+  function allArtistSuggestions() {
+    const lower = new Set(ARTIST_SUGGESTIONS.map(a => a.toLowerCase()));
+    return [...ARTIST_SUGGESTIONS, ...communityArtists.filter(a => !lower.has(a.toLowerCase()))];
+  }
+
+  async function dbLoadCommunityGenres() {
+    if (!currentUser) return;
+    const { data } = await sb.from('community_genres').select('name').order('name');
+    if (data) communityGenres = data.map(r => r.name);
+  }
+
+  async function dbLoadCommunityArtists() {
+    if (!currentUser) return;
+    const { data } = await sb.from('community_artists').select('name').order('name');
+    if (data) communityArtists = data.map(r => r.name);
+  }
+
   // ===== Profile editor (add / edit) =====
   let editingId = null;
   let editingVibeTags = new Set();
@@ -6343,6 +6580,12 @@
     editingId = id || null;
     const r = id ? getRaver(id) : null;
     const isOwnProfile = r?.isYou || isOnboarding;
+
+    // Existing raver → inline editing on the profile page
+    if (id && r) {
+      enterProfileEditMode(id);
+      return;
+    }
 
     // Quick-add mode: new raver added by crew leader (not onboarding own profile)
     const quickAdd = !id && !isOnboarding && !!_pendingAddToCrew;
@@ -6367,7 +6610,7 @@
       return;
     }
 
-    // Full editor: editing existing raver, or own profile during onboarding
+    // Full editor: onboarding (new user creating own profile)
     const claimedHandle = r?.claimedBy && r?.handle
       ? `<div class="form-group"><label class="form-label">Handle</label><div style="font-size:0.88rem;color:var(--muted);padding:11px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;">${r.handle} <span style="font-size:0.72rem;color:var(--neon-green);margin-left:6px;">✓ Claimed</span></div></div>`
       : '';
@@ -6383,7 +6626,7 @@
       <div class="form-group">
         <label class="form-label">🎶 Genres</label>
         <div class="genre-preset-cloud" id="genre-preset-cloud">
-          ${GENRE_PRESETS.map(g => {
+          ${allGenrePresets().map(g => {
             const picked = (r?.genres || []).map(x=>x.toLowerCase()).includes(g.toLowerCase()) ? ' picked' : '';
             return `<span class="genre-preset${picked}" onclick="toggleGenrePick('${g.replace(/'/g,"\\'").replace(/"/g,'&quot;')}', this)">${g}</span>`;
           }).join('')}
@@ -6461,8 +6704,9 @@
     editingCustomVibeTags = [...(r?.customVibeTags || [])];
     renderCustomVibeTags();
 
-    editingGenres = new Set((r?.genres || []).filter(g => GENRE_PRESETS.map(x=>x.toLowerCase()).includes(g.toLowerCase())));
-    editingCustomGenres = (r?.genres || []).filter(g => !GENRE_PRESETS.map(x=>x.toLowerCase()).includes(g.toLowerCase()));
+    const _allPresets = allGenrePresets().map(x => x.toLowerCase());
+    editingGenres = new Set((r?.genres || []).filter(g => _allPresets.includes(g.toLowerCase())));
+    editingCustomGenres = (r?.genres || []).filter(g => !_allPresets.includes(g.toLowerCase()));
     renderCustomGenres();
 
     document.getElementById('profile-edit-overlay').classList.add('open');
@@ -6490,12 +6734,12 @@
     const inp = document.getElementById('genre-custom-input');
     const v = (inp?.value || '').trim();
     if (!v) return;
-    // If it matches a preset, toggle it instead
-    const match = GENRE_PRESETS.find(g => g.toLowerCase() === v.toLowerCase());
+    // If it matches any preset (including community), toggle it instead
+    const allPresets = allGenrePresets();
+    const match = allPresets.find(g => g.toLowerCase() === v.toLowerCase());
     if (match) {
       editingGenres.add(match);
       inp.value = '';
-      // Visually pick the preset chip
       const chips = document.querySelectorAll('#genre-preset-cloud .genre-preset');
       chips.forEach(c => { if (c.textContent.toLowerCase() === match.toLowerCase()) c.classList.add('picked'); });
       return;
@@ -6504,6 +6748,11 @@
     editingCustomGenres.push(v);
     inp.value = '';
     renderCustomGenres();
+    // Write new genre to community pool
+    if (currentUser) {
+      sb.from('community_genres').upsert({ name: v }, { onConflict: 'name', ignoreDuplicates: true }).catch(() => {});
+      if (!communityGenres.some(g => g.toLowerCase() === v.toLowerCase())) communityGenres.push(v);
+    }
   }
 
   function removeCustomGenre(i) {
@@ -6589,7 +6838,7 @@
   function openOwnProfileEditor() {
     const me = squad.find(r => r.isYou);
     if (me) {
-      openProfileEditor(me.id);
+      enterProfileEditMode(me.id);
     } else {
       // No raver profile yet — open onboarding-style full form
       isOnboarding = false;
@@ -6604,6 +6853,32 @@
   }
   function closeProfileEditorOutside(e) {
     if (e.target === document.getElementById('profile-edit-overlay')) closeProfileEditor();
+  }
+
+  // ===== Inline profile edit mode =====
+  function enterProfileEditMode(id) {
+    editingId = id;
+    const r = getRaver(id);
+    const _allPresets = allGenrePresets().map(x => x.toLowerCase());
+    editingFestIds        = new Set(r?.festIds || []);
+    editingVibeTags       = new Set(r?.vibeTags || []);
+    editingCustomVibeTags = [...(r?.customVibeTags || [])];
+    editingGenres         = new Set((r?.genres || []).filter(g => _allPresets.includes(g.toLowerCase())));
+    editingCustomGenres   = (r?.genres || []).filter(g => !_allPresets.includes(g.toLowerCase()));
+    openProfile(id, true);
+  }
+
+  function cancelProfileEdit(id) {
+    editingId = null;
+    openProfile(id);
+  }
+
+  function addArtistSuggestion(name, el) {
+    const inp = document.getElementById('pf-favs');
+    if (!inp) return;
+    const existing = inp.value.trim();
+    inp.value = existing ? existing + ', ' + name : name;
+    el.remove();
   }
 
   // ===== Vibe Tag editor helpers =====
@@ -6665,6 +6940,16 @@
       vibeTags: Array.from(editingVibeTags),
       customVibeTags: [...editingCustomVibeTags]
     };
+    // Write new artists to the community pool for other users
+    if (currentUser && data.favArtists.length) {
+      const known = new Set(allArtistSuggestions().map(a => a.toLowerCase()));
+      data.favArtists.forEach(a => {
+        if (!known.has(a.toLowerCase())) {
+          sb.from('community_artists').upsert({ name: a }, { onConflict: 'name', ignoreDuplicates: true }).catch(() => {});
+          communityArtists.push(a);
+        }
+      });
+    }
 
     if (editingId) {
       const r = getRaver(editingId);
