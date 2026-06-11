@@ -5885,6 +5885,7 @@
 
   function crewNextFestBlock(crew) {
     const n = crewNextUp(crew);
+    if (n.kind === 'upcoming' && n.whoRavers.length === 1 && n.whoRavers[0].isYou) return '';
     if (n.kind === 'upcoming') {
       const cd = countdownLabel(n.date);
       const when = `${n.date.getDate()} ${MON_SHORT[n.date.getMonth()]}`;
@@ -5975,7 +5976,10 @@
 
       // Build the "next fest" block
       let festBlock;
-      if (n.kind === 'upcoming') {
+      const _onlyMe = n.kind === 'upcoming' && n.whoRavers.length === 1 && n.whoRavers[0].isYou;
+      if (_onlyMe) {
+        festBlock = '';
+      } else if (n.kind === 'upcoming') {
         const when = `${n.date.getDate()} ${MON_SHORT[n.date.getMonth()]}`;
         const goingNames = n.who.length ? n.who.join(', ') : 'Nobody yet';
         festBlock = `
@@ -7287,6 +7291,12 @@
         </div>
 
         <div class="profile-section">
+          <h3>📱 Contact</h3>
+          ${fieldRow('Instagram','pf-instagram', r.instagram, '@samraves')}
+          ${fieldRow('Phone','pf-phone', r.phone, '+44 7700 900000')}
+        </div>
+
+        <div class="profile-section">
           <h3>⚡ Vibe Tags</h3>
           <div class="vibe-tag-cloud" id="vibe-preset-cloud">
             ${VIBE_PRESETS.map(p => {
@@ -7328,12 +7338,6 @@
         <div class="profile-section">
           <h3>🎟️ Festivals</h3>
           <div id="fest-picker"></div>
-        </div>
-
-        <div class="profile-section">
-          <h3>📱 Contact</h3>
-          ${fieldRow('Instagram','pf-instagram', r.instagram, '@samraves')}
-          ${fieldRow('Phone','pf-phone', r.phone, '+44 7700 900000')}
         </div>
 
         <div class="profile-section">
@@ -7634,28 +7638,21 @@
       ? fieldRow('Handle','pf-handle', r?.handle, 'e.g. @samraves')
       : claimedHandle;
 
+    const _existingArtists = (r?.favArtists || []).map(a => a.toLowerCase());
+    const _artistSuggestions = allArtistSuggestions().filter(a => !_existingArtists.includes(a.toLowerCase())).slice(0, 16);
+    const _artistSuggestHtml = _artistSuggestions.length ? `
+      <div class="genre-suggest-label">Suggestions</div>
+      <div class="genre-suggest-cloud">
+        ${_artistSuggestions.map(a => `<span class="genre-suggest-chip" style="--chip-col:${artistColor(a)};" onclick="addArtistSuggestion('${a.replace(/'/g,"\\'")}',this)">+ ${a}</span>`).join('')}
+      </div>` : '';
+
     document.getElementById('profile-edit-modal').innerHTML = `
       <div class="modal-title">${r ? '✏️ Edit ' + r.name : '✨ Your Raver Profile'}</div>
       ${fieldRow('Name','pf-name', r?.name, 'e.g. Sam P.')}
       ${handleField}
       ${fieldRow('Home Base','pf-base', r?.base, 'e.g. Berlin, DE')}
-      <div class="form-group">
-        <label class="form-label">🎶 Genres</label>
-        <div class="genre-preset-cloud" id="genre-preset-cloud">
-          ${allGenrePresets().map(g => {
-            const picked = (r?.genres || []).map(x=>x.toLowerCase()).includes(g.toLowerCase()) ? ' picked' : '';
-            return `<span class="genre-preset${picked}" style="--chip-col:${genreColor(g)};" onclick="toggleGenrePick('${g.replace(/'/g,"\\'").replace(/"/g,'&quot;')}', this)">${g}</span>`;
-          }).join('')}
-        </div>
-        <div class="vibe-custom-row">
-          <input class="vibe-custom-input" id="genre-custom-input" placeholder="Add your own genre…" maxlength="40"
-            onkeydown="if(event.key==='Enter'){event.preventDefault();addCustomGenre();}">
-          <button type="button" class="vibe-add-btn" onclick="addCustomGenre()">Add</button>
-        </div>
-        <div class="vibe-custom-chips" id="genre-custom-chips"></div>
-      </div>
-      ${fieldRow('Favorite Artists (comma separated)','pf-favs', r?.favArtists?.join(', '), 'Amelie Lens, Peggy Gou')}
-
+      ${fieldRow('Instagram','pf-instagram', r?.instagram, 'e.g. @samraves')}
+      ${fieldRow('Phone Number','pf-phone', r?.phone, 'e.g. +44 7700 900000')}
       <div class="form-group vibe-tags-section">
         <label class="form-label">⚡ Vibe Tags</label>
         <div class="vibe-tag-cloud" id="vibe-preset-cloud">
@@ -7672,14 +7669,30 @@
         </div>
         <div class="vibe-custom-chips" id="vibe-custom-chips"></div>
       </div>
-
+      <div class="form-group">
+        <label class="form-label">🎶 Genres</label>
+        <div class="genre-preset-cloud" id="genre-preset-cloud">
+          ${allGenrePresets().map(g => {
+            const picked = (r?.genres || []).map(x=>x.toLowerCase()).includes(g.toLowerCase()) ? ' picked' : '';
+            return `<span class="genre-preset${picked}" style="--chip-col:${genreColor(g)};" onclick="toggleGenrePick('${g.replace(/'/g,"\\'").replace(/"/g,'&quot;')}', this)">${g}</span>`;
+          }).join('')}
+        </div>
+        <div class="vibe-custom-row">
+          <input class="vibe-custom-input" id="genre-custom-input" placeholder="Add your own genre…" maxlength="40"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();addCustomGenre();}">
+          <button type="button" class="vibe-add-btn" onclick="addCustomGenre()">Add</button>
+        </div>
+        <div class="vibe-custom-chips" id="genre-custom-chips"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">🎵 Favourite Artists</label>
+        <input class="form-input" id="pf-favs" value="${(r?.favArtists?.join(', ')||'').replace(/"/g,'&quot;')}" placeholder="Amelie Lens, Peggy Gou">
+        ${_artistSuggestHtml}
+      </div>
       <div class="form-group">
         <label class="form-label">🎟️ Festivals</label>
         <div id="fest-picker"></div>
       </div>
-
-      ${fieldRow('Instagram','pf-instagram', r?.instagram, 'e.g. @samraves')}
-      ${fieldRow('Phone Number','pf-phone', r?.phone, 'e.g. +44 7700 900000')}
       ${isOwnProfile ? '' : fieldRow('How We Met','pf-met', r?.metStory, 'Where did your paths cross?', true)}
       ${fieldRow('Notes','pf-notes', r?.notes, isOwnProfile ? "Anything about yourself…" : "What's their vibe?", true)}
       ${isOwnProfile ? `
