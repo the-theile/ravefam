@@ -598,7 +598,11 @@
     font-family: 'Outfit', sans-serif;
     font-weight: 800;
     font-size: 1.3rem;
-    border: 3px solid rgba(255,255,255,0.1);
+  }
+  .member-avatar-ring {
+    flex-shrink: 0;
+    width: 62px; height: 62px; border-radius: 50%;
+    padding: 3px;
   }
   .member-divider {
     width: 3px; height: 44px;
@@ -6409,6 +6413,9 @@
   ];
 
   function getRaver(id) { return squad.find(r => r.id === id); }
+  function extractFirstColor(gradient) {
+    return /#[0-9A-Fa-f]{6}/.exec(gradient)?.[0] || '#ffffff';
+  }
   function raverAvatarHTML(photoUrl, gradient, name, divClass, divStyle) {
     divStyle = divStyle || '';
     if (photoUrl) {
@@ -6488,7 +6495,7 @@
 
       card.innerHTML = `
         ${r.isYou ? `<button class="member-edit-btn" onclick="event.stopPropagation();openOwnProfileEditor()" title="Edit your profile">✏️</button>` : ''}
-        ${raverAvatarHTML(r.avatarUrl, r.gradient, r.name, 'member-avatar', '')}
+        <div class="member-avatar-ring" style="background:${r.avatarUrl ? '#FFB800' : extractFirstColor(r.gradient)}">${raverAvatarHTML(r.avatarUrl, r.gradient, r.name, 'member-avatar', '')}</div>
         <div class="member-divider" style="background:${dividerBg}"></div>
         <div class="member-info">
           <div class="member-name">${r.name}${r.isYou ? ' <span style="font-size:0.75rem;margin-right:2px;">👑</span><span style="font-size:0.7rem;color:var(--neon-pink);font-family:\'Outfit\',sans-serif;font-weight:700;">YOU</span>' : ''}</div>
