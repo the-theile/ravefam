@@ -2702,6 +2702,20 @@
       </p>
     </div>
 
+    <!-- ── Set new password (shown only during PASSWORD_RECOVERY flow) ── -->
+    <div id="auth-reset-form" style="display:none;">
+      <p style="text-align:center;margin:0 0 20px;font-size:0.9rem;color:var(--muted);">Choose a new password for your account.</p>
+      <div class="form-group">
+        <label class="form-label">New Password</label>
+        <input class="form-input" id="reset-password" type="password" placeholder="min 6 characters" autocomplete="new-password">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirm Password</label>
+        <input class="form-input" id="reset-password-confirm" type="password" placeholder="repeat new password" autocomplete="new-password">
+      </div>
+      <button class="auth-btn" id="reset-btn" onclick="doUpdatePassword()">Update Password 🔐</button>
+    </div>
+
     <!-- ── QR scan alternative ── -->
     <div style="display:flex;align-items:center;gap:12px;margin:24px 0 6px;">
       <div style="flex:1;height:1px;background:rgba(255,255,255,0.08);"></div>
@@ -3190,6 +3204,9 @@
   function showAuthTab(tab) {
     document.getElementById('auth-login-form').style.display  = tab === 'login'  ? 'block' : 'none';
     document.getElementById('auth-signup-form').style.display = tab === 'signup' ? 'block' : 'none';
+    document.getElementById('auth-reset-form').style.display  = 'none';
+    document.getElementById('tab-login').style.display  = '';
+    document.getElementById('tab-signup').style.display = '';
     document.getElementById('tab-login').classList.toggle('active',  tab === 'login');
     document.getElementById('tab-signup').classList.toggle('active', tab === 'signup');
     clearAuthMessages();
@@ -3224,6 +3241,38 @@
     });
     if (error) { authError(error.message); return; }
     authSuccess('Password reset email sent! Check your inbox and follow the link to set a new password.');
+  }
+
+  function showResetPasswordScreen() {
+    document.getElementById('app-loading').classList.add('hidden');
+    document.getElementById('auth-screen').classList.remove('hidden');
+    document.getElementById('main-app').style.display = 'none';
+    document.getElementById('auth-login-form').style.display  = 'none';
+    document.getElementById('auth-signup-form').style.display = 'none';
+    document.getElementById('auth-reset-form').style.display  = 'block';
+    // Hide tabs so the user can't navigate away mid-reset
+    document.getElementById('tab-login').style.display  = 'none';
+    document.getElementById('tab-signup').style.display = 'none';
+    clearAuthMessages();
+    document.getElementById('reset-password').value         = '';
+    document.getElementById('reset-password-confirm').value = '';
+  }
+
+  async function doUpdatePassword() {
+    const pw  = document.getElementById('reset-password').value;
+    const pw2 = document.getElementById('reset-password-confirm').value;
+    if (pw.length < 6) { authError('Password must be at least 6 characters.'); return; }
+    if (pw !== pw2)    { authError('Passwords do not match.'); return; }
+    const btn = document.getElementById('reset-btn');
+    btn.disabled = true;
+    clearAuthMessages();
+    const { error } = await sb.auth.updateUser({ password: pw });
+    btn.disabled = false;
+    if (error) { authError(error.message); return; }
+    // Password saved — boot the app; user is already authenticated
+    const { data: { user } } = await sb.auth.getUser();
+    _bootedUserId = user.id;
+    showApp(user);
   }
 
   async function doLogin() {
@@ -3305,9 +3354,16 @@
   }
 
   // ===== AUTH STATE LISTENER =====
-  // Fires on INITIAL_SESSION, SIGNED_IN, TOKEN_REFRESHED, SIGNED_OUT, etc.
+  // Fires on INITIAL_SESSION, SIGNED_IN, TOKEN_REFRESHED, SIGNED_OUT,
+  // PASSWORD_RECOVERY, etc.
   // Guard against TOKEN_REFRESHED re-triggering a full bootApp() re-run.
   sb.auth.onAuthStateChange((event, session) => {
+    if (event === 'PASSWORD_RECOVERY') {
+      // User arrived via a password-reset email link — show the set-new-password
+      // form instead of logging them straight into the app.
+      showResetPasswordScreen();
+      return;
+    }
     if (session?.user) {
       if (session.user.id !== _bootedUserId) {
         // New login or first session restore — boot the app.
