@@ -2247,6 +2247,53 @@
   .hp-btn:active { transform: scale(0.98); }
   .hp-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
 
+  /* ===== PROFILE CREW CARDS ===== */
+  .profile-crew-card {
+    display: flex;
+    align-items: stretch;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+    overflow: hidden;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.12s;
+  }
+  .profile-crew-card:active { transform: scale(0.98); }
+  .profile-crew-card:hover { background: rgba(255,255,255,0.07); border-color: color-mix(in srgb, var(--crew-col, #FF2D78) 40%, transparent); }
+  .profile-crew-bar { width: 5px; flex-shrink: 0; }
+  .profile-crew-body { flex: 1; padding: 13px 14px; min-width: 0; }
+  .profile-crew-name {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 1rem;
+    color: #fff;
+    margin-bottom: 7px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .profile-crew-meta { display: flex; flex-wrap: wrap; gap: 5px; }
+  .pcb {
+    font-size: 0.68rem;
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+  }
+  .pcb.lead   { background: rgba(255,184,0,0.15);   color: #FFB800; border: 1px solid rgba(255,184,0,0.3); }
+  .pcb.member { background: rgba(0,245,255,0.1);    color: var(--neon-cyan); border: 1px solid rgba(0,245,255,0.25); }
+  .profile-crew-arrow {
+    display: flex;
+    align-items: center;
+    padding: 0 14px 0 6px;
+    color: var(--muted);
+    font-size: 1.4rem;
+    line-height: 1;
+  }
+
   /* ═══════════════════════════════════════════════
      QR SCANNER & CLAIM FLOW
   ═══════════════════════════════════════════════ */
@@ -6781,14 +6828,36 @@
         </div>
 
         <div class="profile-section" style="${sg(5)}">
-          <h3>👥 Go-To Crew</h3>
-          <div class="profile-note">${r.crew || '<span class="fest-empty">Not set</span>'}</div>
+          <h3>🎪 Crews</h3>
+          ${(() => {
+            const raverCrews = crews.filter(c => (c.squadIds || []).some(sid => String(sid) === String(r.id)));
+            if (!raverCrews.length) return '<div class="fest-empty">Not in any crews yet</div>';
+            return raverCrews.map(c => {
+              const isLead = c.isLead && String(c.leader_id) === String(r.id);
+              const statusLabel = { 'recruiting': '🟢 Recruiting', 'locked-in': '🔒 Locked In', 'secret': '🤫 Secret' }[c.status] || c.status;
+              const memberCount = (c.squadIds || []).length;
+              return `
+                <div class="profile-crew-card" onclick="openDetail('${c.id}')" style="--crew-col:${c.color};">
+                  <div class="profile-crew-bar" style="background:${c.gradient};"></div>
+                  <div class="profile-crew-body">
+                    <div class="profile-crew-name">${c.name}</div>
+                    <div class="profile-crew-meta">
+                      ${isLead ? '<span class="pcb lead">👑 Lead</span>' : '<span class="pcb member">🎧 Member</span>'}
+                      <span class="pcb" style="background:rgba(255,255,255,0.05);color:var(--muted);border:1px solid rgba(255,255,255,0.1);">${statusLabel}</span>
+                      <span class="pcb" style="background:rgba(255,255,255,0.05);color:var(--muted);border:1px solid rgba(255,255,255,0.1);">👥 ${memberCount}</span>
+                    </div>
+                  </div>
+                  <div class="profile-crew-arrow">›</div>
+                </div>`;
+            }).join('');
+          })()}
         </div>
 
+        ${!r.isYou ? `
         <div class="profile-section" style="${sg(0)}">
           <h3>🤝 How We Met</h3>
           <div class="profile-note">${r.metStory || '<span class="fest-empty">No story logged yet</span>'}</div>
-        </div>
+        </div>` : ''}
 
         <div class="profile-section" style="${sg(1)}">
           <h3>📝 Notes</h3>
