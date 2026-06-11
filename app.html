@@ -4074,7 +4074,10 @@
           .map(sid => squad.find(r => r.id === sid))
           .filter(Boolean)
           .map(r => ({ i: initials(r.name), c: c.color || '#FF2D78', t: '#fff', url: r.avatarUrl || null }));
-        const leaderRaver = squad.find(r => r.claimedBy === c.leader_id);
+        // Resolve auth UUID → raver ID. Prefer claimed_by match; fall back to the
+        // user's own raver (is_you=true) when claimed_by is null (onboarding path).
+        const leaderRaver = squad.find(r => r.claimedBy === c.leader_id)
+          || (c.leader_id === uid ? squad.find(r => r.isYou) : null);
         crews.push({
           id: c.id,
           name: c.name,
@@ -4920,6 +4923,25 @@
 
     // Build member list from linked squad profiles → first names, clickable
     const people = crewSquad(crew);
+
+    // Safety net: the crew leader (current user) must always appear in their own crew.
+    // This repairs crews created before the user's raver profile existed (leader_id was
+    // null and squadIds was empty), and crews where leader_id couldn't be resolved from
+    // the DB because the user's profile uses is_you=true but claimed_by=null.
+    const me = squad.find(r => r.isYou);
+    if (crew.isLead && me) {
+      if (crew.leader_id === null) crew.leader_id = me.id;
+      if (!people.some(p => p.id === me.id)) {
+        people.unshift(me);
+        if (!crew.squadIds.some(id => String(id) === String(me.id))) {
+          crew.squadIds.unshift(me.id);
+          if (currentUser && !String(crew.id).startsWith('temp_') && !String(me.id).startsWith('temp_')) {
+            dbAddCrewMember(crew.id, me.id);
+          }
+        }
+      }
+    }
+
     const isAdmin = isAdminUser();
     const isLockedIn = crew.status === 'locked-in';
     const memberList = people.length
