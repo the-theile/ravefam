@@ -3092,6 +3092,63 @@
   }
   #welcome-back-overlay { z-index: 1100; }
 
+  /* ── Onboarding v2 ── */
+  .ob-eq-bars { display:flex; align-items:flex-end; gap:3px; height:22px; margin:0 auto 18px; width:fit-content; }
+  .ob-eq-bar  { width:4px; border-radius:2px; }
+  .ob-eq-bar:nth-child(1) { background:var(--neon-pink);   height:18px; animation:eqPulse 0.8s ease-in-out infinite; }
+  .ob-eq-bar:nth-child(2) { background:var(--neon-cyan);   height:22px; animation:eqPulse 0.8s ease-in-out infinite 0.15s; }
+  .ob-eq-bar:nth-child(3) { background:var(--neon-green);  height:14px; animation:eqPulse 0.8s ease-in-out infinite 0.3s; }
+  .ob-eq-bar:nth-child(4) { background:var(--neon-purple); height:20px; animation:eqPulse 0.8s ease-in-out infinite 0.05s; }
+  .ob-eq-bar:nth-child(5) { background:var(--neon-yellow); height:12px; animation:eqPulse 0.8s ease-in-out infinite 0.22s; }
+
+  .ob-genre-grid { display:flex; flex-wrap:wrap; gap:7px; justify-content:center; margin-bottom:22px; }
+  .ob-genre-chip {
+    padding:7px 13px; border-radius:100px;
+    border:1.5px solid rgba(255,255,255,0.1);
+    font-family:'Outfit',sans-serif; font-weight:600; font-size:0.78rem;
+    cursor:pointer; transition:all 0.16s; background:rgba(255,255,255,0.04);
+    color:var(--muted); user-select:none;
+  }
+  .ob-genre-chip.ob-selected { color:#fff; }
+
+  .ob-inline-field {
+    background:rgba(255,255,255,0.05); border:1.5px solid rgba(255,255,255,0.1);
+    border-radius:12px; padding:13px 16px; color:#fff;
+    font-family:'Outfit',sans-serif; font-size:0.98rem; font-weight:600;
+    width:100%; box-sizing:border-box; outline:none;
+    transition:border-color 0.2s, box-shadow 0.2s; margin-bottom:10px;
+  }
+  .ob-inline-field:focus { border-color:var(--neon-cyan); box-shadow:0 0 0 3px rgba(0,245,255,0.08); }
+  .ob-inline-field.ob-valid   { border-color:var(--neon-green); }
+  .ob-inline-field.ob-invalid { border-color:#FF4455; }
+
+  .ob-handle-wrap { position:relative; margin-bottom:0; }
+  .ob-handle-wrap .ob-at {
+    position:absolute; left:14px; top:50%; transform:translateY(-50%);
+    color:var(--neon-pink); font-family:'Syne',sans-serif; font-weight:800;
+    font-size:1rem; pointer-events:none;
+  }
+  .ob-handle-wrap .ob-inline-field { padding-left:30px; margin-bottom:0; }
+  .ob-handle-status {
+    font-size:0.77rem; min-height:18px; text-align:center;
+    margin:6px 0 14px; transition:color 0.2s;
+  }
+  .ob-handle-status.ob-ok  { color:var(--neon-green); }
+  .ob-handle-status.ob-err { color:#FF4455; }
+
+  .ob-whatnow-chips { display:flex; flex-direction:column; gap:10px; margin-bottom:16px; }
+  .ob-whatnow-chip {
+    display:flex; align-items:center; gap:12px;
+    background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);
+    border-radius:14px; padding:14px 16px;
+    cursor:pointer; transition:background 0.15s, border-color 0.15s;
+    text-align:left;
+  }
+  .ob-whatnow-chip:hover { background:rgba(255,255,255,0.07); border-color:rgba(255,255,255,0.16); }
+  .ob-whatnow-chip-icon { font-size:1.4rem; flex-shrink:0; }
+  .ob-whatnow-chip-label { font-family:'Outfit',sans-serif; font-weight:700; font-size:0.9rem; color:var(--text); }
+  .ob-whatnow-chip-sub   { font-size:0.75rem; color:var(--muted); margin-top:2px; }
+
 </style>
 </head>
 <body>
@@ -3775,53 +3832,129 @@
     <div class="blob blob-3"></div>
   </div>
 
-  <!-- Step 1: Complete Profile -->
-  <div id="onboard-step1" class="onboard-card">
+  <!-- Step 1: Genre Taste Test -->
+  <div id="ob-step1" class="onboard-card">
     <div class="onboard-step-indicator">
-      <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
-        <div class="onboard-dot active" id="ob-dot1">1</div>
-        <div style="font-size:0.65rem;color:#fff;font-family:'Outfit',sans-serif;font-weight:600;">Profile</div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;">
+        <div class="onboard-dot active">1</div>
+        <div style="font-size:0.6rem;color:#fff;font-family:'Outfit',sans-serif;font-weight:700;">Sound</div>
       </div>
-      <div class="onboard-line" id="ob-line1"></div>
-      <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
-        <div class="onboard-dot" id="ob-dot2">2</div>
-        <div style="font-size:0.65rem;color:var(--muted);font-family:'Outfit',sans-serif;font-weight:600;">Crew</div>
+      <div class="onboard-line"></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;">
+        <div class="onboard-dot">2</div>
+        <div style="font-size:0.6rem;color:var(--muted);font-family:'Outfit',sans-serif;font-weight:700;">You</div>
+      </div>
+      <div class="onboard-line"></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;">
+        <div class="onboard-dot">3</div>
+        <div style="font-size:0.6rem;color:var(--muted);font-family:'Outfit',sans-serif;font-weight:700;">Crew</div>
       </div>
     </div>
-    <div style="font-family:'Outfit',sans-serif;font-size:0.75rem;font-weight:700;color:var(--neon-pink);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">Step 1 of 2</div>
-    <div class="onboard-title">Welcome to RaveFAM! 🎉</div>
-    <div class="onboard-sub">Let's set up your raver identity so your crew can find and recognise you.</div>
-    <div class="onboard-features">
-      <div class="onboard-feat"><span class="onboard-feat-icon">🎭</span><span>Your handle, music taste &amp; home base</span></div>
-      <div class="onboard-feat"><span class="onboard-feat-icon">🎟️</span><span>Raves, festivals & club nights you're hitting this season</span></div>
-      <div class="onboard-feat"><span class="onboard-feat-icon">📱</span><span>Contact info so your crew can reach you</span></div>
+    <div class="ob-eq-bars">
+      <div class="ob-eq-bar"></div>
+      <div class="ob-eq-bar"></div>
+      <div class="ob-eq-bar"></div>
+      <div class="ob-eq-bar"></div>
+      <div class="ob-eq-bar"></div>
     </div>
-    <button class="auth-btn" onclick="startProfileOnboarding()">Complete Your Profile →</button>
+    <div class="onboard-title">What's your sound? 🎛️</div>
+    <div class="onboard-sub">Tap the genres that move you. This is your sonic identity — no wrong answers.</div>
+    <div class="ob-genre-grid" id="ob-genre-grid"></div>
+    <button class="auth-btn" id="ob-step1-btn" disabled onclick="obStep1Next()">Lock In My Sound →</button>
   </div>
 
-  <!-- Step 2: Create / Join a Crew -->
-  <div id="onboard-step2" class="onboard-card" style="display:none;">
+  <!-- Step 2: Minimal Identity -->
+  <div id="ob-step2" class="onboard-card" style="display:none;">
     <div class="onboard-step-indicator">
-      <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
-        <div class="onboard-dot done" id="ob-dot1b">✓</div>
-        <div style="font-size:0.65rem;color:var(--neon-green);font-family:'Outfit',sans-serif;font-weight:600;">Profile</div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;">
+        <div class="onboard-dot done">✓</div>
+        <div style="font-size:0.6rem;color:var(--neon-green);font-family:'Outfit',sans-serif;font-weight:700;">Sound</div>
       </div>
-      <div class="onboard-line done" id="ob-line1b"></div>
-      <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
-        <div class="onboard-dot active" id="ob-dot2b">2</div>
-        <div style="font-size:0.65rem;color:#fff;font-family:'Outfit',sans-serif;font-weight:600;">Crew</div>
+      <div class="onboard-line done"></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;">
+        <div class="onboard-dot active">2</div>
+        <div style="font-size:0.6rem;color:#fff;font-family:'Outfit',sans-serif;font-weight:700;">You</div>
+      </div>
+      <div class="onboard-line"></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;">
+        <div class="onboard-dot">3</div>
+        <div style="font-size:0.6rem;color:var(--muted);font-family:'Outfit',sans-serif;font-weight:700;">Crew</div>
       </div>
     </div>
-    <div style="font-family:'Outfit',sans-serif;font-size:0.75rem;font-weight:700;color:var(--neon-pink);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">Step 2 of 2</div>
-    <div class="onboard-title">Build your crew 🔥</div>
-    <div class="onboard-sub">Create your first crew to start organising your rave season together — or skip and do it later.</div>
+    <div class="onboard-title">Drop your identity 🪩</div>
+    <div class="onboard-sub">Your name and tag — so your crew can find you in the wild. Everything else you can fill in later.</div>
+    <input class="ob-inline-field" id="ob-name-input" type="text"
+      placeholder="Your name" autocomplete="off" spellcheck="false"
+      oninput="obCheckStep2Ready()" style="margin-bottom:10px;">
+    <div class="ob-handle-wrap">
+      <span class="ob-at">@</span>
+      <input class="ob-inline-field" id="ob-handle-input" type="text"
+        placeholder="your_tag" autocomplete="off" autocorrect="off"
+        autocapitalize="none" spellcheck="false" maxlength="30"
+        oninput="obHandleInput(this.value)"
+        onkeydown="if(event.key==='Enter')obStep2Next()">
+    </div>
+    <div class="ob-handle-status" id="ob-handle-status"></div>
+    <button class="auth-btn" id="ob-step2-btn" disabled onclick="obStep2Next()">I'm Ready →</button>
+  </div>
+
+  <!-- Step 3: Build Your Crew -->
+  <div id="ob-step3" class="onboard-card" style="display:none;">
+    <div class="onboard-step-indicator">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;">
+        <div class="onboard-dot done">✓</div>
+        <div style="font-size:0.6rem;color:var(--neon-green);font-family:'Outfit',sans-serif;font-weight:700;">Sound</div>
+      </div>
+      <div class="onboard-line done"></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;">
+        <div class="onboard-dot done">✓</div>
+        <div style="font-size:0.6rem;color:var(--neon-green);font-family:'Outfit',sans-serif;font-weight:700;">You</div>
+      </div>
+      <div class="onboard-line done"></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:5px;">
+        <div class="onboard-dot active">3</div>
+        <div style="font-size:0.6rem;color:#fff;font-family:'Outfit',sans-serif;font-weight:700;">Crew</div>
+      </div>
+    </div>
+    <div class="onboard-title">Start your crew 🔥</div>
+    <div class="onboard-sub">Gather your tribe and plan the season together — or explore the app solo first.</div>
     <div class="onboard-features">
-      <div class="onboard-feat"><span class="onboard-feat-icon">👑</span><span>You'll be the Crew Lead — invite your tribe</span></div>
-      <div class="onboard-feat"><span class="onboard-feat-icon">🔗</span><span>Share your QR code — ravers scan to join the crew and create their account in one step</span></div>
-      <div class="onboard-feat"><span class="onboard-feat-icon">🗓️</span><span>Plan lineups and track who's going to what</span></div>
+      <div class="onboard-feat"><span class="onboard-feat-icon">👑</span><span>You're the Crew Lead — your fam follows</span></div>
+      <div class="onboard-feat"><span class="onboard-feat-icon">📡</span><span>Share your QR — ravers scan to join in seconds</span></div>
+      <div class="onboard-feat"><span class="onboard-feat-icon">🗓️</span><span>Track who's going to what, plan the lineup together</span></div>
     </div>
-    <button class="auth-btn" onclick="createCrewOnboarding()">Create My First Crew →</button>
-    <button class="btn btn-ghost" onclick="completeOnboarding()" style="width:100%;margin-top:10px;padding:12px;font-size:0.85rem;">Skip for now</button>
+    <button class="auth-btn" onclick="createCrewOnboarding()">Start My Crew →</button>
+    <button class="btn btn-ghost" onclick="obShowWhatNow()" style="width:100%;margin-top:10px;padding:12px;font-size:0.85rem;">Explore first →</button>
+  </div>
+
+  <!-- What Now? -->
+  <div id="ob-whatnow" class="onboard-card" style="display:none;text-align:center;">
+    <div style="font-size:2.8rem;margin-bottom:10px;">🎉</div>
+    <div class="onboard-title" style="margin-bottom:6px;">You're in the fam!</div>
+    <div class="onboard-sub" style="margin-bottom:22px;">The floor is yours. What do you want to do first?</div>
+    <div class="ob-whatnow-chips">
+      <button class="ob-whatnow-chip" onclick="completeOnboarding();switchTab('events')">
+        <span class="ob-whatnow-chip-icon">🗓️</span>
+        <div>
+          <div class="ob-whatnow-chip-label">Find my next rave</div>
+          <div class="ob-whatnow-chip-sub">Browse events and mark yourself going</div>
+        </div>
+      </button>
+      <button class="ob-whatnow-chip" onclick="completeOnboarding();openModal()">
+        <span class="ob-whatnow-chip-icon">👑</span>
+        <div>
+          <div class="ob-whatnow-chip-label">Create a crew</div>
+          <div class="ob-whatnow-chip-sub">Invite your tribe and plan the season</div>
+        </div>
+      </button>
+      <button class="ob-whatnow-chip" onclick="completeOnboarding()">
+        <span class="ob-whatnow-chip-icon">🔍</span>
+        <div>
+          <div class="ob-whatnow-chip-label">Just explore</div>
+          <div class="ob-whatnow-chip-sub">Take a look around — you can set up later</div>
+        </div>
+      </button>
+    </div>
   </div>
 </div>
 
@@ -8478,35 +8611,155 @@
   // ===== ONBOARDING =====
   let isOnboarding = false;
 
+  // ===== ONBOARDING v2 =====
+  const OB_GENRE_PICKS = [
+    'Techno','House','Deep House','Hard Techno','Drum & Bass','Jungle',
+    'UK Garage','Trance','Psytrance','Ambient','Electro','Disco','Rave','Hardcore',
+  ];
+  let _obGenres = new Set();
+  let _obHandleValid = false;
+  let _obHandleDebounce = null;
+
+  function hexToRgba(hex, a) {
+    const r = parseInt(hex.slice(1,3),16);
+    const g = parseInt(hex.slice(3,5),16);
+    const b = parseInt(hex.slice(5,7),16);
+    return `rgba(${r},${g},${b},${a})`;
+  }
+
   function showOnboarding() {
     isOnboarding = true;
+    _obGenres = new Set();
+    _obHandleValid = false;
+    const grid = document.getElementById('ob-genre-grid');
+    if (grid) {
+      grid.innerHTML = OB_GENRE_PICKS.map(g => {
+        const col = GENRE_FAMILY_COLORS[g] || '#00F5FF';
+        return `<div class="ob-genre-chip" data-col="${col}" data-genre="${g}" onclick="obToggleGenre(this)">${g}</div>`;
+      }).join('');
+    }
+    const authName = currentUser?.user_metadata?.full_name || '';
+    setTimeout(() => {
+      const el = document.getElementById('ob-name-input');
+      if (el && authName) { el.value = authName; obCheckStep2Ready(); }
+    }, 50);
+    obGoToStep(1);
     document.getElementById('onboarding-screen').classList.add('show');
+  }
+
+  function obGoToStep(n) {
+    ['ob-step1','ob-step2','ob-step3','ob-whatnow'].forEach((id, i) => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = (i === n-1) ? 'block' : 'none';
+    });
+    if (n === 2) setTimeout(() => document.getElementById('ob-name-input')?.focus(), 100);
+  }
+
+  function obToggleGenre(el) {
+    const genre = el.dataset.genre;
+    const col   = el.dataset.col || '#00F5FF';
+    if (_obGenres.has(genre)) {
+      _obGenres.delete(genre);
+      el.classList.remove('ob-selected');
+      el.style.color = ''; el.style.borderColor = ''; el.style.background = '';
+    } else {
+      _obGenres.add(genre);
+      el.classList.add('ob-selected');
+      el.style.color = col; el.style.borderColor = col;
+      el.style.background = hexToRgba(col, 0.14);
+    }
+    const btn = document.getElementById('ob-step1-btn');
+    if (btn) btn.disabled = _obGenres.size === 0;
+  }
+
+  function obStep1Next() {
+    if (_obGenres.size === 0) return;
+    showToast('🎶 Sound locked. The floor knows what you need.');
+    obGoToStep(2);
+  }
+
+  function obHandleInput(raw) {
+    _obHandleValid = false;
+    obCheckStep2Ready();
+    const status = document.getElementById('ob-handle-status');
+    const input  = document.getElementById('ob-handle-input');
+    const { ok, msg, handle } = validateHandleFormat(raw);
+    if (!ok) {
+      if (status) { status.textContent = msg; status.className = 'ob-handle-status' + (msg ? ' ob-err' : ''); }
+      if (input)  input.className = 'ob-inline-field' + (raw.trim() ? ' ob-invalid' : '');
+      return;
+    }
+    if (status) { status.textContent = 'Checking…'; status.className = 'ob-handle-status'; }
+    if (input)  input.className = 'ob-inline-field';
+    clearTimeout(_obHandleDebounce);
+    _obHandleDebounce = setTimeout(async () => {
+      const { data } = await sb.from('ravers').select('id').ilike('handle', handle).maybeSingle();
+      if (data) {
+        if (status) { status.textContent = `@${handle} is taken 😔`; status.className = 'ob-handle-status ob-err'; }
+        if (input)  input.className = 'ob-inline-field ob-invalid';
+        _obHandleValid = false;
+      } else {
+        if (status) { status.textContent = `@${handle} is all yours 🎉`; status.className = 'ob-handle-status ob-ok'; }
+        if (input)  input.className = 'ob-inline-field ob-valid';
+        _obHandleValid = true;
+      }
+      obCheckStep2Ready();
+    }, 400);
+  }
+
+  function obCheckStep2Ready() {
+    const name = (document.getElementById('ob-name-input')?.value || '').trim();
+    const btn  = document.getElementById('ob-step2-btn');
+    if (btn) btn.disabled = !(name && _obHandleValid);
+  }
+
+  async function obStep2Next() {
+    const btn  = document.getElementById('ob-step2-btn');
+    const name = (document.getElementById('ob-name-input')?.value || '').trim();
+    const raw  = document.getElementById('ob-handle-input')?.value || '';
+    const { ok, handle } = validateHandleFormat(raw);
+    if (!name || !ok || !_obHandleValid) return;
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    const uid      = currentUser.id;
+    const gradient = 'linear-gradient(135deg,#FF2D78,#BF00FF)';
+    const qrToken  = crypto?.randomUUID?.() || (Math.random().toString(36).slice(2) + Date.now().toString(36));
+    const { data: inserted, error } = await sb.from('ravers').insert({
+      name, handle, genres: Array.from(_obGenres),
+      is_you: true, claimed_by: uid, created_by: uid, status: 'claimed',
+      gradient, qr_token: qrToken,
+      base: '', crew_name: '', instagram: '', phone: '', met_story: '', notes: '',
+      fav_artists: [], vibe_tags: [], custom_vibe_tags: [], blocked_tags: [],
+      updated_at: new Date().toISOString(),
+    }).select().single();
+    if (error) {
+      showToast('⚠️ Could not save — try again');
+      if (btn) { btn.disabled = false; btn.textContent = "I'm Ready →"; }
+      return;
+    }
+    squad.push({
+      id: inserted.id, name, handle, isYou: true,
+      genres: Array.from(_obGenres), gradient, festIds: [],
+      base: '', crew: '', instagram: '', phone: '', metStory: '', notes: '',
+      favArtists: [], vibeTags: [], customVibeTags: [], blockedTags: [],
+      avatarUrl: null, createdBy: uid, claimedBy: uid, status: 'claimed', qrToken,
+    });
+    addNotification("✨ Profile locked in! You're now on the grid — scan QR codes, join crews, and let the fam find you in the wild.");
+    showToast('✅ Identity confirmed. The fam will find you. 🎤');
+    obGoToStep(3);
+  }
+
+  function obShowWhatNow() {
+    isOnboarding = false;
+    renderSquad(); renderCrews(); renderEvents();
+    if (currentUser) sb.auth.updateUser({ data: { onboarded: true } });
+    obGoToStep(4);
   }
 
   function completeOnboarding() {
     isOnboarding = false;
     document.getElementById('onboarding-screen').classList.remove('show');
-    // Land on Crews tab with empty state visible
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    document.getElementById('page-crews').classList.add('active');
-    document.querySelectorAll('.nav-tab').forEach((t, i) => t.classList.toggle('active', i === 0));
-    renderSquad();
-    renderCrews();
-    // Persist the onboarded flag so returning users skip this screen
+    renderSquad(); renderCrews(); renderEvents();
     if (currentUser) sb.auth.updateUser({ data: { onboarded: true } });
-  }
-
-  function startProfileOnboarding() {
-    // Open profile editor — prefill name + phone from auth metadata
-    openProfileEditor();
-    const authName  = currentUser?.user_metadata?.full_name || '';
-    const authPhone = currentUser?.user_metadata?.phone || '';
-    setTimeout(() => {
-      const nameEl  = document.getElementById('pf-name');
-      const phoneEl = document.getElementById('pf-phone');
-      if (nameEl  && authName)  nameEl.value  = authName;
-      if (phoneEl && authPhone) phoneEl.value = authPhone;
-    }, 50);
   }
 
   let _openDetailAfterCreate = false;
@@ -8523,20 +8776,17 @@
   }
 
   function createCrewOnboarding() {
-    // Close onboarding, open crew modal — after creation we'll open the detail
     document.getElementById('onboarding-screen').classList.remove('show');
     isOnboarding = false;
     _openDetailAfterCreate = true;
-    // Persist onboarded flag
+    renderSquad(); renderCrews(); renderEvents();
     if (currentUser) sb.auth.updateUser({ data: { onboarded: true } });
     openModal();
   }
 
-  // Advance onboarding after profile is saved for the first time
   function maybeAdvanceOnboarding(profileName) {
     if (!isOnboarding) return;
-    document.getElementById('onboard-step1').style.display = 'none';
-    document.getElementById('onboard-step2').style.display = 'block';
+    obGoToStep(3);
     showToast('\u2705 Profile created! Now build your crew.');
   }
 
