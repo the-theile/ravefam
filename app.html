@@ -8142,6 +8142,7 @@
       // Mark as "you" when saving during onboarding
       if (isOnboarding) r.isYou = true;
       squad.push(r);
+      const pendingCrew = _pendingAddToCrew; // capture before closeProfileEditor nulls it
       closeProfileEditor();
       renderSquad(); renderCrews(); renderEvents();
       if (r.isYou) {
@@ -8150,9 +8151,8 @@
 
       if (isOnboarding) {
         maybeAdvanceOnboarding(r.name);
-      } else if (_pendingAddToCrew) {
-        const crewId = _pendingAddToCrew;
-        _pendingAddToCrew = null;
+      } else if (pendingCrew) {
+        const crewId = pendingCrew;
         const crew = crews.find(c => String(c.id) === String(crewId));
         if (crew) {
           crew.squadIds.push(r.id);
