@@ -2671,6 +2671,12 @@
         <input class="form-input" id="login-password" type="password" placeholder="••••••••" autocomplete="current-password">
       </div>
       <button class="auth-btn" id="login-btn" onclick="doLogin()">Log In 🔥</button>
+      <div style="display:flex;align-items:center;gap:10px;margin:18px 0 6px;">
+        <div style="flex:1;height:1px;background:rgba(255,255,255,0.08);"></div>
+        <span style="font-size:0.72rem;color:var(--muted);white-space:nowrap;">or</span>
+        <div style="flex:1;height:1px;background:rgba(255,255,255,0.08);"></div>
+      </div>
+      <button class="btn btn-ghost" id="magic-link-btn" onclick="doMagicLink()" style="width:100%;padding:13px;font-size:0.88rem;border-radius:12px;">✉️ Send me a magic link</button>
       <p style="text-align:center;margin-top:16px;font-size:0.82rem;color:var(--muted);">
         Don't have an account? <a href="#" onclick="showAuthTab('signup');return false;" style="color:var(--neon-pink);text-decoration:none;font-weight:600;">Sign up free →</a>
       </p>
@@ -2700,6 +2706,20 @@
       <p style="text-align:center;margin-top:10px;font-size:0.75rem;color:var(--muted);">
         By signing up you agree to our <a href="/terms.html" style="color:var(--muted);text-decoration:underline;">Terms</a> and <a href="/privacy.html" style="color:var(--muted);text-decoration:underline;">Privacy Policy</a>
       </p>
+    </div>
+
+    <!-- ── Set new password (shown only during PASSWORD_RECOVERY flow) ── -->
+    <div id="auth-reset-form" style="display:none;">
+      <p style="text-align:center;margin:0 0 20px;font-size:0.9rem;color:var(--muted);">Choose a new password for your account.</p>
+      <div class="form-group">
+        <label class="form-label">New Password</label>
+        <input class="form-input" id="reset-password" type="password" placeholder="min 6 characters" autocomplete="new-password">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirm Password</label>
+        <input class="form-input" id="reset-password-confirm" type="password" placeholder="repeat new password" autocomplete="new-password">
+      </div>
+      <button class="auth-btn" id="reset-btn" onclick="doUpdatePassword()">Update Password 🔐</button>
     </div>
 
     <!-- ── QR scan alternative ── -->
@@ -3190,6 +3210,9 @@
   function showAuthTab(tab) {
     document.getElementById('auth-login-form').style.display  = tab === 'login'  ? 'block' : 'none';
     document.getElementById('auth-signup-form').style.display = tab === 'signup' ? 'block' : 'none';
+    document.getElementById('auth-reset-form').style.display  = 'none';
+    document.getElementById('tab-login').style.display  = '';
+    document.getElementById('tab-signup').style.display = '';
     document.getElementById('tab-login').classList.toggle('active',  tab === 'login');
     document.getElementById('tab-signup').classList.toggle('active', tab === 'signup');
     clearAuthMessages();
@@ -3224,6 +3247,77 @@
     });
     if (error) { authError(error.message); return; }
     authSuccess('Password reset email sent! Check your inbox and follow the link to set a new password.');
+  }
+
+  async function doMagicLink() {
+    const email = document.getElementById('login-email').value.trim();
+    if (!email) { authError('Enter your email address above, then click Send me a magic link.'); return; }
+    const btn = document.getElementById('magic-link-btn');
+    btn.disabled = true;
+    clearAuthMessages();
+    const { error } = await sb.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: window.location.origin + window.location.pathname }
+    });
+    btn.disabled = false;
+    if (error) { authError(error.message); return; }
+    authSuccess('Magic link sent! Check your inbox — the link logs you straight in.');
+  }
+
+  function showResetPasswordScreen() {
+    document.getElementById('app-loading').classList.add('hidden');
+    document.getElementById('auth-screen').classList.remove('hidden');
+    document.getElementById('main-app').style.display = 'none';
+    document.getElementById('auth-login-form').style.display  = 'none';
+    document.getElementById('auth-signup-form').style.display = 'none';
+    document.getElementById('auth-reset-form').style.display  = 'block';
+    // Hide tabs so the user can't navigate away mid-reset
+    document.getElementById('tab-login').style.display  = 'none';
+    document.getElementById('tab-signup').style.display = 'none';
+    clearAuthMessages();
+    document.getElementById('reset-password').value         = '';
+    document.getElementById('reset-password-confirm').value = '';
+  }
+
+  function togglePwChangeSection() {
+    const fields = document.getElementById('pw-change-fields');
+    const toggle = document.getElementById('pw-change-toggle');
+    const opening = fields.style.display === 'none';
+    fields.style.display = opening ? 'block' : 'none';
+    toggle.textContent = opening ? '▼ collapse' : '▶ expand';
+  }
+
+  async function doProfilePasswordChange() {
+    const pw  = document.getElementById('pf-new-password').value;
+    const pw2 = document.getElementById('pf-confirm-password').value;
+    if (pw.length < 6) { showToast('⚠️ Password must be at least 6 characters.'); return; }
+    if (pw !== pw2)    { showToast('⚠️ Passwords do not match.'); return; }
+    const btn = document.getElementById('pf-pw-btn');
+    btn.disabled = true;
+    const { error } = await sb.auth.updateUser({ password: pw });
+    btn.disabled = false;
+    if (error) { showToast('⚠️ ' + error.message); return; }
+    showToast('✅ Password updated!');
+    document.getElementById('pf-new-password').value  = '';
+    document.getElementById('pf-confirm-password').value = '';
+    togglePwChangeSection();
+  }
+
+  async function doUpdatePassword() {
+    const pw  = document.getElementById('reset-password').value;
+    const pw2 = document.getElementById('reset-password-confirm').value;
+    if (pw.length < 6) { authError('Password must be at least 6 characters.'); return; }
+    if (pw !== pw2)    { authError('Passwords do not match.'); return; }
+    const btn = document.getElementById('reset-btn');
+    btn.disabled = true;
+    clearAuthMessages();
+    const { error } = await sb.auth.updateUser({ password: pw });
+    btn.disabled = false;
+    if (error) { authError(error.message); return; }
+    // Password saved — boot the app; user is already authenticated
+    const { data: { user } } = await sb.auth.getUser();
+    _bootedUserId = user.id;
+    showApp(user);
   }
 
   async function doLogin() {
@@ -3305,9 +3399,16 @@
   }
 
   // ===== AUTH STATE LISTENER =====
-  // Fires on INITIAL_SESSION, SIGNED_IN, TOKEN_REFRESHED, SIGNED_OUT, etc.
+  // Fires on INITIAL_SESSION, SIGNED_IN, TOKEN_REFRESHED, SIGNED_OUT,
+  // PASSWORD_RECOVERY, etc.
   // Guard against TOKEN_REFRESHED re-triggering a full bootApp() re-run.
   sb.auth.onAuthStateChange((event, session) => {
+    if (event === 'PASSWORD_RECOVERY') {
+      // User arrived via a password-reset email link — show the set-new-password
+      // form instead of logging them straight into the app.
+      showResetPasswordScreen();
+      return;
+    }
     if (session?.user) {
       if (session.user.id !== _bootedUserId) {
         // New login or first session restore — boot the app.
@@ -6335,6 +6436,18 @@
       ${fieldRow('Phone Number','pf-phone', r?.phone, 'e.g. +44 7700 900000')}
       ${isOwnProfile ? '' : fieldRow('How We Met','pf-met', r?.metStory, 'Where did your paths cross?', true)}
       ${fieldRow('Notes','pf-notes', r?.notes, isOwnProfile ? "Anything about yourself…" : "What's their vibe?", true)}
+      ${isOwnProfile ? `
+      <div class="form-group" style="border-top:1px solid rgba(255,255,255,0.08);margin-top:8px;padding-top:16px;">
+        <label class="form-label" style="cursor:pointer;user-select:none;" onclick="togglePwChangeSection()">
+          🔑 Change Password
+          <span id="pw-change-toggle" style="font-size:0.75rem;color:var(--muted);font-weight:400;margin-left:6px;">▶ expand</span>
+        </label>
+        <div id="pw-change-fields" style="display:none;margin-top:10px;">
+          <input class="form-input" id="pf-new-password" type="password" placeholder="New password (min 6 chars)" autocomplete="new-password" style="margin-bottom:8px;">
+          <input class="form-input" id="pf-confirm-password" type="password" placeholder="Confirm new password" autocomplete="new-password" style="margin-bottom:10px;">
+          <button type="button" class="btn btn-ghost" id="pf-pw-btn" style="width:100%;font-size:0.85rem;" onclick="doProfilePasswordChange()">Update Password</button>
+        </div>
+      </div>` : ''}
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeProfileEditor()">Cancel</button>
         <button class="btn btn-primary" onclick="saveProfile()">${r ? 'Save Changes' : 'Save Profile 🔥'}</button>
