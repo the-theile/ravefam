@@ -4023,17 +4023,24 @@
     }
 
     // --- Ravers ---
+    // Load own ravers AND any stubs the user has claimed (claimed_by = uid).
+    // Exclude merged stubs — those were absorbed into the user's own profile.
     const { data: dbRavers, error: rErr } = await sb
       .from('ravers')
       .select('*, raver_festivals(festival_id)')
-      .eq('created_by', uid);
+      .or(`created_by.eq.${uid},claimed_by.eq.${uid}`)
+      .neq('status', 'merged');
     if (!rErr && dbRavers) {
+      const seen = new Set();
       dbRavers.forEach(r => {
+        if (seen.has(r.id)) return;
+        seen.add(r.id);
         squad.push({
           id: r.id,
           name: r.name,
           handle: r.handle || '',
           isYou: r.is_you || r.claimed_by === uid,
+          createdBy: r.created_by || null,
           base: r.base || '',
           gradient: r.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)',
           avatarUrl: r.avatar_url || null,
@@ -4074,10 +4081,14 @@
           .map(sid => squad.find(r => r.id === sid))
           .filter(Boolean)
           .map(r => ({ i: initials(r.name), c: c.color || '#FF2D78', t: '#fff', url: r.avatarUrl || null }));
-        // Resolve auth UUID → raver ID. Prefer claimed_by match; fall back to the
-        // user's own raver (is_you=true) when claimed_by is null (onboarding path).
+        // Resolve auth UUID → raver ID.
+        // 1. claimed_by match (QR-claimed stub)
+        // 2. own raver (is_you=true, onboarding path) when the current user IS the leader
+        // 3. createdBy match — catches the leader's own raver for non-leader viewers
+        //    after the supplemental crewmate query below populates squad.
         const leaderRaver = squad.find(r => r.claimedBy === c.leader_id)
-          || (c.leader_id === uid ? squad.find(r => r.isYou) : null);
+          || (c.leader_id === uid ? squad.find(r => r.isYou) : null)
+          || squad.find(r => r.createdBy === c.leader_id);
         crews.push({
           id: c.id,
           name: c.name,
@@ -4092,6 +4103,71 @@
           members: members.length ? members : []
         });
       });
+    }
+
+    // --- Supplemental crewmate ravers ---
+    // For non-leader crew members, load the profiles of the leader and fellow
+    // members (created by other users) that RLS allows via user_is_crewmate_of_raver.
+    // Contact info is stripped — only rave-profile fields are exposed to crewmates.
+    const knownIds = new Set(squad.map(r => String(r.id)));
+    const missingIds = [];
+    allCrews.forEach(c => {
+      (c.crew_members || []).forEach(cm => {
+        const sid = String(cm.raver_id);
+        if (!knownIds.has(sid)) { missingIds.push(cm.raver_id); knownIds.add(sid); }
+      });
+    });
+    if (missingIds.length) {
+      const { data: crewRavers } = await sb
+        .from('ravers')
+        .select('*, raver_festivals(festival_id)')
+        .in('id', missingIds)
+        .neq('status', 'merged');
+      if (crewRavers) {
+        crewRavers.forEach(r => {
+          squad.push({
+            id: r.id,
+            name: r.name,
+            handle: r.handle || '',
+            isYou: r.claimed_by === uid,  // never use r.is_you — that's for their own account
+            createdBy: r.created_by || null,
+            readOnly: true,
+            base: r.base || '',
+            gradient: r.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)',
+            avatarUrl: r.avatar_url || null,
+            blockedTags: r.blocked_tags || [],
+            genres: r.genres || [],
+            favArtists: r.fav_artists || [],
+            festIds: (r.raver_festivals || []).map(rf => rf.festival_id),
+            crew: r.crew_name || '',
+            instagram: '',  // contact info not shared with crewmates
+            phone: '',
+            metStory: r.met_story || '',
+            notes: '',
+            qrToken: '',
+            claimedBy: r.claimed_by || null,
+            status: r.status || 'unclaimed',
+            vibeTags: r.vibe_tags || [],
+            customVibeTags: r.custom_vibe_tags || []
+          });
+        });
+        // Rebuild crew members arrays and re-resolve leader_id now that all
+        // crewmate ravers are in squad.
+        crews.forEach(crew => {
+          const c = allCrews.find(ac => String(ac.id) === String(crew.id));
+          if (!c) return;
+          crew.members = crew.squadIds
+            .map(sid => squad.find(r => String(r.id) === String(sid)))
+            .filter(Boolean)
+            .map(r => ({ i: initials(r.name), c: crew.color, t: '#fff', url: r.avatarUrl || null }));
+          if (crew.leader_id === null) {
+            const lr = squad.find(r => r.claimedBy === c.leader_id)
+              || (c.leader_id === uid ? squad.find(r => r.isYou) : null)
+              || squad.find(r => r.createdBy === c.leader_id);
+            if (lr) crew.leader_id = lr.id;
+          }
+        });
+      }
     }
   }
 
@@ -4899,10 +4975,11 @@
   }
 
   // Jump from a crew's member list — opens editor for others, profile view for yourself
+  // or for read-only crewmate ravers (profiles owned by other accounts).
   function goToProfileFromDetail(raverId) {
     const r = getRaver(raverId);
     if (!r) return;
-    if (r.isYou) {
+    if (r.isYou || r.readOnly) {
       openProfile(raverId);
     } else {
       openProfileEditor(raverId);
@@ -5212,6 +5289,7 @@
     if (!q) { dropdown.style.display = 'none'; return; }
 
     const matches = squad.filter(r =>
+      !r.readOnly &&
       !crew.squadIds.some(id => String(id) === String(r.id)) &&
       (r.name.toLowerCase().includes(q) || (r.handle || '').toLowerCase().includes(q))
     );
@@ -5944,7 +6022,7 @@
     }
     const connectBlock = connectBtns.length
       ? `<div class="connect-row">${connectBtns.join('')}</div>`
-      : (r.isYou ? '' : `<div class="connect-empty">No contact info yet — add it in Edit Profile.</div>`);
+      : (r.isYou ? '' : r.readOnly ? '' : `<div class="connect-empty">No contact info yet — add it in Edit Profile.</div>`);
 
     // Profile avatar — show photo if set; upload button for own claimed profile
     const showAvatarUpload = r.isYou && !!currentUser;
