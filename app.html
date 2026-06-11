@@ -5885,6 +5885,7 @@
 
   function crewNextFestBlock(crew) {
     const n = crewNextUp(crew);
+    if (n.kind === 'upcoming' && n.whoRavers.length === 1 && n.whoRavers[0].isYou) return '';
     if (n.kind === 'upcoming') {
       const cd = countdownLabel(n.date);
       const when = `${n.date.getDate()} ${MON_SHORT[n.date.getMonth()]}`;
@@ -5975,7 +5976,10 @@
 
       // Build the "next fest" block
       let festBlock;
-      if (n.kind === 'upcoming') {
+      const _onlyMe = n.kind === 'upcoming' && n.whoRavers.length === 1 && n.whoRavers[0].isYou;
+      if (_onlyMe) {
+        festBlock = '';
+      } else if (n.kind === 'upcoming') {
         const when = `${n.date.getDate()} ${MON_SHORT[n.date.getMonth()]}`;
         const goingNames = n.who.length ? n.who.join(', ') : 'Nobody yet';
         festBlock = `
