@@ -6492,11 +6492,11 @@
         const key = f.name.toLowerCase();
         if (!upcoming[key]) upcoming[key] = { date: f._d, name: f.name, who: [], whoRavers: [] };
         if (f._d < upcoming[key].date) upcoming[key].date = f._d;
-        upcoming[key].who.push(p.name.split(' ')[0]);
+        upcoming[key].who.push(displayName(p).split(' ')[0]);
         upcoming[key].whoRavers.push(p);
       });
       raverPast(p).forEach(f => {
-        past.push({ date: f._d, name: f.name, who: p.name.split(' ')[0] });
+        past.push({ date: f._d, name: f.name, who: displayName(p).split(' ')[0] });
       });
     });
 
@@ -7042,16 +7042,20 @@
     const matches = squad.filter(r =>
       !r.readOnly &&
       !crew.squadIds.some(id => String(id) === String(r.id)) &&
-      (r.name.toLowerCase().includes(q) || (r.handle || '').toLowerCase().includes(q))
+      (r.name.toLowerCase().includes(q) || (r.handle || '').toLowerCase().includes(q) || (nicknameCache[String(r.id)] || '').toLowerCase().includes(q))
     );
 
-    const rows = matches.map(r => `
+    const rows = matches.map(r => {
+      const dn = displayName(r);
+      const realNameNote = (nicknameCache[String(r.id)] && dn !== r.name) ? `<span style="font-size:0.7rem;color:var(--muted);margin-left:4px;">(${r.name})</span>` : '';
+      return `
       <div class="member-search-opt" data-raver-id="${r.id}"
         onmousedown="addExistingMember(this.dataset.raverId)">
         ${raverAvatarHTML(r.avatarUrl, r.gradient, r.name, 'avatar', 'margin:0;width:26px;height:26px;font-size:0.62rem;flex-shrink:0;')}
-        <span>${r.name}</span>
+        <span>${dn}${realNameNote}</span>
         <span class="opt-handle">${r.handle || ''}</span>
-      </div>`).join('');
+      </div>`;
+    }).join('');
 
     const createRow = `
       <div class="member-search-opt member-search-create" data-create-name="${query.trim().replace(/"/g,'&quot;')}"
@@ -7747,6 +7751,7 @@
       .sort((a, b) => (b.isYou ? 1 : 0) - (a.isYou ? 1 : 0))
       .filter(r => !query
         || r.name.toLowerCase().includes(query)
+        || (nicknameCache[String(r.id)] || '').toLowerCase().includes(query)
         || (r.handle||'').toLowerCase().includes(query)
         || (r.crew||'').toLowerCase().includes(query)
         || (r.base||'').toLowerCase().includes(query));
@@ -9022,11 +9027,12 @@
       if (goers.length) {
         const shown = goers.slice(0, 5);
         avatarChips = shown.map(w => {
+          const dn = displayName(w);
           const bg = w.avatarUrl ? 'transparent;overflow:hidden;padding:0' : extractFirstColor(w.gradient);
           const inner = w.avatarUrl
-            ? `<img src="${w.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${initials(w.name)}">`
-            : initials(w.name).toUpperCase();
-          return `<div class="avatar going-avatar" style="background:${bg};" data-raver-id="${w.id}" onclick="event.stopPropagation(); openProfile(this.dataset.raverId)" title="${w.name}">${inner}</div>`;
+            ? `<img src="${w.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${initials(dn)}">`
+            : initials(dn).toUpperCase();
+          return `<div class="avatar going-avatar" style="background:${bg};" data-raver-id="${w.id}" onclick="event.stopPropagation(); openProfile(this.dataset.raverId)" title="${dn}">${inner}</div>`;
         }).join('');
         if (goers.length > 5) avatarChips += `<div class="avatar avatar-count">+${goers.length - 5}</div>`;
       } else {
