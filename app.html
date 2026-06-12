@@ -1924,6 +1924,65 @@
   }
   .our-photos-standalone .our-photos-col { flex-direction: column; width: auto; align-items: center; }
 
+  /* ===== How We Met Bubbles ===== */
+  .met-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 4px;
+  }
+  .met-bubble {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .met-bubble-mine {
+    border-color: rgba(255,45,120,0.3);
+    background: rgba(255,45,120,0.05);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .met-bubble-mine:hover { background: rgba(255,45,120,0.09); }
+  .met-bubble-head { display: flex; align-items: center; gap: 7px; }
+  .met-avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    font-size: 0.6rem; font-weight: 800; font-family: 'Outfit', sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; color: #fff;
+  }
+  .met-bubble-name {
+    font-size: 0.68rem; font-family: 'Outfit', sans-serif;
+    font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.5px; color: rgba(255,255,255,0.65);
+  }
+  .met-cloud-text {
+    font-size: 0.82rem; line-height: 1.55;
+    color: var(--text); white-space: pre-wrap; word-break: break-word;
+  }
+  .met-cloud-empty { color: var(--neon-pink); font-style: italic; opacity: 0.85; }
+  .met-cloud-placeholder { color: var(--muted); font-style: italic; font-size: 0.78rem; }
+  .met-edit-hint { font-size: 0.65rem; color: var(--neon-pink); opacity: 0.6; margin-top: 2px; }
+  .met-edit-area {
+    width: 100%; background: transparent; border: none;
+    color: var(--text); font-size: 0.82rem; line-height: 1.5;
+    resize: none; outline: none; padding: 0; box-sizing: border-box;
+    min-height: 64px; font-family: inherit;
+  }
+  .met-bubble-actions { display: flex; gap: 6px; margin-top: 4px; }
+  .met-bubble-actions button {
+    flex: 1; padding: 6px 0; font-size: 0.72rem; border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.15); background: transparent;
+    color: var(--text); cursor: pointer; font-family: inherit;
+  }
+  .met-bubble-actions .met-save-btn {
+    background: var(--neon-pink); color: #000;
+    border-color: var(--neon-pink); font-weight: 700;
+  }
+
   /* ===== Vibe Tags ===== */
   .vibe-tags-section { margin-top: 14px; }
   .vibe-tag-cloud { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 10px; }
@@ -5304,6 +5363,136 @@
     document.getElementById('welcome-back-overlay').classList.remove('open');
   }
 
+  // ===== HOW WE MET — pairwise thought-bubble stories =====
+
+  const metStoriesCache = {}; // { [raverId]: { mine: string|null, theirs: string|null } }
+
+  const MET_FUNNY = [
+    "No memory of it 🥴",
+    "Their lips are sealed 🤫",
+    "Still processing… 🎧",
+    "Too deep in the bass to remember 🔊",
+    "The drops were too many 🎶",
+  ];
+  function metFunnyPlaceholder(raverId) {
+    const n = String(raverId).split('').reduce((s, c) => s + c.charCodeAt(0), 0);
+    return MET_FUNNY[n % MET_FUNNY.length];
+  }
+
+  async function loadMetStories(viewingRaverId) {
+    if (!currentUser) return { mine: null, theirs: null };
+    const me = squad.find(r => r.isYou);
+    const them = getRaver(viewingRaverId);
+    const legacyMine = them?.metStory || null;
+    try {
+      const myQ = sb.from('met_stories').select('story')
+        .eq('author_user_id', currentUser.id)
+        .eq('target_raver_id', String(viewingRaverId))
+        .maybeSingle();
+      const theirClaimedBy = them?.claimedBy || null;
+      const theirQ = (theirClaimedBy && me?.id)
+        ? sb.from('met_stories').select('story')
+            .eq('author_user_id', theirClaimedBy)
+            .eq('target_raver_id', String(me.id))
+            .maybeSingle()
+        : Promise.resolve({ data: null });
+      const [myRes, theirRes] = await Promise.all([myQ, theirQ]);
+      const stories = {
+        mine:   myRes.data?.story   ?? legacyMine,
+        theirs: theirRes.data?.story ?? null,
+      };
+      metStoriesCache[String(viewingRaverId)] = stories;
+      return stories;
+    } catch(e) {
+      return { mine: legacyMine, theirs: null };
+    }
+  }
+
+  async function saveMetStory(viewingRaverId, story) {
+    const trimmed = story.trim();
+    metStoriesCache[String(viewingRaverId)] = {
+      ...(metStoriesCache[String(viewingRaverId)] || {}),
+      mine: trimmed,
+    };
+    if (!currentUser) return;
+    await sb.from('met_stories').upsert({
+      author_user_id: currentUser.id,
+      target_raver_id: String(viewingRaverId),
+      story: trimmed,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'author_user_id,target_raver_id' });
+  }
+
+  function howWeMetSectionHTML(viewingRaverId, stories, raver) {
+    const me = squad.find(r => r.isYou);
+    if (!me) return '';
+    const mine   = stories?.mine   || '';
+    const theirs = stories?.theirs || null;
+    const isUnclaimed = !raver.claimedBy;
+    const theirName = raver.name.split(' ')[0];
+
+    const myBubble = `
+      <div class="met-bubble met-bubble-mine" onclick="startEditMetStory('${viewingRaverId}')">
+        <div class="met-bubble-head">
+          ${raverAvatarHTML(me.avatarUrl, me.gradient, me.name, 'met-avatar', '')}
+          <span class="met-bubble-name">You</span>
+        </div>
+        <div id="met-cloud-mine-${viewingRaverId}">
+          ${mine
+            ? `<div class="met-cloud-text">${mine.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>`
+            : `<div class="met-cloud-text met-cloud-empty">Tap to add your version…</div>`}
+          <div class="met-edit-hint">✎ tap to edit</div>
+        </div>
+      </div>`;
+
+    const theirContent = isUnclaimed
+      ? `<div class="met-cloud-text met-cloud-placeholder">${metFunnyPlaceholder(viewingRaverId)}</div>`
+      : theirs
+        ? `<div class="met-cloud-text">${theirs.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>`
+        : `<div class="met-cloud-text met-cloud-placeholder">No story yet…</div>`;
+
+    const theirBubble = `
+      <div class="met-bubble met-bubble-theirs">
+        <div class="met-bubble-head">
+          ${raverAvatarHTML(raver.avatarUrl, raver.gradient, raver.name, 'met-avatar', '')}
+          <span class="met-bubble-name">${theirName.replace(/</g,'&lt;')}</span>
+        </div>
+        ${theirContent}
+      </div>`;
+
+    return `<div class="met-pair">${myBubble}${theirBubble}</div>`;
+  }
+
+  function startEditMetStory(raverId) {
+    const cloud = document.getElementById(`met-cloud-mine-${raverId}`);
+    if (!cloud) return;
+    const current = (metStoriesCache[String(raverId)]?.mine || '').replace(/&amp;/g,'&').replace(/&lt;/g,'<');
+    cloud.innerHTML = `
+      <textarea class="met-edit-area" id="met-edit-${raverId}" placeholder="How did you two meet?">${current}</textarea>
+      <div class="met-bubble-actions">
+        <button onclick="cancelEditMetStory('${raverId}')">Cancel</button>
+        <button class="met-save-btn" onclick="doneEditMetStory('${raverId}')">Save ✓</button>
+      </div>`;
+    const ta = document.getElementById(`met-edit-${raverId}`);
+    if (ta) { ta.focus(); ta.selectionStart = ta.value.length; }
+  }
+
+  function cancelEditMetStory(raverId) {
+    const r = getRaver(raverId);
+    const section = document.getElementById('how-we-met-section');
+    if (section && r) section.innerHTML = howWeMetSectionHTML(raverId, metStoriesCache[String(raverId)] || {}, r);
+  }
+
+  async function doneEditMetStory(raverId) {
+    const ta = document.getElementById(`met-edit-${raverId}`);
+    if (!ta) return;
+    await saveMetStory(raverId, ta.value);
+    const r = getRaver(raverId);
+    const section = document.getElementById('how-we-met-section');
+    if (section && r) section.innerHTML = howWeMetSectionHTML(raverId, metStoriesCache[String(raverId)] || {}, r);
+    showToast('✅ Memory saved!');
+  }
+
   // ===== SUPABASE WRITE HELPERS =====
 
   async function dbSaveRaver(data, id) {
@@ -5321,7 +5510,6 @@
       crew_name: data.crew,
       instagram: data.instagram,
       phone: data.phone,
-      met_story: data.metStory,
       notes: data.notes,
       is_you: data.isYou || false,
       vibe_tags: data.vibeTags || [],
@@ -7433,12 +7621,6 @@
           ${fieldRow('','pf-crew', r.crew, 'Your ride-or-die group name')}
         </div>
 
-        ${!isOwnProfile ? `
-        <div class="profile-section">
-          <h3>🤝 How We Met</h3>
-          ${fieldRow('','pf-met', r.metStory, 'Where did your paths cross?', true)}
-        </div>` : ''}
-
         <div class="profile-section">
           <h3>📝 Notes</h3>
           ${fieldRow('','pf-notes', r.notes, isOwnProfile ? 'Anything about yourself…' : "What's their vibe?", true)}
@@ -7563,7 +7745,9 @@
         ${!r.isYou ? `
         <div class="profile-section" style="${sg(0)}">
           <h3>🤝 How We Met</h3>
-          <div class="profile-note">${r.metStory || '<span class="fest-empty">No story logged yet</span>'}</div>
+          <div id="how-we-met-section">
+            ${howWeMetSectionHTML(r.id, metStoriesCache[String(r.id)] || null, r)}
+          </div>
         </div>` : ''}
 
         <div class="profile-section" style="${sg(1)}">
@@ -7584,6 +7768,16 @@
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     profilePage.classList.add('active');
     window.scrollTo(0,0);
+
+    // Async-load How We Met stories and update the section once loaded
+    if (!editMode && !r.isYou && currentUser) {
+      const _profileId = r.id;
+      loadMetStories(_profileId).then(stories => {
+        const section = document.getElementById('how-we-met-section');
+        const raver = getRaver(_profileId);
+        if (section && raver) section.innerHTML = howWeMetSectionHTML(_profileId, stories, raver);
+      });
+    }
   }
 
   function backToSquad() {
@@ -7781,7 +7975,6 @@
         <label class="form-label">🎟️ Festivals</label>
         <div id="fest-picker"></div>
       </div>
-      ${isOwnProfile ? '' : fieldRow('How We Met','pf-met', r?.metStory, 'Where did your paths cross?', true)}
       ${fieldRow('Notes','pf-notes', r?.notes, isOwnProfile ? "Anything about yourself…" : "What's their vibe?", true)}
       ${isOwnProfile ? `
       <div class="form-group" style="border-top:1px solid rgba(255,255,255,0.08);margin-top:8px;padding-top:16px;">
@@ -8198,7 +8391,6 @@
       crew: val('pf-crew'),
       instagram: val('pf-instagram'),
       phone: val('pf-phone'),
-      metStory: val('pf-met'),
       notes: val('pf-notes'),
       vibeTags: Array.from(editingVibeTags),
       customVibeTags: [...editingCustomVibeTags]
