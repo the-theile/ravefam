@@ -727,7 +727,9 @@
     background: conic-gradient(#FF2D78, #BF00FF, #00F5FF, #39FF14, #FFB800, #FF2D78);
     animation: ringRotate 3s linear infinite;
     position: relative; z-index: 1;
+    cursor: pointer;
   }
+  .profile-avatar-ring.paused { animation-play-state: paused; }
   @keyframes ringRotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
   .profile-avatar {
     width: 110px; height: 110px; border-radius: 50%;
@@ -4316,6 +4318,12 @@
     const fields = document.getElementById('pw-change-fields');
     const toggle = document.getElementById('pw-change-toggle');
     const opening = fields.style.display === 'none';
+    if (opening && !fields.querySelector('#pf-new-password')) {
+      fields.innerHTML = `
+        <input class="form-input" id="pf-new-password" type="password" placeholder="New password (min 6 chars)" autocomplete="new-password" style="margin-bottom:8px;">
+        <input class="form-input" id="pf-confirm-password" type="password" placeholder="Confirm new password" autocomplete="new-password" style="margin-bottom:10px;">
+        <button type="button" class="btn btn-ghost" id="pf-pw-btn" style="width:100%;font-size:0.85rem;" onclick="doProfilePasswordChange()">Update Password</button>`;
+    }
     fields.style.display = opening ? 'block' : 'none';
     toggle.textContent = opening ? '▼ collapse' : '▶ expand';
   }
@@ -5229,7 +5237,6 @@
           genres: r.genres || [],
           favArtists: r.fav_artists || [],
           festIds: (r.raver_festivals || []).map(rf => rf.festival_id),
-          crew: r.crew_name || '',
           instagram: r.instagram || '',
           phone: r.phone || '',
           phoneVisible: r.phone_visible || false,
@@ -5321,7 +5328,6 @@
             genres: r.genres || [],
             favArtists: r.fav_artists || [],
             festIds: (r.raver_festivals || []).map(rf => rf.festival_id),
-            crew: r.crew_name || '',
             instagram: r.phone_visible ? (r.instagram || '') : '',
             phone: r.phone_visible ? (r.phone || '') : '',
             phoneVisible: r.phone_visible || false,
@@ -5590,7 +5596,6 @@
       blocked_tags: data.blockedTags || [],
       genres: data.genres,
       fav_artists: data.favArtists,
-      crew_name: data.crew,
       instagram: data.instagram,
       phone: data.phone,
       phone_visible: data.phoneVisible || false,
@@ -7755,7 +7760,6 @@
         || r.name.toLowerCase().includes(query)
         || (nicknameCache[String(r.id)] || '').toLowerCase().includes(query)
         || (r.handle||'').toLowerCase().includes(query)
-        || (r.crew||'').toLowerCase().includes(query)
         || (r.base||'').toLowerCase().includes(query));
 
     sorted.forEach(r => {
@@ -7767,10 +7771,6 @@
       const nextFestLine = nextFest
         ? `<div class="member-next-fest">🎟️ ${nextFest.name} · ${countdownDays(nextFest._d)}</div>`
         : `<div class="member-next-fest" style="color:var(--muted);">No upcoming raves</div>`;
-
-      const crewLine = r.crew
-        ? `<div class="member-crew">👥 ${r.crew}</div>`
-        : '';
 
       const allVibes = [...(r.vibeTags||[]), ...(r.customVibeTags||[])];
       const miniVibes = allVibes.slice(0,3).map((v, i) => {
@@ -7789,7 +7789,6 @@
         <div class="member-info">
           <div class="member-name">${displayName(r)}${r.isYou ? ' <span style="font-size:0.75rem;margin-right:2px;">👑</span><span style="font-size:0.7rem;color:var(--neon-pink);font-family:\'Outfit\',sans-serif;font-weight:700;">YOU</span>' : ''}</div>
           <div class="member-handle">${r.handle}</div>
-          ${crewLine}
           ${nextFestLine}
           <div class="member-base">📍 ${r.base}</div>
           ${miniVibes ? `<div class="member-vibes">${miniVibes}</div>` : ''}
@@ -8031,11 +8030,6 @@
         </div>
 
         <div class="profile-section">
-          <h3>👥 Go-To Crew</h3>
-          ${fieldRow('','pf-crew', r.crew, 'Your ride-or-die group name')}
-        </div>
-
-        <div class="profile-section">
           <h3>📝 Notes</h3>
           ${fieldRow('','pf-notes', r.notes, isOwnProfile ? 'Anything about yourself…' : "What's their vibe?", true)}
         </div>
@@ -8046,11 +8040,7 @@
             🔑 Change Password
             <span id="pw-change-toggle" style="font-size:0.75rem;color:var(--muted);font-weight:400;margin-left:6px;">▶ expand</span>
           </label>
-          <div id="pw-change-fields" style="display:none;margin-top:10px;">
-            <input class="form-input" id="pf-new-password" type="password" placeholder="New password (min 6 chars)" autocomplete="new-password" style="margin-bottom:8px;">
-            <input class="form-input" id="pf-confirm-password" type="password" placeholder="Confirm new password" autocomplete="new-password" style="margin-bottom:10px;">
-            <button type="button" class="btn btn-ghost" id="pf-pw-btn" style="width:100%;font-size:0.85rem;" onclick="doProfilePasswordChange()">Update Password</button>
-          </div>
+          <div id="pw-change-fields" style="display:none;margin-top:10px;"></div>
         </div>` : ''}
 
         <div class="profile-actions" style="margin-top:8px;">
@@ -8069,7 +8059,7 @@
         <button class="profile-back" onclick="backToSquad()">← Back to Squad</button>
         <div class="profile-hero-banner" style="background:${r.gradient}"></div>
         <div class="profile-hero-body">
-          <div class="profile-avatar-ring">
+          <div class="profile-avatar-ring" onclick="this.classList.toggle('paused')">
             ${avatarEl}
           </div>
           <div class="profile-id">
@@ -8191,7 +8181,7 @@
                  <div class="contact-their-phone"><span id="ief-wrap-${r.id}-instagram" class="ief-wrap">${inlineEditDisplay(r.id, 'instagram', r.instagram || '')}</span></div>
                </div>`
             : '';
-          const theirPhone = perms.editPhone
+          const theirPhone = (perms.editPhone && !perms.isClaimed)
             ? `<div class="contact-row">
                  <div class="contact-their-label">Their phone (crew reference)</div>
                  <div class="contact-their-phone"><span id="ief-wrap-${r.id}-phone" class="ief-wrap">${inlineEditDisplay(r.id, 'phone', r.phone || '')}</span></div>
@@ -8203,7 +8193,7 @@
                    </div>`
                 : '');
           const myPhone = `<div class="contact-row">
-              <div class="contact-your-label">Your saved number</div>
+              <div class="contact-your-label">Saved number (private)</div>
               <div class="contact-their-phone"><span id="ief-wrap-${r.id}-private-phone" class="ief-wrap">${(() => {
                 const pv = privatePhoneCache[String(r.id)] || '';
                 const escaped = pv.replace(/`/g,'\\`');
@@ -8874,7 +8864,6 @@
       genres: [...Array.from(editingGenres), ...editingCustomGenres],
       favArtists: parseList(val('pf-favs')),
       festIds: Array.from(editingFestIds),
-      crew: val('pf-crew'),
       instagram: val('pf-instagram'),
       phone: val('pf-phone'),
       phoneVisible: document.getElementById('pf-phone-visible')?.checked ?? false,
