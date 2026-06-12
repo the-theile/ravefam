@@ -1924,6 +1924,65 @@
   }
   .our-photos-standalone .our-photos-col { flex-direction: column; width: auto; align-items: center; }
 
+  /* ===== How We Met Bubbles ===== */
+  .met-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 4px;
+  }
+  .met-bubble {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .met-bubble-mine {
+    border-color: rgba(255,45,120,0.3);
+    background: rgba(255,45,120,0.05);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .met-bubble-mine:hover { background: rgba(255,45,120,0.09); }
+  .met-bubble-head { display: flex; align-items: center; gap: 7px; }
+  .met-avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    font-size: 0.6rem; font-weight: 800; font-family: 'Outfit', sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; color: #fff;
+  }
+  .met-bubble-name {
+    font-size: 0.68rem; font-family: 'Outfit', sans-serif;
+    font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.5px; color: rgba(255,255,255,0.65);
+  }
+  .met-cloud-text {
+    font-size: 0.82rem; line-height: 1.55;
+    color: var(--text); white-space: pre-wrap; word-break: break-word;
+  }
+  .met-cloud-empty { color: var(--neon-pink); font-style: italic; opacity: 0.85; }
+  .met-cloud-placeholder { color: var(--muted); font-style: italic; font-size: 0.78rem; }
+  .met-edit-hint { font-size: 0.65rem; color: var(--neon-pink); opacity: 0.6; margin-top: 2px; }
+  .met-edit-area {
+    width: 100%; background: transparent; border: none;
+    color: var(--text); font-size: 0.82rem; line-height: 1.5;
+    resize: none; outline: none; padding: 0; box-sizing: border-box;
+    min-height: 64px; font-family: inherit;
+  }
+  .met-bubble-actions { display: flex; gap: 6px; margin-top: 4px; }
+  .met-bubble-actions button {
+    flex: 1; padding: 6px 0; font-size: 0.72rem; border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.15); background: transparent;
+    color: var(--text); cursor: pointer; font-family: inherit;
+  }
+  .met-bubble-actions .met-save-btn {
+    background: var(--neon-pink); color: #000;
+    border-color: var(--neon-pink); font-weight: 700;
+  }
+
   /* ===== Vibe Tags ===== */
   .vibe-tags-section { margin-top: 14px; }
   .vibe-tag-cloud { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 10px; }
@@ -5219,6 +5278,9 @@
     // Load community genre + artist pools (non-blocking)
     dbLoadCommunityGenres().catch(() => {});
     dbLoadCommunityArtists().catch(() => {});
+
+    // Load Our Photos into cache so squad cards show them immediately (non-blocking)
+    loadAllOurPhotos().catch(() => {});
   }
 
   // ===== WELCOME BACK POPUP =====
@@ -5304,6 +5366,136 @@
     document.getElementById('welcome-back-overlay').classList.remove('open');
   }
 
+  // ===== HOW WE MET — pairwise thought-bubble stories =====
+
+  const metStoriesCache = {}; // { [raverId]: { mine: string|null, theirs: string|null } }
+
+  const MET_FUNNY = [
+    "No memory of it 🥴",
+    "Their lips are sealed 🤫",
+    "Still processing… 🎧",
+    "Too deep in the bass to remember 🔊",
+    "The drops were too many 🎶",
+  ];
+  function metFunnyPlaceholder(raverId) {
+    const n = String(raverId).split('').reduce((s, c) => s + c.charCodeAt(0), 0);
+    return MET_FUNNY[n % MET_FUNNY.length];
+  }
+
+  async function loadMetStories(viewingRaverId) {
+    if (!currentUser) return { mine: null, theirs: null };
+    const me = squad.find(r => r.isYou);
+    const them = getRaver(viewingRaverId);
+    const legacyMine = them?.metStory || null;
+    try {
+      const myQ = sb.from('met_stories').select('story')
+        .eq('author_user_id', currentUser.id)
+        .eq('target_raver_id', String(viewingRaverId))
+        .maybeSingle();
+      const theirClaimedBy = them?.claimedBy || null;
+      const theirQ = (theirClaimedBy && me?.id)
+        ? sb.from('met_stories').select('story')
+            .eq('author_user_id', theirClaimedBy)
+            .eq('target_raver_id', String(me.id))
+            .maybeSingle()
+        : Promise.resolve({ data: null });
+      const [myRes, theirRes] = await Promise.all([myQ, theirQ]);
+      const stories = {
+        mine:   myRes.data?.story   ?? legacyMine,
+        theirs: theirRes.data?.story ?? null,
+      };
+      metStoriesCache[String(viewingRaverId)] = stories;
+      return stories;
+    } catch(e) {
+      return { mine: legacyMine, theirs: null };
+    }
+  }
+
+  async function saveMetStory(viewingRaverId, story) {
+    const trimmed = story.trim();
+    metStoriesCache[String(viewingRaverId)] = {
+      ...(metStoriesCache[String(viewingRaverId)] || {}),
+      mine: trimmed,
+    };
+    if (!currentUser) return;
+    await sb.from('met_stories').upsert({
+      author_user_id: currentUser.id,
+      target_raver_id: String(viewingRaverId),
+      story: trimmed,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'author_user_id,target_raver_id' });
+  }
+
+  function howWeMetSectionHTML(viewingRaverId, stories, raver) {
+    const me = squad.find(r => r.isYou);
+    if (!me) return '';
+    const mine   = stories?.mine   || '';
+    const theirs = stories?.theirs || null;
+    const isUnclaimed = !raver.claimedBy;
+    const theirName = raver.name.split(' ')[0];
+
+    const myBubble = `
+      <div class="met-bubble met-bubble-mine" onclick="startEditMetStory('${viewingRaverId}')">
+        <div class="met-bubble-head">
+          ${raverAvatarHTML(me.avatarUrl, me.gradient, me.name, 'met-avatar', '')}
+          <span class="met-bubble-name">You</span>
+        </div>
+        <div id="met-cloud-mine-${viewingRaverId}">
+          ${mine
+            ? `<div class="met-cloud-text">${mine.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>`
+            : `<div class="met-cloud-text met-cloud-empty">Tap to add your version…</div>`}
+          <div class="met-edit-hint">✎ tap to edit</div>
+        </div>
+      </div>`;
+
+    const theirContent = isUnclaimed
+      ? `<div class="met-cloud-text met-cloud-placeholder">${metFunnyPlaceholder(viewingRaverId)}</div>`
+      : theirs
+        ? `<div class="met-cloud-text">${theirs.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>`
+        : `<div class="met-cloud-text met-cloud-placeholder">No story yet…</div>`;
+
+    const theirBubble = `
+      <div class="met-bubble met-bubble-theirs">
+        <div class="met-bubble-head">
+          ${raverAvatarHTML(raver.avatarUrl, raver.gradient, raver.name, 'met-avatar', '')}
+          <span class="met-bubble-name">${theirName.replace(/</g,'&lt;')}</span>
+        </div>
+        ${theirContent}
+      </div>`;
+
+    return `<div class="met-pair">${myBubble}${theirBubble}</div>`;
+  }
+
+  function startEditMetStory(raverId) {
+    const cloud = document.getElementById(`met-cloud-mine-${raverId}`);
+    if (!cloud) return;
+    const current = (metStoriesCache[String(raverId)]?.mine || '').replace(/&amp;/g,'&').replace(/&lt;/g,'<');
+    cloud.innerHTML = `
+      <textarea class="met-edit-area" id="met-edit-${raverId}" placeholder="How did you two meet?">${current}</textarea>
+      <div class="met-bubble-actions">
+        <button onclick="cancelEditMetStory('${raverId}')">Cancel</button>
+        <button class="met-save-btn" onclick="doneEditMetStory('${raverId}')">Save ✓</button>
+      </div>`;
+    const ta = document.getElementById(`met-edit-${raverId}`);
+    if (ta) { ta.focus(); ta.selectionStart = ta.value.length; }
+  }
+
+  function cancelEditMetStory(raverId) {
+    const r = getRaver(raverId);
+    const section = document.getElementById('how-we-met-section');
+    if (section && r) section.innerHTML = howWeMetSectionHTML(raverId, metStoriesCache[String(raverId)] || {}, r);
+  }
+
+  async function doneEditMetStory(raverId) {
+    const ta = document.getElementById(`met-edit-${raverId}`);
+    if (!ta) return;
+    await saveMetStory(raverId, ta.value);
+    const r = getRaver(raverId);
+    const section = document.getElementById('how-we-met-section');
+    if (section && r) section.innerHTML = howWeMetSectionHTML(raverId, metStoriesCache[String(raverId)] || {}, r);
+    showToast('✅ Memory saved!');
+  }
+
   // ===== SUPABASE WRITE HELPERS =====
 
   async function dbSaveRaver(data, id) {
@@ -5321,7 +5513,6 @@
       crew_name: data.crew,
       instagram: data.instagram,
       phone: data.phone,
-      met_story: data.metStory,
       notes: data.notes,
       is_you: data.isYou || false,
       vibe_tags: data.vibeTags || [],
@@ -5654,23 +5845,84 @@
     });
   }
 
-  // ── Our Photo (localStorage) ───────────────────────────────────────────────
+  // ── Our Photos (Supabase Storage + DB) ────────────────────────────────────
 
-  function ourPhotoKeys(viewingRaverId) {
+  // Cache: { [viewingRaverId]: { mine: url|null, theirs: url|null } }
+  const ourPhotosCache = {};
+
+  // Returns canonical sorted raver-id pair for a given viewing raver.
+  function ourPhotoPair(viewingRaverId) {
     const me = squad.find(r => r.isYou);
-    // Fall back to auth UID so section shows even if no raver has isYou=true
-    const myKey = me ? String(me.id) : (currentUser ? `u_${currentUser.id.slice(0, 8)}` : null);
-    if (!myKey) return null;
-    const sorted = [myKey, String(viewingRaverId)].sort();
-    const prefix = `ourPhoto_${sorted[0]}_${sorted[1]}_from_`;
-    return { mine: prefix + myKey, theirs: prefix + viewingRaverId };
+    if (!me) return null;
+    const ids = [String(me.id), String(viewingRaverId)].sort();
+    return { a: ids[0], b: ids[1], myId: String(me.id) };
+  }
+
+  // Storage path for a photo in this pair uploaded by the current user.
+  function ourPhotoStoragePath(viewingRaverId) {
+    const pair = ourPhotoPair(viewingRaverId);
+    if (!pair || !currentUser) return null;
+    return `our-photos/${pair.a}_${pair.b}_${currentUser.id}.jpg`;
+  }
+
+  // Bulk-load all Our Photos for the current user's raver at startup.
+  async function loadAllOurPhotos() {
+    if (!currentUser) return;
+    const me = squad.find(r => r.isYou);
+    if (!me) return;
+    const myId = String(me.id);
+    try {
+      const { data: rows } = await sb.from('our_photos').select('uploader_user_id,raver_a_id,raver_b_id,photo_url')
+        .or(`raver_a_id.eq.${myId},raver_b_id.eq.${myId}`);
+      if (!rows) return;
+      rows.forEach(p => {
+        const otherId = String(p.raver_a_id) === myId ? String(p.raver_b_id) : String(p.raver_a_id);
+        if (!ourPhotosCache[otherId]) ourPhotosCache[otherId] = { mine: null, theirs: null };
+        if (p.uploader_user_id === currentUser.id) {
+          ourPhotosCache[otherId].mine = p.photo_url;
+        } else {
+          ourPhotosCache[otherId].theirs = p.photo_url;
+        }
+      });
+    } catch(e) { /* non-blocking */ }
+  }
+
+  // Load photos for one pair — called when opening a profile.
+  async function loadOurPhotos(viewingRaverId) {
+    if (!currentUser) return ourPhotosCache[String(viewingRaverId)] || { mine: null, theirs: null };
+    const me = squad.find(r => r.isYou);
+    if (!me) return { mine: null, theirs: null };
+    const pair = ourPhotoPair(viewingRaverId);
+    if (!pair) return { mine: null, theirs: null };
+    try {
+      const { data: rows } = await sb.from('our_photos').select('uploader_user_id,photo_url')
+        .eq('raver_a_id', pair.a).eq('raver_b_id', pair.b);
+      const result = { mine: null, theirs: null };
+      (rows || []).forEach(p => {
+        if (p.uploader_user_id === currentUser.id) result.mine = p.photo_url;
+        else result.theirs = p.photo_url;
+      });
+      // Fallback: if no DB mine photo, check localStorage legacy
+      if (!result.mine) {
+        const lsKey = `ourPhoto_${pair.a}_${pair.b}_from_${pair.myId}`;
+        result.mine = localStorage.getItem(lsKey) || null;
+      }
+      ourPhotosCache[String(viewingRaverId)] = result;
+      return result;
+    } catch(e) {
+      return ourPhotosCache[String(viewingRaverId)] || { mine: null, theirs: null };
+    }
   }
 
   function ourPhotoSectionHTML(viewingRaverId) {
-    const keys = ourPhotoKeys(viewingRaverId);
-    if (!keys) return '';
-    const myPhoto    = localStorage.getItem(keys.mine);
-    const theirPhoto = localStorage.getItem(keys.theirs);
+    const cached = ourPhotosCache[String(viewingRaverId)];
+    // Fallback to localStorage legacy during load
+    let myPhoto = cached?.mine ?? null;
+    let theirPhoto = cached?.theirs ?? null;
+    if (!myPhoto) {
+      const pair = ourPhotoPair(viewingRaverId);
+      if (pair) myPhoto = localStorage.getItem(`ourPhoto_${pair.a}_${pair.b}_from_${pair.myId}`) || null;
+    }
 
     const mySlot = myPhoto
       ? `<div class="our-photo-slot">
@@ -5708,17 +5960,33 @@
   async function handleOurPhotoUpload(event, viewingRaverId, slot) {
     const file = event.target.files[0];
     if (!file) return;
-    const keys = ourPhotoKeys(viewingRaverId);
-    if (!keys) return;
-    showToast('📸 Saving…');
+    const storagePath = ourPhotoStoragePath(viewingRaverId);
+    const pair = ourPhotoPair(viewingRaverId);
+    if (!storagePath || !pair || !currentUser) return;
+    // Guard: only upload for real DB IDs (not temp_ stubs)
+    if (String(viewingRaverId).startsWith('temp_') || pair.myId.startsWith('temp_')) {
+      showToast('⚠️ Save your profile to the cloud first');
+      return;
+    }
+    showToast('📸 Uploading…');
     try {
-      const dataUrl = await compressImageToDataUrl(file, 400);
-      localStorage.setItem(keys[slot], dataUrl);
+      const url = await uploadPhotoToStorage(file, storagePath);
+      await sb.from('our_photos').upsert({
+        uploader_user_id: currentUser.id,
+        raver_a_id: pair.a,
+        raver_b_id: pair.b,
+        photo_url: url,
+      }, { onConflict: 'uploader_user_id,raver_a_id,raver_b_id' });
+      if (!ourPhotosCache[String(viewingRaverId)]) ourPhotosCache[String(viewingRaverId)] = { mine: null, theirs: null };
+      ourPhotosCache[String(viewingRaverId)].mine = url;
+      // Clear any legacy localStorage entry for this pair
+      localStorage.removeItem(`ourPhoto_${pair.a}_${pair.b}_from_${pair.myId}`);
       const r = squad.find(x => String(x.id) === String(viewingRaverId));
       if (r) openProfile(r.id);
       showToast('📸 Photo saved!');
     } catch(e) {
-      showToast('⚠️ Could not save — try a smaller photo');
+      console.error('Our photo upload error', e);
+      showToast('⚠️ Upload failed — try again');
     }
   }
 
@@ -5733,18 +6001,30 @@
     if (e.key === 'Escape') closePhotoLightbox();
   });
 
-  function removeOurPhoto(viewingRaverId, slot) {
+  async function removeOurPhoto(viewingRaverId, slot) {
     showPhotoConfirm({
       icon: '💫',
       title: 'Delete this memory?',
-      body: "Once it's gone, it's gone — only stored on your device. Make sure you've saved a copy if you want to keep it.",
-      onConfirm: () => {
-        const keys = ourPhotoKeys(viewingRaverId);
-        if (!keys) return;
-        localStorage.removeItem(keys[slot]);
-        const r = squad.find(x => String(x.id) === String(viewingRaverId));
-        if (r) openProfile(r.id);
-        showToast('Photo removed');
+      body: "Once it's gone, it's gone. The photo will be removed from the cloud.",
+      onConfirm: async () => {
+        try {
+          if (currentUser) {
+            const storagePath = ourPhotoStoragePath(viewingRaverId);
+            const pair = ourPhotoPair(viewingRaverId);
+            if (storagePath) await sb.storage.from('photos').remove([storagePath]).catch(() => {});
+            if (pair) await sb.from('our_photos').delete()
+              .eq('uploader_user_id', currentUser.id).eq('raver_a_id', pair.a).eq('raver_b_id', pair.b).catch(() => {});
+          }
+          if (ourPhotosCache[String(viewingRaverId)]) ourPhotosCache[String(viewingRaverId)].mine = null;
+          // Also clear legacy localStorage entry
+          const pair = ourPhotoPair(viewingRaverId);
+          if (pair) localStorage.removeItem(`ourPhoto_${pair.a}_${pair.b}_from_${pair.myId}`);
+          const r = squad.find(x => String(x.id) === String(viewingRaverId));
+          if (r) openProfile(r.id);
+          showToast('Photo removed');
+        } catch(e) {
+          showToast('⚠️ Could not remove photo');
+        }
       }
     });
   }
@@ -6039,7 +6319,19 @@
       if (emptyMsg) emptyMsg.remove();
     }
 
-    crews.forEach(crew => {
+    const sortedCrews = [...crews].sort((a, b) => {
+      const na = crewNextUp(a);
+      const nb = crewNextUp(b);
+      if (na.kind === 'upcoming' && nb.kind === 'upcoming') return na.date - nb.date;
+      if (na.kind === 'upcoming') return -1;
+      if (nb.kind === 'upcoming') return 1;
+      if (na.kind === 'past' && nb.kind === 'past') return nb.date - na.date;
+      if (na.kind === 'past') return -1;
+      if (nb.kind === 'past') return 1;
+      return 0;
+    });
+
+    sortedCrews.forEach(crew => {
       const s = STATUS[crew.status];
       const card = document.createElement('div');
       card.className = 'crew-card';
@@ -6257,12 +6549,14 @@
       }
     } else {
       const canJoin = crew.status === 'recruiting';
+      const meRaver = squad.find(r => r.isYou);
+      const isAlreadyMember = meRaver && crew.squadIds.some(id => String(id) === String(meRaver.id));
       statusControl = `
         <div class="form-group">
           <label class="form-label">Status</label>
           <div style="font-size:0.85rem;color:var(--muted);">Set by the Crew Lead — you can't change this.</div>
         </div>
-        ${!isSecret ? `<button class="btn ${canJoin?'btn-primary':'btn-ghost'}" style="width:100%;padding:12px;"
+        ${!isSecret && !isAlreadyMember ? `<button class="btn ${canJoin?'btn-primary':'btn-ghost'}" style="width:100%;padding:12px;"
           onclick="${canJoin ? `joinCrew('${crew.id}')` : `showToast('🔒 This crew is Locked In — ask the Lead for an invite')`}">
           ${canJoin ? '➕ Join this crew' : '🔒 Locked — invite only'}
         </button>` : ''}`;
@@ -7135,10 +7429,12 @@
   }
 
   function ourPhotoCardHTML(viewingRaverId) {
-    const keys = ourPhotoKeys(viewingRaverId);
-    if (!keys) return '';
-    const myPhoto    = localStorage.getItem(keys.mine);
-    const theirPhoto = localStorage.getItem(keys.theirs);
+    const cached = ourPhotosCache[String(viewingRaverId)];
+    // Also check legacy localStorage during transition period
+    const pair = ourPhotoPair(viewingRaverId);
+    const lsMine = pair ? localStorage.getItem(`ourPhoto_${pair.a}_${pair.b}_from_${pair.myId}`) : null;
+    const myPhoto    = cached?.mine    ?? lsMine ?? null;
+    const theirPhoto = cached?.theirs  ?? null;
     if (!myPhoto && !theirPhoto) return '';
     const slots = [];
     if (myPhoto)    slots.push(`<div class="our-photo-slot"><img src="${myPhoto}" alt=""></div>`);
@@ -7310,7 +7606,8 @@
       : `<div class="profile-avatar" style="background:${avatarBg};${avatarOverflow}">${avatarContent}</div>`;
 
     // Our Photo section — only shown when viewing someone else's profile
-    const ourPhotoHTML = (!r.isYou && (squad.find(x => x.isYou) || currentUser)) ? ourPhotoSectionHTML(r.id) : '';
+    const showOurPhotos = !r.isYou && (squad.find(x => x.isYou) || currentUser);
+    const ourPhotoHTML = showOurPhotos ? `<div id="our-photos-async-wrap">${ourPhotoSectionHTML(r.id)}</div>` : '';
 
     // Countdown + Our Photo layout
     let photoCountdownBlock;
@@ -7419,12 +7716,6 @@
           ${fieldRow('','pf-crew', r.crew, 'Your ride-or-die group name')}
         </div>
 
-        ${!isOwnProfile ? `
-        <div class="profile-section">
-          <h3>🤝 How We Met</h3>
-          ${fieldRow('','pf-met', r.metStory, 'Where did your paths cross?', true)}
-        </div>` : ''}
-
         <div class="profile-section">
           <h3>📝 Notes</h3>
           ${fieldRow('','pf-notes', r.notes, isOwnProfile ? 'Anything about yourself…' : "What's their vibe?", true)}
@@ -7472,7 +7763,7 @@
         ${photoCountdownBlock}
 
         <div class="profile-actions" data-raver-id="${r.id}">
-          <button class="btn btn-primary" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="enterProfileEditMode(this.dataset.raverId)">✏️ Edit Profile</button>
+          ${!r.readOnly ? `<button class="btn btn-primary" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="enterProfileEditMode(this.dataset.raverId)">✏️ Edit Profile</button>` : ''}
           ${(!r.isYou && isAdminUser()) ? `<button class="btn btn-ghost" style="padding:11px;color:var(--neon-pink);border-color:rgba(255,45,120,0.3);" data-raver-id="${r.id}" onclick="showDeleteRaverConfirm(this.dataset.raverId)">🗑️</button>` : ''}
         </div>
 
@@ -7549,7 +7840,9 @@
         ${!r.isYou ? `
         <div class="profile-section" style="${sg(0)}">
           <h3>🤝 How We Met</h3>
-          <div class="profile-note">${r.metStory || '<span class="fest-empty">No story logged yet</span>'}</div>
+          <div id="how-we-met-section">
+            ${howWeMetSectionHTML(r.id, metStoriesCache[String(r.id)] || null, r)}
+          </div>
         </div>` : ''}
 
         <div class="profile-section" style="${sg(1)}">
@@ -7570,6 +7863,22 @@
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     profilePage.classList.add('active');
     window.scrollTo(0,0);
+
+    // Async-load How We Met stories and Our Photos, refresh sections once loaded
+    if (!editMode && !r.isYou && currentUser) {
+      const _profileId = r.id;
+      loadMetStories(_profileId).then(stories => {
+        const section = document.getElementById('how-we-met-section');
+        const raver = getRaver(_profileId);
+        if (section && raver) section.innerHTML = howWeMetSectionHTML(_profileId, stories, raver);
+      });
+      loadOurPhotos(_profileId).then(() => {
+        // Re-render the photo slots in place without a full profile re-render
+        const photoSection = document.getElementById('our-photos-async-wrap');
+        const raver = getRaver(_profileId);
+        if (photoSection && raver) photoSection.innerHTML = ourPhotoSectionHTML(_profileId);
+      });
+    }
   }
 
   function backToSquad() {
@@ -7767,7 +8076,6 @@
         <label class="form-label">🎟️ Festivals</label>
         <div id="fest-picker"></div>
       </div>
-      ${isOwnProfile ? '' : fieldRow('How We Met','pf-met', r?.metStory, 'Where did your paths cross?', true)}
       ${fieldRow('Notes','pf-notes', r?.notes, isOwnProfile ? "Anything about yourself…" : "What's their vibe?", true)}
       ${isOwnProfile ? `
       <div class="form-group" style="border-top:1px solid rgba(255,255,255,0.08);margin-top:8px;padding-top:16px;">
@@ -8184,7 +8492,6 @@
       crew: val('pf-crew'),
       instagram: val('pf-instagram'),
       phone: val('pf-phone'),
-      metStory: val('pf-met'),
       notes: val('pf-notes'),
       vibeTags: Array.from(editingVibeTags),
       customVibeTags: [...editingCustomVibeTags]
