@@ -5278,6 +5278,9 @@
     // Load community genre + artist pools (non-blocking)
     dbLoadCommunityGenres().catch(() => {});
     dbLoadCommunityArtists().catch(() => {});
+
+    // Load Our Photos into cache so squad cards show them immediately (non-blocking)
+    loadAllOurPhotos().catch(() => {});
   }
 
   // ===== WELCOME BACK POPUP =====
@@ -5842,23 +5845,84 @@
     });
   }
 
-  // ── Our Photo (localStorage) ───────────────────────────────────────────────
+  // ── Our Photos (Supabase Storage + DB) ────────────────────────────────────
 
-  function ourPhotoKeys(viewingRaverId) {
+  // Cache: { [viewingRaverId]: { mine: url|null, theirs: url|null } }
+  const ourPhotosCache = {};
+
+  // Returns canonical sorted raver-id pair for a given viewing raver.
+  function ourPhotoPair(viewingRaverId) {
     const me = squad.find(r => r.isYou);
-    // Fall back to auth UID so section shows even if no raver has isYou=true
-    const myKey = me ? String(me.id) : (currentUser ? `u_${currentUser.id.slice(0, 8)}` : null);
-    if (!myKey) return null;
-    const sorted = [myKey, String(viewingRaverId)].sort();
-    const prefix = `ourPhoto_${sorted[0]}_${sorted[1]}_from_`;
-    return { mine: prefix + myKey, theirs: prefix + viewingRaverId };
+    if (!me) return null;
+    const ids = [String(me.id), String(viewingRaverId)].sort();
+    return { a: ids[0], b: ids[1], myId: String(me.id) };
+  }
+
+  // Storage path for a photo in this pair uploaded by the current user.
+  function ourPhotoStoragePath(viewingRaverId) {
+    const pair = ourPhotoPair(viewingRaverId);
+    if (!pair || !currentUser) return null;
+    return `our-photos/${pair.a}_${pair.b}_${currentUser.id}.jpg`;
+  }
+
+  // Bulk-load all Our Photos for the current user's raver at startup.
+  async function loadAllOurPhotos() {
+    if (!currentUser) return;
+    const me = squad.find(r => r.isYou);
+    if (!me) return;
+    const myId = String(me.id);
+    try {
+      const { data: rows } = await sb.from('our_photos').select('uploader_user_id,raver_a_id,raver_b_id,photo_url')
+        .or(`raver_a_id.eq.${myId},raver_b_id.eq.${myId}`);
+      if (!rows) return;
+      rows.forEach(p => {
+        const otherId = String(p.raver_a_id) === myId ? String(p.raver_b_id) : String(p.raver_a_id);
+        if (!ourPhotosCache[otherId]) ourPhotosCache[otherId] = { mine: null, theirs: null };
+        if (p.uploader_user_id === currentUser.id) {
+          ourPhotosCache[otherId].mine = p.photo_url;
+        } else {
+          ourPhotosCache[otherId].theirs = p.photo_url;
+        }
+      });
+    } catch(e) { /* non-blocking */ }
+  }
+
+  // Load photos for one pair — called when opening a profile.
+  async function loadOurPhotos(viewingRaverId) {
+    if (!currentUser) return ourPhotosCache[String(viewingRaverId)] || { mine: null, theirs: null };
+    const me = squad.find(r => r.isYou);
+    if (!me) return { mine: null, theirs: null };
+    const pair = ourPhotoPair(viewingRaverId);
+    if (!pair) return { mine: null, theirs: null };
+    try {
+      const { data: rows } = await sb.from('our_photos').select('uploader_user_id,photo_url')
+        .eq('raver_a_id', pair.a).eq('raver_b_id', pair.b);
+      const result = { mine: null, theirs: null };
+      (rows || []).forEach(p => {
+        if (p.uploader_user_id === currentUser.id) result.mine = p.photo_url;
+        else result.theirs = p.photo_url;
+      });
+      // Fallback: if no DB mine photo, check localStorage legacy
+      if (!result.mine) {
+        const lsKey = `ourPhoto_${pair.a}_${pair.b}_from_${pair.myId}`;
+        result.mine = localStorage.getItem(lsKey) || null;
+      }
+      ourPhotosCache[String(viewingRaverId)] = result;
+      return result;
+    } catch(e) {
+      return ourPhotosCache[String(viewingRaverId)] || { mine: null, theirs: null };
+    }
   }
 
   function ourPhotoSectionHTML(viewingRaverId) {
-    const keys = ourPhotoKeys(viewingRaverId);
-    if (!keys) return '';
-    const myPhoto    = localStorage.getItem(keys.mine);
-    const theirPhoto = localStorage.getItem(keys.theirs);
+    const cached = ourPhotosCache[String(viewingRaverId)];
+    // Fallback to localStorage legacy during load
+    let myPhoto = cached?.mine ?? null;
+    let theirPhoto = cached?.theirs ?? null;
+    if (!myPhoto) {
+      const pair = ourPhotoPair(viewingRaverId);
+      if (pair) myPhoto = localStorage.getItem(`ourPhoto_${pair.a}_${pair.b}_from_${pair.myId}`) || null;
+    }
 
     const mySlot = myPhoto
       ? `<div class="our-photo-slot">
@@ -5896,17 +5960,33 @@
   async function handleOurPhotoUpload(event, viewingRaverId, slot) {
     const file = event.target.files[0];
     if (!file) return;
-    const keys = ourPhotoKeys(viewingRaverId);
-    if (!keys) return;
-    showToast('📸 Saving…');
+    const storagePath = ourPhotoStoragePath(viewingRaverId);
+    const pair = ourPhotoPair(viewingRaverId);
+    if (!storagePath || !pair || !currentUser) return;
+    // Guard: only upload for real DB IDs (not temp_ stubs)
+    if (String(viewingRaverId).startsWith('temp_') || pair.myId.startsWith('temp_')) {
+      showToast('⚠️ Save your profile to the cloud first');
+      return;
+    }
+    showToast('📸 Uploading…');
     try {
-      const dataUrl = await compressImageToDataUrl(file, 400);
-      localStorage.setItem(keys[slot], dataUrl);
+      const url = await uploadPhotoToStorage(file, storagePath);
+      await sb.from('our_photos').upsert({
+        uploader_user_id: currentUser.id,
+        raver_a_id: pair.a,
+        raver_b_id: pair.b,
+        photo_url: url,
+      }, { onConflict: 'uploader_user_id,raver_a_id,raver_b_id' });
+      if (!ourPhotosCache[String(viewingRaverId)]) ourPhotosCache[String(viewingRaverId)] = { mine: null, theirs: null };
+      ourPhotosCache[String(viewingRaverId)].mine = url;
+      // Clear any legacy localStorage entry for this pair
+      localStorage.removeItem(`ourPhoto_${pair.a}_${pair.b}_from_${pair.myId}`);
       const r = squad.find(x => String(x.id) === String(viewingRaverId));
       if (r) openProfile(r.id);
       showToast('📸 Photo saved!');
     } catch(e) {
-      showToast('⚠️ Could not save — try a smaller photo');
+      console.error('Our photo upload error', e);
+      showToast('⚠️ Upload failed — try again');
     }
   }
 
@@ -5921,18 +6001,30 @@
     if (e.key === 'Escape') closePhotoLightbox();
   });
 
-  function removeOurPhoto(viewingRaverId, slot) {
+  async function removeOurPhoto(viewingRaverId, slot) {
     showPhotoConfirm({
       icon: '💫',
       title: 'Delete this memory?',
-      body: "Once it's gone, it's gone — only stored on your device. Make sure you've saved a copy if you want to keep it.",
-      onConfirm: () => {
-        const keys = ourPhotoKeys(viewingRaverId);
-        if (!keys) return;
-        localStorage.removeItem(keys[slot]);
-        const r = squad.find(x => String(x.id) === String(viewingRaverId));
-        if (r) openProfile(r.id);
-        showToast('Photo removed');
+      body: "Once it's gone, it's gone. The photo will be removed from the cloud.",
+      onConfirm: async () => {
+        try {
+          if (currentUser) {
+            const storagePath = ourPhotoStoragePath(viewingRaverId);
+            const pair = ourPhotoPair(viewingRaverId);
+            if (storagePath) await sb.storage.from('photos').remove([storagePath]).catch(() => {});
+            if (pair) await sb.from('our_photos').delete()
+              .eq('uploader_user_id', currentUser.id).eq('raver_a_id', pair.a).eq('raver_b_id', pair.b).catch(() => {});
+          }
+          if (ourPhotosCache[String(viewingRaverId)]) ourPhotosCache[String(viewingRaverId)].mine = null;
+          // Also clear legacy localStorage entry
+          const pair = ourPhotoPair(viewingRaverId);
+          if (pair) localStorage.removeItem(`ourPhoto_${pair.a}_${pair.b}_from_${pair.myId}`);
+          const r = squad.find(x => String(x.id) === String(viewingRaverId));
+          if (r) openProfile(r.id);
+          showToast('Photo removed');
+        } catch(e) {
+          showToast('⚠️ Could not remove photo');
+        }
       }
     });
   }
@@ -7337,10 +7429,12 @@
   }
 
   function ourPhotoCardHTML(viewingRaverId) {
-    const keys = ourPhotoKeys(viewingRaverId);
-    if (!keys) return '';
-    const myPhoto    = localStorage.getItem(keys.mine);
-    const theirPhoto = localStorage.getItem(keys.theirs);
+    const cached = ourPhotosCache[String(viewingRaverId)];
+    // Also check legacy localStorage during transition period
+    const pair = ourPhotoPair(viewingRaverId);
+    const lsMine = pair ? localStorage.getItem(`ourPhoto_${pair.a}_${pair.b}_from_${pair.myId}`) : null;
+    const myPhoto    = cached?.mine    ?? lsMine ?? null;
+    const theirPhoto = cached?.theirs  ?? null;
     if (!myPhoto && !theirPhoto) return '';
     const slots = [];
     if (myPhoto)    slots.push(`<div class="our-photo-slot"><img src="${myPhoto}" alt=""></div>`);
@@ -7512,7 +7606,8 @@
       : `<div class="profile-avatar" style="background:${avatarBg};${avatarOverflow}">${avatarContent}</div>`;
 
     // Our Photo section — only shown when viewing someone else's profile
-    const ourPhotoHTML = (!r.isYou && (squad.find(x => x.isYou) || currentUser)) ? ourPhotoSectionHTML(r.id) : '';
+    const showOurPhotos = !r.isYou && (squad.find(x => x.isYou) || currentUser);
+    const ourPhotoHTML = showOurPhotos ? `<div id="our-photos-async-wrap">${ourPhotoSectionHTML(r.id)}</div>` : '';
 
     // Countdown + Our Photo layout
     let photoCountdownBlock;
@@ -7769,13 +7864,19 @@
     profilePage.classList.add('active');
     window.scrollTo(0,0);
 
-    // Async-load How We Met stories and update the section once loaded
+    // Async-load How We Met stories and Our Photos, refresh sections once loaded
     if (!editMode && !r.isYou && currentUser) {
       const _profileId = r.id;
       loadMetStories(_profileId).then(stories => {
         const section = document.getElementById('how-we-met-section');
         const raver = getRaver(_profileId);
         if (section && raver) section.innerHTML = howWeMetSectionHTML(_profileId, stories, raver);
+      });
+      loadOurPhotos(_profileId).then(() => {
+        // Re-render the photo slots in place without a full profile re-render
+        const photoSection = document.getElementById('our-photos-async-wrap');
+        const raver = getRaver(_profileId);
+        if (photoSection && raver) photoSection.innerHTML = ourPhotoSectionHTML(_profileId);
       });
     }
   }
