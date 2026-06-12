@@ -6039,7 +6039,19 @@
       if (emptyMsg) emptyMsg.remove();
     }
 
-    crews.forEach(crew => {
+    const sortedCrews = [...crews].sort((a, b) => {
+      const na = crewNextUp(a);
+      const nb = crewNextUp(b);
+      if (na.kind === 'upcoming' && nb.kind === 'upcoming') return na.date - nb.date;
+      if (na.kind === 'upcoming') return -1;
+      if (nb.kind === 'upcoming') return 1;
+      if (na.kind === 'past' && nb.kind === 'past') return nb.date - na.date;
+      if (na.kind === 'past') return -1;
+      if (nb.kind === 'past') return 1;
+      return 0;
+    });
+
+    sortedCrews.forEach(crew => {
       const s = STATUS[crew.status];
       const card = document.createElement('div');
       card.className = 'crew-card';
@@ -6257,12 +6269,14 @@
       }
     } else {
       const canJoin = crew.status === 'recruiting';
+      const meRaver = squad.find(r => r.isYou);
+      const isAlreadyMember = meRaver && crew.squadIds.some(id => String(id) === String(meRaver.id));
       statusControl = `
         <div class="form-group">
           <label class="form-label">Status</label>
           <div style="font-size:0.85rem;color:var(--muted);">Set by the Crew Lead — you can't change this.</div>
         </div>
-        ${!isSecret ? `<button class="btn ${canJoin?'btn-primary':'btn-ghost'}" style="width:100%;padding:12px;"
+        ${!isSecret && !isAlreadyMember ? `<button class="btn ${canJoin?'btn-primary':'btn-ghost'}" style="width:100%;padding:12px;"
           onclick="${canJoin ? `joinCrew('${crew.id}')` : `showToast('🔒 This crew is Locked In — ask the Lead for an invite')`}">
           ${canJoin ? '➕ Join this crew' : '🔒 Locked — invite only'}
         </button>` : ''}`;
@@ -7472,7 +7486,7 @@
         ${photoCountdownBlock}
 
         <div class="profile-actions" data-raver-id="${r.id}">
-          <button class="btn btn-primary" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="enterProfileEditMode(this.dataset.raverId)">✏️ Edit Profile</button>
+          ${!r.readOnly ? `<button class="btn btn-primary" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="enterProfileEditMode(this.dataset.raverId)">✏️ Edit Profile</button>` : ''}
           ${(!r.isYou && isAdminUser()) ? `<button class="btn btn-ghost" style="padding:11px;color:var(--neon-pink);border-color:rgba(255,45,120,0.3);" data-raver-id="${r.id}" onclick="showDeleteRaverConfirm(this.dataset.raverId)">🗑️</button>` : ''}
         </div>
 
