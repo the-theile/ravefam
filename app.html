@@ -1819,6 +1819,33 @@
     text-transform: uppercase; letter-spacing: 2px;
     color: rgba(255,255,255,0.5); text-align: center;
   }
+  /* ── Inline field editing ───────────────────────────────────────────── */
+  .ief-wrap { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .ief-value { font-size:0.88rem; color:var(--text); }
+  .ief-add-nickname { font-size:0.8rem; color:var(--muted); cursor:pointer; }
+  .ief-add-nickname:hover, .ief-add-nickname:focus { color:var(--neon-pink); outline:none; }
+  .nickname-value { font-size:0.88rem; color:var(--neon-green); font-style:italic; }
+  .ief-input { background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.18); border-radius:7px; color:#fff; padding:5px 10px; font-size:0.85rem; outline:none; }
+  .ief-input:focus { border-color:var(--neon-pink); }
+  .ief-btn { background:none; border:none; cursor:pointer; padding:3px 6px; font-size:0.85rem; color:var(--muted); border-radius:5px; }
+  .ief-btn:hover { background:rgba(255,255,255,0.07); }
+  .ief-ok { color:var(--neon-green) !important; }
+  .ief-cancel { color:rgba(255,80,80,0.8) !important; }
+  .ief-edit { opacity:0.5; font-size:0.72rem; }
+  .profile-nickname-row { display:flex; align-items:center; gap:6px; margin-top:4px; }
+  .profile-real-name { font-size:0.72rem; color:var(--muted); margin-top:2px; }
+  .phone-visibility-row { display:flex; align-items:center; gap:8px; margin-top:6px; font-size:0.82rem; color:var(--muted); }
+  .phone-visibility-row input[type=checkbox] { accent-color:var(--neon-pink); width:16px; height:16px; cursor:pointer; }
+  .profile-contact-section { margin-top:0; }
+  .contact-their-phone { font-size:0.85rem; color:var(--text); }
+  .contact-phone-hidden { font-size:0.82rem; color:var(--muted); }
+  .contact-their-label, .contact-your-label { font-size:0.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:3px; }
+  .contact-row { display:flex; flex-direction:column; gap:2px; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.06); }
+  .contact-row:last-child { border-bottom:none; }
+  /* ── Disconnect / permission action buttons ─────────────────────────── */
+  .btn-disconnect { padding:11px; color:rgba(255,200,60,0.9); border-color:rgba(255,200,60,0.3); }
+  .btn-disconnect:hover { background:rgba(255,200,60,0.08); }
+
   /* Polaroid frame */
   .our-photo-slot {
     position: relative; width: 120px;
@@ -4161,6 +4188,53 @@
   let currentUser = null;  // holds the logged-in Supabase user object
   const ADMIN_EMAIL = 'theile.secure@proton.me';
   function isAdminUser() { return currentUser?.email === ADMIN_EMAIL; }
+
+  // Per-viewer private caches (keyed by target raver ID)
+  const privatePhoneCache = {};  // { [raverId]: string }
+  const nicknameCache     = {};  // { [raverId]: string }
+
+  // Returns the display name for a raver — uses the viewer's private nickname if set.
+  function displayName(r) {
+    if (!r) return '';
+    if (r.isYou) return r.name;
+    return nicknameCache[String(r.id)] || r.name;
+  }
+
+  // Permission flags for the current viewer on a given raver object.
+  function raverPerms(r) {
+    const none = () => ({
+      editName:false, editHandle:false, editLocation:false, editInstagram:false,
+      editPhone:false, editTags:false, editGenres:false, editArtists:false, editFests:false,
+      canDisconnect:false, canDelete:false, isLeaderOfRaver:false, isClaimed:false
+    });
+    if (!r) return none();
+    if (r.isYou) return {
+      editName:true, editHandle:true, editLocation:true, editInstagram:true,
+      editPhone:true, editTags:true, editGenres:true, editArtists:true, editFests:true,
+      canDisconnect:false, canDelete:false, isLeaderOfRaver:false, isClaimed:true
+    };
+    if (!currentUser) return none();
+    const shared = crews.filter(c => (c.squadIds||[]).some(id => String(id) === String(r.id)));
+    if (!shared.length) return none();
+    const isLeader   = shared.some(c => c.isLead);
+    const isMember   = shared.length > 0;
+    const isClaimed  = !!(r.claimedBy || r.status === 'claimed');
+    return {
+      editName:       isLeader,
+      editHandle:     false,
+      editLocation:   isMember && !isClaimed,
+      editInstagram:  isMember && !isClaimed,
+      editPhone:      isMember && !isClaimed,
+      editTags:       isMember,
+      editGenres:     isMember,
+      editArtists:    isMember,
+      editFests:      isMember,
+      canDisconnect:  isLeader && isClaimed,
+      canDelete:      isLeader && !isClaimed,
+      isLeaderOfRaver: isLeader,
+      isClaimed,
+    };
+  }
   let _bootedUserId = null; // guard: prevents bootApp() running more than once per session
 
   // ===== AUTH UI helpers =====
@@ -5156,6 +5230,7 @@
           crew: r.crew_name || '',
           instagram: r.instagram || '',
           phone: r.phone || '',
+          phoneVisible: r.phone_visible || false,
           metStory: r.met_story || '',
           notes: r.notes || '',
           qrToken: r.qr_token || '',
@@ -5245,8 +5320,9 @@
             favArtists: r.fav_artists || [],
             festIds: (r.raver_festivals || []).map(rf => rf.festival_id),
             crew: r.crew_name || '',
-            instagram: '',  // contact info not shared with crewmates
+            instagram: '',  // contact info not shared directly; shown only if phone_visible=true
             phone: '',
+            phoneVisible: r.phone_visible || false,
             metStory: r.met_story || '',
             notes: '',
             qrToken: '',
@@ -5279,8 +5355,10 @@
     dbLoadCommunityGenres().catch(() => {});
     dbLoadCommunityArtists().catch(() => {});
 
-    // Load Our Photos into cache so squad cards show them immediately (non-blocking)
+    // Load Our Photos, private phones, and nicknames into cache (non-blocking)
     loadAllOurPhotos().catch(() => {});
+    loadPrivatePhones().catch(() => {});
+    loadNicknames().catch(() => {});
   }
 
   // ===== WELCOME BACK POPUP =====
@@ -5513,6 +5591,7 @@
       crew_name: data.crew,
       instagram: data.instagram,
       phone: data.phone,
+      phone_visible: data.phoneVisible || false,
       notes: data.notes,
       is_you: data.isYou || false,
       vibe_tags: data.vibeTags || [],
@@ -5911,6 +5990,218 @@
       return result;
     } catch(e) {
       return ourPhotosCache[String(viewingRaverId)] || { mine: null, theirs: null };
+    }
+  }
+
+  // ── Private Phones ─────────────────────────────────────────────────────────
+
+  async function loadPrivatePhones() {
+    if (!currentUser) return;
+    const { data } = await sb.from('private_phones')
+      .select('target_raver_id, phone').eq('recorder_user_id', currentUser.id);
+    (data || []).forEach(p => { privatePhoneCache[String(p.target_raver_id)] = p.phone; });
+  }
+
+  async function savePrivatePhone(raverId, phone) {
+    if (!currentUser) return;
+    const trimmed = (phone || '').trim();
+    if (trimmed) {
+      await sb.from('private_phones').upsert(
+        { recorder_user_id: currentUser.id, target_raver_id: raverId, phone: trimmed, updated_at: new Date().toISOString() },
+        { onConflict: 'recorder_user_id,target_raver_id' }
+      );
+      privatePhoneCache[String(raverId)] = trimmed;
+    } else {
+      await sb.from('private_phones').delete()
+        .eq('recorder_user_id', currentUser.id).eq('target_raver_id', raverId);
+      delete privatePhoneCache[String(raverId)];
+    }
+  }
+
+  // ── Nicknames ──────────────────────────────────────────────────────────────
+
+  async function loadNicknames() {
+    if (!currentUser) return;
+    const { data } = await sb.from('raver_nicknames')
+      .select('target_raver_id, nickname').eq('recorder_user_id', currentUser.id);
+    (data || []).forEach(n => { nicknameCache[String(n.target_raver_id)] = n.nickname; });
+  }
+
+  async function saveNickname(raverId, nickname) {
+    if (!currentUser) return;
+    const trimmed = (nickname || '').trim();
+    if (trimmed) {
+      await sb.from('raver_nicknames').upsert(
+        { recorder_user_id: currentUser.id, target_raver_id: raverId, nickname: trimmed, updated_at: new Date().toISOString() },
+        { onConflict: 'recorder_user_id,target_raver_id' }
+      );
+      nicknameCache[String(raverId)] = trimmed;
+    } else {
+      await sb.from('raver_nicknames').delete()
+        .eq('recorder_user_id', currentUser.id).eq('target_raver_id', raverId);
+      delete nicknameCache[String(raverId)];
+    }
+    // Refresh name everywhere it's shown
+    renderSquad();
+    const profilePage = document.getElementById('page-profile');
+    const actions = profilePage?.querySelector('.profile-actions[data-raver-id]');
+    if (actions && String(actions.dataset.raverId) === String(raverId)) openProfile(raverId);
+  }
+
+  // ── Inline field editing (for non-own ravers) ─────────────────────────────
+
+  function startInlineEdit(raverId, fieldKey, currentValue) {
+    const wrap = document.getElementById(`ief-wrap-${raverId}-${fieldKey}`);
+    if (!wrap) return;
+    const escaped = (currentValue || '').replace(/"/g, '&quot;');
+    wrap.innerHTML = `
+      <input id="ief-input-${raverId}-${fieldKey}" class="ief-input" value="${escaped}" placeholder="${fieldKey}" style="flex:1;min-width:0;">
+      <button class="ief-btn ief-ok" onclick="commitInlineEdit('${raverId}','${fieldKey}')">✓</button>
+      <button class="ief-btn ief-cancel" onclick="cancelInlineEdit('${raverId}','${fieldKey}',\`${escaped}\`)">✕</button>`;
+    document.getElementById(`ief-input-${raverId}-${fieldKey}`)?.focus();
+  }
+
+  function cancelInlineEdit(raverId, fieldKey, oldValue) {
+    const wrap = document.getElementById(`ief-wrap-${raverId}-${fieldKey}`);
+    if (!wrap) return;
+    wrap.innerHTML = inlineEditDisplay(raverId, fieldKey, oldValue);
+  }
+
+  async function commitInlineEdit(raverId, fieldKey, isNickname) {
+    const input = document.getElementById(`ief-input-${raverId}-${fieldKey}`);
+    if (!input) return;
+    const value = input.value.trim();
+    if (isNickname) {
+      await saveNickname(raverId, value);
+      return;
+    }
+    await saveFieldForRaver(raverId, fieldKey, value);
+  }
+
+  function inlineEditDisplay(raverId, fieldKey, value) {
+    const display = value || `<span style="color:var(--muted);font-size:0.8rem;">—</span>`;
+    return `<span class="ief-value">${display}</span>
+      <button class="ief-btn ief-edit" onclick="startInlineEdit('${raverId}','${fieldKey}',\`${(value||'').replace(/`/g,'\\`')}\`)">✏️</button>`;
+  }
+
+  function inlineEditNicknameDisplay(raverId, currentNickname) {
+    const val = currentNickname || '';
+    const display = val
+      ? `<span class="ief-value nickname-value">${val}</span>`
+      : `<span class="ief-add-nickname">+ Add nickname</span>`;
+    const pencil = val ? ` <button class="ief-btn ief-edit" onclick="startNicknameEdit('${raverId}','${val.replace(/'/g,"\\'")}')">✏️</button>` : '';
+    return display + pencil;
+  }
+
+  function startNicknameEdit(raverId, currentValue) {
+    const fieldKey = 'nickname';
+    const wrap = document.getElementById(`ief-wrap-${raverId}-${fieldKey}`);
+    if (!wrap) return;
+    const escaped = (currentValue || '').replace(/"/g, '&quot;');
+    wrap.innerHTML = `
+      <input id="ief-input-${raverId}-${fieldKey}" class="ief-input" value="${escaped}" placeholder="Nickname…" maxlength="30" style="flex:1;min-width:0;">
+      <button class="ief-btn ief-ok" onclick="commitInlineEdit('${raverId}','${fieldKey}',true)">✓</button>
+      <button class="ief-btn ief-cancel" onclick="cancelNicknameEdit('${raverId}','${escaped}')">✕</button>`;
+    document.getElementById(`ief-input-${raverId}-${fieldKey}`)?.focus();
+  }
+
+  function cancelNicknameEdit(raverId, oldValue) {
+    const wrap = document.getElementById(`ief-wrap-${raverId}-nickname`);
+    if (wrap) wrap.innerHTML = inlineEditNicknameDisplay(raverId, oldValue);
+  }
+
+  async function saveFieldForRaver(raverId, fieldKey, value) {
+    const r = getRaver(raverId);
+    if (!r) return;
+    // DB column name mapping
+    const colMap = { name: 'name', base: 'base', instagram: 'instagram', phone: 'phone' };
+    const col = colMap[fieldKey];
+    if (!col) return;
+    r[fieldKey] = value;
+    showToast('✅ Saved');
+    // Re-render the inline field display
+    const wrap = document.getElementById(`ief-wrap-${raverId}-${fieldKey}`);
+    if (wrap) wrap.innerHTML = inlineEditDisplay(raverId, fieldKey, value);
+    renderSquad();
+    if (currentUser) {
+      const { error } = await sb.from('ravers').update({ [col]: value }).eq('id', String(raverId));
+      if (error) { console.error('saveFieldForRaver error', error); showToast('⚠️ Save failed'); }
+    }
+  }
+
+  function startPrivatePhoneEdit(raverId, currentValue) {
+    const wrap = document.getElementById(`ief-wrap-${raverId}-private-phone`);
+    if (!wrap) return;
+    const escaped = (currentValue || '').replace(/"/g, '&quot;');
+    wrap.innerHTML = `
+      <input id="ief-input-${raverId}-private-phone" class="ief-input" value="${escaped}" placeholder="+44 7700…" style="flex:1;min-width:0;" type="tel">
+      <button class="ief-btn ief-ok" onclick="commitPrivatePhoneEdit('${raverId}')">✓</button>
+      <button class="ief-btn ief-cancel" onclick="cancelPrivatePhoneEdit('${raverId}',\`${escaped}\`)">✕</button>`;
+    document.getElementById(`ief-input-${raverId}-private-phone`)?.focus();
+  }
+
+  async function commitPrivatePhoneEdit(raverId) {
+    const input = document.getElementById(`ief-input-${raverId}-private-phone`);
+    if (!input) return;
+    const value = input.value.trim();
+    await savePrivatePhone(raverId, value);
+    // Refresh the display
+    const wrap = document.getElementById(`ief-wrap-${raverId}-private-phone`);
+    if (wrap) {
+      const pv = value;
+      const escaped = pv.replace(/`/g,'\\`');
+      const display = pv || `<span style="color:var(--muted);font-size:0.8rem;">—</span>`;
+      wrap.innerHTML = `<span class="ief-value">${display}</span>
+        <button class="ief-btn ief-edit" onclick="startPrivatePhoneEdit('${raverId}',\`${escaped}\`)">✏️</button>`;
+    }
+    showToast('✅ Saved');
+  }
+
+  function cancelPrivatePhoneEdit(raverId, oldValue) {
+    const wrap = document.getElementById(`ief-wrap-${raverId}-private-phone`);
+    if (!wrap) return;
+    const display = oldValue || `<span style="color:var(--muted);font-size:0.8rem;">—</span>`;
+    wrap.innerHTML = `<span class="ief-value">${display}</span>
+      <button class="ief-btn ief-edit" onclick="startPrivatePhoneEdit('${raverId}',\`${oldValue}\`)">✏️</button>`;
+  }
+
+  function removeBeenTo(raverId, festId) {
+    const r = getRaver(raverId);
+    if (!r) return;
+    r.festIds = (r.festIds || []).filter(id => String(id) !== String(festId));
+    if (currentUser) dbSaveRaverFestivals(raverId, r.festIds);
+    renderSquad(); renderEvents();
+    openProfile(raverId);
+  }
+
+  // ── Disconnect Raver ───────────────────────────────────────────────────────
+
+  function showDisconnectConfirm(raverId) {
+    const r = getRaver(raverId);
+    if (!r) return;
+    showConfirm(
+      '🔗 Disconnect account?',
+      `This will unlink ${r.name}'s registered account. Their profile stays in the crew as unclaimed. They can re-link using their original invite code — but you can't undo this yourself.`,
+      'Disconnect',
+      () => disconnectRaver(raverId)
+    );
+  }
+
+  async function disconnectRaver(raverId) {
+    try {
+      await sb.rpc('disconnect_raver', { p_raver_id: raverId });
+      const r = getRaver(raverId);
+      if (r) {
+        r.claimedBy = null;
+        r.status = 'unclaimed';
+        r.isYou = false;
+      }
+      renderSquad();
+      openProfile(raverId);
+      showToast('🔗 Account disconnected — profile is now unclaimed');
+    } catch(e) {
+      console.error('disconnectRaver error', e);
+      showToast('⚠️ Could not disconnect — ' + (e.message || 'try again'));
     }
   }
 
@@ -6509,9 +6800,10 @@
           } else {
             right = `<span class="detail-member-arrow">›</span>`;
           }
+          const pDisplayFirst = displayName(p).split(' ')[0];
           const nameDisplay = isLeader
-            ? `<span style="display:flex;align-items:center;gap:5px;">${p.name.split(' ')[0]}${p.isYou ? ' (You)' : ''} <span title="Crew Leader" style="font-size:1rem;">👑</span> ${statusDot}</span>`
-            : `<span>${p.name.split(' ')[0]}${p.isYou ? ' (You)' : ''} ${statusDot}</span>`;
+            ? `<span style="display:flex;align-items:center;gap:5px;">${pDisplayFirst}${p.isYou ? ' (You)' : ''} <span title="Crew Leader" style="font-size:1rem;">👑</span> ${statusDot}</span>`
+            : `<span>${pDisplayFirst}${p.isYou ? ' (You)' : ''} ${statusDot}</span>`;
           return `
             <div class="detail-member detail-member-link" data-raver-id="${p.id}" onclick="goToProfileFromDetail(this.dataset.raverId)" title="View ${p.name}'s profile">
               ${raverAvatarHTML(p.avatarUrl, p.gradient, p.name, 'avatar', 'margin:0;')}
@@ -7296,12 +7588,16 @@
 
   function getPreset(id) { return VIBE_PRESETS.find(v => v.id === id); }
 
-  function vibeTagHTML(vtId, isCustom, mini) {
+  function vibeTagHTML(vtId, isCustom, mini, removableRaverId) {
     const cls = `vibe-display-tag ${isCustom ? 'is-custom' : 'is-preset'}${mini ? ' vibe-mini' : ''}`;
-    if (isCustom) return `<span class="${cls}">✨ ${vtId}</span>`;
+    const field = isCustom ? 'customVibeTags' : 'vibeTags';
+    const removeBtn = removableRaverId
+      ? ` <span class="vibe-chip-remove" onclick="removeTag('${removableRaverId}','${field}','${vtId.replace(/'/g,"\\'")}')">✕</span>`
+      : '';
+    if (isCustom) return `<span class="${cls}">✨ ${vtId}${removeBtn}</span>`;
     const p = getPreset(vtId);
     if (!p) return '';
-    return `<span class="${cls}" style="background:${p.bg};border-color:${p.color}40;color:${p.color};">${p.icon} ${p.label}</span>`;
+    return `<span class="${cls}" style="background:${p.bg};border-color:${p.color}40;color:${p.color};">${p.icon} ${p.label}${removeBtn}</span>`;
   }
 
   // ===== Squad / Raver profiles =====
@@ -7484,7 +7780,7 @@
         <div class="member-avatar-ring" style="background:${r.avatarUrl ? '#FFB800' : extractFirstColor(r.gradient)}">${raverAvatarHTML(r.avatarUrl, r.gradient, r.name, 'member-avatar', '')}</div>
         <div class="member-divider" style="background:${dividerBg}"></div>
         <div class="member-info">
-          <div class="member-name">${r.name}${r.isYou ? ' <span style="font-size:0.75rem;margin-right:2px;">👑</span><span style="font-size:0.7rem;color:var(--neon-pink);font-family:\'Outfit\',sans-serif;font-weight:700;">YOU</span>' : ''}</div>
+          <div class="member-name">${displayName(r)}${r.isYou ? ' <span style="font-size:0.75rem;margin-right:2px;">👑</span><span style="font-size:0.7rem;color:var(--neon-pink);font-family:\'Outfit\',sans-serif;font-weight:700;">YOU</span>' : ''}</div>
           <div class="member-handle">${r.handle}</div>
           ${crewLine}
           ${nextFestLine}
@@ -7552,12 +7848,16 @@
         </div>`;
     }
 
-    // Inline tag chips (removable for own profile, add-input for all)
+    // Permission flags for this viewer on this raver
+    const perms = raverPerms(r);
+
+    // Inline tag chips (removable for own profile or crew members with edit perms)
     const blockedTags = r.blockedTags || [];
     function tagChip(val, field) {
       const col = field === 'genres' ? genreColor(val) : artistColor(val);
       const cs = `--chip-col:${col};`;
-      if (r.isYou) {
+      const canEdit = r.isYou || (field === 'genres' ? perms.editGenres : perms.editArtists);
+      if (canEdit) {
         return `<span class="fav-chip tag-removable" style="${cs}">${val}<button class="tag-remove-btn" title="Remove"
           onclick="showConfirm('Remove tag?','Remove \'${val.replace(/'/g,"\\'")}\'?','Remove',()=>removeTag('${r.id}','${field}','${val.replace(/'/g,"\\'")}'))">&nbsp;✕</button></span>`;
       }
@@ -7573,14 +7873,18 @@
       ? r.favArtists.map(a => tagChip(a, 'favArtists')).join('')
       : '<span class="fest-empty" style="font-size:0.8rem;">None logged yet</span>';
 
-    // Connect buttons — only show what exists
+    // Connect buttons — show instagram if public; show phone if owned or phone_visible
     const connectBtns = [];
-    if (r.instagram) {
+    // Instagram: show if it's your profile, or if crew member with edit perms (unclaimed), or if claimed and phone_visible (reuse same flag for instagram)
+    const showInstagram = r.isYou || (r.instagram && (perms.editInstagram || (perms.isClaimed && r.phoneVisible)));
+    if (showInstagram && r.instagram) {
       const ig = r.instagram.replace('@','');
       connectBtns.push(`<a class="connect-btn connect-ig" href="https://instagram.com/${ig}" target="_blank" rel="noopener">📷 Instagram</a>`);
     }
-    if (r.phone) {
-      const tel = r.phone.replace(/[^+\d]/g,'');
+    // Phone: show if it's your profile, unclaimed (crew member can see), or claimed + owner opted in
+    const sharedPhone = r.isYou ? r.phone : (perms.editPhone && !perms.isClaimed ? r.phone : (perms.isClaimed && r.phoneVisible ? r.phone : null));
+    if (sharedPhone) {
+      const tel = sharedPhone.replace(/[^+\d]/g,'');
       connectBtns.push(`<a class="connect-btn connect-call" href="tel:${tel}">📞 Call</a>`);
       connectBtns.push(`<a class="connect-btn connect-text" href="sms:${tel}">💬 Text</a>`);
     }
@@ -7631,11 +7935,12 @@
 
     if (editMode) {
       const isOwnProfile = r.isYou;
-      const handleField = r.claimedBy && r.handle
-        ? `<div style="font-size:0.9rem;color:var(--muted);">${r.handle} <span style="font-size:0.7rem;color:var(--neon-green);">✓ Claimed</span></div>`
-        : (isOwnProfile
-            ? `<input class="profile-edit-hero-input handle-input" id="pf-handle" value="${(r.handle||'').replace(/"/g,'&quot;')}" placeholder="@handle">`
-            : `<div style="font-size:0.9rem;color:var(--muted);">${r.handle}</div>`);
+      // Handle: only shown/editable for own profile; hidden entirely for crew-leader editing unclaimed
+      const handleField = isOwnProfile
+        ? (r.claimedBy && r.handle
+            ? `<div style="font-size:0.9rem;color:var(--muted);">${r.handle} <span style="font-size:0.7rem;color:var(--neon-green);">✓ Claimed</span></div>`
+            : `<input class="profile-edit-hero-input handle-input" id="pf-handle" value="${(r.handle||'').replace(/"/g,'&quot;')}" placeholder="@handle">`)
+        : '';
       const existingArtists = (r.favArtists || []).map(a => a.toLowerCase());
       const artistSuggestions = allArtistSuggestions().filter(a => !existingArtists.includes(a.toLowerCase())).slice(0, 16);
       const artistSuggestHtml = artistSuggestions.length ? `
@@ -7665,6 +7970,11 @@
           <h3>📱 Contact</h3>
           ${fieldRow('Instagram','pf-instagram', r.instagram, '@samraves')}
           ${fieldRow('Phone','pf-phone', r.phone, '+44 7700 900000')}
+          ${isOwnProfile ? `
+            <div class="phone-visibility-row">
+              <input type="checkbox" id="pf-phone-visible" ${r.phoneVisible ? 'checked' : ''}>
+              <label for="pf-phone-visible" style="cursor:pointer;">Share phone number with crewmates</label>
+            </div>` : `<p style="font-size:0.72rem;color:var(--muted);margin-top:6px;line-height:1.4;">Stored for crew reference — not linked to a registered account.</p>`}
         </div>
 
         <div class="profile-section">
@@ -7754,17 +8064,28 @@
             ${avatarEl}
           </div>
           <div class="profile-id">
-            <h2>${r.isYou ? '👑 ' : ''}${r.name}${r.isYou ? ' <span style="font-size:0.9rem;color:var(--muted)">(You)</span>' : ''}</h2>
+            <h2>${r.isYou ? '👑 ' : ''}${displayName(r)}${r.isYou ? ' <span style="font-size:0.9rem;color:var(--muted)">(You)</span>' : ''}</h2>
+            ${nicknameCache[String(r.id)] ? `<div class="profile-real-name">Real name: ${r.name}</div>` : ''}
+            ${!r.isYou && currentUser ? `
+              <div class="profile-nickname-row">
+                <span style="font-size:0.7rem;color:var(--muted);">🏷️</span>
+                <span id="ief-wrap-${r.id}-nickname" class="ief-wrap" onclick="if(!event.target.closest('button,input'))startNicknameEdit('${r.id}','${(nicknameCache[String(r.id)]||'').replace(/'/g,"\\'")}')" style="cursor:pointer;">
+                  ${inlineEditNicknameDisplay(r.id, nicknameCache[String(r.id)] || '')}
+                </span>
+              </div>` : ''}
             <div class="profile-handle">${r.handle}</div>
-            <div class="profile-base-line">📍 Based in ${r.base}</div>
+            ${perms.editLocation
+              ? `<div class="profile-base-line">📍 <span id="ief-wrap-${r.id}-base" class="ief-wrap">${inlineEditDisplay(r.id, 'base', r.base)}</span></div>`
+              : `<div class="profile-base-line">📍 Based in ${r.base}</div>`}
           </div>
         </div>
 
         ${photoCountdownBlock}
 
         <div class="profile-actions" data-raver-id="${r.id}">
-          ${!r.readOnly ? `<button class="btn btn-primary" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="enterProfileEditMode(this.dataset.raverId)">✏️ Edit Profile</button>` : ''}
-          ${(!r.isYou && isAdminUser()) ? `<button class="btn btn-ghost" style="padding:11px;color:var(--neon-pink);border-color:rgba(255,45,120,0.3);" data-raver-id="${r.id}" onclick="showDeleteRaverConfirm(this.dataset.raverId)">🗑️</button>` : ''}
+          ${(r.isYou || (perms.isLeaderOfRaver && !perms.isClaimed)) ? `<button class="btn btn-primary" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="enterProfileEditMode(this.dataset.raverId)">✏️ Edit Profile</button>` : ''}
+          ${perms.canDisconnect ? `<button class="btn btn-ghost btn-disconnect" data-raver-id="${r.id}" onclick="showDisconnectConfirm(this.dataset.raverId)" title="Disconnect account">🔗</button>` : ''}
+          ${(perms.canDelete || (!r.isYou && isAdminUser())) ? `<button class="btn btn-ghost" style="padding:11px;color:var(--neon-pink);border-color:rgba(255,45,120,0.3);" data-raver-id="${r.id}" onclick="showDeleteRaverConfirm(this.dataset.raverId)">🗑️</button>` : ''}
         </div>
 
         ${connectBlock}
@@ -7772,18 +8093,22 @@
         <div class="profile-section" style="${sg(0)}">
           <h3>⚡ Vibe Tags</h3>
           ${(() => {
-            const presetVibes = (r.vibeTags||[]).map(v => vibeTagHTML(v, false, false)).join('');
-            const customVibes = (r.customVibeTags||[]).map(v => vibeTagHTML(v, true, false)).join('');
+            const editableId = (r.isYou || perms.editTags) ? r.id : null;
+            const presetVibes = (r.vibeTags||[]).map(v => vibeTagHTML(v, false, false, editableId)).join('');
+            const customVibes = (r.customVibeTags||[]).map(v => vibeTagHTML(v, true, false, editableId)).join('');
+            const addVibeInput = editableId
+              ? `<div class="vibe-custom-row" style="margin-top:8px;"><input class="vibe-custom-input" placeholder="Add custom vibe tag…" maxlength="30" onkeydown="if(event.key==='Enter'&&this.value.trim()){addTag('${r.id}','customVibeTags',this.value);this.value='';}"><button type="button" class="vibe-add-btn" onclick="const i=this.previousElementSibling;if(i.value.trim()){addTag('${r.id}','customVibeTags',i.value);i.value='';}">Add</button></div>`
+              : '';
             return (presetVibes || customVibes)
-              ? `<div class="profile-vibes">${presetVibes}${customVibes}</div>`
-              : '<div class="fest-empty">No vibe tags yet — edit profile to add some</div>';
+              ? `<div class="profile-vibes">${presetVibes}${customVibes}</div>${addVibeInput}`
+              : `<div class="fest-empty">No vibe tags yet${r.isYou || perms.isLeaderOfRaver ? ' — edit profile to add presets' : ''}</div>${addVibeInput}`;
           })()}
         </div>
 
         <div class="profile-section" style="${sg(1)}">
           <h3>🎶 Genres</h3>
           <div class="tag-edit-wrap">${genreChips}</div>
-          ${r.isYou ? (() => {
+          ${(r.isYou || perms.editGenres) ? (() => {
             const existing = (r.genres || []).map(x => x.toLowerCase());
             const suggestions = allGenrePresets().filter(g => !existing.includes(g.toLowerCase())).slice(0, 12);
             return suggestions.length ? `
@@ -7792,23 +8117,42 @@
                 ${suggestions.map(g => `<span class="genre-suggest-chip" style="--chip-col:${genreColor(g)};" onclick="addTag('${r.id}','genres','${g.replace(/'/g,"\\'")}');return false;">+ ${g}</span>`).join('')}
               </div>` : '';
           })() : ''}
-          ${r.isYou ? addTagInput('genres', '+ custom genre') : ''}
+          ${(r.isYou || perms.editGenres) ? addTagInput('genres', '+ custom genre') : ''}
         </div>
 
         <div class="profile-section" style="${sg(2)}">
           <h3>🎵 Favourite Artists</h3>
           <div class="tag-edit-wrap">${favChips}</div>
-          ${r.isYou ? addTagInput('favArtists', '+ artist') : ''}
+          ${(r.isYou || perms.editArtists) ? addTagInput('favArtists', '+ artist') : ''}
         </div>
 
         <div class="profile-section" style="${sg(3)}">
           <h3>🎟️ Festivals — Going To</h3>
-          ${festListUpcoming}
+          ${upcomingFests.length
+            ? upcomingFests.map(f => `
+                <div class="fest-row">
+                  <span>${f.name}<span class="fest-loc">📍 ${f.location || 'TBD'}</span></span>
+                  <span style="display:flex;align-items:center;gap:6px;">
+                    <span class="fest-when">${festWhenLabel(f)} <span class="fest-cd">⏳ ${countdownLabel(f._d)}</span></span>
+                    ${(r.isYou || perms.editFests) ? `<button class="tag-remove-btn" title="Remove" onclick="removeBeenTo('${r.id}','${f.id}')" style="flex-shrink:0;">&nbsp;✕</button>` : ''}
+                  </span>
+                </div>`).join('')
+            : '<div class="fest-empty">Nothing logged yet</div>'}
+          ${(r.isYou || perms.editFests) ? `<div style="margin-top:8px;"><input class="tag-add-input" placeholder="+ add upcoming festival" id="fest-add-upcoming-${r.id}" list="fest-list-${r.id}" style="width:100%;"><datalist id="fest-list-${r.id}">${festivals.map(f=>`<option value="${f.name.replace(/"/g,'&quot;')}">`).join('')}</datalist><button class="vibe-add-btn" style="margin-top:4px;width:100%;" onclick="const i=document.getElementById('fest-add-upcoming-${r.id}');const f=festivals.find(x=>x.name.toLowerCase()===i.value.trim().toLowerCase());if(f){addBeenTo('${r.id}',f.id);i.value='';}else if(i.value.trim()){showToast('Festival not found — check spelling');}">Add Fest</button></div>` : ''}
         </div>
 
         <div class="profile-section" style="${sg(4)}">
           <h3>✅ Festivals — Been To</h3>
-          ${festListPast}
+          ${pastFests.length
+            ? pastFests.map(f => `
+                <div class="fest-row">
+                  <span>${f.name}<span class="fest-loc">📍 ${f.location || 'TBD'}</span></span>
+                  <span style="display:flex;align-items:center;gap:6px;">
+                    <span class="fest-when">${f._d.getFullYear()}</span>
+                    ${(r.isYou || perms.editFests) ? `<button class="tag-remove-btn" title="Remove" onclick="removeBeenTo('${r.id}','${f.id}')" style="flex-shrink:0;">&nbsp;✕</button>` : ''}
+                  </span>
+                </div>`).join('')
+            : '<div class="fest-empty">Nothing logged yet</div>'}
         </div>
 
         <div class="profile-section" style="${sg(5)}">
@@ -7844,6 +8188,46 @@
             ${howWeMetSectionHTML(r.id, metStoriesCache[String(r.id)] || null, r)}
           </div>
         </div>` : ''}
+
+        ${(!r.isYou && currentUser) ? (() => {
+          // Contact section: owner's shared fields + your private phone
+          const theirInstagram = perms.editInstagram
+            ? `<div class="contact-row">
+                 <div class="contact-their-label">Instagram</div>
+                 <div class="contact-their-phone"><span id="ief-wrap-${r.id}-instagram" class="ief-wrap">${inlineEditDisplay(r.id, 'instagram', r.instagram || '')}</span></div>
+               </div>`
+            : '';
+          const theirPhone = perms.editPhone
+            ? `<div class="contact-row">
+                 <div class="contact-their-label">Their phone (crew reference)</div>
+                 <div class="contact-their-phone"><span id="ief-wrap-${r.id}-phone" class="ief-wrap">${inlineEditDisplay(r.id, 'phone', r.phone || '')}</span></div>
+               </div>`
+            : (perms.isClaimed
+                ? `<div class="contact-row">
+                     <div class="contact-their-label">Their phone</div>
+                     <div class="${r.phoneVisible ? 'contact-their-phone' : 'contact-phone-hidden'}">${r.phoneVisible ? (r.phone || '—') : '🔒 Hidden by owner'}</div>
+                   </div>`
+                : '');
+          const myPhone = `<div class="contact-row">
+              <div class="contact-your-label">Your saved number</div>
+              <div class="contact-their-phone"><span id="ief-wrap-${r.id}-private-phone" class="ief-wrap">${(() => {
+                const pv = privatePhoneCache[String(r.id)] || '';
+                const escaped = pv.replace(/`/g,'\\`');
+                const display = pv || `<span style="color:var(--muted);font-size:0.8rem;">—</span>`;
+                return `<span class="ief-value">${display}</span>
+                  <button class="ief-btn ief-edit" onclick="startPrivatePhoneEdit('${r.id}',\`${escaped}\`)">✏️</button>`;
+              })()}</span></div>
+            </div>`;
+          if (!theirInstagram && !theirPhone && !perms.isClaimed) return '';
+          return `<div class="profile-section" style="${sg(1)}">
+            <h3>📱 Contact</h3>
+            <div class="profile-contact-section">
+              ${theirInstagram}
+              ${theirPhone}
+              ${myPhone}
+            </div>
+          </div>`;
+        })() : ''}
 
         <div class="profile-section" style="${sg(1)}">
           <h3>📝 Notes</h3>
@@ -8408,8 +8792,15 @@
 
   // ===== Inline profile edit mode =====
   function enterProfileEditMode(id) {
-    editingId = id;
     const r = getRaver(id);
+    if (!r) return;
+    // Allow own profile or crew leader editing an unclaimed profile
+    const p = raverPerms(r);
+    if (!r.isYou && !(p.isLeaderOfRaver && !p.isClaimed)) {
+      showToast('⚠️ You can only edit your own profile or unclaimed crew members');
+      return;
+    }
+    editingId = id;
     const _allPresets = allGenrePresets().map(x => x.toLowerCase());
     editingFestIds        = new Set(r?.festIds || []);
     editingVibeTags       = new Set(r?.vibeTags || []);
@@ -8492,6 +8883,7 @@
       crew: val('pf-crew'),
       instagram: val('pf-instagram'),
       phone: val('pf-phone'),
+      phoneVisible: document.getElementById('pf-phone-visible')?.checked ?? false,
       notes: val('pf-notes'),
       vibeTags: Array.from(editingVibeTags),
       customVibeTags: [...editingCustomVibeTags]
