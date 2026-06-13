@@ -4650,6 +4650,7 @@
   let _scannerStream    = null;   // active MediaStream
   let _scannerAnimFrame = null;   // rAF handle
   let _scannerActive    = false;  // scanning loop running
+  let _scanHandled      = false;  // prevents duplicate QR processing
   let _pendingClaimToken = null;  // token awaiting user confirmation
 
   // ── Open / Close ──────────────────────────────────────
@@ -4709,15 +4710,28 @@
   // ── Camera ────────────────────────────────────────────
   async function startCamera() {
     if (_scannerStream) return;
+    _scanHandled = false;
     const statusEl = document.getElementById('camera-status');
     if (statusEl) statusEl.textContent = 'Starting camera…';
     try {
-      _scannerStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 640 } }
-      });
+      // Try back camera first, fall back to any camera
+      try {
+        _scannerStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 640 } }
+        });
+      } catch {
+        _scannerStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      }
       const video = document.getElementById('scanner-video');
+      if (!video) { _scannerStream.getTracks().forEach(t => t.stop()); _scannerStream = null; return; }
       video.srcObject = _scannerStream;
-      await video.play();
+      try {
+        await video.play();
+      } catch (playErr) {
+        _scannerStream.getTracks().forEach(t => t.stop());
+        _scannerStream = null;
+        throw playErr;
+      }
       _scannerActive = true;
       if (statusEl) statusEl.textContent = 'Point at a RaveFAM QR code…';
       tickScan();
@@ -4727,6 +4741,7 @@
       if (statusEl) {
         if (err.name === 'NotAllowedError') {
           statusEl.innerHTML = '📵 Camera access denied.<br><small>Use the <strong>Enter Code</strong> tab or upload a QR image.</small>';
+          setTimeout(() => switchScannerTab('code'), 400);
         } else {
           statusEl.innerHTML = '📷 Camera unavailable.<br><small>Use <strong>Enter Code</strong> or upload a QR image.</small>';
         }
@@ -4780,10 +4795,12 @@
   }
 
   function handleRawScan(rawValue) {
+    if (_scanHandled) return;
     let token = null;
     try { token = new URL(rawValue).searchParams.get('claim'); } catch { token = rawValue.trim(); }
     if (!token) { _scannerAnimFrame = requestAnimationFrame(tickScan); return; }
 
+    _scanHandled = true;
     stopCamera();
     // Flash effect
     const flash = document.getElementById('scan-flash');
@@ -7219,7 +7236,7 @@
     if (!crew) return;
     showConfirm(
       `Leave ${crew.name}?`,
-      `You'll lose access to shared memories, the dream board, and everything else. Only the Crew Lead can re-add you — and only while the crew is in Recruiting mode.`,
+      `You'll lose access to shared memories, photos, and everything else. Only the Crew Lead can re-add you — and only while the crew is in Recruiting mode.`,
       `✌️ Leave Crew`,
       () => {
         const me = squad.find(r => r.isYou);
