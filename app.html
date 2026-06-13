@@ -7692,7 +7692,7 @@
     const removeBtn = removableRaverId
       ? ` <span class="vibe-chip-remove" onclick="removeTag('${removableRaverId}','${field}','${vtId.replace(/'/g,"\\'")}')">✕</span>`
       : '';
-    if (isCustom) return `<span class="${cls}">✨ ${vtId}${removeBtn}</span>`;
+    if (isCustom) return `<span class="${cls}">✨ ${escHtml(vtId)}${removeBtn}</span>`;
     const p = getPreset(vtId);
     if (!p) return '';
     return `<span class="${cls}" style="background:${p.bg};border-color:${p.color}40;color:${p.color};">${p.icon} ${p.label}${removeBtn}</span>`;
@@ -8155,8 +8155,8 @@
             ${avatarEl}
           </div>
           <div class="profile-id">
-            <h2>${r.isYou ? '👑 ' : ''}${displayName(r)}${r.isYou ? ' <span style="font-size:0.9rem;color:var(--muted)">(You)</span>' : ''}</h2>
-            ${nicknameCache[String(r.id)] ? `<div class="profile-real-name">Real name: ${r.name}</div>` : ''}
+            <h2>${r.isYou ? '👑 ' : ''}${escHtml(displayName(r))}${r.isYou ? ' <span style="font-size:0.9rem;color:var(--muted)">(You)</span>' : ''}</h2>
+            ${nicknameCache[String(r.id)] ? `<div class="profile-real-name">Real name: ${escHtml(r.name)}</div>` : ''}
             ${!r.isYou && currentUser ? `
               <div class="profile-nickname-row">
                 <span style="font-size:0.7rem;color:var(--muted);">🏷️</span>
@@ -8164,10 +8164,10 @@
                   ${inlineEditNicknameDisplay(r.id, nicknameCache[String(r.id)] || '')}
                 </span>
               </div>` : ''}
-            <div class="profile-handle">${r.handle}</div>
+            <div class="profile-handle">${escHtml(r.handle)}</div>
             ${perms.editLocation
               ? `<div class="profile-base-line">📍 <span id="ief-wrap-${r.id}-base" class="ief-wrap">${inlineEditDisplay(r.id, 'base', r.base)}</span></div>`
-              : `<div class="profile-base-line">📍 Based in ${r.base}</div>`}
+              : `<div class="profile-base-line">📍 Based in ${escHtml(r.base)}</div>`}
           </div>
         </div>
 
@@ -8307,7 +8307,7 @@
 
         <div class="profile-section" style="${sg(1)}">
           <h3>📝 Notes</h3>
-          ${r.isYou ? `<div class="profile-note">${r.notes || '<span class="fest-empty">No notes yet</span>'}</div>` : (() => {
+          ${r.isYou ? `<div class="profile-note">${r.notes ? escHtml(r.notes) : '<span class="fest-empty">No notes yet</span>'}</div>` : (() => {
             const savedNotes = localStorage.getItem('viewer_notes_' + r.id) || '';
             return `<p style="font-size:0.72rem;color:var(--muted);margin-bottom:8px;line-height:1.4;">Private — only you can see this.</p>
               <textarea id="viewer-notes-${r.id}" class="inline-notes-area"
@@ -8622,7 +8622,7 @@
     const box = document.getElementById('genre-custom-chips');
     if (!box) return;
     box.innerHTML = editingCustomGenres.map((g, i) =>
-      `<span class="vibe-custom-chip">${g} <span class="vibe-chip-remove" onclick="removeCustomGenre(${i})">✕</span></span>`
+      `<span class="vibe-custom-chip">${escHtml(g)} <span class="vibe-chip-remove" onclick="removeCustomGenre(${i})">✕</span></span>`
     ).join('');
   }
 
@@ -8925,7 +8925,7 @@
     const box = document.getElementById('vibe-custom-chips');
     if (!box) return;
     box.innerHTML = editingCustomVibeTags.map((t, i) =>
-      `<span class="vibe-custom-chip">${t} <span class="vibe-chip-remove" onclick="removeCustomVibe(${i})">✕</span></span>`
+      `<span class="vibe-custom-chip">${escHtml(t)} <span class="vibe-chip-remove" onclick="removeCustomVibe(${i})">✕</span></span>`
     ).join('');
   }
 
@@ -8961,7 +8961,8 @@
       phoneVisible: document.getElementById('pf-phone-visible')?.checked ?? false,
       notes: val('pf-notes'),
       vibeTags: Array.from(editingVibeTags),
-      customVibeTags: [...editingCustomVibeTags]
+      customVibeTags: [...editingCustomVibeTags],
+      blockedTags: (editingId ? getRaver(editingId)?.blockedTags : null) || []
     };
     // Write new artists to the community pool for other users
     if (currentUser && data.favArtists.length) {
@@ -9444,6 +9445,7 @@
 
   let _hpDebounce = null;
   let _hpReady = false;
+  let _hpSeq = 0;
 
   function showHandlePicker() {
     document.getElementById('handle-picker').classList.add('show');
@@ -9472,6 +9474,7 @@
     if (input)  input.className = '';
 
     clearTimeout(_hpDebounce);
+    const seq = ++_hpSeq;
     _hpDebounce = setTimeout(async () => {
       const myRaver = squad.find(r => r.isYou);
       const { data } = await sb.from('ravers')
@@ -9480,6 +9483,7 @@
         .neq('id', myRaver?.id || '00000000-0000-0000-0000-000000000000')
         .maybeSingle();
 
+      if (seq !== _hpSeq) return; // stale response — a newer check superseded this one
       if (data) {
         if (status) { status.textContent = `@${handle} is taken 😔`; status.className = 'hp-status hp-err'; }
         if (input)  input.className = 'hp-invalid';
