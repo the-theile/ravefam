@@ -4442,6 +4442,8 @@
   }
 
   async function doLogout() {
+    sessionStorage.removeItem('pendingClaim');
+    sessionStorage.removeItem('pendingCrewJoin');
     await sb.auth.signOut();
     // onAuthStateChange will fire SIGNED_OUT and flip back to auth screen
   }
@@ -4458,6 +4460,7 @@
 
   function showAuthScreen() {
     currentUser = null;
+    squad.length = 0; crews.length = 0; festivals.length = 0;
     document.getElementById('app-loading').classList.add('hidden');
     document.getElementById('auth-screen').classList.remove('hidden');
     document.getElementById('main-app').style.display = 'none';
@@ -5372,7 +5375,7 @@
             genres: r.genres || [],
             favArtists: r.fav_artists || [],
             festIds: (r.raver_festivals || []).map(rf => rf.festival_id),
-            instagram: r.phone_visible ? (r.instagram || '') : '',
+            instagram: r.instagram || '',
             phone: r.phone_visible ? (r.phone || '') : '',
             phoneVisible: r.phone_visible || false,
             metStory: r.met_story || '',
@@ -7748,7 +7751,7 @@
     }
   ];
 
-  function getRaver(id) { return squad.find(r => r.id === id); }
+  function getRaver(id) { return squad.find(r => String(r.id) === String(id)); }
   function extractFirstColor(gradient) {
     return /#[0-9A-Fa-f]{6}/.exec(gradient)?.[0] || '#ffffff';
   }
