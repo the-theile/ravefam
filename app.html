@@ -4860,25 +4860,37 @@
     if (e.key === 'Enter') submitInviteCode();
   }
 
+  let _codeSubmitting = false;
   async function submitInviteCode() {
     const code = [...document.querySelectorAll('.otp-box')].map(b => b.value.trim()).join('').toUpperCase();
     if (code.length < 6) return;
+    if (_codeSubmitting) return;
+    _codeSubmitting = true;
     const btn = document.getElementById('code-submit-btn');
     if (btn) btn.disabled = true;
     const errEl = document.getElementById('code-error');
     if (errEl) errEl.textContent = '';
 
     const { data: results, error } = await sb.rpc('find_raver_by_invite_code', { p_code: code });
-    const match = results?.[0];
 
-    if (error || !match?.qr_token) {
+    if (error) {
+      if (errEl) errEl.textContent = '⚠️ Network error — please try again.';
+      if (btn) btn.disabled = false;
+      _codeSubmitting = false;
+      return;
+    }
+
+    const match = results?.[0];
+    if (!match?.qr_token) {
       if (errEl) errEl.textContent = '⚠️ Code not found or already used.';
       if (btn) btn.disabled = false;
+      _codeSubmitting = false;
       return;
     }
 
     await handleClaimToken(match.qr_token, false);
     if (btn) btn.disabled = false;
+    _codeSubmitting = false;
   }
 
   // ── Main claim handler ────────────────────────────────
@@ -6414,6 +6426,11 @@
   }
 
   function switchTab(page, el) {
+    document.querySelectorAll('.modal-overlay.open').forEach(o => o.classList.remove('open'));
+    const nd = document.getElementById('notif-drawer-overlay');
+    if (nd) nd.classList.remove('open');
+    const so = document.getElementById('scanner-overlay');
+    if (so && so.classList.contains('open')) closeScanner();
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
     document.getElementById('page-' + page).classList.add('active');
@@ -6881,7 +6898,7 @@
             ? `<span style="display:flex;align-items:center;gap:5px;">${pDisplayFirst}${p.isYou ? ' (You)' : ''} <span title="Crew Leader" style="font-size:1rem;">👑</span> ${statusDot}</span>`
             : `<span>${pDisplayFirst}${p.isYou ? ' (You)' : ''} ${statusDot}</span>`;
           return `
-            <div class="detail-member detail-member-link" data-raver-id="${p.id}" onclick="goToProfileFromDetail(this.dataset.raverId)" title="View ${p.name}'s profile">
+            <div class="detail-member detail-member-link" data-raver-id="${p.id}" onclick="goToProfileFromDetail(this.dataset.raverId)" title="View ${escHtml(p.name)}'s profile">
               ${raverAvatarHTML(p.avatarUrl, p.gradient, p.name, 'avatar', 'margin:0;')}
               ${nameDisplay}
               ${right}
@@ -7775,13 +7792,18 @@
   ];
 
   function getRaver(id) { return squad.find(r => String(r.id) === String(id)); }
+  function escHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
   function extractFirstColor(gradient) {
     return /#[0-9A-Fa-f]{6}/.exec(gradient)?.[0] || '#ffffff';
   }
   function raverAvatarHTML(photoUrl, gradient, name, divClass, divStyle) {
     divStyle = divStyle || '';
     if (photoUrl) {
-      return `<div class="${divClass}" style="${divStyle}background:transparent;overflow:hidden;padding:0;flex-shrink:0;"><img src="${photoUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${name}"></div>`;
+      return `<div class="${divClass}" style="${divStyle}background:transparent;overflow:hidden;padding:0;flex-shrink:0;"><img src="${photoUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${escHtml(name)}"></div>`;
     }
     return `<div class="${divClass}" style="${divStyle}background:${gradient}">${initials(name).toUpperCase()}</div>`;
   }
@@ -7858,7 +7880,7 @@
         <div class="member-divider" style="background:${dividerBg}"></div>
         <div class="member-info">
           <div class="member-name">${displayName(r)}${r.isYou ? ' <span style="font-size:0.75rem;margin-right:2px;">👑</span><span style="font-size:0.7rem;color:var(--neon-pink);font-family:\'Outfit\',sans-serif;font-weight:700;">YOU</span>' : ''}</div>
-          <div class="member-handle">${r.handle}</div>
+          <div class="member-handle">${escHtml(r.handle)}</div>
           ${nextFestLine}
           <div class="member-base">📍 ${r.base}</div>
           ${miniVibes ? `<div class="member-vibes">${miniVibes}</div>` : ''}
@@ -9103,7 +9125,7 @@
       const toggleBtn = `<button class="going-toggle${youGoing ? ' going-toggle-active' : ''}" data-fest-id="${f.id}" onclick="event.stopPropagation(); toggleGoingToFest(this.dataset.festId)">${youGoing ? '🎟️ Going' : '＋ Going'}</button>`;
 
       return `
-        <div class="event-item event-item-clickable${youGoing ? ' event-item-going' : ''}" data-fest-id="${f.id}" onclick="activeFestId=this.dataset.festId; openRaveEditor(this.dataset.festId)" title="Tap to edit ${f.name}">
+        <div class="event-item event-item-clickable${youGoing ? ' event-item-going' : ''}" data-fest-id="${f.id}" onclick="activeFestId=this.dataset.festId; openRaveEditor(this.dataset.festId)" title="Tap to edit ${escHtml(f.name)}">
           <div class="event-date">
             <div class="event-day" style="color:${color}">${day}</div>
             <div class="event-month">${mon}</div>
@@ -9126,7 +9148,7 @@
     if (up.length) html += `<div class="fest-group-label" style="margin:4px 0 10px;">🔜 Upcoming</div>` + up.map(card).join('');
     if (past.length) html += `<div class="fest-group-label" style="margin:22px 0 10px;">📼 Past</div>` + past.map(card).join('');
     if (!up.length && !past.length) html = query
-      ? `<div class="fest-empty" style="padding:20px;text-align:center;color:var(--muted);">No raves found for "${query}"</div>`
+      ? `<div class="fest-empty" style="padding:20px;text-align:center;color:var(--muted);">No raves found for "${escHtml(query)}"</div>`
       : '<div class="fest-empty" style="padding:20px;text-align:center;">No raves yet — add a festival, club night, or that warehouse party on Saturday.</div>';
     list.innerHTML = html;
   }
