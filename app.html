@@ -5475,7 +5475,7 @@
 
     const lastRave = raverPast(me)[0];
     const lastRaveText = lastRave
-      ? `It's been ${Math.round((TODAY - lastRave._d) / 86400000)} days since ${lastRave.name}`
+      ? `It's been ${Math.round((TODAY - lastRave._d) / 86400000)} days since ${escHtml(lastRave.name)}`
       : "First time here — you found home base 🏠";
     document.getElementById('wbp-last-rave').innerHTML =
       `<div>${msg}</div><div style="font-size:0.7rem;margin-top:3px;opacity:0.6;">${lastRaveText}</div>`;
@@ -7864,7 +7864,7 @@
 
       const nextFest = raverUpcoming(r)[0];
       const nextFestLine = nextFest
-        ? `<div class="member-next-fest">🎟️ ${nextFest.name} · ${countdownDays(nextFest._d)}</div>`
+        ? `<div class="member-next-fest">🎟️ ${escHtml(nextFest.name)} · ${countdownDays(nextFest._d)}</div>`
         : `<div class="member-next-fest" style="color:var(--muted);">No upcoming raves</div>`;
 
       const allVibes = [...(r.vibeTags||[]), ...(r.customVibeTags||[])];
@@ -7882,10 +7882,10 @@
         <div class="member-avatar-ring" style="background:${r.avatarUrl ? '#FFB800' : extractFirstColor(r.gradient)}">${raverAvatarHTML(r.avatarUrl, r.gradient, r.name, 'member-avatar', '')}</div>
         <div class="member-divider" style="background:${dividerBg}"></div>
         <div class="member-info">
-          <div class="member-name">${displayName(r)}${r.isYou ? ' <span style="font-size:0.75rem;margin-right:2px;">👑</span><span style="font-size:0.7rem;color:var(--neon-pink);font-family:\'Outfit\',sans-serif;font-weight:700;">YOU</span>' : ''}</div>
+          <div class="member-name">${escHtml(displayName(r))}${r.isYou ? ' <span style="font-size:0.75rem;margin-right:2px;">👑</span><span style="font-size:0.7rem;color:var(--neon-pink);font-family:\'Outfit\',sans-serif;font-weight:700;">YOU</span>' : ''}</div>
           <div class="member-handle">${escHtml(r.handle)}</div>
           ${nextFestLine}
-          <div class="member-base">📍 ${r.base}</div>
+          <div class="member-base">📍 ${escHtml(r.base)}</div>
           ${miniVibes ? `<div class="member-vibes">${miniVibes}</div>` : ''}
         </div>
         ${photosHTML}
@@ -7920,7 +7920,7 @@
     const festListUpcoming = upcomingFests.length
       ? upcomingFests.map(f => `
           <div class="fest-row">
-            <span>${f.name}<span class="fest-loc">📍 ${f.location || 'TBD'}</span></span>
+            <span>${escHtml(f.name)}<span class="fest-loc">📍 ${escHtml(f.location || 'TBD')}</span></span>
             <span class="fest-when">${festWhenLabel(f)} <span class="fest-cd">⏳ ${countdownLabel(f._d)}</span></span>
           </div>`).join('')
       : '<div class="fest-empty">Nothing logged yet</div>';
@@ -7930,7 +7930,7 @@
     const festListPast = pastFests.length
       ? pastFests.map(f => `
           <div class="fest-row">
-            <span>${f.name}<span class="fest-loc">📍 ${f.location || 'TBD'}</span></span>
+            <span>${escHtml(f.name)}<span class="fest-loc">📍 ${escHtml(f.location || 'TBD')}</span></span>
             <span class="fest-when">${f._d.getFullYear()}</span>
           </div>`).join('')
       : '<div class="fest-empty">Nothing logged yet</div>';
@@ -7943,9 +7943,9 @@
       nextBanner = `
         <div class="countdown-banner" style="background:${r.gradient}">
           <div class="cd-label">⏳ Next rave</div>
-          <div class="cd-fest">${f.name}</div>
+          <div class="cd-fest">${escHtml(f.name)}</div>
           <div class="cd-days">${n === 0 ? "It's TODAY! 🔥" : n === 1 ? '1 day to go' : n + ' days to go'}</div>
-          <div class="cd-date">${festWhenLabel(f)} · 📍 ${f.location || 'TBD'}</div>
+          <div class="cd-date">${festWhenLabel(f)} · 📍 ${escHtml(f.location || 'TBD')}</div>
         </div>`;
     }
 
@@ -7960,11 +7960,11 @@
       if (editMode) {
         const canEdit = r.isYou || (field === 'genres' ? perms.editGenres : perms.editArtists);
         if (canEdit) {
-          return `<span class="fav-chip tag-removable" style="${cs}">${val}<button class="tag-remove-btn" title="Remove"
+          return `<span class="fav-chip tag-removable" style="${cs}">${escHtml(val)}<button class="tag-remove-btn" title="Remove"
             onclick="showConfirm('Remove tag?','Remove \'${val.replace(/'/g,"\\'")}\'?','Remove',()=>removeTag('${r.id}','${field}','${val.replace(/'/g,"\\'")}'))">&nbsp;✕</button></span>`;
         }
       }
-      return `<span class="fav-chip" style="${cs}">${val}</span>`;
+      return `<span class="fav-chip" style="${cs}">${escHtml(val)}</span>`;
     }
     const addTagInput = (field, placeholder) => `
       <input class="tag-add-input" id="tag-input-${field}" placeholder="${placeholder}"
@@ -8041,7 +8041,7 @@
       // Handle: only shown/editable for own profile; hidden entirely for crew-leader editing unclaimed
       const handleField = isOwnProfile
         ? (r.claimedBy && r.handle
-            ? `<div style="font-size:0.9rem;color:var(--muted);">${r.handle} <span style="font-size:0.7rem;color:var(--neon-green);">✓ Claimed</span></div>`
+            ? `<div style="font-size:0.9rem;color:var(--muted);">${escHtml(r.handle)} <span style="font-size:0.7rem;color:var(--neon-green);">✓ Claimed</span></div>`
             : `<input class="profile-edit-hero-input handle-input" id="pf-handle" value="${(r.handle||'').replace(/"/g,'&quot;')}" placeholder="@handle">`)
         : '';
       const existingArtists = (r.favArtists || []).map(a => a.toLowerCase());
@@ -8049,7 +8049,7 @@
       const artistSuggestHtml = artistSuggestions.length ? `
         <div class="genre-suggest-label">Suggestions</div>
         <div class="genre-suggest-cloud">
-          ${artistSuggestions.map(a => `<span class="genre-suggest-chip" style="--chip-col:${artistColor(a)};" onclick="addArtistSuggestion('${a.replace(/'/g,"\\'")}',this)">+ ${a}</span>`).join('')}
+          ${artistSuggestions.map(a => `<span class="genre-suggest-chip" style="--chip-col:${artistColor(a)};" onclick="addArtistSuggestion('${a.replace(/'/g,"\\'")}',this)">+ ${escHtml(a)}</span>`).join('')}
         </div>` : '';
 
       profilePage.innerHTML = `
@@ -8210,7 +8210,7 @@
           ${upcomingFests.length
             ? upcomingFests.map(f => `
                 <div class="fest-row">
-                  <span>${f.name}<span class="fest-loc">📍 ${f.location || 'TBD'}</span></span>
+                  <span>${escHtml(f.name)}<span class="fest-loc">📍 ${escHtml(f.location || 'TBD')}</span></span>
                   <span style="display:flex;align-items:center;gap:6px;">
                     <span class="fest-when" style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;"><span>${festWhenLabel(f)}</span><span class="fest-cd">⏳ ${countdownLabel(f._d)}</span></span>
                     ${(r.isYou || perms.editFests) ? `<button class="tag-remove-btn" title="Remove" onclick="removeBeenTo('${r.id}','${f.id}')" style="flex-shrink:0;">&nbsp;✕</button>` : ''}
@@ -8225,7 +8225,7 @@
           ${pastFests.length
             ? pastFests.map(f => `
                 <div class="fest-row">
-                  <span>${f.name}<span class="fest-loc">📍 ${f.location || 'TBD'}</span></span>
+                  <span>${escHtml(f.name)}<span class="fest-loc">📍 ${escHtml(f.location || 'TBD')}</span></span>
                   <span style="display:flex;align-items:center;gap:6px;">
                     <span class="fest-when">${f._d.getFullYear()}</span>
                     ${(r.isYou || perms.editFests) ? `<button class="tag-remove-btn" title="Remove" onclick="removeBeenTo('${r.id}','${f.id}')" style="flex-shrink:0;">&nbsp;✕</button>` : ''}
@@ -8358,13 +8358,13 @@
     if (!r) return;
     const crewNames = crews.filter(c => (c.squadIds || []).some(id => String(id) === String(raverId))).map(c => c.name);
     const crewNote = crewNames.length
-      ? `They're in ${crewNames.length} crew${crewNames.length !== 1 ? 's' : ''}: ${crewNames.join(', ')}.`
+      ? `They're in ${crewNames.length} crew${crewNames.length !== 1 ? 's' : ''}: ${crewNames.map(n => escHtml(n)).join(', ')}.`
       : 'They have no crew memberships.';
     document.getElementById('page-profile').innerHTML = `
       <button class="profile-back" data-raver-id="${raverId}" onclick="openProfile(this.dataset.raverId)">← Back</button>
       <div style="text-align:center;padding:40px 24px 24px;">
         <div style="font-size:3rem;margin-bottom:16px;">🗑️</div>
-        <h2 style="margin-bottom:8px;">Remove ${r.name}?</h2>
+        <h2 style="margin-bottom:8px;">Remove ${escHtml(r.name)}?</h2>
         <p style="font-size:0.86rem;color:var(--muted);line-height:1.65;margin-bottom:6px;">${crewNote}</p>
         <p style="font-size:0.86rem;color:var(--muted);line-height:1.65;margin-bottom:18px;">They will be removed from all crews and rave links.</p>
         <p style="font-size:0.86rem;color:var(--neon-pink);font-weight:700;">This cannot be undone.</p>
@@ -8640,7 +8640,7 @@
       ? selFests.map(f => {
           const d = festDate(f);
           const col = (d && d >= TODAY) ? '#39FF14' : '#00F5FF';
-          return `<span class="fest-sel-chip" style="--chip-col:${col};">${f.name}<button class="tag-remove-btn" onclick="festRemoveSel('${f.id}')">✕</button></span>`;
+          return `<span class="fest-sel-chip" style="--chip-col:${col};">${escHtml(f.name)}<button class="tag-remove-btn" onclick="festRemoveSel('${f.id}')">✕</button></span>`;
         }).join('')
       : `<span class="fest-empty" style="font-size:0.78rem;">No raves added yet — tap below to add</span>`;
 
@@ -8654,7 +8654,7 @@
       ? upcoming.map(f => {
           const isPicked = editingFestIds.has(f.id) || [...editingFestIds].some(id => String(id) === String(f.id));
           const when = `${f._d.getDate()} ${MON_SHORT[f._d.getMonth()]}`;
-          return `<span class="fest-quick-chip${isPicked ? ' picked' : ''}" data-fid="${f.id}" onclick="festToggleQuick('${f.id}',this)">${f.name}<span class="fest-quick-date">${when}</span></span>`;
+          return `<span class="fest-quick-chip${isPicked ? ' picked' : ''}" data-fid="${f.id}" onclick="festToggleQuick('${f.id}',this)">${escHtml(f.name)}<span class="fest-quick-date">${when}</span></span>`;
         }).join('')
       : `<span class="fest-empty" style="font-size:0.78rem;">No upcoming raves in catalog yet</span>`;
 
@@ -8698,7 +8698,7 @@
       ? selFests.map(f => {
           const d = festDate(f);
           const col = (d && d >= TODAY) ? '#39FF14' : '#00F5FF';
-          return `<span class="fest-sel-chip" style="--chip-col:${col};">${f.name}<button class="tag-remove-btn" onclick="festRemoveSel('${f.id}')">✕</button></span>`;
+          return `<span class="fest-sel-chip" style="--chip-col:${col};">${escHtml(f.name)}<button class="tag-remove-btn" onclick="festRemoveSel('${f.id}')">✕</button></span>`;
         }).join('')
       : `<span class="fest-empty" style="font-size:0.78rem;">No raves added yet — tap below to add</span>`;
   }
@@ -8741,9 +8741,9 @@
     results.innerHTML = matches.map(f => {
       const d = festDate(f);
       const when = d ? `${d.getDate()} ${MON_SHORT[d.getMonth()]} ${d.getFullYear()}` : '';
-      const meta = [when, f.location].filter(Boolean).join(' · ');
+      const meta = [when, escHtml(f.location)].filter(Boolean).join(' · ');
       return `<div class="fest-search-item" onmousedown="festPickFromSearch('${f.id}')">
-        <span class="fest-search-name">${f.name}</span>
+        <span class="fest-search-name">${escHtml(f.name)}</span>
         ${meta ? `<span class="fest-search-meta">${meta}</span>` : ''}
       </div>`;
     }).join('');
@@ -8773,9 +8773,9 @@
     results.innerHTML = matches.map(f => {
       const d = festDate(f);
       const when = d ? `${d.getDate()} ${MON_SHORT[d.getMonth()]} ${d.getFullYear()}` : '';
-      const meta = [when, f.location].filter(Boolean).join(' · ');
+      const meta = [when, escHtml(f.location)].filter(Boolean).join(' · ');
       return `<div class="fest-search-item" onmousedown="nfPickExisting('${f.id}')">
-        <span class="fest-search-name">${f.name}</span>
+        <span class="fest-search-name">${escHtml(f.name)}</span>
         ${meta ? `<span class="fest-search-meta">${meta}</span>` : ''}
       </div>`;
     }).join('');
@@ -9191,7 +9191,7 @@
       if (items.length === 0) { closeLoc(); return; }
       dropdown.style.display = 'block';
       dropdown.innerHTML = items.map((label, i) =>
-        `<div class="loc-item" data-idx="${i}" onmousedown="pickLoc('${label.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${label}</div>`
+        `<div class="loc-item" data-idx="${i}" onmousedown="pickLoc('${label.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${escHtml(label)}</div>`
       ).join('');
       _locIdx = -1;
     } catch(e) { closeLoc(); }
