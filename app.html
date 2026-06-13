@@ -5219,7 +5219,7 @@
       avatarEl.style.background = grad;
       avatarEl.style.boxShadow  = `0 0 32px ${crewColor}55`;
       if (raver.avatar_url) {
-        avatarEl.innerHTML = `<img src="${raver.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="${raver.name||''}">`;
+        avatarEl.innerHTML = `<img src="${raver.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="${escHtml(raver.name||'')}">`;
       } else if (raver.name) {
         avatarEl.textContent = initials(raver.name);
       } else {
@@ -5578,7 +5578,7 @@
   }
 
   async function saveMetStory(viewingRaverId, story) {
-    const trimmed = story.trim();
+    const trimmed = story.trim().slice(0, 2000);
     metStoriesCache[String(viewingRaverId)] = {
       ...(metStoriesCache[String(viewingRaverId)] || {}),
       mine: trimmed,
@@ -5637,7 +5637,7 @@
     if (!cloud) return;
     const current = (metStoriesCache[String(raverId)]?.mine || '').replace(/&amp;/g,'&').replace(/&lt;/g,'<');
     cloud.innerHTML = `
-      <textarea class="met-edit-area" id="met-edit-${raverId}" placeholder="How did you two meet?">${current}</textarea>
+      <textarea class="met-edit-area" id="met-edit-${raverId}" placeholder="How did you two meet?" maxlength="2000">${current}</textarea>
       <div class="met-bubble-actions">
         <button onclick="cancelEditMetStory('${raverId}')">Cancel</button>
         <button class="met-save-btn" onclick="doneEditMetStory('${raverId}')">Save ✓</button>
@@ -6166,7 +6166,7 @@
   }
 
   function inlineEditDisplay(raverId, fieldKey, value) {
-    const display = value || `<span style="color:var(--muted);font-size:0.8rem;">—</span>`;
+    const display = value ? escHtml(value) : `<span style="color:var(--muted);font-size:0.8rem;">—</span>`;
     return `<span class="ief-value">${display}</span>
       <button class="ief-btn ief-edit" onclick="startInlineEdit('${raverId}','${fieldKey}',\`${(value||'').replace(/`/g,'\\`')}\`)">✏️</button>`;
   }
@@ -6174,7 +6174,7 @@
   function inlineEditNicknameDisplay(raverId, currentNickname) {
     const val = currentNickname || '';
     const display = val
-      ? `<span class="ief-value nickname-value">${val}</span>`
+      ? `<span class="ief-value nickname-value">${escHtml(val)}</span>`
       : `<span class="ief-add-nickname">+ Add nickname</span>`;
     const pencil = val ? ` <button class="ief-btn ief-edit" onclick="startNicknameEdit('${raverId}','${val.replace(/'/g,"\\'")}')">✏️</button>` : '';
     return display + pencil;
@@ -6276,7 +6276,8 @@
 
   async function disconnectRaver(raverId) {
     try {
-      await sb.rpc('disconnect_raver', { p_raver_id: raverId });
+      const { error } = await sb.rpc('disconnect_raver', { p_raver_id: raverId });
+      if (error) throw error;
       const r = getRaver(raverId);
       if (r) {
         r.claimedBy = null;
@@ -8281,7 +8282,7 @@
             : (perms.isClaimed
                 ? `<div class="contact-row">
                      <div class="contact-their-label">Their phone</div>
-                     <div class="${r.phoneVisible ? 'contact-their-phone' : 'contact-phone-hidden'}">${r.phoneVisible ? (r.phone || '—') : '🔒 Hidden by owner'}</div>
+                     <div class="${r.phoneVisible ? 'contact-their-phone' : 'contact-phone-hidden'}">${r.phoneVisible ? (escHtml(r.phone) || '—') : '🔒 Hidden by owner'}</div>
                    </div>`
                 : '');
           const myPhone = `<div class="contact-row">
@@ -8289,7 +8290,7 @@
               <div class="contact-their-phone"><span id="ief-wrap-${r.id}-private-phone" class="ief-wrap">${(() => {
                 const pv = privatePhoneCache[String(r.id)] || '';
                 const escaped = pv.replace(/`/g,'\\`');
-                const display = pv || `<span style="color:var(--muted);font-size:0.8rem;">—</span>`;
+                const display = pv ? escHtml(pv) : `<span style="color:var(--muted);font-size:0.8rem;">—</span>`;
                 return `<span class="ief-value">${display}</span>
                   <button class="ief-btn ief-edit" onclick="startPrivatePhoneEdit('${r.id}',\`${escaped}\`)">✏️</button>`;
               })()}</span></div>
