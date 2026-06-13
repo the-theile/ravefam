@@ -5023,7 +5023,8 @@
     const { data: result, error } = await sb.rpc('claim_and_merge_raver', params);
     if (error || result?.error) {
       if (btn) { btn.disabled = false; btn.textContent = '🎉 Claim My Spot'; }
-      showScannerError(result?.error === 'invalid_or_used_token' ? 'claimed' : 'unknown', null);
+      const errType = (result?.error === 'invalid_or_used_token' || result?.error === 'already_claimed') ? 'claimed' : 'unknown';
+      showScannerError(errType, previewSnap);
       return;
     }
 
@@ -7193,6 +7194,7 @@
     const raver = squad.find(r => String(r.id) === String(raverId));
     const isAdmin = isAdminUser();
     if (!crew || (!crew.isLead && !isAdmin)) return;
+    if (String(raverId) === String(crew.leader_id)) { showToast('⚠️ The crew leader cannot be removed.'); return; }
     crew.squadIds = crew.squadIds.filter(id => String(id) !== String(raverId));
     // Rebuild members array cleanly from remaining squadIds
     crew.members = crew.squadIds
