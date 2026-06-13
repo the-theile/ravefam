@@ -4238,7 +4238,7 @@
 
   let currentUser = null;  // holds the logged-in Supabase user object
   const ADMIN_EMAIL = 'theile.secure@proton.me';
-  function isAdminUser() { return currentUser?.email === ADMIN_EMAIL; }
+  function isAdminUser() { return currentUser?.email?.toLowerCase() === ADMIN_EMAIL; }
 
   // Per-viewer private caches (keyed by target raver ID)
   const privatePhoneCache = {};  // { [raverId]: string }
@@ -4931,20 +4931,20 @@
 
     const tags = [...(raver.genres || []), ...(raver.fav_artists || [])].slice(0, 5);
     const tagsHtml = tags.length
-      ? tags.map(t => `<span class="claim-tag">${t}</span>`).join('')
+      ? tags.map(t => `<span class="claim-tag">${escHtml(t)}</span>`).join('')
       : `<span class="claim-tag">Raver</span>`;
 
     const avatarContent = raver.avatar_url
-      ? `<img src="${raver.avatar_url}" style="width:100%;height:100%;object-fit:cover;" alt="${raver.name || ''}">`
+      ? `<img src="${raver.avatar_url}" style="width:100%;height:100%;object-fit:cover;" alt="${escHtml(raver.name || '')}">`
       : (raver.name ? initials(raver.name) : '?');
 
     const hasPreFill = raver.notes || raver.met_story || raver.handle;
     const reviewBlock = hasPreFill ? `
       <div class="claim-review-block">
         <div class="claim-review-label">Your leader added these details for you</div>
-        ${raver.handle ? `<div class="claim-review-row"><span class="claim-review-key">Handle</span><span>${raver.handle}</span></div>` : ''}
-        ${raver.met_story ? `<div class="claim-review-row"><span class="claim-review-key">How we met</span><span>${raver.met_story}</span></div>` : ''}
-        ${raver.notes ? `<div class="claim-review-row"><span class="claim-review-key">Note</span><span>${raver.notes}</span></div>` : ''}
+        ${raver.handle ? `<div class="claim-review-row"><span class="claim-review-key">Handle</span><span>${escHtml(raver.handle)}</span></div>` : ''}
+        ${raver.met_story ? `<div class="claim-review-row"><span class="claim-review-key">How we met</span><span>${escHtml(raver.met_story)}</span></div>` : ''}
+        ${raver.notes ? `<div class="claim-review-row"><span class="claim-review-key">Note</span><span>${escHtml(raver.notes)}</span></div>` : ''}
         <button class="claim-edit-btn" onclick="toggleClaimEditForm(this)">✏️ Edit before claiming</button>
         <div class="claim-review-edit-form" id="claim-edit-form">
           <div>
@@ -4966,7 +4966,7 @@
     const primaryColor = slotGradient.match(/#[0-9A-Fa-f]{6}/)?.[0] || crewColor;
     document.getElementById('preview-body').innerHTML = `
       <div class="claim-crew-banner" style="background:linear-gradient(135deg,${crewColor}2a,${crewColor}0e);border:1px solid ${crewColor}55;box-shadow:0 0 36px ${crewColor}18,inset 0 1px 0 ${crewColor}30;">
-        <div class="claim-crew-name">${crewName}</div>
+        <div class="claim-crew-name">${escHtml(crewName)}</div>
         <div class="claim-crew-meta">
           <span class="claim-crew-badge" style="color:${crewColor};border:1px solid ${crewColor}44;">${statusLabel}</span>
           <span class="claim-crew-members">👥 ${memberText}</span>
@@ -4976,14 +4976,14 @@
       <div class="claim-slot-card" style="--slot-grad:${slotGradient};border-color:${primaryColor}44;box-shadow:0 0 24px ${primaryColor}20;">
         <div class="claim-slot-avatar" style="background:${slotGradient};box-shadow:0 0 22px ${primaryColor}55;">${avatarContent}</div>
         <div class="claim-slot-info">
-          <div class="claim-slot-name">${raver.name || 'Your Spot'}</div>
-          ${raver.handle ? `<div class="claim-slot-handle">${raver.handle}</div>` : ''}
+          <div class="claim-slot-name">${escHtml(raver.name) || 'Your Spot'}</div>
+          ${raver.handle ? `<div class="claim-slot-handle">${escHtml(raver.handle)}</div>` : ''}
           <div class="claim-slot-tags">${tagsHtml}</div>
         </div>
       </div>
       ${reviewBlock}
       <div class="claim-spot-label">${hasPreFill ? 'Review the details above — you can edit anything before joining.' : 'This profile was saved for you by your crew leader.'}</div>
-      <button class="btn-claim" id="confirm-claim-btn" onclick="commitClaim()">🎉 Claim My Spot in ${crewName}</button>
+      <button class="btn-claim" id="confirm-claim-btn" onclick="commitClaim()">🎉 Claim My Spot in ${escHtml(crewName)}</button>
       <span class="claim-back-link" role="button" tabindex="0" onclick="backToScan()" onkeydown="if(event.key==='Enter')backToScan()">Not you? Scan a different code</span>
     `;
     showScannerView('preview');
@@ -7058,12 +7058,12 @@
     let icon, title, body, confirmLabel;
     if (newStatus === 'recruiting' && crew.status === 'secret') {
       icon = '🟢';
-      title = `Ready to Open ${crew.name} to Recruiting?`;
+      title = `Ready to Open ${escHtml(crew.name)} to Recruiting?`;
       body = `Claimed members will be able to see each other and access shared features. Personal QR codes and invite links become active. <strong>This can't be undone</strong> — you won't be able to go back to Secret.`;
       confirmLabel = `🟢 Open to Recruiting`;
     } else if (newStatus === 'locked-in') {
       icon = '🔒';
-      title = `Lock ${crew.name} In? 🔒`;
+      title = `Lock ${escHtml(crew.name)} In? 🔒`;
       const unclaimedCount = crewSquad(crew).filter(p => !(p.claimedBy || p.isYou || p.status === 'claimed')).length;
       const unclaimedWarn = unclaimedCount > 0
         ? `<div style="margin-top:10px;padding:10px 12px;background:rgba(255,230,0,0.08);border:1px solid rgba(255,230,0,0.25);border-radius:10px;color:var(--neon-yellow);font-size:0.8rem;line-height:1.5;">⚠️ <strong>${unclaimedCount} unclaimed profile${unclaimedCount > 1 ? 's' : ''}</strong> won't be able to join without an invite — but their QR codes stay active so they can still claim a spot later.</div>`
@@ -7072,7 +7072,7 @@
       confirmLabel = `🔒 Lock It In`;
     } else {
       icon = '🌟';
-      title = `Re-open ${crew.name} to Recruiting? 🌟`;
+      title = `Re-open ${escHtml(crew.name)} to Recruiting? 🌟`;
       body = `More ravers might be joining the squad — keep an eye out! QR invite links will be re-enabled for unclaimed members.`;
       confirmLabel = `🌟 Re-open Recruiting`;
     }
@@ -7142,20 +7142,20 @@
 
     const rows = matches.map(r => {
       const dn = displayName(r);
-      const realNameNote = (nicknameCache[String(r.id)] && dn !== r.name) ? `<span style="font-size:0.7rem;color:var(--muted);margin-left:4px;">(${r.name})</span>` : '';
+      const realNameNote = (nicknameCache[String(r.id)] && dn !== r.name) ? `<span style="font-size:0.7rem;color:var(--muted);margin-left:4px;">(${escHtml(r.name)})</span>` : '';
       return `
       <div class="member-search-opt" data-raver-id="${r.id}"
         onmousedown="addExistingMember(this.dataset.raverId)">
         ${raverAvatarHTML(r.avatarUrl, r.gradient, r.name, 'avatar', 'margin:0;width:26px;height:26px;font-size:0.62rem;flex-shrink:0;')}
-        <span>${dn}${realNameNote}</span>
-        <span class="opt-handle">${r.handle || ''}</span>
+        <span>${escHtml(dn)}${realNameNote}</span>
+        <span class="opt-handle">${escHtml(r.handle || '')}</span>
       </div>`;
     }).join('');
 
     const createRow = `
       <div class="member-search-opt member-search-create" data-create-name="${query.trim().replace(/"/g,'&quot;')}"
         onmousedown="addNewMemberFromSearch(this.dataset.createName)">
-        ＋ Create "${query.trim()}" as a new raver
+        ＋ Create "${escHtml(query.trim())}" as a new raver
       </div>`;
 
     dropdown.innerHTML = rows + createRow;
@@ -8437,7 +8437,7 @@
   function fieldRow(label, id, value, placeholder, textarea) {
     const v = (value || '').replace(/"/g,'&quot;');
     const input = textarea
-      ? `<textarea class="form-input" id="${id}" placeholder="${placeholder}">${value || ''}</textarea>`
+      ? `<textarea class="form-input" id="${id}" placeholder="${placeholder}">${escHtml(value || '')}</textarea>`
       : `<input class="form-input" id="${id}" value="${v}" placeholder="${placeholder}">`;
     return `<div class="form-group"><label class="form-label">${label}</label>${input}</div>`;
   }
@@ -9256,7 +9256,7 @@
           <div class="loc-dropdown" id="loc-dropdown"></div>
         </div>
       </div>
-      ${f ? `<div class="fest-goers-note">${goers.length ? goers.length + ' tribe member' + (goers.length!==1?'s':'') + ' linked: ' + goers.map(g=>g.name.split(' ')[0]).join(', ') : 'No tribe members linked yet'}</div>` : ''}
+      ${f ? `<div class="fest-goers-note">${goers.length ? goers.length + ' tribe member' + (goers.length!==1?'s':'') + ' linked: ' + goers.map(g=>escHtml(g.name.split(' ')[0])).join(', ') : 'No tribe members linked yet'}</div>` : ''}
       <div class="modal-actions">
         ${f ? `<button class="btn btn-ghost" style="color:var(--neon-pink);" onclick="showDeleteRaveConfirm()">Delete</button>` : ''}
         <button class="btn btn-ghost" onclick="closeRaveEditor()">Cancel</button>
@@ -9330,12 +9330,12 @@
     if (!f) return;
     const goers = festivalGoers(activeFestId);
     const note = goers.length
-      ? `${goers.length} tribe member${goers.length !== 1 ? 's' : ''} (${goers.map(g => g.name.split(' ')[0]).join(', ')}) will have it removed from their profiles.`
+      ? `${goers.length} tribe member${goers.length !== 1 ? 's' : ''} (${goers.map(g => escHtml(g.name.split(' ')[0])).join(', ')}) will have it removed from their profiles.`
       : 'No tribe members are linked to this rave.';
     document.getElementById('rave-edit-modal').innerHTML = `
       <div style="text-align:center;padding:8px 0 24px;">
         <div style="font-size:2.8rem;margin-bottom:14px;">🗑️</div>
-        <div class="modal-title" style="margin-bottom:12px;">Delete "${f.name}"?</div>
+        <div class="modal-title" style="margin-bottom:12px;">Delete "${escHtml(f.name)}"?</div>
         <p style="font-size:0.86rem;color:var(--muted);line-height:1.65;margin-bottom:8px;">${note}</p>
         <p style="font-size:0.86rem;color:var(--neon-pink);font-weight:700;">This cannot be undone.</p>
       </div>
