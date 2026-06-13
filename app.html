@@ -1567,8 +1567,7 @@
 
   .notif-list {
     flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
+    overflow: hidden;
     padding: 12px 0;
   }
   .notif-item {
@@ -1578,19 +1577,22 @@
     padding: 12px 20px;
     border-bottom: 1px solid rgba(255,255,255,0.05);
     transition: background 0.15s;
+    position: relative;
   }
   .notif-item:last-child { border-bottom: none; }
-  .notif-item.unread { background: rgba(255,45,120,0.04); }
+  /* Unread — bright, prominent */
+  .notif-item.unread { background: rgba(255,45,120,0.10); }
   .notif-item.unread::before {
     content: '';
     position: absolute;
-    left: 0;
+    left: 0; top: 0;
     width: 3px;
     height: 100%;
     background: var(--neon-pink);
     border-radius: 0 2px 2px 0;
   }
-  .notif-item { position: relative; }
+  /* Read — visually receded */
+  .notif-item.notif-read { opacity: 0.55; }
   .notif-dot {
     width: 8px; height: 8px;
     border-radius: 50%;
@@ -1606,6 +1608,7 @@
     line-height: 1.55;
     color: var(--text);
   }
+  .notif-item.unread .notif-text { font-weight: 500; }
   .notif-time {
     font-size: 0.7rem;
     color: var(--muted);
@@ -9700,7 +9703,7 @@
       return;
     }
     el.innerHTML = list.map(n => `
-      <div class="notif-item ${n.read ? '' : 'unread'}">
+      <div class="notif-item ${n.read ? 'notif-read' : 'unread'}">
         <span class="notif-dot"></span>
         <span class="notif-text">${n.message}</span>
         <span class="notif-time">${relativeTime(n.timestamp)}</span>
