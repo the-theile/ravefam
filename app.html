@@ -1567,8 +1567,7 @@
 
   .notif-list {
     flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
+    overflow: hidden;
     padding: 12px 0;
   }
   .notif-item {
@@ -1578,19 +1577,22 @@
     padding: 12px 20px;
     border-bottom: 1px solid rgba(255,255,255,0.05);
     transition: background 0.15s;
+    position: relative;
   }
   .notif-item:last-child { border-bottom: none; }
-  .notif-item.unread { background: rgba(255,45,120,0.04); }
+  /* Unread — bright, prominent */
+  .notif-item.unread { background: rgba(255,45,120,0.10); }
   .notif-item.unread::before {
     content: '';
     position: absolute;
-    left: 0;
+    left: 0; top: 0;
     width: 3px;
     height: 100%;
     background: var(--neon-pink);
     border-radius: 0 2px 2px 0;
   }
-  .notif-item { position: relative; }
+  /* Read — visually receded */
+  .notif-item.notif-read { opacity: 0.55; }
   .notif-dot {
     width: 8px; height: 8px;
     border-radius: 50%;
@@ -1606,6 +1608,7 @@
     line-height: 1.55;
     color: var(--text);
   }
+  .notif-item.unread .notif-text { font-weight: 500; }
   .notif-time {
     font-size: 0.7rem;
     color: var(--muted);
@@ -4442,6 +4445,8 @@
   }
 
   async function doLogout() {
+    sessionStorage.removeItem('pendingClaim');
+    sessionStorage.removeItem('pendingCrewJoin');
     await sb.auth.signOut();
     // onAuthStateChange will fire SIGNED_OUT and flip back to auth screen
   }
@@ -4458,6 +4463,7 @@
 
   function showAuthScreen() {
     currentUser = null;
+    squad.length = 0; crews.length = 0; festivals.length = 0;
     document.getElementById('app-loading').classList.add('hidden');
     document.getElementById('auth-screen').classList.remove('hidden');
     document.getElementById('main-app').style.display = 'none';
@@ -4591,7 +4597,7 @@
 
     document.getElementById('qr-modal').innerHTML = `
       <div class="qr-color-bar" style="background:${gradient}"></div>
-      <div class="modal-title" style="margin-bottom:4px;">Invite ${r.name.split(' ')[0]}</div>
+      <div class="modal-title" style="margin-bottom:4px;">Invite ${escHtml(r.name.split(' ')[0])}</div>
       <div class="qr-hint">Show this QR or share the code — they're added to your crew instantly. No account needed first.</div>
       <div class="qr-canvas-wrap" id="qr-canvas-wrap" style="min-width:200px;min-height:200px;display:flex;align-items:center;justify-content:center;">
         <div style="color:var(--muted);font-size:0.78rem;">Generating…</div>
@@ -4644,6 +4650,7 @@
   let _scannerStream    = null;   // active MediaStream
   let _scannerAnimFrame = null;   // rAF handle
   let _scannerActive    = false;  // scanning loop running
+  let _scanHandled      = false;  // prevents duplicate QR processing
   let _pendingClaimToken = null;  // token awaiting user confirmation
 
   // ── Open / Close ──────────────────────────────────────
@@ -4703,15 +4710,28 @@
   // ── Camera ────────────────────────────────────────────
   async function startCamera() {
     if (_scannerStream) return;
+    _scanHandled = false;
     const statusEl = document.getElementById('camera-status');
     if (statusEl) statusEl.textContent = 'Starting camera…';
     try {
-      _scannerStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 640 } }
-      });
+      // Try back camera first, fall back to any camera
+      try {
+        _scannerStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 640 } }
+        });
+      } catch {
+        _scannerStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      }
       const video = document.getElementById('scanner-video');
+      if (!video) { _scannerStream.getTracks().forEach(t => t.stop()); _scannerStream = null; return; }
       video.srcObject = _scannerStream;
-      await video.play();
+      try {
+        await video.play();
+      } catch (playErr) {
+        _scannerStream.getTracks().forEach(t => t.stop());
+        _scannerStream = null;
+        throw playErr;
+      }
       _scannerActive = true;
       if (statusEl) statusEl.textContent = 'Point at a RaveFAM QR code…';
       tickScan();
@@ -4721,6 +4741,7 @@
       if (statusEl) {
         if (err.name === 'NotAllowedError') {
           statusEl.innerHTML = '📵 Camera access denied.<br><small>Use the <strong>Enter Code</strong> tab or upload a QR image.</small>';
+          setTimeout(() => switchScannerTab('code'), 400);
         } else {
           statusEl.innerHTML = '📷 Camera unavailable.<br><small>Use <strong>Enter Code</strong> or upload a QR image.</small>';
         }
@@ -4774,10 +4795,12 @@
   }
 
   function handleRawScan(rawValue) {
+    if (_scanHandled) return;
     let token = null;
     try { token = new URL(rawValue).searchParams.get('claim'); } catch { token = rawValue.trim(); }
     if (!token) { _scannerAnimFrame = requestAnimationFrame(tickScan); return; }
 
+    _scanHandled = true;
     stopCamera();
     // Flash effect
     const flash = document.getElementById('scan-flash');
@@ -4837,25 +4860,37 @@
     if (e.key === 'Enter') submitInviteCode();
   }
 
+  let _codeSubmitting = false;
   async function submitInviteCode() {
     const code = [...document.querySelectorAll('.otp-box')].map(b => b.value.trim()).join('').toUpperCase();
     if (code.length < 6) return;
+    if (_codeSubmitting) return;
+    _codeSubmitting = true;
     const btn = document.getElementById('code-submit-btn');
     if (btn) btn.disabled = true;
     const errEl = document.getElementById('code-error');
     if (errEl) errEl.textContent = '';
 
     const { data: results, error } = await sb.rpc('find_raver_by_invite_code', { p_code: code });
-    const match = results?.[0];
 
-    if (error || !match?.qr_token) {
+    if (error) {
+      if (errEl) errEl.textContent = '⚠️ Network error — please try again.';
+      if (btn) btn.disabled = false;
+      _codeSubmitting = false;
+      return;
+    }
+
+    const match = results?.[0];
+    if (!match?.qr_token) {
       if (errEl) errEl.textContent = '⚠️ Code not found or already used.';
       if (btn) btn.disabled = false;
+      _codeSubmitting = false;
       return;
     }
 
     await handleClaimToken(match.qr_token, false);
     if (btn) btn.disabled = false;
+    _codeSubmitting = false;
   }
 
   // ── Main claim handler ────────────────────────────────
@@ -5020,7 +5055,8 @@
     const { data: result, error } = await sb.rpc('claim_and_merge_raver', params);
     if (error || result?.error) {
       if (btn) { btn.disabled = false; btn.textContent = '🎉 Claim My Spot'; }
-      showScannerError(result?.error === 'invalid_or_used_token' ? 'claimed' : 'unknown', null);
+      const errType = (result?.error === 'invalid_or_used_token' || result?.error === 'already_claimed') ? 'claimed' : 'unknown';
+      showScannerError(errType, previewSnap);
       return;
     }
 
@@ -5183,7 +5219,7 @@
       avatarEl.style.background = grad;
       avatarEl.style.boxShadow  = `0 0 32px ${crewColor}55`;
       if (raver.avatar_url) {
-        avatarEl.innerHTML = `<img src="${raver.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="${raver.name||''}">`;
+        avatarEl.innerHTML = `<img src="${raver.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="${escHtml(raver.name||'')}">`;
       } else if (raver.name) {
         avatarEl.textContent = initials(raver.name);
       } else {
@@ -5372,7 +5408,7 @@
             genres: r.genres || [],
             favArtists: r.fav_artists || [],
             festIds: (r.raver_festivals || []).map(rf => rf.festival_id),
-            instagram: r.phone_visible ? (r.instagram || '') : '',
+            instagram: r.instagram || '',
             phone: r.phone_visible ? (r.phone || '') : '',
             phoneVisible: r.phone_visible || false,
             metStory: r.met_story || '',
@@ -5542,7 +5578,7 @@
   }
 
   async function saveMetStory(viewingRaverId, story) {
-    const trimmed = story.trim();
+    const trimmed = story.trim().slice(0, 2000);
     metStoriesCache[String(viewingRaverId)] = {
       ...(metStoriesCache[String(viewingRaverId)] || {}),
       mine: trimmed,
@@ -5601,7 +5637,7 @@
     if (!cloud) return;
     const current = (metStoriesCache[String(raverId)]?.mine || '').replace(/&amp;/g,'&').replace(/&lt;/g,'<');
     cloud.innerHTML = `
-      <textarea class="met-edit-area" id="met-edit-${raverId}" placeholder="How did you two meet?">${current}</textarea>
+      <textarea class="met-edit-area" id="met-edit-${raverId}" placeholder="How did you two meet?" maxlength="2000">${current}</textarea>
       <div class="met-bubble-actions">
         <button onclick="cancelEditMetStory('${raverId}')">Cancel</button>
         <button class="met-save-btn" onclick="doneEditMetStory('${raverId}')">Save ✓</button>
@@ -5669,7 +5705,7 @@
     if (festIds.length) {
       const rows = festIds.map(fid => ({ raver_id: raverId, festival_id: fid }));
       const { error } = await sb.from('raver_festivals').insert(rows);
-      if (error) console.error('raver_festivals insert error', error);
+      if (error) { console.error('raver_festivals insert error', error); showToast('⚠️ Could not save festival attendance'); }
     }
   }
 
@@ -5862,6 +5898,7 @@
   async function handleProfilePhotoUpload(event, raverId) {
     const file = event.target.files[0];
     if (!file) return;
+    event.target.value = '';
     const r = getRaver(raverId);
     if (!r) return;
     if (r.avatarUrl) {
@@ -5871,7 +5908,6 @@
         body: 'Your current photo will be swapped out for the new one. No going back!',
         onConfirm: () => doProfilePhotoUpload(file, raverId, r)
       });
-      event.target.value = '';
       return;
     }
     doProfilePhotoUpload(file, raverId, r);
@@ -5927,6 +5963,7 @@
   async function handleTotemPhotoUpload(event, crewId) {
     const file = event.target.files[0];
     if (!file) return;
+    event.target.value = '';
     const crew = getCrew(crewId);
     if (!crew) return;
     if (crew.totemPhotoUrl) {
@@ -5936,7 +5973,6 @@
         body: 'The current totem photo will be replaced. Your crew identity will thank you.',
         onConfirm: () => doTotemPhotoUpload(file, crewId, crew)
       });
-      event.target.value = '';
       return;
     }
     doTotemPhotoUpload(file, crewId, crew);
@@ -6130,7 +6166,7 @@
   }
 
   function inlineEditDisplay(raverId, fieldKey, value) {
-    const display = value || `<span style="color:var(--muted);font-size:0.8rem;">—</span>`;
+    const display = value ? escHtml(value) : `<span style="color:var(--muted);font-size:0.8rem;">—</span>`;
     return `<span class="ief-value">${display}</span>
       <button class="ief-btn ief-edit" onclick="startInlineEdit('${raverId}','${fieldKey}',\`${(value||'').replace(/`/g,'\\`')}\`)">✏️</button>`;
   }
@@ -6138,7 +6174,7 @@
   function inlineEditNicknameDisplay(raverId, currentNickname) {
     const val = currentNickname || '';
     const display = val
-      ? `<span class="ief-value nickname-value">${val}</span>`
+      ? `<span class="ief-value nickname-value">${escHtml(val)}</span>`
       : `<span class="ief-add-nickname">+ Add nickname</span>`;
     const pencil = val ? ` <button class="ief-btn ief-edit" onclick="startNicknameEdit('${raverId}','${val.replace(/'/g,"\\'")}')">✏️</button>` : '';
     return display + pencil;
@@ -6221,7 +6257,7 @@
     if (!r) return;
     r.festIds = (r.festIds || []).filter(id => String(id) !== String(festId));
     if (currentUser) dbSaveRaverFestivals(raverId, r.festIds);
-    renderSquad(); renderEvents();
+    renderSquad(); renderEvents(); renderCrews();
     openProfile(raverId);
   }
 
@@ -6240,7 +6276,8 @@
 
   async function disconnectRaver(raverId) {
     try {
-      await sb.rpc('disconnect_raver', { p_raver_id: raverId });
+      const { error } = await sb.rpc('disconnect_raver', { p_raver_id: raverId });
+      if (error) throw error;
       const r = getRaver(raverId);
       if (r) {
         r.claimedBy = null;
@@ -6302,6 +6339,7 @@
   async function handleOurPhotoUpload(event, viewingRaverId, slot) {
     const file = event.target.files[0];
     if (!file) return;
+    event.target.value = '';
     const storagePath = ourPhotoStoragePath(viewingRaverId);
     const pair = ourPhotoPair(viewingRaverId);
     if (!storagePath || !pair || !currentUser) return;
@@ -6389,6 +6427,11 @@
   }
 
   function switchTab(page, el) {
+    document.querySelectorAll('.modal-overlay.open').forEach(o => o.classList.remove('open'));
+    const nd = document.getElementById('notif-drawer-overlay');
+    if (nd) nd.classList.remove('open');
+    const so = document.getElementById('scanner-overlay');
+    if (so && so.classList.contains('open')) closeScanner();
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
     document.getElementById('page-' + page).classList.add('active');
@@ -6588,15 +6631,16 @@
       const goingAvatars = (n.whoRavers || []).map(r =>
         raverAvatarHTML(r.avatarUrl || r.avatar_url || null, r.gradient || 'linear-gradient(135deg,#FF2D78,#00F5FF)', r.name, 'cnf-avatar', '')
       ).join('');
-      const goingLabel = n.who.length === 1
-        ? `${n.who[0]} is going`
-        : n.who.length > 1
-          ? `${n.who.slice(0,-1).join(', ')} & ${n.who[n.who.length-1]} are going`
+      const safeWho = (n.who || []).map(name => escHtml(name));
+      const goingLabel = safeWho.length === 1
+        ? `${safeWho[0]} is going`
+        : safeWho.length > 1
+          ? `${safeWho.slice(0,-1).join(', ')} & ${safeWho[safeWho.length-1]} are going`
           : 'Nobody RSVPed yet';
       return `
         <div class="cnf-block">
           <div class="cnf-eyebrow">🎪 Next Rave Up</div>
-          <div class="cnf-name">${n.name}</div>
+          <div class="cnf-name">${escHtml(n.name)}</div>
           <div class="cnf-meta">
             <span class="cnf-date">📅 ${when}</span>
             <span class="cnf-countdown">⏳ ${cd}</span>
@@ -6615,7 +6659,7 @@
       return `
         <div class="cnf-block cnf-block-past">
           <div class="cnf-eyebrow">📍 Last Rave</div>
-          <div class="cnf-name">${n.name}</div>
+          <div class="cnf-name">${escHtml(n.name)}</div>
           <div class="cnf-meta"><span class="cnf-date">${n.date.getFullYear()}</span></div>
         </div>`;
     }
@@ -6718,7 +6762,7 @@
           : `<div class="secret-eye-badge eye-open" title="Crew is visible to members"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>`}
         <div class="crew-card-head">
           ${crew.totemPhotoUrl ? `<img class="crew-totem-thumb" src="${crew.totemPhotoUrl}" alt="Crew totem">` : ''}
-          <div class="crew-name">${crew.name}</div>
+          <div class="crew-name">${escHtml(crew.name)}</div>
           <span class="crew-status ${s.cls}${crew.isLead ? ' tappable' : ''}"
                 onclick="event.stopPropagation(); toggleStatus('${crew.id}')"
                 title="${crew.isLead ? 'Tap to change status' : 'Only the Crew Lead can change status'}">${s.label}</span>
@@ -6856,7 +6900,7 @@
             ? `<span style="display:flex;align-items:center;gap:5px;">${pDisplayFirst}${p.isYou ? ' (You)' : ''} <span title="Crew Leader" style="font-size:1rem;">👑</span> ${statusDot}</span>`
             : `<span>${pDisplayFirst}${p.isYou ? ' (You)' : ''} ${statusDot}</span>`;
           return `
-            <div class="detail-member detail-member-link" data-raver-id="${p.id}" onclick="goToProfileFromDetail(this.dataset.raverId)" title="View ${p.name}'s profile">
+            <div class="detail-member detail-member-link" data-raver-id="${p.id}" onclick="goToProfileFromDetail(this.dataset.raverId)" title="View ${escHtml(p.name)}'s profile">
               ${raverAvatarHTML(p.avatarUrl, p.gradient, p.name, 'avatar', 'margin:0;')}
               ${nameDisplay}
               ${right}
@@ -6948,7 +6992,7 @@
       <div class="crew-detail-page-wrap">
       <div class="detail-bar" style="background:${crew.gradient}"></div>
       <div class="crew-detail-title-row">
-        <div class="modal-title">${crew.name}</div>
+        <div class="modal-title">${escHtml(crew.name)}</div>
         ${crew.isLead ? `<button class="crew-edit-btn" onclick="showCrewEditModal('${crew.id}')" title="Edit crew name and colour">✏️</button>` : ''}
         <span class="crew-status ${s.cls}${crew.isLead ? ' tappable-lead' : ''}"
           ${crew.isLead ? `onclick="toggleStatus('${crew.id}')" title="Tap to change status"` : ''}>${s.label}</span>
@@ -7190,6 +7234,7 @@
     const raver = squad.find(r => String(r.id) === String(raverId));
     const isAdmin = isAdminUser();
     if (!crew || (!crew.isLead && !isAdmin)) return;
+    if (String(raverId) === String(crew.leader_id)) { showToast('⚠️ The crew leader cannot be removed.'); return; }
     crew.squadIds = crew.squadIds.filter(id => String(id) !== String(raverId));
     // Rebuild members array cleanly from remaining squadIds
     crew.members = crew.squadIds
@@ -7210,7 +7255,7 @@
     if (!crew) return;
     showConfirm(
       `Leave ${crew.name}?`,
-      `You'll lose access to shared memories, the dream board, and everything else. Only the Crew Lead can re-add you — and only while the crew is in Recruiting mode.`,
+      `You'll lose access to shared memories, photos, and everything else. Only the Crew Lead can re-add you — and only while the crew is in Recruiting mode.`,
       `✌️ Leave Crew`,
       () => {
         const me = squad.find(r => r.isYou);
@@ -7294,7 +7339,7 @@
       <div class="detail-bar" style="background:${crew.gradient}"></div>
       <div style="text-align:center;padding:8px 0 24px;">
         <div style="font-size:2.8rem;margin-bottom:14px;">🗑️</div>
-        <div class="modal-title" style="margin-bottom:12px;">Delete "${crew.name}"?</div>
+        <div class="modal-title" style="margin-bottom:12px;">Delete "${escHtml(crew.name)}"?</div>
         <p style="font-size:0.86rem;color:var(--muted);line-height:1.65;margin-bottom:8px;">${note}</p>
         <p style="font-size:0.86rem;color:var(--neon-pink);font-weight:700;">This cannot be undone.</p>
       </div>
@@ -7435,7 +7480,8 @@
     if (!crew || !crew.isLead) return;
     let token = crew.invite_token;
     if (!token) {
-      token = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : (Math.random().toString(36).slice(2) + Date.now().toString(36));
+      token = (typeof crypto?.randomUUID === 'function') ? crypto.randomUUID()
+            : Array.from(crypto.getRandomValues(new Uint8Array(18)), b => b.toString(36)).join('');
       const { error } = await sb.from('crews').update({ invite_token: token }).eq('id', crewId);
       if (error) { showToast('⚠️ Could not generate invite link.'); return; }
       crew.invite_token = token;
@@ -7649,7 +7695,7 @@
     const removeBtn = removableRaverId
       ? ` <span class="vibe-chip-remove" onclick="removeTag('${removableRaverId}','${field}','${vtId.replace(/'/g,"\\'")}')">✕</span>`
       : '';
-    if (isCustom) return `<span class="${cls}">✨ ${vtId}${removeBtn}</span>`;
+    if (isCustom) return `<span class="${cls}">✨ ${escHtml(vtId)}${removeBtn}</span>`;
     const p = getPreset(vtId);
     if (!p) return '';
     return `<span class="${cls}" style="background:${p.bg};border-color:${p.color}40;color:${p.color};">${p.icon} ${p.label}${removeBtn}</span>`;
@@ -7748,14 +7794,19 @@
     }
   ];
 
-  function getRaver(id) { return squad.find(r => r.id === id); }
+  function getRaver(id) { return squad.find(r => String(r.id) === String(id)); }
+  function escHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
   function extractFirstColor(gradient) {
     return /#[0-9A-Fa-f]{6}/.exec(gradient)?.[0] || '#ffffff';
   }
   function raverAvatarHTML(photoUrl, gradient, name, divClass, divStyle) {
     divStyle = divStyle || '';
     if (photoUrl) {
-      return `<div class="${divClass}" style="${divStyle}background:transparent;overflow:hidden;padding:0;flex-shrink:0;"><img src="${photoUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${name}"></div>`;
+      return `<div class="${divClass}" style="${divStyle}background:transparent;overflow:hidden;padding:0;flex-shrink:0;"><img src="${photoUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${escHtml(name)}"></div>`;
     }
     return `<div class="${divClass}" style="${divStyle}background:${gradient}">${initials(name).toUpperCase()}</div>`;
   }
@@ -7832,7 +7883,7 @@
         <div class="member-divider" style="background:${dividerBg}"></div>
         <div class="member-info">
           <div class="member-name">${displayName(r)}${r.isYou ? ' <span style="font-size:0.75rem;margin-right:2px;">👑</span><span style="font-size:0.7rem;color:var(--neon-pink);font-family:\'Outfit\',sans-serif;font-weight:700;">YOU</span>' : ''}</div>
-          <div class="member-handle">${r.handle}</div>
+          <div class="member-handle">${escHtml(r.handle)}</div>
           ${nextFestLine}
           <div class="member-base">📍 ${r.base}</div>
           ${miniVibes ? `<div class="member-vibes">${miniVibes}</div>` : ''}
@@ -8107,8 +8158,8 @@
             ${avatarEl}
           </div>
           <div class="profile-id">
-            <h2>${r.isYou ? '👑 ' : ''}${displayName(r)}${r.isYou ? ' <span style="font-size:0.9rem;color:var(--muted)">(You)</span>' : ''}</h2>
-            ${nicknameCache[String(r.id)] ? `<div class="profile-real-name">Real name: ${r.name}</div>` : ''}
+            <h2>${r.isYou ? '👑 ' : ''}${escHtml(displayName(r))}${r.isYou ? ' <span style="font-size:0.9rem;color:var(--muted)">(You)</span>' : ''}</h2>
+            ${nicknameCache[String(r.id)] ? `<div class="profile-real-name">Real name: ${escHtml(r.name)}</div>` : ''}
             ${!r.isYou && currentUser ? `
               <div class="profile-nickname-row">
                 <span style="font-size:0.7rem;color:var(--muted);">🏷️</span>
@@ -8116,10 +8167,10 @@
                   ${inlineEditNicknameDisplay(r.id, nicknameCache[String(r.id)] || '')}
                 </span>
               </div>` : ''}
-            <div class="profile-handle">${r.handle}</div>
+            <div class="profile-handle">${escHtml(r.handle)}</div>
             ${perms.editLocation
               ? `<div class="profile-base-line">📍 <span id="ief-wrap-${r.id}-base" class="ief-wrap">${inlineEditDisplay(r.id, 'base', r.base)}</span></div>`
-              : `<div class="profile-base-line">📍 Based in ${r.base}</div>`}
+              : `<div class="profile-base-line">📍 Based in ${escHtml(r.base)}</div>`}
           </div>
         </div>
 
@@ -8233,7 +8284,7 @@
             : (perms.isClaimed
                 ? `<div class="contact-row">
                      <div class="contact-their-label">Their phone</div>
-                     <div class="${r.phoneVisible ? 'contact-their-phone' : 'contact-phone-hidden'}">${r.phoneVisible ? (r.phone || '—') : '🔒 Hidden by owner'}</div>
+                     <div class="${r.phoneVisible ? 'contact-their-phone' : 'contact-phone-hidden'}">${r.phoneVisible ? (escHtml(r.phone) || '—') : '🔒 Hidden by owner'}</div>
                    </div>`
                 : '');
           const myPhone = `<div class="contact-row">
@@ -8241,7 +8292,7 @@
               <div class="contact-their-phone"><span id="ief-wrap-${r.id}-private-phone" class="ief-wrap">${(() => {
                 const pv = privatePhoneCache[String(r.id)] || '';
                 const escaped = pv.replace(/`/g,'\\`');
-                const display = pv || `<span style="color:var(--muted);font-size:0.8rem;">—</span>`;
+                const display = pv ? escHtml(pv) : `<span style="color:var(--muted);font-size:0.8rem;">—</span>`;
                 return `<span class="ief-value">${display}</span>
                   <button class="ief-btn ief-edit" onclick="startPrivatePhoneEdit('${r.id}',\`${escaped}\`)">✏️</button>`;
               })()}</span></div>
@@ -8259,7 +8310,7 @@
 
         <div class="profile-section" style="${sg(1)}">
           <h3>📝 Notes</h3>
-          ${r.isYou ? `<div class="profile-note">${r.notes || '<span class="fest-empty">No notes yet</span>'}</div>` : (() => {
+          ${r.isYou ? `<div class="profile-note">${r.notes ? escHtml(r.notes) : '<span class="fest-empty">No notes yet</span>'}</div>` : (() => {
             const savedNotes = localStorage.getItem('viewer_notes_' + r.id) || '';
             return `<p style="font-size:0.72rem;color:var(--muted);margin-bottom:8px;line-height:1.4;">Private — only you can see this.</p>
               <textarea id="viewer-notes-${r.id}" class="inline-notes-area"
@@ -8574,7 +8625,7 @@
     const box = document.getElementById('genre-custom-chips');
     if (!box) return;
     box.innerHTML = editingCustomGenres.map((g, i) =>
-      `<span class="vibe-custom-chip">${g} <span class="vibe-chip-remove" onclick="removeCustomGenre(${i})">✕</span></span>`
+      `<span class="vibe-custom-chip">${escHtml(g)} <span class="vibe-chip-remove" onclick="removeCustomGenre(${i})">✕</span></span>`
     ).join('');
   }
 
@@ -8877,7 +8928,7 @@
     const box = document.getElementById('vibe-custom-chips');
     if (!box) return;
     box.innerHTML = editingCustomVibeTags.map((t, i) =>
-      `<span class="vibe-custom-chip">${t} <span class="vibe-chip-remove" onclick="removeCustomVibe(${i})">✕</span></span>`
+      `<span class="vibe-custom-chip">${escHtml(t)} <span class="vibe-chip-remove" onclick="removeCustomVibe(${i})">✕</span></span>`
     ).join('');
   }
 
@@ -8913,7 +8964,8 @@
       phoneVisible: document.getElementById('pf-phone-visible')?.checked ?? false,
       notes: val('pf-notes'),
       vibeTags: Array.from(editingVibeTags),
-      customVibeTags: [...editingCustomVibeTags]
+      customVibeTags: [...editingCustomVibeTags],
+      blockedTags: (editingId ? getRaver(editingId)?.blockedTags : null) || []
     };
     // Write new artists to the community pool for other users
     if (currentUser && data.favArtists.length) {
@@ -9077,7 +9129,7 @@
       const toggleBtn = `<button class="going-toggle${youGoing ? ' going-toggle-active' : ''}" data-fest-id="${f.id}" onclick="event.stopPropagation(); toggleGoingToFest(this.dataset.festId)">${youGoing ? '🎟️ Going' : '＋ Going'}</button>`;
 
       return `
-        <div class="event-item event-item-clickable${youGoing ? ' event-item-going' : ''}" data-fest-id="${f.id}" onclick="activeFestId=this.dataset.festId; openRaveEditor(this.dataset.festId)" title="Tap to edit ${f.name}">
+        <div class="event-item event-item-clickable${youGoing ? ' event-item-going' : ''}" data-fest-id="${f.id}" onclick="activeFestId=this.dataset.festId; openRaveEditor(this.dataset.festId)" title="Tap to edit ${escHtml(f.name)}">
           <div class="event-date">
             <div class="event-day" style="color:${color}">${day}</div>
             <div class="event-month">${mon}</div>
@@ -9100,7 +9152,7 @@
     if (up.length) html += `<div class="fest-group-label" style="margin:4px 0 10px;">🔜 Upcoming</div>` + up.map(card).join('');
     if (past.length) html += `<div class="fest-group-label" style="margin:22px 0 10px;">📼 Past</div>` + past.map(card).join('');
     if (!up.length && !past.length) html = query
-      ? `<div class="fest-empty" style="padding:20px;text-align:center;color:var(--muted);">No raves found for "${query}"</div>`
+      ? `<div class="fest-empty" style="padding:20px;text-align:center;color:var(--muted);">No raves found for "${escHtml(query)}"</div>`
       : '<div class="fest-empty" style="padding:20px;text-align:center;">No raves yet — add a festival, club night, or that warehouse party on Saturday.</div>';
     list.innerHTML = html;
   }
@@ -9229,6 +9281,7 @@
     }
     renderEvents();
     renderSquad();
+    renderCrews();
     if (currentUser) dbSaveRaverFestivals(you.id, you.festIds);
   }
 
@@ -9356,7 +9409,7 @@
     if ((r.festIds || []).includes(festId)) { showToast('Already on their list'); return; }
     r.festIds = [...(r.festIds || []), festId];
     if (currentUser) dbSaveRaverFestivals(raverId, r.festIds);
-    renderSquad(); renderEvents();
+    renderSquad(); renderEvents(); renderCrews();
     openProfile(raverId);
   }
 
@@ -9395,6 +9448,7 @@
 
   let _hpDebounce = null;
   let _hpReady = false;
+  let _hpSeq = 0;
 
   function showHandlePicker() {
     document.getElementById('handle-picker').classList.add('show');
@@ -9423,6 +9477,7 @@
     if (input)  input.className = '';
 
     clearTimeout(_hpDebounce);
+    const seq = ++_hpSeq;
     _hpDebounce = setTimeout(async () => {
       const myRaver = squad.find(r => r.isYou);
       const { data } = await sb.from('ravers')
@@ -9431,6 +9486,7 @@
         .neq('id', myRaver?.id || '00000000-0000-0000-0000-000000000000')
         .maybeSingle();
 
+      if (seq !== _hpSeq) return; // stale response — a newer check superseded this one
       if (data) {
         if (status) { status.textContent = `@${handle} is taken 😔`; status.className = 'hp-status hp-err'; }
         if (input)  input.className = 'hp-invalid';
@@ -9694,9 +9750,9 @@
       return;
     }
     el.innerHTML = list.map(n => `
-      <div class="notif-item ${n.read ? '' : 'unread'}">
+      <div class="notif-item ${n.read ? 'notif-read' : 'unread'}">
         <span class="notif-dot"></span>
-        <span class="notif-text">${n.message}</span>
+        <span class="notif-text">${escHtml(n.message)}</span>
         <span class="notif-time">${relativeTime(n.timestamp)}</span>
       </div>`).join('');
   }
