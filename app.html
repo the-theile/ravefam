@@ -4597,7 +4597,7 @@
 
     document.getElementById('qr-modal').innerHTML = `
       <div class="qr-color-bar" style="background:${gradient}"></div>
-      <div class="modal-title" style="margin-bottom:4px;">Invite ${r.name.split(' ')[0]}</div>
+      <div class="modal-title" style="margin-bottom:4px;">Invite ${escHtml(r.name.split(' ')[0])}</div>
       <div class="qr-hint">Show this QR or share the code — they're added to your crew instantly. No account needed first.</div>
       <div class="qr-canvas-wrap" id="qr-canvas-wrap" style="min-width:200px;min-height:200px;display:flex;align-items:center;justify-content:center;">
         <div style="color:var(--muted);font-size:0.78rem;">Generating…</div>
@@ -6631,15 +6631,16 @@
       const goingAvatars = (n.whoRavers || []).map(r =>
         raverAvatarHTML(r.avatarUrl || r.avatar_url || null, r.gradient || 'linear-gradient(135deg,#FF2D78,#00F5FF)', r.name, 'cnf-avatar', '')
       ).join('');
-      const goingLabel = n.who.length === 1
-        ? `${n.who[0]} is going`
-        : n.who.length > 1
-          ? `${n.who.slice(0,-1).join(', ')} & ${n.who[n.who.length-1]} are going`
+      const safeWho = (n.who || []).map(name => escHtml(name));
+      const goingLabel = safeWho.length === 1
+        ? `${safeWho[0]} is going`
+        : safeWho.length > 1
+          ? `${safeWho.slice(0,-1).join(', ')} & ${safeWho[safeWho.length-1]} are going`
           : 'Nobody RSVPed yet';
       return `
         <div class="cnf-block">
           <div class="cnf-eyebrow">🎪 Next Rave Up</div>
-          <div class="cnf-name">${n.name}</div>
+          <div class="cnf-name">${escHtml(n.name)}</div>
           <div class="cnf-meta">
             <span class="cnf-date">📅 ${when}</span>
             <span class="cnf-countdown">⏳ ${cd}</span>
@@ -6658,7 +6659,7 @@
       return `
         <div class="cnf-block cnf-block-past">
           <div class="cnf-eyebrow">📍 Last Rave</div>
-          <div class="cnf-name">${n.name}</div>
+          <div class="cnf-name">${escHtml(n.name)}</div>
           <div class="cnf-meta"><span class="cnf-date">${n.date.getFullYear()}</span></div>
         </div>`;
     }
@@ -6761,7 +6762,7 @@
           : `<div class="secret-eye-badge eye-open" title="Crew is visible to members"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>`}
         <div class="crew-card-head">
           ${crew.totemPhotoUrl ? `<img class="crew-totem-thumb" src="${crew.totemPhotoUrl}" alt="Crew totem">` : ''}
-          <div class="crew-name">${crew.name}</div>
+          <div class="crew-name">${escHtml(crew.name)}</div>
           <span class="crew-status ${s.cls}${crew.isLead ? ' tappable' : ''}"
                 onclick="event.stopPropagation(); toggleStatus('${crew.id}')"
                 title="${crew.isLead ? 'Tap to change status' : 'Only the Crew Lead can change status'}">${s.label}</span>
@@ -6991,7 +6992,7 @@
       <div class="crew-detail-page-wrap">
       <div class="detail-bar" style="background:${crew.gradient}"></div>
       <div class="crew-detail-title-row">
-        <div class="modal-title">${crew.name}</div>
+        <div class="modal-title">${escHtml(crew.name)}</div>
         ${crew.isLead ? `<button class="crew-edit-btn" onclick="showCrewEditModal('${crew.id}')" title="Edit crew name and colour">✏️</button>` : ''}
         <span class="crew-status ${s.cls}${crew.isLead ? ' tappable-lead' : ''}"
           ${crew.isLead ? `onclick="toggleStatus('${crew.id}')" title="Tap to change status"` : ''}>${s.label}</span>
@@ -7338,7 +7339,7 @@
       <div class="detail-bar" style="background:${crew.gradient}"></div>
       <div style="text-align:center;padding:8px 0 24px;">
         <div style="font-size:2.8rem;margin-bottom:14px;">🗑️</div>
-        <div class="modal-title" style="margin-bottom:12px;">Delete "${crew.name}"?</div>
+        <div class="modal-title" style="margin-bottom:12px;">Delete "${escHtml(crew.name)}"?</div>
         <p style="font-size:0.86rem;color:var(--muted);line-height:1.65;margin-bottom:8px;">${note}</p>
         <p style="font-size:0.86rem;color:var(--neon-pink);font-weight:700;">This cannot be undone.</p>
       </div>
@@ -7479,7 +7480,8 @@
     if (!crew || !crew.isLead) return;
     let token = crew.invite_token;
     if (!token) {
-      token = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : (Math.random().toString(36).slice(2) + Date.now().toString(36));
+      token = (typeof crypto?.randomUUID === 'function') ? crypto.randomUUID()
+            : Array.from(crypto.getRandomValues(new Uint8Array(18)), b => b.toString(36)).join('');
       const { error } = await sb.from('crews').update({ invite_token: token }).eq('id', crewId);
       if (error) { showToast('⚠️ Could not generate invite link.'); return; }
       crew.invite_token = token;
@@ -9750,7 +9752,7 @@
     el.innerHTML = list.map(n => `
       <div class="notif-item ${n.read ? 'notif-read' : 'unread'}">
         <span class="notif-dot"></span>
-        <span class="notif-text">${n.message}</span>
+        <span class="notif-text">${escHtml(n.message)}</span>
         <span class="notif-time">${relativeTime(n.timestamp)}</span>
       </div>`).join('');
   }
