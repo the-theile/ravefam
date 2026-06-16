@@ -5447,10 +5447,11 @@
     dbLoadCommunityGenres().catch(() => {});
     dbLoadCommunityArtists().catch(() => {});
 
-    // Load Our Photos, private phones, and nicknames into cache (non-blocking)
+    // Load Our Photos, private phones, nicknames, and viewer notes into cache (non-blocking)
     loadAllOurPhotos().catch(() => {});
     loadPrivatePhones().catch(() => {});
     loadNicknames().catch(() => {});
+    loadViewerNotes().catch(() => {});
   }
 
   // ===== WELCOME BACK POPUP =====
@@ -5469,9 +5470,9 @@
     const me = squad.find(r => r.isYou);
     if (!me || !me.handle) return;
 
-    const todayKey = `ravefam_welcome_${currentUser.id}_${new Date().toISOString().slice(0,10)}`;
-    if (localStorage.getItem(todayKey)) return;
-    localStorage.setItem(todayKey, '1');
+    const todayKey = `ravefam_welcome_${currentUser.id}`;
+    if (sessionStorage.getItem(todayKey)) return;
+    sessionStorage.setItem(todayKey, '1');
 
     const [emoji, msg] = WBP_GREETINGS[Math.floor(Math.random() * WBP_GREETINGS.length)];
     document.getElementById('wbp-emoji').textContent = emoji;
@@ -5802,14 +5803,12 @@
       .order('created_at', { ascending: false })
       .limit(100);
     if (error || !data) return;
-    // Merge DB notifications into localStorage feed (DB is source of truth)
-    const list = data.map(n => ({
+    _notifications = data.map(n => ({
       id: n.id,
       message: n.message,
       timestamp: new Date(n.created_at).getTime(),
       read: n.read
     }));
-    saveNotifs(list);
     updateNotifBadge();
   }
 
@@ -6072,11 +6071,6 @@
         if (p.uploader_user_id === currentUser.id) result.mine = p.photo_url;
         else result.theirs = p.photo_url;
       });
-      // Fallback: if no DB mine photo, check localStorage legacy
-      if (!result.mine) {
-        const lsKey = `ourPhoto_${pair.a}_${pair.b}_from_${pair.myId}`;
-        result.mine = localStorage.getItem(lsKey) || null;
-      }
       ourPhotosCache[String(viewingRaverId)] = result;
       return result;
     } catch(e) {
@@ -6116,6 +6110,30 @@
     const { data } = await sb.from('raver_nicknames')
       .select('target_raver_id, nickname').eq('recorder_user_id', currentUser.id);
     (data || []).forEach(n => { nicknameCache[String(n.target_raver_id)] = n.nickname; });
+  }
+
+  // ── Viewer notes (private notes per crewmate, synced to DB) ────────────────
+
+  const viewerNotesCache = {};
+  const _viewerNoteTimers = {};
+
+  async function loadViewerNotes() {
+    if (!currentUser) return;
+    const { data } = await sb.from('viewer_notes')
+      .select('raver_id, notes').eq('viewer_user_id', currentUser.id);
+    (data || []).forEach(row => { viewerNotesCache[String(row.raver_id)] = row.notes; });
+  }
+
+  function saveViewerNote(raverId, notes) {
+    viewerNotesCache[String(raverId)] = notes;
+    clearTimeout(_viewerNoteTimers[raverId]);
+    _viewerNoteTimers[raverId] = setTimeout(() => {
+      if (!currentUser || String(raverId).startsWith('temp_')) return;
+      sb.from('viewer_notes').upsert(
+        { viewer_user_id: currentUser.id, raver_id: raverId, notes, updated_at: new Date().toISOString() },
+        { onConflict: 'viewer_user_id,raver_id' }
+      ).catch(() => {});
+    }, 1000);
   }
 
   async function saveNickname(raverId, nickname) {
@@ -6299,13 +6317,8 @@
 
   function ourPhotoSectionHTML(viewingRaverId) {
     const cached = ourPhotosCache[String(viewingRaverId)];
-    // Fallback to localStorage legacy during load
     let myPhoto = cached?.mine ?? null;
     let theirPhoto = cached?.theirs ?? null;
-    if (!myPhoto) {
-      const pair = ourPhotoPair(viewingRaverId);
-      if (pair) myPhoto = localStorage.getItem(`ourPhoto_${pair.a}_${pair.b}_from_${pair.myId}`) || null;
-    }
 
     const mySlot = myPhoto
       ? `<div class="our-photo-slot">
@@ -6363,8 +6376,6 @@
       }, { onConflict: 'uploader_user_id,raver_a_id,raver_b_id' });
       if (!ourPhotosCache[String(viewingRaverId)]) ourPhotosCache[String(viewingRaverId)] = { mine: null, theirs: null };
       ourPhotosCache[String(viewingRaverId)].mine = url;
-      // Clear any legacy localStorage entry for this pair
-      localStorage.removeItem(`ourPhoto_${pair.a}_${pair.b}_from_${pair.myId}`);
       const r = squad.find(x => String(x.id) === String(viewingRaverId));
       if (r) openProfile(r.id);
       showToast('📸 Photo saved!');
@@ -6400,9 +6411,6 @@
               .eq('uploader_user_id', currentUser.id).eq('raver_a_id', pair.a).eq('raver_b_id', pair.b).catch(() => {});
           }
           if (ourPhotosCache[String(viewingRaverId)]) ourPhotosCache[String(viewingRaverId)].mine = null;
-          // Also clear legacy localStorage entry
-          const pair = ourPhotoPair(viewingRaverId);
-          if (pair) localStorage.removeItem(`ourPhoto_${pair.a}_${pair.b}_from_${pair.myId}`);
           const r = squad.find(x => String(x.id) === String(viewingRaverId));
           if (r) openProfile(r.id);
           showToast('Photo removed');
@@ -7837,10 +7845,7 @@
 
   function ourPhotoCardHTML(viewingRaverId) {
     const cached = ourPhotosCache[String(viewingRaverId)];
-    // Also check legacy localStorage during transition period
-    const pair = ourPhotoPair(viewingRaverId);
-    const lsMine = pair ? localStorage.getItem(`ourPhoto_${pair.a}_${pair.b}_from_${pair.myId}`) : null;
-    const myPhoto    = cached?.mine    ?? lsMine ?? null;
+    const myPhoto    = cached?.mine    ?? null;
     const theirPhoto = cached?.theirs  ?? null;
     if (!myPhoto && !theirPhoto) return '';
     const slots = [];
@@ -8316,11 +8321,11 @@
         <div class="profile-section" style="${sg(1)}">
           <h3>📝 Notes</h3>
           ${r.isYou ? `<div class="profile-note">${r.notes ? escHtml(r.notes) : '<span class="fest-empty">No notes yet</span>'}</div>` : (() => {
-            const savedNotes = localStorage.getItem('viewer_notes_' + r.id) || '';
+            const savedNotes = escHtml(viewerNotesCache[String(r.id)] || '');
             return `<p style="font-size:0.72rem;color:var(--muted);margin-bottom:8px;line-height:1.4;">Private — only you can see this.</p>
               <textarea id="viewer-notes-${r.id}" class="inline-notes-area"
                 placeholder="Vibe check, inside jokes, things to remember…"
-                oninput="localStorage.setItem('viewer_notes_${r.id}',this.value);const s=document.getElementById('notes-saved-${r.id}');if(s){s.classList.add('show');clearTimeout(s._t);s._t=setTimeout(()=>s.classList.remove('show'),1400);}"
+                oninput="saveViewerNote('${r.id}',this.value);const s=document.getElementById('notes-saved-${r.id}');if(s){s.classList.add('show');clearTimeout(s._t);s._t=setTimeout(()=>s.classList.remove('show'),1400);}"
               >${savedNotes}</textarea>
               <div id="notes-saved-${r.id}" class="inline-notes-saved">Saved ✓</div>`;
           })()}
@@ -9719,23 +9724,27 @@
   //  IN-APP NOTIFICATION FEED
   // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 
-  const NOTIF_KEY = 'ravefam_notifications';
+  // ═══════════════════════════════════════════════════════════════════════════════
+  //  IN-APP NOTIFICATION FEED
+  // ═══════════════════════════════════════════════════════════════════════════════
 
-  function loadNotifs() {
-    try { return JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]'); } catch { return []; }
-  }
-  function saveNotifs(list) {
-    localStorage.setItem(NOTIF_KEY, JSON.stringify(list));
-  }
+  // In-memory notification store — loaded from DB on boot, never touches localStorage.
+  let _notifications = [];
+
+  function loadNotifs() { return _notifications; }
+  function saveNotifs() {} // intentional no-op — kept so no stray call breaks
 
   function addNotification(message) {
-    const list = loadNotifs();
-    list.unshift({ id: Date.now(), message, timestamp: Date.now(), read: false });
-    if (list.length > 100) list.splice(100);
-    saveNotifs(list);
+    const n = { id: Date.now() + '_' + Math.random(), message, timestamp: Date.now(), read: false };
+    _notifications.unshift(n);
+    if (_notifications.length > 100) _notifications.splice(100);
     updateNotifBadge();
-    if (document.getElementById('notif-drawer-overlay').classList.contains('open')) {
-      renderNotifList();
+    if (document.getElementById('notif-drawer-overlay').classList.contains('open')) renderNotifList();
+    if (currentUser) {
+      sb.from('notifications').insert({ user_id: currentUser.id, crew_id: null, message })
+        .select('id').single()
+        .then(({ data: ins }) => { if (ins?.id) n.id = ins.id; })
+        .catch(() => {});
     }
   }
 
@@ -9773,9 +9782,7 @@
   }
 
   function openNotifDrawer() {
-    const list = loadNotifs();
-    const updated = list.map(n => ({ ...n, read: true }));
-    saveNotifs(updated);
+    _notifications = _notifications.map(n => ({ ...n, read: true }));
     updateNotifBadge();
     renderNotifList();
     document.getElementById('notif-drawer-overlay').classList.add('open');
@@ -9805,7 +9812,7 @@
   }
 
   function clearAllNotifs() {
-    saveNotifs([]);
+    _notifications = [];
     updateNotifBadge();
     renderNotifList();
     if (currentUser) dbClearNotifications();
@@ -9831,8 +9838,8 @@
   const LS_KEY = 'spt_progress';
   let prog = {};
 
-  function loadLS() { try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch(e) { return {}; } }
-  function saveLS(data) { try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch(e) {} }
+  function loadLS() { try { return JSON.parse(sessionStorage.getItem(LS_KEY) || '{}'); } catch(e) { return {}; } }
+  function saveLS(data) { try { sessionStorage.setItem(LS_KEY, JSON.stringify(data)); } catch(e) {} }
 
   function mergeProgress(base) {
     const ls = loadLS();
