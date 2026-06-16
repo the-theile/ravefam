@@ -515,13 +515,52 @@
   }
   .event-meta { font-size: 0.78rem; color: var(--muted); }
   /* Stacked avatar row replacing name chips */
-  .going-avatars { display: flex; align-items: center; margin-top: 9px; }
+  .going-avatars {
+    display: flex; align-items: flex-end;
+    margin-top: 9px; padding-top: 46px; overflow: visible;
+  }
   .going-avatar {
     cursor: pointer;
     transition: transform 0.15s;
     position: relative;
   }
   .going-avatar:hover { transform: scale(1.15) translateY(-2px); z-index: 10; }
+  /* Vibe bubble floating above an avatar */
+  .going-vibe-bubble {
+    position: absolute; bottom: calc(100% + 4px); left: 0; z-index: 5;
+    background: var(--surface2);
+    border: 1px solid rgba(255,45,120,0.28);
+    border-radius: 10px 10px 10px 2px;
+    padding: 4px 8px;
+    display: inline-flex; align-items: center; gap: 5px;
+    white-space: nowrap; font-size: 0.9rem;
+    pointer-events: none;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3), 0 0 8px rgba(255,45,120,0.07);
+  }
+  .going-vibe-bubble.is-mine {
+    pointer-events: auto; cursor: pointer;
+    border-color: rgba(255,45,120,0.5);
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .going-vibe-bubble.is-mine:hover {
+    background: rgba(255,45,120,0.08); border-color: rgba(255,45,120,0.7);
+  }
+  .going-vibe-add {
+    pointer-events: auto; cursor: pointer;
+    font-size: 0.67rem; font-family: 'Outfit', sans-serif; font-weight: 700;
+    color: rgba(255,45,120,0.7);
+    border: 1.5px dashed rgba(255,45,120,0.38);
+    background: rgba(255,45,120,0.04);
+    transition: all 0.15s;
+  }
+  .going-vibe-add:hover {
+    color: var(--neon-pink); border-color: var(--neon-pink);
+    background: rgba(255,45,120,0.08);
+  }
+  .going-vibe-caption {
+    font-size: 0.65rem; color: rgba(255,255,255,0.82);
+    max-width: 90px; overflow: hidden; text-overflow: ellipsis;
+  }
 
   .going-toggle {
     display: inline-flex;
@@ -6004,8 +6043,7 @@ async function doProfilePasswordChange() {
   }
 
   function renderVibeRow(festId) {
-    const row = document.getElementById(`vibe-row-${festId}`);
-    if (row) row.innerHTML = buildVibeRowHTML(festId);
+    renderEvents();
   }
 
   function openVibePicker(festId) {
@@ -10053,7 +10091,7 @@ async function doProfilePasswordChange() {
       const you = squad.find(r => r.isYou);
       const youGoing = you && (you.festIds || []).some(fid => String(fid) === String(f.id));
 
-      // Stacked avatar chips replacing name-text pills
+      // Stacked avatar chips — each with an optional vibe bubble floating above
       let avatarChips;
       if (goers.length) {
         const shown = goers.slice(0, 5);
@@ -10063,7 +10101,18 @@ async function doProfilePasswordChange() {
           const inner = w.avatarUrl
             ? `<img src="${w.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${initials(dn)}">`
             : initials(dn).toUpperCase();
-          return `<div class="avatar going-avatar" style="background:${bg};" data-raver-id="${w.id}" onclick="event.stopPropagation(); openProfile(this.dataset.raverId, false, 'members')" title="${dn}">${inner}</div>`;
+          const vibe = (festVibesCache[String(f.id)] || []).find(v => String(v.raverId) === String(w.id));
+          const isMeW = you && String(w.id) === String(you.id);
+          let bubbleHtml = '';
+          if (vibe) {
+            const captionHtml = vibe.caption ? `<span class="going-vibe-caption">${escHtml(vibe.caption)}</span>` : '';
+            const cls = `going-vibe-bubble${isMeW ? ' is-mine' : ''}`;
+            const click = isMeW ? `onclick="event.stopPropagation(); openVibePicker('${f.id}')"` : '';
+            bubbleHtml = `<div class="${cls}" ${click}>${vibe.emoji}${captionHtml}</div>`;
+          } else if (isMeW) {
+            bubbleHtml = `<div class="going-vibe-bubble going-vibe-add" onclick="event.stopPropagation(); openVibePicker('${f.id}')">✦ vibe</div>`;
+          }
+          return `<div class="avatar going-avatar" style="background:${bg};" data-raver-id="${w.id}" onclick="event.stopPropagation(); openProfile(this.dataset.raverId, false, 'members')" title="${dn}">${inner}${bubbleHtml}</div>`;
         }).join('');
         if (goers.length > 5) avatarChips += `<div class="avatar avatar-count">+${goers.length - 5}</div>`;
       } else {
@@ -10083,7 +10132,7 @@ async function doProfilePasswordChange() {
             <div class="event-name">${f.name} <span class="fest-edit-hint">✏️</span></div>
             <div class="event-meta">${metaLine}</div>
             <div class="going-avatars">${avatarChips}</div>
-            <div class="fest-vibe-row" id="vibe-row-${f.id}">${buildVibeRowHTML(f.id)}</div>
+            <div id="vibe-picker-${f.id}" style="display:none;margin-top:6px;"></div>
             ${toggleBtn}
           </div>
           <div class="event-crew-going">
