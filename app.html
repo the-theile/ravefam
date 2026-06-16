@@ -4402,6 +4402,7 @@
     const { error } = await sb.auth.updateUser({ password: pw });
     btn.disabled = false;
     if (error) { authError(error.message); return; }
+    authSuccess('✅ Password updated!');
     // Password saved — boot the app; user is already authenticated
     const { data: { user } } = await sb.auth.getUser();
     _bootedUserId = user.id;
@@ -5693,13 +5694,13 @@
     };
     if (id) {
       const { error } = await sb.from('ravers').update(row).eq('id', id);
-      if (error) console.error('raver update error', error);
+      if (error) { console.error('raver update error', error); showToast('⚠️ Could not save profile — try again'); }
       return id;
     } else {
       row.created_by = uid;
       row.qr_token = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : (Math.random().toString(36).slice(2) + Date.now().toString(36));
       const { data: inserted, error } = await sb.from('ravers').insert(row).select().single();
-      if (error) console.error('raver insert error', error);
+      if (error) { console.error('raver insert error', error); showToast('⚠️ Could not create profile — try again'); }
       return inserted || null;
     }
   }
@@ -5720,12 +5721,12 @@
     const row = { name: data.name, date: data.date, location: data.location };
     if (id) {
       const { error } = await sb.from('festivals').update(row).eq('id', id);
-      if (error) console.error('festival update error', error);
+      if (error) { console.error('festival update error', error); showToast('⚠️ Could not update rave — try again'); }
       return id;
     } else {
       row.created_by = uid;
       const { data: inserted, error } = await sb.from('festivals').insert(row).select().single();
-      if (error) console.error('festival insert error', error);
+      if (error) { console.error('festival insert error', error); showToast('⚠️ Could not create rave — try again'); }
       return inserted?.id;
     }
   }
@@ -5741,12 +5742,12 @@
     const row = { name: data.name, color: data.color, gradient: data.gradient, status: data.status, totem_photo_url: data.totemPhotoUrl ?? undefined };
     if (id) {
       const { error } = await sb.from('crews').update(row).eq('id', id);
-      if (error) console.error('crew update error', error);
+      if (error) { console.error('crew update error', error); showToast('⚠️ Could not update crew — try again'); }
       return id;
     } else {
       row.leader_id = uid;
       const { data: inserted, error } = await sb.from('crews').insert(row).select().single();
-      if (error) console.error('crew insert error', error);
+      if (error) { console.error('crew insert error', error); showToast('⚠️ Could not create crew — try again'); }
       return inserted?.id;
     }
   }
@@ -5768,7 +5769,7 @@
     const { error } = await sb.from('crew_members')
       .upsert({ crew_id: crewId, raver_id: raverId, added_by: uid },
                { onConflict: 'crew_id,raver_id', ignoreDuplicates: true });
-    if (error) console.error('crew member add error', error);
+    if (error) { console.error('crew member add error', error); showToast('⚠️ Could not add member — try again'); }
   }
 
   // Targeted single-row delete — only touches the removed member
@@ -5777,7 +5778,7 @@
       .delete()
       .eq('crew_id', crewId)
       .eq('raver_id', raverId);
-    if (error) console.error('crew member remove error', error);
+    if (error) { console.error('crew member remove error', error); showToast('⚠️ Could not remove member — try again'); }
   }
 
 
@@ -8408,7 +8409,7 @@
     addNotification(`🗑️ ${r.name} has been removed from the tribe. The circle tightens — may the bass always find them.`);
     if (currentUser) {
       sb.from('ravers').delete().eq('id', raverId).then(({ error }) => {
-        if (error) console.error('delete raver error', error);
+        if (error) { console.error('delete raver error', error); showToast('⚠️ Could not fully delete — refresh and try again'); }
       });
     }
   }
