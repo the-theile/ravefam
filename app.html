@@ -4410,13 +4410,13 @@
   // Permission flags for the current viewer on a given raver object.
   function raverPerms(r) {
     const none = () => ({
-      editName:false, editHandle:false, editLocation:false, editInstagram:false,
+      editName:false, editHandle:false, editLocation:false, editInstagram:false, editRadiate:false,
       editPhone:false, editTags:false, editGenres:false, editArtists:false, editFests:false,
       canDisconnect:false, canDelete:false, isLeaderOfRaver:false, isClaimed:false
     });
     if (!r) return none();
     if (r.isYou) return {
-      editName:true, editHandle:true, editLocation:true, editInstagram:true,
+      editName:true, editHandle:true, editLocation:true, editInstagram:true, editRadiate:true,
       editPhone:true, editTags:true, editGenres:true, editArtists:true, editFests:true,
       canDisconnect:false, canDelete:false, isLeaderOfRaver:false, isClaimed:true
     };
@@ -4433,6 +4433,7 @@
       editHandle:     false,
       editLocation:   isMember && !isClaimed,
       editInstagram:  isMember && !isClaimed,
+      editRadiate:    isMember && !isClaimed,
       editPhone:      isMember && !isClaimed,
       editTags:       isMember,
       editGenres:     isMember,
@@ -5111,9 +5112,10 @@ async function doProfilePasswordChange() {
       const newBase      = raver.base      && !existingRaver.base      ? raver.base      : null;
       const newHandle    = raver.handle    && !existingRaver.handle    ? raver.handle    : null;
       const newInstagram = raver.instagram && !existingRaver.instagram ? raver.instagram : null;
+      const newRadiate   = raver.radiate   && !existingRaver.radiate   ? raver.radiate   : null;
 
       const chipItems = [...newGenres, ...newArtists, ...newVibes, ...newFestNames];
-      const hasAdds   = chipItems.length > 0 || newBase || newHandle || newInstagram;
+      const hasAdds   = chipItems.length > 0 || newBase || newHandle || newInstagram || newRadiate;
 
       if (hasAdds) {
         const chipHtml = chipItems.map(t => `<span class="claim-tag">${escHtml(t)}</span>`).join('');
@@ -5531,6 +5533,7 @@ async function doProfilePasswordChange() {
           favArtists: r.fav_artists || [],
           festIds: (r.raver_festivals || []).map(rf => rf.festival_id),
           instagram: r.instagram || '',
+          radiate: r.radiate || '',
           phone: r.phone || '',
           phoneVisible: r.phone_visible || false,
           metStory: r.met_story || '',
@@ -5623,6 +5626,7 @@ async function doProfilePasswordChange() {
             favArtists: r.fav_artists || [],
             festIds: (r.raver_festivals || []).map(rf => rf.festival_id),
             instagram: r.instagram || '',
+            radiate: r.radiate || '',
             phone: r.phone_visible ? (r.phone || '') : '',
             phoneVisible: r.phone_visible || false,
             metStory: r.met_story || '',
@@ -5892,6 +5896,7 @@ async function doProfilePasswordChange() {
       genres: data.genres,
       fav_artists: data.favArtists,
       instagram: data.instagram,
+      radiate: data.radiate,
       phone: data.phone,
       phone_visible: data.phoneVisible || false,
       notes: data.notes,
@@ -6436,7 +6441,7 @@ async function doProfilePasswordChange() {
     const r = getRaver(raverId);
     if (!r) return;
     // DB column name mapping
-    const colMap = { name: 'name', base: 'base', instagram: 'instagram', phone: 'phone' };
+    const colMap = { name: 'name', base: 'base', instagram: 'instagram', radiate: 'radiate', phone: 'phone' };
     const col = colMap[fieldKey];
     if (!col) return;
     r[fieldKey] = value;
@@ -8543,6 +8548,7 @@ async function doProfilePasswordChange() {
         <div class="profile-section">
           <h3>📱 Contact</h3>
           ${fieldRow('Instagram','pf-instagram', r.instagram, '@samraves')}
+          ${fieldRow('Radiate','pf-radiate', r.radiate, 'e.g. @samraves')}
           ${fieldRow('Phone','pf-phone', r.phone, '+44 7700 900000')}
           ${isOwnProfile ? `
             <div class="phone-visibility-row">
@@ -8747,6 +8753,12 @@ async function doProfilePasswordChange() {
                  <div class="contact-their-phone"><span id="ief-wrap-${r.id}-instagram" class="ief-wrap">${inlineEditDisplay(r.id, 'instagram', r.instagram || '')}</span></div>
                </div>`
             : '';
+          const theirRadiate = perms.editRadiate
+            ? `<div class="contact-row">
+                 <div class="contact-their-label">Radiate</div>
+                 <div class="contact-their-phone"><span id="ief-wrap-${r.id}-radiate" class="ief-wrap">${inlineEditDisplay(r.id, 'radiate', r.radiate || '')}</span></div>
+               </div>`
+            : '';
           const theirPhone = (perms.editPhone && !perms.isClaimed)
             ? `<div class="contact-row">
                  <div class="contact-their-label">Their phone (crew reference)</div>
@@ -8768,11 +8780,12 @@ async function doProfilePasswordChange() {
                   <button class="ief-btn ief-edit" onclick="startPrivatePhoneEdit('${r.id}',\`${escaped}\`)">✏️</button>`;
               })()}</span></div>
             </div>`;
-          if (!theirInstagram && !theirPhone && !perms.isClaimed) return '';
+          if (!theirInstagram && !theirRadiate && !theirPhone && !perms.isClaimed) return '';
           return `<div class="profile-section" style="${sg(1)}">
             <h3>📱 Contact</h3>
             <div class="profile-contact-section">
               ${theirInstagram}
+              ${theirRadiate}
               ${theirPhone}
               ${myPhone}
             </div>
@@ -8940,6 +8953,7 @@ async function doProfilePasswordChange() {
         ${fieldRow('Name','pf-name', '', 'e.g. Sam P.')}
         ${fieldRow('Phone Number','pf-phone', '', 'e.g. +44 7700 900000')}
         ${fieldRow('Instagram','pf-instagram', '', 'e.g. @samraves')}
+        ${fieldRow('Radiate','pf-radiate', '', 'e.g. @samraves')}
         <div class="modal-actions">
           <button class="btn btn-ghost" onclick="closeProfileEditor()">Cancel</button>
           <button class="btn btn-primary" onclick="saveProfile()">Add Raver 🔥</button>
@@ -8975,6 +8989,7 @@ async function doProfilePasswordChange() {
       ${handleField}
       ${fieldRow('Home Base','pf-base', r?.base, 'e.g. Berlin, DE')}
       ${fieldRow('Instagram','pf-instagram', r?.instagram, 'e.g. @samraves')}
+      ${fieldRow('Radiate','pf-radiate', r?.radiate, 'e.g. @samraves')}
       ${fieldRow('Phone Number','pf-phone', r?.phone, 'e.g. +44 7700 900000')}
       <div class="form-group vibe-tags-section">
         <label class="form-label">⚡ Vibe Tags</label>
@@ -9630,6 +9645,7 @@ async function doProfilePasswordChange() {
       favArtists: parseList(val('pf-favs')),
       festIds: Array.from(editingFestIds),
       instagram: val('pf-instagram'),
+      radiate: val('pf-radiate'),
       phone: val('pf-phone'),
       phoneVisible: document.getElementById('pf-phone-visible')?.checked ?? false,
       notes: val('pf-notes'),
@@ -10430,7 +10446,7 @@ async function doProfilePasswordChange() {
       name, handle, genres: Array.from(_obGenres),
       is_you: true, claimed_by: uid, created_by: uid, status: 'claimed',
       gradient, qr_token: qrToken,
-      base: '', crew_name: '', instagram: '', phone: '', met_story: '', notes: '',
+      base: '', crew_name: '', instagram: '', radiate: '', phone: '', met_story: '', notes: '',
       fav_artists: [], vibe_tags: [], custom_vibe_tags: [], blocked_tags: [],
       updated_at: new Date().toISOString(),
     }).select().single();
@@ -10442,7 +10458,7 @@ async function doProfilePasswordChange() {
     squad.push({
       id: inserted.id, name, handle, isYou: true,
       genres: Array.from(_obGenres), gradient, festIds: [],
-      base: '', crew: '', instagram: '', phone: '', metStory: '', notes: '',
+      base: '', crew: '', instagram: '', radiate: '', phone: '', metStory: '', notes: '',
       favArtists: [], vibeTags: [], customVibeTags: [], blockedTags: [],
       avatarUrl: null, createdBy: uid, claimedBy: uid, status: 'claimed', qrToken,
     });
