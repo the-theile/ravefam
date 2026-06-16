@@ -4995,29 +4995,74 @@ async function doProfilePasswordChange() {
       ? `<img src="${raver.avatar_url}" style="width:100%;height:100%;object-fit:cover;" alt="${escHtml(raver.name || '')}">`
       : (raver.name ? initials(raver.name) : '?');
 
-    const hasPreFill = raver.notes || raver.met_story || raver.handle;
-    const reviewBlock = hasPreFill ? `
-      <div class="claim-review-block">
-        <div class="claim-review-label">Your leader added these details for you</div>
-        ${raver.handle ? `<div class="claim-review-row"><span class="claim-review-key">Handle</span><span>${escHtml(raver.handle)}</span></div>` : ''}
-        ${raver.met_story ? `<div class="claim-review-row"><span class="claim-review-key">How we met</span><span>${escHtml(raver.met_story)}</span></div>` : ''}
-        ${raver.notes ? `<div class="claim-review-row"><span class="claim-review-key">Note</span><span>${escHtml(raver.notes)}</span></div>` : ''}
-        <button class="claim-edit-btn" onclick="toggleClaimEditForm(this)">✏️ Edit before claiming</button>
-        <div class="claim-review-edit-form" id="claim-edit-form">
-          <div>
-            <div class="claim-review-label" style="margin-bottom:5px;">Name</div>
-            <input class="form-input" id="claim-edit-name" value="${(raver.name || '').replace(/"/g,'&quot;')}" placeholder="Your name">
+    // Detect merge scenario: does this user already have an active raver profile?
+    const existingRaver = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
+    let bottomSection = '';
+
+    if (existingRaver) {
+      // Compute what from the stub is genuinely new to the existing profile
+      const newGenres  = (raver.genres || []).filter(g => !existingRaver.genres.includes(g));
+      const newArtists = (raver.fav_artists || []).filter(a => !existingRaver.favArtists.includes(a));
+      const stubVibes  = [...(raver.vibe_tags || []), ...(raver.custom_vibe_tags || [])];
+      const newVibes   = stubVibes.filter(t =>
+        !existingRaver.vibeTags.includes(t) && !existingRaver.customVibeTags.includes(t)
+      );
+      const newFestIds   = (raver.festival_ids || []).filter(id => !existingRaver.festIds.includes(String(id)));
+      const newFestNames = newFestIds
+        .map(id => festivals.find(f => String(f.id) === String(id))?.name)
+        .filter(Boolean);
+      const newBase      = raver.base      && !existingRaver.base      ? raver.base      : null;
+      const newHandle    = raver.handle    && !existingRaver.handle    ? raver.handle    : null;
+      const newInstagram = raver.instagram && !existingRaver.instagram ? raver.instagram : null;
+
+      const chipItems = [...newGenres, ...newArtists, ...newVibes, ...newFestNames];
+      const hasAdds   = chipItems.length > 0 || newBase || newHandle || newInstagram;
+
+      if (hasAdds) {
+        const chipHtml = chipItems.map(t => `<span class="claim-tag">${escHtml(t)}</span>`).join('');
+        bottomSection = `
+          <div class="claim-review-block">
+            <div class="claim-review-label">✨ Your crew leader added these to your profile</div>
+            ${chipHtml ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">${chipHtml}</div>` : ''}
+            ${newBase      ? `<div class="claim-review-row"><span class="claim-review-key">📍 Base</span><span>${escHtml(newBase)}</span></div>` : ''}
+            ${newHandle    ? `<div class="claim-review-row"><span class="claim-review-key">🏷️ Handle</span><span>${escHtml(newHandle)}</span></div>` : ''}
+            ${newInstagram ? `<div class="claim-review-row"><span class="claim-review-key">📸 Instagram</span><span>@${escHtml(newInstagram)}</span></div>` : ''}
+            <div style="margin-top:10px;font-size:0.75rem;color:rgba(255,255,255,0.4);">These will be added to your profile when you claim. Nothing on your existing profile will be removed or overwritten.</div>
           </div>
-          <div>
-            <div class="claim-review-label" style="margin-bottom:5px;">Handle</div>
-            <input class="form-input" id="claim-edit-handle" value="${(raver.handle || '').replace(/"/g,'&quot;')}" placeholder="@handle">
+          <div class="claim-spot-label">This profile was saved for you by your crew leader.</div>`;
+      } else {
+        bottomSection = `<div class="claim-spot-label">This profile was saved for you by your crew leader. Claiming this spot just joins you to the crew — no changes to your existing profile.</div>`;
+      }
+    } else {
+      // Direct claim: stub becomes their profile
+      const hasPreFill = raver.notes || raver.handle;
+      if (hasPreFill) {
+        bottomSection = `
+          <div class="claim-review-block">
+            <div class="claim-review-label">Your leader added these details for you</div>
+            ${raver.handle ? `<div class="claim-review-row"><span class="claim-review-key">Handle</span><span>${escHtml(raver.handle)}</span></div>` : ''}
+            ${raver.notes  ? `<div class="claim-review-row"><span class="claim-review-key">Note</span><span>${escHtml(raver.notes)}</span></div>`   : ''}
+            <button class="claim-edit-btn" onclick="toggleClaimEditForm(this)">✏️ Edit before claiming</button>
+            <div class="claim-review-edit-form" id="claim-edit-form">
+              <div>
+                <div class="claim-review-label" style="margin-bottom:5px;">Name</div>
+                <input class="form-input" id="claim-edit-name" value="${(raver.name || '').replace(/"/g,'&quot;')}" placeholder="Your name">
+              </div>
+              <div>
+                <div class="claim-review-label" style="margin-bottom:5px;">Handle</div>
+                <input class="form-input" id="claim-edit-handle" value="${(raver.handle || '').replace(/"/g,'&quot;')}" placeholder="@handle">
+              </div>
+              <div>
+                <div class="claim-review-label" style="margin-bottom:5px;">How we met</div>
+                <input class="form-input" id="claim-edit-met" value="${(raver.met_story || '').replace(/"/g,'&quot;')}" placeholder="Where did your paths cross?">
+              </div>
+            </div>
           </div>
-          <div>
-            <div class="claim-review-label" style="margin-bottom:5px;">How we met</div>
-            <input class="form-input" id="claim-edit-met" value="${(raver.met_story || '').replace(/"/g,'&quot;')}" placeholder="Where did your paths cross?">
-          </div>
-        </div>
-      </div>` : '';
+          <div class="claim-spot-label">Review the details above — you can edit anything before joining.</div>`;
+      } else {
+        bottomSection = `<div class="claim-spot-label">This profile was saved for you by your crew leader.</div>`;
+      }
+    }
 
     const slotGradient = raver.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)';
     const primaryColor = slotGradient.match(/#[0-9A-Fa-f]{6}/)?.[0] || crewColor;
@@ -5038,8 +5083,7 @@ async function doProfilePasswordChange() {
           <div class="claim-slot-tags">${tagsHtml}</div>
         </div>
       </div>
-      ${reviewBlock}
-      <div class="claim-spot-label">${hasPreFill ? 'Review the details above — you can edit anything before joining.' : 'This profile was saved for you by your crew leader.'}</div>
+      ${bottomSection}
       <button class="btn-claim" id="confirm-claim-btn" onclick="commitClaim()">🎉 Claim My Spot in ${escHtml(crewName)}</button>
       <span class="claim-back-link" role="button" tabindex="0" onclick="backToScan()" onkeydown="if(event.key==='Enter')backToScan()">Not you? Scan a different code</span>
     `;
@@ -5063,10 +5107,15 @@ async function doProfilePasswordChange() {
       actions = `
         <button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="backToScan()">📷 Try Again</button>
         <button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="closeScanner()">Close</button>`;
+    } else if (type === 'network') {
+      icon    = '⚠️';
+      title   = 'No connection';
+      desc    = "Couldn't reach the server. Check your connection and try again.";
+      actions = `<button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="backToScan()">Try Again</button>`;
     } else {
       icon    = '⚠️';
       title   = 'Something went wrong';
-      desc    = "Couldn't reach the server. Check your connection and try again.";
+      desc    = "An error occurred while claiming your spot. Please try again.";
       actions = `<button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="backToScan()">Try Again</button>`;
     }
     document.getElementById('error-body').innerHTML = `
@@ -5112,7 +5161,14 @@ async function doProfilePasswordChange() {
     const { data: result, error } = await sb.rpc('claim_and_merge_raver', params);
     if (error || result?.error) {
       if (btn) { btn.disabled = false; btn.textContent = '🎉 Claim My Spot'; }
-      const errType = (result?.error === 'invalid_or_used_token' || result?.error === 'already_claimed') ? 'claimed' : 'unknown';
+      let errType;
+      if (result?.error === 'invalid_or_used_token' || result?.error === 'already_claimed') {
+        errType = 'claimed';
+      } else if (error && (!error.status || error.status === 0)) {
+        errType = 'network';
+      } else {
+        errType = 'unknown';
+      }
       showScannerError(errType, previewSnap);
       return;
     }
