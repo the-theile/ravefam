@@ -5063,10 +5063,15 @@ async function doProfilePasswordChange() {
       actions = `
         <button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="backToScan()">📷 Try Again</button>
         <button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="closeScanner()">Close</button>`;
+    } else if (type === 'network') {
+      icon    = '⚠️';
+      title   = 'No connection';
+      desc    = "Couldn't reach the server. Check your connection and try again.";
+      actions = `<button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="backToScan()">Try Again</button>`;
     } else {
       icon    = '⚠️';
       title   = 'Something went wrong';
-      desc    = "Couldn't reach the server. Check your connection and try again.";
+      desc    = "An error occurred while claiming your spot. Please try again.";
       actions = `<button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="backToScan()">Try Again</button>`;
     }
     document.getElementById('error-body').innerHTML = `
@@ -5112,7 +5117,14 @@ async function doProfilePasswordChange() {
     const { data: result, error } = await sb.rpc('claim_and_merge_raver', params);
     if (error || result?.error) {
       if (btn) { btn.disabled = false; btn.textContent = '🎉 Claim My Spot'; }
-      const errType = (result?.error === 'invalid_or_used_token' || result?.error === 'already_claimed') ? 'claimed' : 'unknown';
+      let errType;
+      if (result?.error === 'invalid_or_used_token' || result?.error === 'already_claimed') {
+        errType = 'claimed';
+      } else if (error && (!error.status || error.status === 0)) {
+        errType = 'network';
+      } else {
+        errType = 'unknown';
+      }
       showScannerError(errType, previewSnap);
       return;
     }
