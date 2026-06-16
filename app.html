@@ -4557,7 +4557,8 @@
   async function processPendingClaim() {
     const token = sessionStorage.getItem('pendingClaim');
     if (!token || !currentUser) return;
-    sessionStorage.removeItem('pendingClaim');
+    // Keep pendingClaim in sessionStorage until commitClaim() succeeds —
+    // clearing it here would lose the token if the user accidentally closes the overlay.
 
     const { data: preview, error } = await sb.rpc('get_claim_preview', { p_token: token });
     if (error) { showToast('⚠️ Could not load invite details.'); return; }
@@ -5059,6 +5060,9 @@
       showScannerError(errType, previewSnap);
       return;
     }
+
+    // Claim succeeded — safe to clear the pending token from storage
+    sessionStorage.removeItem('pendingClaim');
 
     // Persist any edits the user made in the review form
     const claimedId = result?.claimed_id || result?.merged_into;
@@ -7188,10 +7192,17 @@
   function joinCrew(id) {
     const crew = getCrew(id);
     if (!crew || crew.status !== 'recruiting') return;
-    crew.members.push({ i: 'ME', c: crew.color, t: '#000' });
+    const me = squad.find(r => r.isYou);
+    if (!me) { showToast('⚠️ Set up your profile first before joining a crew'); return; }
+    if (crew.squadIds.some(sid => String(sid) === String(me.id))) {
+      showToast('You\'re already in this crew'); return;
+    }
+    crew.squadIds.push(me.id);
+    crew.members.push({ i: initials(me.name), c: crew.color, t: '#000', url: me.avatarUrl || null });
     renderCrews();
     renderDetail(id);
     showToast(`🎉 You joined ${crew.name}!`);
+    if (currentUser) dbAddCrewMember(crew.id, me.id);
   }
 
   function confirmRemoveMember(crewId, raverId) {
@@ -7972,8 +7983,8 @@
 
     // Connect buttons — show instagram if public; show phone if owned or phone_visible
     const connectBtns = [];
-    // Instagram: show if it's your profile, or if crew member with edit perms (unclaimed), or if claimed and phone_visible (reuse same flag for instagram)
-    const showInstagram = r.isYou || (r.instagram && (perms.editInstagram || (perms.isClaimed && r.phoneVisible)));
+    // Instagram: show if it's your profile, if you can edit the raver (unclaimed crew member), or if the raver is claimed (public social handle)
+    const showInstagram = r.isYou || perms.editInstagram || (perms.isClaimed && !!r.instagram);
     if (showInstagram && r.instagram) {
       const ig = r.instagram.replace('@','');
       connectBtns.push(`<a class="connect-btn connect-ig" href="https://instagram.com/${ig}" target="_blank" rel="noopener">📷 Instagram</a>`);
