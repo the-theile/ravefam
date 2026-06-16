@@ -6715,35 +6715,23 @@
       card.style.setProperty('--accent-a', crew.color);
       card.onclick = () => openDetail(crew.id);
       const leadBadge = crew.isLead ? '👑 You lead' : '';
-      const n = crewNextUp(crew);
+      // socialOnly=true: only show fest when at least one non-logged-in member is going.
+      const n = crewNextUp(crew, true);
 
       // Build the "next fest" block
       let festBlock;
-      const _onlyMe = n.kind === 'upcoming' && n.whoRavers.length === 1 && n.whoRavers[0].isYou;
-      if (_onlyMe) {
-        festBlock = '';
-      } else if (n.kind === 'upcoming') {
+      if (n.kind === 'upcoming') {
         const when = `${n.date.getDate()} ${MON_SHORT[n.date.getMonth()]}`;
-        const goingNames = n.who.length ? n.who.join(', ') : 'Nobody yet';
+        const goingNames = n.who.length ? n.who.map(w => escHtml(w)).join(', ') : 'Nobody yet';
         festBlock = `
           <div class="crew-fest">
             <div class="crew-fest-label">⏳ Next up · ${countdownLabel(n.date)}</div>
-            <div class="crew-fest-name">${n.name}</div>
+            <div class="crew-fest-name">${escHtml(n.name)}</div>
             <div class="crew-fest-date">${when}</div>
             <div class="crew-fest-going">🎟️ ${n.who.length} going: ${goingNames}</div>
           </div>`;
-      } else if (n.kind === 'past') {
-        festBlock = `
-          <div class="crew-fest crew-fest-past">
-            <div class="crew-fest-label">📍 Last seen at</div>
-            <div class="crew-fest-name">${n.name}</div>
-            <div class="crew-fest-date">${n.date.getFullYear()}</div>
-          </div>`;
       } else {
-        festBlock = `
-          <div class="crew-fest crew-fest-empty">
-            <div class="crew-fest-label">🎵 No upcoming raves planned</div>
-          </div>`;
+        festBlock = '';
       }
 
       card.innerHTML = `
