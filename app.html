@@ -2124,6 +2124,92 @@
     border-color: var(--neon-pink); font-weight: 700;
   }
 
+  /* ===== Festival Vibe Bubbles ===== */
+  .fest-vibe-row {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    margin-top: 8px; align-items: flex-end;
+  }
+  .fest-vibe-bubble {
+    background: var(--surface2);
+    border: 1px solid rgba(255,45,120,0.2);
+    border-radius: 12px 12px 12px 0;
+    padding: 6px 9px;
+    display: flex; flex-direction: column; gap: 2px;
+    max-width: 130px;
+    box-shadow: 0 0 10px rgba(255,45,120,0.08);
+  }
+  .fest-vibe-bubble.is-mine {
+    cursor: pointer;
+    border-color: rgba(255,45,120,0.45);
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .fest-vibe-bubble.is-mine:hover {
+    background: rgba(255,45,120,0.08);
+    border-color: rgba(255,45,120,0.65);
+  }
+  .fest-vibe-emoji { font-size: 1.3rem; line-height: 1; }
+  .fest-vibe-caption {
+    font-size: 0.68rem; color: var(--text); opacity: 0.85;
+    line-height: 1.3; word-break: break-word; max-width: 110px;
+  }
+  .fest-vibe-author {
+    font-size: 0.6rem; color: var(--muted);
+    font-family: 'Outfit', sans-serif; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.4px; margin-top: 1px;
+  }
+  .fest-vibe-add-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 10px; border-radius: 100px;
+    border: 1.5px dashed rgba(255,45,120,0.4);
+    background: transparent; color: rgba(255,45,120,0.7);
+    font-size: 0.7rem; font-family: 'Outfit', sans-serif; font-weight: 700;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .fest-vibe-add-btn:hover {
+    border-color: var(--neon-pink); color: var(--neon-pink);
+    background: rgba(255,45,120,0.06);
+  }
+  .fest-vibe-picker {
+    background: var(--surface2);
+    border: 1px solid rgba(255,45,120,0.35);
+    border-radius: 14px; padding: 10px;
+    display: flex; flex-direction: column; gap: 8px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4), 0 0 16px rgba(255,45,120,0.1);
+    min-width: 220px; margin-top: 4px;
+  }
+  .fest-vibe-picker-grid {
+    display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px;
+  }
+  .fest-vibe-picker-emoji {
+    font-size: 1.25rem; text-align: center; padding: 4px; border-radius: 8px;
+    cursor: pointer; border: 2px solid transparent; background: transparent;
+    transition: background 0.1s, border-color 0.1s; line-height: 1;
+    user-select: none;
+  }
+  .fest-vibe-picker-emoji:hover { background: rgba(255,255,255,0.08); }
+  .fest-vibe-picker-emoji.selected {
+    border-color: var(--neon-pink); background: rgba(255,45,120,0.14);
+  }
+  .fest-vibe-picker-input {
+    width: 100%; background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;
+    padding: 6px 9px; color: var(--text); font-size: 0.78rem;
+    font-family: inherit; outline: none; box-sizing: border-box;
+  }
+  .fest-vibe-picker-input:focus { border-color: rgba(255,45,120,0.5); }
+  .fest-vibe-picker-actions { display: flex; gap: 6px; }
+  .fest-vibe-picker-actions button {
+    flex: 1; padding: 7px 0; font-size: 0.72rem; border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.15); background: transparent;
+    color: var(--text); cursor: pointer; font-family: inherit; font-weight: 600;
+  }
+  .fest-vibe-save-btn {
+    background: var(--neon-pink) !important; color: #000 !important;
+    border-color: var(--neon-pink) !important; font-weight: 700 !important;
+  }
+  .fest-vibe-cancel-btn { color: var(--muted) !important; }
+  .fest-vibe-clear-btn { color: rgba(255,45,120,0.7) !important; }
+
   /* ===== Vibe Tags ===== */
   .vibe-tags-section { margin-top: 14px; }
   .vibe-tag-cloud { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 10px; }
@@ -4399,6 +4485,7 @@
   // Per-viewer private caches (keyed by target raver ID)
   const privatePhoneCache = {};  // { [raverId]: string }
   const nicknameCache     = {};  // { [raverId]: string }
+  const festVibesCache    = {};  // { [festId]: [{ raverId, emoji, caption }] }
 
   // Returns the display name for a raver — uses the viewer's private nickname if set.
   function displayName(r) {
@@ -5661,6 +5748,9 @@ async function doProfilePasswordChange() {
     dbLoadCommunityGenres().catch(() => {});
     dbLoadCommunityArtists().catch(() => {});
 
+    // Load festival vibes before render so cards show bubbles on first paint
+    await loadAllFestVibes().catch(() => {});
+
     // Load Our Photos, private phones, nicknames, and viewer notes into cache (non-blocking)
     loadAllOurPhotos().catch(() => {});
     loadPrivatePhones().catch(() => {});
@@ -5809,6 +5899,145 @@ async function doProfilePasswordChange() {
       story: trimmed,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'author_user_id,target_raver_id' });
+  }
+
+  // ===== Festival Vibe Bubbles =====
+
+  async function loadAllFestVibes() {
+    if (!currentUser) return;
+    const { data, error } = await sb.from('festival_vibes').select('raver_id, festival_id, emoji, caption');
+    if (error || !data) return;
+    Object.keys(festVibesCache).forEach(k => delete festVibesCache[k]);
+    data.forEach(v => {
+      const fid = String(v.festival_id);
+      if (!festVibesCache[fid]) festVibesCache[fid] = [];
+      festVibesCache[fid].push({ raverId: String(v.raver_id), emoji: v.emoji, caption: v.caption || '' });
+    });
+  }
+
+  async function saveFestVibe(festId, emoji, caption) {
+    const me = squad.find(r => r.isYou);
+    if (!me) return;
+    const fid = String(festId);
+    const trimmedCaption = (caption || '').trim().slice(0, 80);
+    if (!festVibesCache[fid]) festVibesCache[fid] = [];
+    const cache = festVibesCache[fid];
+    const idx = cache.findIndex(v => String(v.raverId) === String(me.id));
+    const entry = { raverId: String(me.id), emoji, caption: trimmedCaption };
+    if (idx >= 0) cache[idx] = entry; else cache.push(entry);
+    if (!currentUser) return;
+    await sb.from('festival_vibes').upsert({
+      raver_id: me.id,
+      festival_id: festId,
+      emoji,
+      caption: trimmedCaption,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'raver_id,festival_id' });
+  }
+
+  async function clearFestVibe(festId) {
+    const me = squad.find(r => r.isYou);
+    if (!me) return;
+    const fid = String(festId);
+    if (festVibesCache[fid]) {
+      festVibesCache[fid] = festVibesCache[fid].filter(v => String(v.raverId) !== String(me.id));
+    }
+    if (!currentUser) return;
+    await sb.from('festival_vibes').delete()
+      .eq('raver_id', me.id)
+      .eq('festival_id', festId);
+  }
+
+  const VIBE_EMOJIS = ['🔥','💃','🎧','🪩','✨','🫶','🕺','⚡','🌊','👾','🌀','🎶','🦋','🍄','🥂','🫠'];
+  let _vibePickerFestId = null;
+  let _vibePickerEmoji  = null;
+
+  function buildVibeRowHTML(festId) {
+    const me = squad.find(r => r.isYou);
+    const vibes = festVibesCache[String(festId)] || [];
+    const myVibe = me && vibes.find(v => String(v.raverId) === String(me.id));
+    if (!me && !vibes.length) return '';
+    let html = '';
+    for (const vibe of vibes) {
+      const r = squad.find(r2 => String(r2.id) === String(vibe.raverId));
+      if (!r) continue;
+      const isMine = me && String(r.id) === String(me.id);
+      const firstName = escHtml(displayName(r).split(' ')[0]);
+      const captionHtml = vibe.caption ? `<div class="fest-vibe-caption">${escHtml(vibe.caption)}</div>` : '';
+      const editHint = isMine ? '<div class="met-edit-hint">✎ tap to edit</div>' : '';
+      const attrs = isMine
+        ? `onclick="event.stopPropagation(); openVibePicker('${festId}')" title="Edit your vibe"`
+        : `title="${firstName}'s vibe"`;
+      html += `<div class="fest-vibe-bubble${isMine ? ' is-mine' : ''}" ${attrs}>
+        <div class="fest-vibe-emoji">${vibe.emoji}</div>
+        ${captionHtml}
+        <div class="fest-vibe-author">${firstName}</div>
+        ${editHint}
+      </div>`;
+    }
+    if (me && !myVibe) {
+      html += `<button class="fest-vibe-add-btn" onclick="event.stopPropagation(); openVibePicker('${festId}')">✦ vibe</button>`;
+    }
+    html += `<div id="vibe-picker-${festId}" style="display:none;flex-basis:100%;"></div>`;
+    return html;
+  }
+
+  function renderVibeRow(festId) {
+    const row = document.getElementById(`vibe-row-${festId}`);
+    if (row) row.innerHTML = buildVibeRowHTML(festId);
+  }
+
+  function openVibePicker(festId) {
+    if (_vibePickerFestId && _vibePickerFestId !== String(festId)) closeVibePicker(_vibePickerFestId);
+    _vibePickerFestId = String(festId);
+    const me = squad.find(r => r.isYou);
+    if (!me) return;
+    const existing = (festVibesCache[String(festId)] || []).find(v => String(v.raverId) === String(me.id));
+    _vibePickerEmoji = existing?.emoji || null;
+    const emojiGrid = VIBE_EMOJIS.map(e =>
+      `<span class="fest-vibe-picker-emoji${e === _vibePickerEmoji ? ' selected' : ''}" onclick="event.stopPropagation(); selectVibeEmoji('${e}')">${e}</span>`
+    ).join('');
+    const pickerEl = document.getElementById(`vibe-picker-${festId}`);
+    if (!pickerEl) return;
+    pickerEl.innerHTML = `<div class="fest-vibe-picker" onclick="event.stopPropagation()">
+      <div class="fest-vibe-picker-grid">${emojiGrid}</div>
+      <input class="fest-vibe-picker-input" id="vibe-caption-input-${festId}" placeholder="add a hype line…" maxlength="80" value="${escHtml(existing?.caption || '')}" onclick="event.stopPropagation()">
+      <div class="fest-vibe-picker-actions">
+        <button class="fest-vibe-cancel-btn" onclick="event.stopPropagation(); closeVibePicker('${festId}')">Cancel</button>
+        ${existing ? `<button class="fest-vibe-clear-btn" onclick="event.stopPropagation(); doVibeClear('${festId}')">✕ Clear</button>` : ''}
+        <button class="fest-vibe-save-btn" onclick="event.stopPropagation(); doVibeSave('${festId}')">Save ✓</button>
+      </div>
+    </div>`;
+    pickerEl.style.display = 'block';
+  }
+
+  function closeVibePicker(festId) {
+    const el = document.getElementById(`vibe-picker-${String(festId)}`);
+    if (el) { el.innerHTML = ''; el.style.display = 'none'; }
+    if (_vibePickerFestId === String(festId)) { _vibePickerFestId = null; _vibePickerEmoji = null; }
+  }
+
+  function selectVibeEmoji(emoji) {
+    _vibePickerEmoji = emoji;
+    document.querySelectorAll('.fest-vibe-picker-emoji').forEach(el => {
+      el.classList.toggle('selected', el.textContent.trim() === emoji);
+    });
+  }
+
+  async function doVibeSave(festId) {
+    if (!_vibePickerEmoji) { showToast('Pick an emoji first 🎉'); return; }
+    const caption = (document.getElementById(`vibe-caption-input-${festId}`)?.value || '').trim();
+    await saveFestVibe(festId, _vibePickerEmoji, caption);
+    closeVibePicker(festId);
+    renderVibeRow(festId);
+    showToast('🔥 Vibe set!');
+  }
+
+  async function doVibeClear(festId) {
+    await clearFestVibe(festId);
+    closeVibePicker(festId);
+    renderVibeRow(festId);
+    showToast('Vibe cleared ✓');
   }
 
   function howWeMetSectionHTML(viewingRaverId, stories, raver) {
@@ -9833,6 +10062,7 @@ async function doProfilePasswordChange() {
             <div class="event-name">${f.name} <span class="fest-edit-hint">✏️</span></div>
             <div class="event-meta">${metaLine}</div>
             <div class="going-avatars">${avatarChips}</div>
+            <div class="fest-vibe-row" id="vibe-row-${f.id}">${buildVibeRowHTML(f.id)}</div>
             ${toggleBtn}
           </div>
           <div class="event-crew-going">
