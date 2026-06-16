@@ -617,6 +617,28 @@
     font-size: 0.85rem; pointer-events: none;
   }
 
+  /* Crews search */
+  .crew-search-wrap { position: relative; margin-bottom: 16px; }
+  .crew-search {
+    width: 100%; box-sizing: border-box;
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 10px 14px 10px 38px;
+    color: var(--text);
+    font-size: 0.9rem;
+    font-family: 'Outfit', sans-serif;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .crew-search:focus { border-color: rgba(191,0,255,0.5); }
+  .crew-search::placeholder { color: var(--muted); }
+  .crew-search-icon {
+    position: absolute; left: 13px; top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.85rem; pointer-events: none;
+  }
+
   .members-grid { display: flex; flex-direction: column; gap: 12px; }
 
   .member-card {
@@ -3591,8 +3613,12 @@
 
     <!-- CREWS PAGE -->
     <div class="page active" id="page-crews">
-      <div class="section-header" style="margin-bottom:20px;">
+      <div class="section-header" style="margin-bottom:12px;">
         <div class="section-title">Your Crews <span id="crews-count" style="color:var(--muted);font-size:1rem;font-weight:400"></span></div>
+      </div>
+      <div class="crew-search-wrap">
+        <span class="crew-search-icon">🔍</span>
+        <input class="crew-search" id="crew-search" type="text" placeholder="Search crews…" oninput="renderCrews()" autocomplete="off">
       </div>
       <div class="crew-grid" id="crew-grid">
         <!-- Crew cards rendered by JS -->
@@ -6694,6 +6720,7 @@ async function doProfilePasswordChange() {
   function renderCrews() {
     const grid = document.getElementById('crew-grid');
     const addCard = grid.querySelector('.crew-add-card');
+    const query = (document.getElementById('crew-search')?.value || '').toLowerCase().trim();
     grid.querySelectorAll('.crew-card').forEach(c => c.remove());
 
     // Empty state
@@ -6724,7 +6751,7 @@ async function doProfilePasswordChange() {
       if (na.kind === 'past') return -1;
       if (nb.kind === 'past') return 1;
       return 0;
-    });
+    }).filter(crew => !query || crew.name.toLowerCase().includes(query));
 
     sortedCrews.forEach(crew => {
       const s = STATUS[crew.status];
