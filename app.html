@@ -1358,6 +1358,28 @@
   .modal-actions { display: flex; gap: 10px; margin-top: 24px; }
   .modal-actions .btn { flex: 1; padding: 12px; font-size: 0.85rem; }
 
+  /* Crew Pick Dialog */
+  .crew-pick-list { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 4px; max-height: 300px; overflow-y: auto; }
+  .crew-pick-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px; border-radius: 14px;
+    background: rgba(255,255,255,0.04); border: 1.5px solid rgba(255,255,255,0.08);
+    cursor: pointer; transition: background 0.18s, border-color 0.18s; user-select: none;
+  }
+  .crew-pick-item:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.18); }
+  .crew-pick-item.selected { border-color: var(--neon-pink); background: rgba(255,45,120,0.1); }
+  .crew-pick-dot { width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 8px rgba(255,255,255,0.2); }
+  .crew-pick-info { flex: 1; min-width: 0; }
+  .crew-pick-name { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.95rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .crew-pick-count { font-size: 0.75rem; color: var(--muted); margin-top: 1px; }
+  .crew-pick-check {
+    width: 22px; height: 22px; border-radius: 6px; flex-shrink: 0;
+    border: 2px solid rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center;
+    transition: background 0.18s, border-color 0.18s;
+  }
+  .crew-pick-item.selected .crew-pick-check { background: var(--neon-pink); border-color: var(--neon-pink); }
+  .crew-pick-empty { text-align: center; padding: 20px 12px 8px; color: var(--muted); font-size: 0.88rem; line-height: 1.6; }
+
   /* Toast */
   .toast {
     position: fixed;
@@ -3816,6 +3838,13 @@
       <button class="btn btn-ghost" onclick="closeConfirm()">Cancel</button>
       <button class="btn btn-primary" id="confirm-ok-btn">Confirm</button>
     </div>
+  </div>
+</div>
+
+<!-- Crew Pick Modal (shown after adding a new raver) -->
+<div class="modal-overlay" id="crew-pick-overlay" onclick="if(event.target===this)closeCrewPick()">
+  <div class="modal" id="crew-pick-modal" style="max-height:80vh;overflow-y:auto;">
+    <!-- filled by JS -->
   </div>
 </div>
 
@@ -7451,6 +7480,118 @@ async function doProfilePasswordChange() {
     }
   }
 
+  // ===== Crew Pick Dialog (shown after adding a new raver) =====
+
+  let _crewPickRaverId = null;
+  let _crewPickSelected = new Set();
+
+  function openCrewPickDialog(raverId) {
+    _crewPickRaverId = raverId;
+    _crewPickSelected = new Set();
+    renderCrewPickDialog();
+    document.getElementById('crew-pick-overlay').classList.add('open');
+  }
+
+  function renderCrewPickDialog() {
+    const raver = getRaver(_crewPickRaverId);
+    const modal = document.getElementById('crew-pick-modal');
+    const firstName = raver ? raver.name.split(' ')[0] : 'them';
+
+    if (!crews.length) {
+      modal.innerHTML = `
+        <div style="font-size:2.8rem;text-align:center;margin-bottom:10px;filter:drop-shadow(0 0 14px rgba(255,45,120,0.7))">🔥</div>
+        <div class="modal-title" style="text-align:center;margin-bottom:6px">Drop ${firstName} in a crew!</div>
+        <div class="crew-pick-empty">No crews yet — spark one and<br>start building your lineup 🎉</div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px;">
+          <button class="btn btn-primary" onclick="closeCrewPick();openModal()">Create a Crew 🎉</button>
+          <button class="btn btn-ghost" onclick="closeCrewPickAndProfile()">Skip for now</button>
+        </div>`;
+      return;
+    }
+
+    const items = crews.map(c => {
+      const count = c.squadIds.length;
+      const alreadyIn = c.squadIds.some(sid => String(sid) === String(_crewPickRaverId));
+      const sel = _crewPickSelected.has(String(c.id)) || alreadyIn;
+      const checkmark = sel
+        ? `<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><polyline points="1.5,6.5 4.5,9.5 10.5,2.5" stroke="#000" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+        : '';
+      return `
+        <div class="crew-pick-item${sel ? ' selected' : ''}" onclick="toggleCrewPick('${String(c.id).replace(/'/g,"\\'")}')">
+          <div class="crew-pick-dot" style="background:${c.color}"></div>
+          <div class="crew-pick-info">
+            <div class="crew-pick-name">${c.name}</div>
+            <div class="crew-pick-count">${count} ${count === 1 ? 'member' : 'members'}</div>
+          </div>
+          <div class="crew-pick-check">${checkmark}</div>
+        </div>`;
+    }).join('');
+
+    modal.innerHTML = `
+      <div style="font-size:2.8rem;text-align:center;margin-bottom:10px;filter:drop-shadow(0 0 14px rgba(255,45,120,0.7))">🔥</div>
+      <div class="modal-title" style="text-align:center;margin-bottom:6px">Drop ${firstName} in a crew!</div>
+      <p style="text-align:center;font-size:0.83rem;color:var(--muted);margin:0 0 2px;line-height:1.5">Which crew(s) are they rolling with? You can always change this later.</p>
+      <div class="crew-pick-list">${items}</div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeCrewPickAndProfile()">Skip for now</button>
+        <button class="btn btn-primary" onclick="saveCrewPick()">Let's go! 🔥</button>
+      </div>`;
+  }
+
+  function toggleCrewPick(crewId) {
+    const id = String(crewId);
+    if (_crewPickSelected.has(id)) {
+      _crewPickSelected.delete(id);
+    } else {
+      _crewPickSelected.add(id);
+    }
+    renderCrewPickDialog();
+  }
+
+  function saveCrewPick() {
+    const raverId = _crewPickRaverId;
+    const raver = getRaver(raverId);
+    const addedTo = [];
+    _crewPickSelected.forEach(crewId => {
+      const crew = getCrew(crewId);
+      if (!crew) return;
+      if (crew.squadIds.some(sid => String(sid) === String(raverId))) return;
+      if (crew.squadIds.length >= CREW_LIMIT) {
+        showToast(`⚠️ ${crew.name} is full (${CREW_LIMIT} member max)`);
+        return;
+      }
+      crew.squadIds.push(raverId);
+      crew.members = crew.squadIds
+        .map(sid => squad.find(r => String(r.id) === String(sid)))
+        .filter(Boolean)
+        .map(r => ({ i: initials(r.name), c: crew.color, t: '#fff', url: r.avatarUrl || null }));
+      addedTo.push(crew.name);
+      if (currentUser) dbSaveCrewMembers(crew.id, crew.squadIds);
+    });
+    closeCrewPick();
+    renderCrews();
+    if (raver) openProfile(raver.id);
+    if (addedTo.length) {
+      const label = addedTo.length === 1 ? addedTo[0] : addedTo.slice(0,-1).join(', ') + ' & ' + addedTo[addedTo.length-1];
+      showToast(`🎉 ${raver?.name?.split(' ')[0] || 'Raver'} added to ${label}`);
+    }
+  }
+
+  function closeCrewPickAndProfile() {
+    const raverId = _crewPickRaverId;
+    closeCrewPick();
+    if (raverId) {
+      const r = getRaver(raverId);
+      if (r) openProfile(r.id);
+    }
+  }
+
+  function closeCrewPick() {
+    document.getElementById('crew-pick-overlay').classList.remove('open');
+    _crewPickRaverId = null;
+    _crewPickSelected = new Set();
+  }
+
   // ===== Crew Edit (rename + recolour) =====
 
   let _editingCrewId = null;
@@ -9204,8 +9345,8 @@ async function doProfilePasswordChange() {
           showToast(`🎉 Created ${r.name} and added to ${crew.name}`);
         }
       } else {
-        openProfile(r.id);
-        showToast(`🎉 Added ${r.name} to the tribe`);
+        showToast(`🎉 ${r.name} is in the tribe! 🔥`);
+        openCrewPickDialog(r.id);
       }
 
       if (currentUser) {
@@ -9214,6 +9355,7 @@ async function doProfilePasswordChange() {
             const oldTempId = r.id;
             r.id = inserted.id;
             if (inserted.qr_token) r.qrToken = inserted.qr_token;
+            if (String(_crewPickRaverId) === String(oldTempId)) _crewPickRaverId = inserted.id;
             dbSaveRaverFestivals(inserted.id, data.festIds);
             // Re-render the profile page if it's currently open for this raver,
             // so any inline edits (tags etc.) use the real DB id, not the temp one.
