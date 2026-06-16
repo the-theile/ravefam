@@ -3908,6 +3908,20 @@
   </div>
 </div>
 
+<!-- Change Password Modal -->
+<div class="modal-overlay" id="change-pw-overlay" onclick="if(event.target===this)closeChangePwModal()">
+  <div class="modal" style="max-width:360px;">
+    <div class="modal-title">🔑 Change Password</div>
+    <p style="font-size:0.82rem;color:var(--muted);margin-bottom:18px;line-height:1.5;">Choose a new password for your account.</p>
+    <input class="form-input" id="pf-new-password" type="password" placeholder="New password (min 6 chars)" autocomplete="new-password" style="margin-bottom:8px;">
+    <input class="form-input" id="pf-confirm-password" type="password" placeholder="Confirm new password" autocomplete="new-password" style="margin-bottom:16px;">
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeChangePwModal()">Cancel</button>
+      <button class="btn btn-primary" id="pf-pw-btn" onclick="doProfilePasswordChange()">Update Password</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
@@ -4265,11 +4279,13 @@
       canDisconnect:false, canDelete:false, isLeaderOfRaver:false, isClaimed:true
     };
     if (!currentUser) return none();
-    const shared = crews.filter(c => (c.squadIds||[]).some(id => String(id) === String(r.id)));
-    if (!shared.length) return none();
-    const isLeader   = shared.some(c => c.isLead);
-    const isMember   = shared.length > 0;
     const isClaimed  = !!(r.claimedBy || r.status === 'claimed');
+    // Creator of an unclaimed raver gets full leader-level permissions (matches DB RLS)
+    const isCreator  = !isClaimed && !!(r.createdBy && String(r.createdBy) === String(currentUser.id));
+    const shared = crews.filter(c => (c.squadIds||[]).some(id => String(id) === String(r.id)));
+    if (!shared.length && !isCreator) return none();
+    const isLeader   = isCreator || shared.some(c => c.isLead);
+    const isMember   = isCreator || shared.length > 0;
     return {
       editName:       isLeader,
       editHandle:     false,
@@ -4361,21 +4377,7 @@
     document.getElementById('reset-password-confirm').value = '';
   }
 
-  function togglePwChangeSection() {
-    const fields = document.getElementById('pw-change-fields');
-    const toggle = document.getElementById('pw-change-toggle');
-    const opening = fields.style.display === 'none';
-    if (opening && !fields.querySelector('#pf-new-password')) {
-      fields.innerHTML = `
-        <input class="form-input" id="pf-new-password" type="password" placeholder="New password (min 6 chars)" autocomplete="new-password" style="margin-bottom:8px;">
-        <input class="form-input" id="pf-confirm-password" type="password" placeholder="Confirm new password" autocomplete="new-password" style="margin-bottom:10px;">
-        <button type="button" class="btn btn-ghost" id="pf-pw-btn" style="width:100%;font-size:0.85rem;" onclick="doProfilePasswordChange()">Update Password</button>`;
-    }
-    fields.style.display = opening ? 'block' : 'none';
-    toggle.textContent = opening ? '▼ collapse' : '▶ expand';
-  }
-
-  async function doProfilePasswordChange() {
+async function doProfilePasswordChange() {
     const pw  = document.getElementById('pf-new-password').value;
     const pw2 = document.getElementById('pf-confirm-password').value;
     if (pw.length < 6) { showToast('⚠️ Password must be at least 6 characters.'); return; }
@@ -4386,9 +4388,7 @@
     btn.disabled = false;
     if (error) { showToast('⚠️ ' + error.message); return; }
     showToast('✅ Password updated!');
-    document.getElementById('pf-new-password').value  = '';
-    document.getElementById('pf-confirm-password').value = '';
-    togglePwChangeSection();
+    closeChangePwModal();
   }
 
   async function doUpdatePassword() {
@@ -6809,16 +6809,8 @@
     if (e.target === document.getElementById('detail-overlay')) closeDetail();
   }
 
-  // Jump from a crew's member list — opens editor for others, profile view for yourself
-  // or for read-only crewmate ravers (profiles owned by other accounts).
   function goToProfileFromDetail(raverId) {
-    const r = getRaver(raverId);
-    if (!r) return;
-    if (r.isYou || r.readOnly) {
-      openProfile(raverId);
-    } else {
-      openProfileEditor(raverId);
-    }
+    openProfile(raverId);
   }
 
   function renderDetail(id) {
@@ -8551,18 +8543,6 @@
         <div id="fest-picker"></div>
       </div>
       ${fieldRow('Notes','pf-notes', r?.notes, isOwnProfile ? "Anything about yourself…" : "What's their vibe?", true)}
-      ${isOwnProfile ? `
-      <div class="form-group" style="border-top:1px solid rgba(255,255,255,0.08);margin-top:8px;padding-top:16px;">
-        <label class="form-label" style="cursor:pointer;user-select:none;" onclick="togglePwChangeSection()">
-          🔑 Change Password
-          <span id="pw-change-toggle" style="font-size:0.75rem;color:var(--muted);font-weight:400;margin-left:6px;">▶ expand</span>
-        </label>
-        <div id="pw-change-fields" style="display:none;margin-top:10px;">
-          <input class="form-input" id="pf-new-password" type="password" placeholder="New password (min 6 chars)" autocomplete="new-password" style="margin-bottom:8px;">
-          <input class="form-input" id="pf-confirm-password" type="password" placeholder="Confirm new password" autocomplete="new-password" style="margin-bottom:10px;">
-          <button type="button" class="btn btn-ghost" id="pf-pw-btn" style="width:100%;font-size:0.85rem;" onclick="doProfilePasswordChange()">Update Password</button>
-        </div>
-      </div>` : ''}
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeProfileEditor()">Cancel</button>
         <button class="btn btn-primary" onclick="saveProfile()">${r ? 'Save Changes' : 'Save Profile 🔥'}</button>
@@ -9802,14 +9782,17 @@
 
   function notifDrawerChangePassword() {
     closeNotifDrawer();
-    const me = squad.find(r => r.isYou);
-    if (!me) return;
-    openProfileEditor(me.id);
-    setTimeout(() => {
-      const fields = document.getElementById('pw-change-fields');
-      if (fields && fields.style.display === 'none') togglePwChangeSection();
-      fields?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 350);
+    openChangePwModal();
+  }
+
+  function openChangePwModal() {
+    document.getElementById('pf-new-password').value = '';
+    document.getElementById('pf-confirm-password').value = '';
+    document.getElementById('change-pw-overlay').classList.add('open');
+  }
+
+  function closeChangePwModal() {
+    document.getElementById('change-pw-overlay').classList.remove('open');
   }
 
   function clearAllNotifs() {
