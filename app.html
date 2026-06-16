@@ -6576,7 +6576,9 @@
   }
 
   // Compute the crew's headline festival line from its members' profiles.
-  function crewNextUp(crew) {
+  // socialOnly=true: only considers fests where at least one non-logged-in member is going,
+  // and skips the past fallback (used by the crew card's Next Rave Up block).
+  function crewNextUp(crew, socialOnly = false) {
     const people = crewSquad(crew);
     const upcoming = {}; // festName -> { date, name, who: [] }
     const past = [];     // { date, name, who }
@@ -6594,12 +6596,14 @@
       });
     });
 
-    const upList = Object.values(upcoming).sort((a,b) => a.date - b.date);
+    let upList = Object.values(upcoming).sort((a,b) => a.date - b.date);
+    if (socialOnly) upList = upList.filter(u => u.whoRavers.some(r => !r.isYou));
+
     if (upList.length) {
       const next = upList[0];
       return { kind: 'upcoming', name: next.name, date: next.date, who: next.who, whoRavers: next.whoRavers };
     }
-    if (past.length) {
+    if (!socialOnly && past.length) {
       past.sort((a,b) => b.date - a.date);
       const last = past[0];
       return { kind: 'past', name: last.name, date: last.date, who: [last.who] };
@@ -6623,49 +6627,37 @@
   }
 
   function crewNextFestBlock(crew) {
-    const n = crewNextUp(crew);
-    if (n.kind === 'upcoming') {
-      const cd = countdownLabel(n.date);
-      const when = `${n.date.getDate()} ${MON_SHORT[n.date.getMonth()]}`;
-      const goingAvatars = (n.whoRavers || []).map(r =>
-        raverAvatarHTML(r.avatarUrl || r.avatar_url || null, r.gradient || 'linear-gradient(135deg,#FF2D78,#00F5FF)', r.name, 'cnf-avatar', '')
-      ).join('');
-      const safeWho = (n.who || []).map(name => escHtml(name));
-      const goingLabel = safeWho.length === 1
-        ? `${safeWho[0]} is going`
-        : safeWho.length > 1
-          ? `${safeWho.slice(0,-1).join(', ')} & ${safeWho[safeWho.length-1]} are going`
-          : 'Nobody RSVPed yet';
-      return `
-        <div class="cnf-block">
-          <div class="cnf-eyebrow">🎪 Next Rave Up</div>
-          <div class="cnf-name">${escHtml(n.name)}</div>
-          <div class="cnf-meta">
-            <span class="cnf-date">📅 ${when}</span>
-            <span class="cnf-countdown">⏳ ${cd}</span>
-          </div>
-          ${n.who.length ? `
-          <div class="cnf-going">
-            <div class="cnf-going-label">🎟️ Who's Going</div>
-            <div class="cnf-going-row">
-              <div class="cnf-avatars">${goingAvatars}</div>
-              <span class="cnf-going-names">${goingLabel}</span>
-            </div>
-          </div>` : `<div class="cnf-going-empty">Be the first to RSVP on the Raves tab 👆</div>`}
-        </div>`;
-    }
-    if (n.kind === 'past') {
-      return `
-        <div class="cnf-block cnf-block-past">
-          <div class="cnf-eyebrow">📍 Last Rave</div>
-          <div class="cnf-name">${escHtml(n.name)}</div>
-          <div class="cnf-meta"><span class="cnf-date">${n.date.getFullYear()}</span></div>
-        </div>`;
-    }
+    // socialOnly=true: find the nearest fest where at least one non-logged-in member is going.
+    // Hide the block entirely if no qualifying fest exists.
+    const n = crewNextUp(crew, true);
+    if (n.kind !== 'upcoming') return '';
+    const cd = countdownLabel(n.date);
+    const when = `${n.date.getDate()} ${MON_SHORT[n.date.getMonth()]}`;
+    const goingAvatars = (n.whoRavers || []).map(r =>
+      raverAvatarHTML(r.avatarUrl || r.avatar_url || null, r.gradient || 'linear-gradient(135deg,#FF2D78,#00F5FF)', r.name, 'cnf-avatar', '')
+    ).join('');
+    const safeWho = (n.who || []).map(name => escHtml(name));
+    const goingLabel = safeWho.length === 1
+      ? `${safeWho[0]} is going`
+      : safeWho.length > 1
+        ? `${safeWho.slice(0,-1).join(', ')} & ${safeWho[safeWho.length-1]} are going`
+        : 'Nobody RSVPed yet';
     return `
-      <div class="cnf-block cnf-block-empty">
-        <div class="cnf-eyebrow">🎵 No Raves Planned Yet</div>
-        <div class="cnf-empty-hint">Add festivals on the Raves tab and your crew will see them here.</div>
+      <div class="cnf-block">
+        <div class="cnf-eyebrow">🎪 Next Rave Up</div>
+        <div class="cnf-name">${escHtml(n.name)}</div>
+        <div class="cnf-meta">
+          <span class="cnf-date">📅 ${when}</span>
+          <span class="cnf-countdown">⏳ ${cd}</span>
+        </div>
+        ${n.who.length ? `
+        <div class="cnf-going">
+          <div class="cnf-going-label">🎟️ Who's Going</div>
+          <div class="cnf-going-row">
+            <div class="cnf-avatars">${goingAvatars}</div>
+            <span class="cnf-going-names">${goingLabel}</span>
+          </div>
+        </div>` : `<div class="cnf-going-empty">Be the first to RSVP on the Raves tab 👆</div>`}
       </div>`;
   }
 
