@@ -8929,7 +8929,7 @@ async function doProfilePasswordChange() {
     }
 
     // Quick-add mode: new raver added by crew leader (not onboarding own profile)
-    const quickAdd = !id && !isOnboarding && !!_pendingAddToCrew;
+    const quickAdd = !id && !isOnboarding && (!!_pendingAddToCrew || !!_pendingAddToFest);
 
     if (quickAdd) {
       document.getElementById('profile-edit-modal').innerHTML = `
@@ -9530,6 +9530,7 @@ async function doProfilePasswordChange() {
     document.getElementById('profile-edit-overlay').classList.remove('open');
     editingId = null;
     _pendingAddToCrew = null;
+    _pendingAddToFest = null;
   }
   function closeProfileEditorOutside(e) {
     if (e.target === document.getElementById('profile-edit-overlay')) closeProfileEditor();
@@ -9661,13 +9662,20 @@ async function doProfilePasswordChange() {
       if (isOnboarding) r.isYou = true;
       squad.push(r);
       const pendingCrew = _pendingAddToCrew; // capture before closeProfileEditor nulls it
+      const pendingFest = _pendingAddToFest;
       closeProfileEditor();
       renderSquad(); renderCrews(); renderEvents();
       if (r.isYou) {
         addNotification(`✨ Profile locked in! You're now on the grid — scan QR codes, join crews, and let the fam find you in the wild.`);
       }
 
-      if (isOnboarding) {
+      if (pendingFest) {
+        r.festIds = [...(r.festIds || []), pendingFest];
+        data.festIds = r.festIds;
+        const fest = getFestival(pendingFest);
+        showToast(`✅ ${r.name.split(' ')[0]} added and linked to ${fest?.name || 'the rave'}`);
+        openRaveEditor(pendingFest);
+      } else if (isOnboarding) {
         maybeAdvanceOnboarding(r.name);
       } else if (pendingCrew) {
         const crewId = pendingCrew;
@@ -9924,7 +9932,13 @@ async function doProfilePasswordChange() {
           <div class="loc-dropdown" id="loc-dropdown"></div>
         </div>
       </div>
-      ${f ? `<div class="fest-goers-note">${goers.length ? goers.length + ' tribe member' + (goers.length!==1?'s':'') + ' linked: ' + goers.map(g=>escHtml(g.name.split(' ')[0])).join(', ') : 'No tribe members linked yet'}</div>` : ''}
+      ${f ? `<div class="fest-goers-note" id="re-goers-note">${goers.length ? goers.length + ' tribe member' + (goers.length!==1?'s':'') + ' linked: ' + goers.map(g=>escHtml(g.name.split(' ')[0])).join(', ') : 'No tribe members linked yet'}</div>
+      <div class="fest-search-wrap" style="margin-top:8px;margin-bottom:4px;">
+        <input class="form-input" id="re-raver-search" placeholder="🔍 Search tribe to add…" autocomplete="off" style="font-size:16px;"
+          oninput="reSearch(this.value)"
+          onblur="setTimeout(()=>{const d=document.getElementById('re-raver-results');if(d)d.style.display='none';},200)">
+        <div id="re-raver-results" class="fest-search-dropdown" style="display:none;"></div>
+      </div>` : ''}
       <div class="modal-actions">
         ${f ? `<button class="btn btn-ghost" style="color:var(--neon-pink);" onclick="showDeleteRaveConfirm()">Delete</button>` : ''}
         <button class="btn btn-ghost" onclick="closeRaveEditor()">Cancel</button>
@@ -9960,6 +9974,74 @@ async function doProfilePasswordChange() {
   function closeRaveEditorOutside(e) {
     if (e.target === document.getElementById('rave-edit-overlay')) closeRaveEditor();
   }
+
+  let _reSearchQuery = '';
+
+  function reSearch(q) {
+    const results = document.getElementById('re-raver-results');
+    if (!results) return;
+    const query = (q || '').trim().toLowerCase();
+    _reSearchQuery = (q || '').trim();
+    if (!query) { results.style.display = 'none'; return; }
+    const linkedIds = new Set(festivalGoers(editingFestivalId).map(g => String(g.id)));
+    const matches = squad
+      .filter(r => {
+        if (linkedIds.has(String(r.id))) return false;
+        return (r.name || '').toLowerCase().includes(query) ||
+               (r.handle || '').toLowerCase().includes(query);
+      })
+      .slice(0, 8);
+    if (matches.length) {
+      results.innerHTML = matches.map(r => {
+        const meta = [r.handle ? '@' + r.handle : '', r.base].filter(Boolean).join(' · ');
+        return `<div class="fest-search-item" onmousedown="reAdd('${r.id}')">
+          <span class="fest-search-name">${escHtml(r.name)}</span>
+          ${meta ? `<span class="fest-search-meta">${escHtml(meta)}</span>` : ''}
+        </div>`;
+      }).join('');
+    } else {
+      results.innerHTML = `<div class="fest-search-item" onmousedown="reAddNew()">
+        <span class="fest-search-name" style="color:var(--neon-pink);">＋ Add "${escHtml(_reSearchQuery)}" as new raver</span>
+      </div>`;
+    }
+    results.style.display = 'block';
+  }
+
+  function reAdd(raverId) {
+    if (!editingFestivalId) return;
+    const r = getRaver(raverId);
+    if (!r) return;
+    if ((r.festIds || []).some(fid => String(fid) === String(editingFestivalId))) {
+      showToast('Already linked'); return;
+    }
+    r.festIds = [...(r.festIds || []), editingFestivalId];
+    if (currentUser) dbSaveRaverFestivals(raverId, r.festIds);
+    const goers = festivalGoers(editingFestivalId);
+    const note = document.getElementById('re-goers-note');
+    if (note) {
+      note.textContent = goers.length
+        ? `${goers.length} tribe member${goers.length !== 1 ? 's' : ''} linked: ${goers.map(g => g.name.split(' ')[0]).join(', ')}`
+        : 'No tribe members linked yet';
+    }
+    const inp = document.getElementById('re-raver-search');
+    if (inp) inp.value = '';
+    const res = document.getElementById('re-raver-results');
+    if (res) res.style.display = 'none';
+    showToast(`✅ ${r.name.split(' ')[0]} linked`);
+  }
+
+  function reAddNew() {
+    const name = _reSearchQuery;
+    const festId = editingFestivalId;
+    _pendingAddToFest = festId;
+    closeRaveEditor();
+    openProfileEditor();
+    setTimeout(() => {
+      const el = document.getElementById('pf-name');
+      if (el) el.value = name;
+    }, 50);
+  }
+
   function saveRave() {
     const name = val('fe-name');
     const date = document.getElementById('fe-date').value;
@@ -10379,6 +10461,7 @@ async function doProfilePasswordChange() {
 
   let _openDetailAfterCreate = false;
   let _pendingAddToCrew = null;
+  let _pendingAddToFest = null;
 
   function addNewMemberFromSearch(name) {
     _pendingAddToCrew = activeDetailId;
