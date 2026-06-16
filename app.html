@@ -1201,6 +1201,31 @@
   }
   .modal-overlay.open .modal { transform: scale(1); }
 
+  /* Delete-rave bottom sheet */
+  .bottom-sheet-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(8px);
+    z-index: 300;
+    display: flex;
+    align-items: flex-end;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s;
+  }
+  .bottom-sheet-overlay.open { opacity: 1; pointer-events: all; }
+  .bottom-sheet {
+    background: var(--surface2);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 24px 24px 0 0;
+    padding: 28px 24px calc(28px + env(safe-area-inset-bottom, 0px));
+    width: 100%;
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .bottom-sheet-overlay.open .bottom-sheet { transform: translateY(0); }
+
   /* Location autocomplete */
   .loc-autocomplete-wrap { position: relative; }
   .loc-dropdown {
@@ -3845,6 +3870,13 @@
 <div class="modal-overlay" id="crew-pick-overlay" onclick="if(event.target===this)closeCrewPick()">
   <div class="modal" id="crew-pick-modal" style="max-height:80vh;overflow-y:auto;">
     <!-- filled by JS -->
+  </div>
+</div>
+
+<!-- Delete Rave Bottom Sheet -->
+<div class="bottom-sheet-overlay" id="delete-rave-sheet-overlay" onclick="if(event.target===this)closeDeleteRaveSheet()">
+  <div class="bottom-sheet">
+    <div id="delete-rave-sheet-content"></div>
   </div>
 </div>
 
@@ -6938,7 +6970,13 @@ async function doProfilePasswordChange() {
   }
 
   function goToProfileFromDetail(raverId) {
-    openProfile(raverId);
+    const r = getRaver(raverId);
+    if (!r) return;
+    if (r.isYou || r.readOnly) {
+      openProfile(raverId, false, 'crews');
+    } else {
+      openProfileEditor(raverId);
+    }
   }
 
   function renderDetail(id) {
@@ -7055,7 +7093,7 @@ async function doProfilePasswordChange() {
           <label class="form-label">Status</label>
           <div style="font-size:0.85rem;color:var(--muted);">Set by the Crew Lead — you can't change this.</div>
         </div>
-        ${!isSecret && !isAlreadyMember ? `<button class="btn ${canJoin?'btn-primary':'btn-ghost'}" style="width:100%;padding:12px;"
+        ${ /* TODO: gate on currentUser */ !isSecret && !isAlreadyMember ? `<button class="btn ${canJoin?'btn-primary':'btn-ghost'}" style="width:100%;padding:12px;"
           onclick="${canJoin ? `joinCrew('${crew.id}')` : `showToast('🔒 This crew is Locked In — ask the Lead for an invite')`}">
           ${canJoin ? '➕ Join this crew' : '🔒 Locked — invite only'}
         </button>` : ''}`;
@@ -7637,7 +7675,7 @@ async function doProfilePasswordChange() {
     });
     closeCrewPick();
     renderCrews();
-    if (raver) openProfile(raver.id);
+    if (raver) openProfile(raver.id, false, 'members');
     if (addedTo.length) {
       const label = addedTo.length === 1 ? addedTo[0] : addedTo.slice(0,-1).join(', ') + ' & ' + addedTo[addedTo.length-1];
       showToast(`🎉 ${raver?.name?.split(' ')[0] || 'Raver'} added to ${label}`);
@@ -7649,7 +7687,7 @@ async function doProfilePasswordChange() {
     closeCrewPick();
     if (raverId) {
       const r = getRaver(raverId);
-      if (r) openProfile(r.id);
+      if (r) openProfile(r.id, false, 'members');
     }
   }
 
@@ -8113,7 +8151,7 @@ async function doProfilePasswordChange() {
     sorted.forEach(r => {
       const card = document.createElement('div');
       card.className = 'member-card' + (r.isYou ? ' member-card-you' : '');
-      card.onclick = () => openProfile(r.id);
+      card.onclick = () => openProfile(r.id, false, 'members');
 
       const nextFest = raverUpcoming(r)[0];
       const nextFestLine = nextFest
@@ -8164,9 +8202,10 @@ async function doProfilePasswordChange() {
   }
 
   // ===== Dedicated profile page =====
-  function openProfile(id, editMode = false) {
+  function openProfile(id, editMode = false, origin = null) {
     const r = getRaver(id);
     if (!r) return;
+    if (origin !== null) profileOrigin = origin;
 
     // Upcoming: sorted soonest-first, with date + countdown
     const upcomingFests = raverUpcoming(r);
@@ -8404,7 +8443,7 @@ async function doProfilePasswordChange() {
       const _STAGE_PAL = ['#FF2D78','#BF00FF','#00F5FF','#39FF14','#FFB800','#FF3355'];
       const sg = (i) => `--section-glow:${_STAGE_PAL[i % _STAGE_PAL.length]};`;
       profilePage.innerHTML = `
-        <button class="profile-back" onclick="backToSquad()">← Back to Squad</button>
+        <button class="profile-back" onclick="backFromProfile()">← Back to ${profileOrigin === 'crews' ? 'My Crews' : 'Squad'}</button>
         <div class="profile-hero-banner" style="background:${r.gradient}"></div>
         <div class="profile-hero-body">
           <div class="profile-avatar-ring" onclick="this.classList.toggle('paused')">
@@ -8430,7 +8469,7 @@ async function doProfilePasswordChange() {
         ${photoCountdownBlock}
 
         <div class="profile-actions" data-raver-id="${r.id}">
-          ${(r.isYou || (perms.isLeaderOfRaver && !perms.isClaimed)) ? `<button class="btn btn-primary" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="enterProfileEditMode(this.dataset.raverId)">✏️ Edit Profile</button>` : ''}
+          ${ /* TODO: gate on currentUser */ (r.isYou || (perms.isLeaderOfRaver && !perms.isClaimed)) ? `<button class="btn btn-primary" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="enterProfileEditMode(this.dataset.raverId)">✏️ Edit Profile</button>` : ''}
           ${perms.canDisconnect ? `<button class="btn btn-ghost btn-disconnect" data-raver-id="${r.id}" onclick="showDisconnectConfirm(this.dataset.raverId)" title="Disconnect account">🔗</button>` : ''}
           ${(perms.canDelete || (!r.isYou && isAdminUser())) ? `<button class="btn btn-ghost" style="padding:11px;color:var(--neon-pink);border-color:rgba(255,45,120,0.3);" data-raver-id="${r.id}" onclick="showDeleteRaverConfirm(this.dataset.raverId)">🗑️</button>` : ''}
         </div>
@@ -8598,12 +8637,16 @@ async function doProfilePasswordChange() {
     }
   }
 
-  function backToSquad() {
+  function backFromProfile() {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    document.getElementById('page-members').classList.add('active');
-    // keep the Squad nav tab highlighted
     document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.nav-tab').forEach(t => { if (t.textContent.trim()==='Ravers') t.classList.add('active'); });
+    if (profileOrigin === 'crews') {
+      document.getElementById('page-crews').classList.add('active');
+      document.querySelectorAll('.nav-tab').forEach(t => { if (t.textContent.trim() === 'My Crews') t.classList.add('active'); });
+    } else {
+      document.getElementById('page-members').classList.add('active');
+      document.querySelectorAll('.nav-tab').forEach(t => { if (t.textContent.trim() === 'Ravers') t.classList.add('active'); });
+    }
   }
 
   // ===== Admin: delete raver =====
@@ -8646,7 +8689,7 @@ async function doProfilePasswordChange() {
     // Remove from squad
     const idx = squad.findIndex(x => String(x.id) === String(raverId));
     if (idx >= 0) squad.splice(idx, 1);
-    backToSquad();
+    backFromProfile();
     renderSquad(); renderCrews(); renderEvents();
     showToast(`🗑️ ${r.name} removed from the tribe`);
     addNotification(`🗑️ ${r.name} has been removed from the tribe. The circle tightens — may the bass always find them.`);
@@ -8684,6 +8727,7 @@ async function doProfilePasswordChange() {
   }
 
   // ===== Profile editor (add / edit) =====
+  let profileOrigin = 'members'; // tracks which page opened the profile view
   let editingId = null;
   let editingVibeTags = new Set();
   let editingCustomVibeTags = [];
@@ -9514,7 +9558,7 @@ async function doProfilePasswordChange() {
           const inner = w.avatarUrl
             ? `<img src="${w.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${initials(dn)}">`
             : initials(dn).toUpperCase();
-          return `<div class="avatar going-avatar" style="background:${bg};" data-raver-id="${w.id}" onclick="event.stopPropagation(); openProfile(this.dataset.raverId)" title="${dn}">${inner}</div>`;
+          return `<div class="avatar going-avatar" style="background:${bg};" data-raver-id="${w.id}" onclick="event.stopPropagation(); openProfile(this.dataset.raverId, false, 'members')" title="${dn}">${inner}</div>`;
         }).join('');
         if (goers.length > 5) avatarChips += `<div class="avatar avatar-count">+${goers.length - 5}</div>`;
       } else {
@@ -9627,6 +9671,7 @@ async function doProfilePasswordChange() {
 
   // ===== Rave editor (create / edit / delete a catalog item) =====
   let editingFestivalId = null;
+  let pendingDeleteFestId = null;
 
   function openRaveEditor(id) {
     editingFestivalId = id || null;
@@ -9638,7 +9683,7 @@ async function doProfilePasswordChange() {
       ${fieldRow('Rave Name','fe-name', f?.name, 'e.g. Awakenings or Basement at Fabric this Friday')}
       <div class="form-group">
         <label class="form-label">Date</label>
-        <input class="form-input" id="fe-date" type="date" value="${f?.date || ''}" style="color-scheme:dark;">
+        <input class="form-input" id="fe-date" type="date" value="${(() => { if (!f) return ''; if (f.date) return f.date; const d = festDate(f); if (!d || isNaN(d)) return ''; return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })()}" style="color-scheme:dark;">
       </div>
       <div class="form-group">
         <label class="form-label">Location</label>
@@ -9724,20 +9769,47 @@ async function doProfilePasswordChange() {
     const f = getFestival(activeFestId);
     if (!f) return;
     const goers = festivalGoers(activeFestId);
-    const note = goers.length
-      ? `${goers.length} tribe member${goers.length !== 1 ? 's' : ''} (${goers.map(g => escHtml(g.name.split(' ')[0])).join(', ')}) will have it removed from their profiles.`
-      : 'No tribe members are linked to this rave.';
-    document.getElementById('rave-edit-modal').innerHTML = `
-      <div style="text-align:center;padding:8px 0 24px;">
-        <div style="font-size:2.8rem;margin-bottom:14px;">🗑️</div>
-        <div class="modal-title" style="margin-bottom:12px;">Delete "${escHtml(f.name)}"?</div>
-        <p style="font-size:0.86rem;color:var(--muted);line-height:1.65;margin-bottom:8px;">${note}</p>
-        <p style="font-size:0.86rem;color:var(--neon-pink);font-weight:700;">This cannot be undone.</p>
-      </div>
-      <div class="modal-actions">
-        <button class="btn btn-ghost" onclick="openRaveEditor(activeFestId)" style="flex:1;padding:12px;">Cancel</button>
-        <button class="btn btn-primary" onclick="deleteRave(activeFestId)" style="flex:1;padding:12px;background:var(--neon-pink);">Yes, delete it</button>
-      </div>`;
+    if (goers.length) {
+      // Tribe members linked — use bottom sheet for the destructive confirmation
+      pendingDeleteFestId = activeFestId;
+      const goerNames = goers.map(g => escHtml(g.name.split(' ')[0])).join(', ');
+      document.getElementById('delete-rave-sheet-content').innerHTML = `
+        <div style="text-align:center;padding:8px 0 20px;">
+          <div style="font-size:2.8rem;margin-bottom:12px;">🗑️</div>
+          <div class="modal-title" style="margin-bottom:10px;">Delete "${escHtml(f.name)}"?</div>
+          <p style="font-size:0.86rem;color:var(--muted);line-height:1.65;margin-bottom:8px;">${goers.length} tribe member${goers.length !== 1 ? 's' : ''} (${goerNames}) will have it removed from their profiles.</p>
+          <p style="font-size:0.86rem;color:var(--neon-pink);font-weight:700;">This cannot be undone.</p>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" style="flex:1;padding:12px;" onclick="closeDeleteRaveSheet()">Cancel</button>
+          <button class="btn btn-primary" style="flex:1;padding:12px;background:var(--neon-pink);" onclick="confirmDeleteRave()">Delete</button>
+        </div>`;
+      document.getElementById('delete-rave-sheet-overlay').classList.add('open');
+    } else {
+      // No linked goers — use the existing in-modal confirmation
+      document.getElementById('rave-edit-modal').innerHTML = `
+        <div style="text-align:center;padding:8px 0 24px;">
+          <div style="font-size:2.8rem;margin-bottom:14px;">🗑️</div>
+          <div class="modal-title" style="margin-bottom:12px;">Delete "${escHtml(f.name)}"?</div>
+          <p style="font-size:0.86rem;color:var(--muted);line-height:1.65;margin-bottom:8px;">No tribe members are linked to this rave.</p>
+          <p style="font-size:0.86rem;color:var(--neon-pink);font-weight:700;">This cannot be undone.</p>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" onclick="openRaveEditor(activeFestId)" style="flex:1;padding:12px;">Cancel</button>
+          <button class="btn btn-primary" onclick="deleteRave(activeFestId)" style="flex:1;padding:12px;background:var(--neon-pink);">Yes, delete it</button>
+        </div>`;
+    }
+  }
+
+  function closeDeleteRaveSheet() {
+    document.getElementById('delete-rave-sheet-overlay').classList.remove('open');
+    pendingDeleteFestId = null;
+  }
+
+  function confirmDeleteRave() {
+    const id = pendingDeleteFestId;
+    closeDeleteRaveSheet();
+    deleteRave(id);
   }
 
   function deleteRave(id) {
