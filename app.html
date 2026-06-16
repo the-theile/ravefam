@@ -4510,6 +4510,7 @@ async function doProfilePasswordChange() {
   // ===== APP SHOW / HIDE =====
   function showApp(user) {
     currentUser = user;
+    document.getElementById('claim-intercept').classList.remove('open');
     document.getElementById('app-loading').classList.add('hidden');
     document.getElementById('auth-screen').classList.add('hidden');
     document.getElementById('main-app').style.display = 'flex';
@@ -4538,9 +4539,18 @@ async function doProfilePasswordChange() {
     // user understands WHY they're being asked to sign in / sign up.
     const pendingToken = sessionStorage.getItem('pendingClaim');
     if (pendingToken) {
+      // Show intercept immediately with default "You've been invited!" content
+      // so the user sees it before any RPC latency
+      document.getElementById('claim-intercept').classList.add('open');
       // RPC is SECURITY DEFINER + granted to anon — works without auth
       sb.rpc('get_claim_preview', { p_token: pendingToken }).then(({ data }) => {
-        showPreAuthIntercept(data, pendingToken);
+        if (data && !data.error) {
+          showPreAuthIntercept(data, pendingToken);
+        } else {
+          // Invalid/used token — close intercept and fall back to plain auth form
+          document.getElementById('claim-intercept').classList.remove('open');
+          if (data?.error === 'invalid_token') sessionStorage.removeItem('pendingClaim');
+        }
       });
     } else {
       const pendingJoin = sessionStorage.getItem('pendingCrewJoin');
