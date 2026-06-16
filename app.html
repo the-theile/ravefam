@@ -5907,8 +5907,9 @@ async function doProfilePasswordChange() {
       ...(data.isYou ? { claimed_by: uid, status: 'claimed' } : {})
     };
     if (id) {
-      const { error } = await sb.from('ravers').update(row).eq('id', id);
-      if (error) { console.error('raver update error', error); showToast('⚠️ Could not save profile — try again'); }
+      const { data: updated, error } = await sb.from('ravers').update(row).eq('id', id).select('id');
+      if (error) { console.error('raver update error', error); showToast('⚠️ Could not save profile — try again'); return null; }
+      if (!updated?.length) { console.warn('raver update: 0 rows affected (RLS block?)', id); showToast('⚠️ Save failed — permission denied'); return null; }
       return id;
     } else {
       row.created_by = uid;
@@ -7036,13 +7037,7 @@ async function doProfilePasswordChange() {
   }
 
   function goToProfileFromDetail(raverId) {
-    const r = getRaver(raverId);
-    if (!r) return;
-    if (r.isYou || r.readOnly) {
-      openProfile(raverId, false, 'crews');
-    } else {
-      openProfileEditor(raverId);
-    }
+    openProfile(raverId, false, 'crews');
   }
 
   function renderDetail(id) {
