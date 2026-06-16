@@ -1203,14 +1203,16 @@
   .dream-add-btn { flex-shrink: 0; padding: 10px 16px; font-size: 0.82rem; }
   .dream-pins-list { display: flex; flex-direction: column; gap: 8px; }
   .dream-pin {
-    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
     background: var(--surface);
     border: 1px solid rgba(255,255,255,0.07);
     border-radius: 10px;
     padding: 10px 12px;
   }
-  .dream-pin-label { font-size: 0.9rem; color: #fff; flex: 1; line-height: 1.4; word-break: break-word; }
-  .dream-pin-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .dream-pin-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+  .dream-pin-label { font-size: 0.9rem; color: #fff; line-height: 1.4; word-break: break-word; }
+  .dream-pin-attr { font-size: 0.7rem; color: var(--muted); opacity: 0.55; }
+  .dream-pin-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; align-self: center; }
   .hype-btn {
     background: none; border: 1.5px solid rgba(255,255,255,0.12); border-radius: 8px;
     padding: 3px 8px; font-size: 0.8rem; cursor: pointer; color: var(--muted);
@@ -7612,9 +7614,21 @@ async function doProfilePasswordChange() {
       const hyped = (pin.hyped_by || []).includes(uid);
       const hypeCount = (pin.hyped_by || []).length;
       const canDelete = pin.added_by === uid || isLead || isAdminUser();
+      let addedByLabel = '';
+      if (pin.added_by) {
+        if (pin.added_by === uid) {
+          addedByLabel = 'you';
+        } else {
+          const adder = getRaver(pin.added_by);
+          if (adder) addedByLabel = displayName(adder).split(' ')[0];
+        }
+      }
       return `
         <div class="dream-pin" id="dream-pin-${escHtml(pin.id)}">
-          <span class="dream-pin-label">${escHtml(pin.label)}</span>
+          <div class="dream-pin-text">
+            <span class="dream-pin-label">${escHtml(pin.label)}</span>
+            ${addedByLabel ? `<span class="dream-pin-attr">added by ${escHtml(addedByLabel)}</span>` : ''}
+          </div>
           <div class="dream-pin-actions">
             <button class="hype-btn ${hyped ? 'hyped' : ''}"
               data-pin-id="${escHtml(pin.id)}" data-crew-id="${escHtml(crewId)}"
