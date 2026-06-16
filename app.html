@@ -7257,7 +7257,7 @@
     _editUnclaimedRaverId = raverId;
     document.getElementById('edit-unclaimed-name').value = r.name || '';
     document.getElementById('edit-unclaimed-handle').value = r.handle || '';
-    document.getElementById('edit-unclaimed-note').value = r.note || '';
+    document.getElementById('edit-unclaimed-note').value = r.notes || '';
     document.getElementById('edit-unclaimed-overlay').classList.add('open');
   }
 
@@ -7273,11 +7273,17 @@
     if (!name) { showToast('⚠️ Name can\'t be empty'); return; }
     r.name = name;
     r.handle = document.getElementById('edit-unclaimed-handle').value.trim();
-    r.note = document.getElementById('edit-unclaimed-note').value.trim();
+    r.notes = document.getElementById('edit-unclaimed-note').value.trim();
     closeEditUnclaimedModal();
     renderCrews();
     renderDetail(activeDetailId);
     showToast(`✅ ${name.split(' ')[0]}'s profile updated`);
+    if (currentUser && !String(r.id).startsWith('temp_')) {
+      sb.from('ravers')
+        .update({ name: r.name, handle: r.handle || null, notes: r.notes, updated_at: new Date().toISOString() })
+        .eq('id', r.id)
+        .then(({ error }) => { if (error) showToast('⚠️ Save failed — please try again'); });
+    }
   }
 
   function deleteUnclaimedProfile(raverId) {
@@ -7289,7 +7295,7 @@
       `This will permanently remove the unclaimed profile and their invite code. This can't be undone.`,
       `🗑️ Delete Profile`,
       () => {
-        // Remove from all crews
+        // Remove from all crews in-memory
         crews.forEach(c => {
           c.squadIds = (c.squadIds || []).filter(id => String(id) !== String(raverId));
           c.members = c.squadIds.map(sid => squad.find(r2 => String(r2.id) === String(sid))).filter(Boolean)
@@ -7300,6 +7306,15 @@
         renderCrews();
         renderDetail(activeDetailId);
         showToast(`🗑️ ${firstName}'s profile deleted`);
+        if (currentUser && !String(raverId).startsWith('temp_')) {
+          sb.from('raver_festivals').delete().eq('raver_id', raverId).then(() =>
+            sb.from('crew_members').delete().eq('raver_id', raverId).then(() =>
+              sb.from('ravers').delete().eq('id', raverId).then(({ error }) => {
+                if (error) showToast('⚠️ Could not fully delete — refresh and try again');
+              })
+            )
+          );
+        }
       }
     );
   }
