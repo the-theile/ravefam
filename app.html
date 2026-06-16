@@ -5733,7 +5733,8 @@ async function doProfilePasswordChange() {
 
   async function dbDeleteFestival(id) {
     await sb.from('raver_festivals').delete().eq('festival_id', id);
-    await sb.from('festivals').delete().eq('id', id);
+    const { error } = await sb.from('festivals').delete().eq('id', id);
+    if (error) { console.error('festival delete error', error); showToast('⚠️ Could not delete rave — try again'); }
   }
 
   async function dbSaveCrew(data, id) {
@@ -5754,11 +5755,13 @@ async function doProfilePasswordChange() {
 
   // Bulk insert for initial crew creation — safe to wipe first because there are no rows yet
   async function dbSaveCrewMembers(crewId, raverIds) {
-    await sb.from('crew_members').delete().eq('crew_id', crewId);
+    const { error: delErr } = await sb.from('crew_members').delete().eq('crew_id', crewId);
+    if (delErr) { console.error('crew members delete error', delErr); showToast('⚠️ Could not update crew members — try again'); return; }
     if (raverIds.length) {
       const uid = currentUser?.id;
       const rows = raverIds.map(rid => ({ crew_id: crewId, raver_id: rid, added_by: uid }));
-      await sb.from('crew_members').insert(rows);
+      const { error: insErr } = await sb.from('crew_members').insert(rows);
+      if (insErr) { console.error('crew members insert error', insErr); showToast('⚠️ Could not save crew members — try again'); }
     }
   }
 
@@ -6441,6 +6444,8 @@ async function doProfilePasswordChange() {
 
   function switchTab(page, el) {
     document.querySelectorAll('.modal-overlay.open').forEach(o => o.classList.remove('open'));
+    editingId = null;
+    _pendingAddToCrew = null;
     const nd = document.getElementById('notif-drawer-overlay');
     if (nd) nd.classList.remove('open');
     const so = document.getElementById('scanner-overlay');
@@ -7368,7 +7373,8 @@ async function doProfilePasswordChange() {
     addNotification(`🗑️ ${name} has been dissolved. The memories live on in the frequencies — the energy never dies.`);
     if (currentUser) {
       await sb.from('crew_members').delete().eq('crew_id', id);
-      await sb.from('crews').delete().eq('id', id);
+      const { error } = await sb.from('crews').delete().eq('id', id);
+      if (error) { console.error('crew delete error', error); showToast('⚠️ Could not fully delete crew — refresh and try again'); }
     }
   }
 
