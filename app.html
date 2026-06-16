@@ -7857,9 +7857,18 @@ async function doProfilePasswordChange() {
     const grid = document.getElementById('members-grid');
     grid.innerHTML = '';
     const query = (document.getElementById('raver-search')?.value || '').toLowerCase().trim();
-    // Pin "You" card first, then everyone else alphabetically, then filter by search
+    // Pin "You" card first, then everyone else by next fest soonest, then filter by search
     const sorted = [...squad]
-      .sort((a, b) => (b.isYou ? 1 : 0) - (a.isYou ? 1 : 0))
+      .sort((a, b) => {
+        if (a.isYou) return -1;
+        if (b.isYou) return 1;
+        const na = raverUpcoming(a)[0];
+        const nb = raverUpcoming(b)[0];
+        if (na && nb) return na._d - nb._d;
+        if (na) return -1;
+        if (nb) return 1;
+        return 0;
+      })
       .filter(r => !query
         || r.name.toLowerCase().includes(query)
         || (nicknameCache[String(r.id)] || '').toLowerCase().includes(query)
