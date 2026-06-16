@@ -1157,6 +1157,37 @@
     font-family: 'Outfit', sans-serif;
   }
 
+  /* Dream Board */
+  .dream-board-section { margin-bottom: 0; }
+  .dream-add-row { display: flex; gap: 8px; margin-bottom: 12px; }
+  .dream-add-row .dream-pin-input { flex: 1; margin-bottom: 0; }
+  .dream-add-btn { flex-shrink: 0; padding: 10px 16px; font-size: 0.82rem; }
+  .dream-pins-list { display: flex; flex-direction: column; gap: 8px; }
+  .dream-pin {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .dream-pin-label { font-size: 0.9rem; color: #fff; flex: 1; line-height: 1.4; word-break: break-word; }
+  .dream-pin-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .hype-btn {
+    background: none; border: 1.5px solid rgba(255,255,255,0.12); border-radius: 8px;
+    padding: 3px 8px; font-size: 0.8rem; cursor: pointer; color: var(--muted);
+    display: flex; align-items: center; gap: 3px; transition: all 0.15s;
+  }
+  .hype-btn:hover, .hype-btn.hyped {
+    border-color: rgba(255,107,53,0.5); background: rgba(255,107,53,0.1); color: #ff6b35;
+  }
+  .hype-count { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.75rem; }
+  .dream-pin-del {
+    background: none; border: none; color: var(--muted); font-size: 1.1rem;
+    cursor: pointer; padding: 2px 4px; line-height: 1; opacity: 0.6;
+  }
+  .dream-pin-del:hover { color: var(--neon-pink); opacity: 1; }
+  .dream-empty { font-size: 0.82rem; color: var(--muted); text-align: center; padding: 20px 0; }
+
   /* Modal */
   .modal-overlay {
     position: fixed;
@@ -4552,7 +4583,7 @@ async function doProfilePasswordChange() {
 
   function showAuthScreen() {
     currentUser = null;
-    squad.length = 0; crews.length = 0; festivals.length = 0;
+    squad.length = 0; crews.length = 0; festivals.length = 0; dreamPins = [];
     document.getElementById('app-loading').classList.add('hidden');
     document.getElementById('auth-screen').classList.remove('hidden');
     document.getElementById('main-app').style.display = 'none';
@@ -6950,13 +6981,17 @@ async function doProfilePasswordChange() {
 
   // ===== Crew detail view =====
   let activeDetailId = null;
+  let dreamPins = [];
 
-  function openDetail(id) {
+  async function openDetail(id) {
     activeDetailId = id;
-    renderDetail(id);
+    dreamPins = [];
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById('page-crew-detail').classList.add('active');
     window.scrollTo(0, 0);
+    renderDetail(id);
+    await dbLoadDreamPins(id);
+    rerenderDreamBoard(id);
   }
   function closeDetail() {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -7159,6 +7194,7 @@ async function doProfilePasswordChange() {
         <label class="form-label">Crew Members</label>
         <div class="detail-members">${memberList}</div>
       </div>
+      ${buildDreamBoardHTML(crew.id)}
       <div class="crew-status-zone">
         <div class="crew-status-zone-header">
           <span class="crew-status-zone-label">Status</span>
@@ -7185,6 +7221,123 @@ async function doProfilePasswordChange() {
       </div>
       </div>
     `;
+  }
+
+  // ===== Dream Board =====
+
+  async function dbLoadDreamPins(crewId) {
+    if (!currentUser) return;
+    const { data, error } = await sb.from('dream_board_pins')
+      .select('*').eq('crew_id', crewId).order('created_at', { ascending: true });
+    if (!error) dreamPins = data || [];
+  }
+
+  async function dbAddDreamPin(crewId, label) {
+    const { data, error } = await sb.from('dream_board_pins')
+      .insert({ crew_id: crewId, added_by: currentUser.id, label: label.trim() })
+      .select().single();
+    if (error) { showToast('⚠️ Could not save pin — try again'); return null; }
+    dreamPins.push(data);
+    return data;
+  }
+
+  async function dbDeleteDreamPin(pinId) {
+    const { error } = await sb.from('dream_board_pins').delete().eq('id', pinId);
+    if (error) { showToast('⚠️ Could not remove pin — try again'); return false; }
+    dreamPins = dreamPins.filter(p => p.id !== pinId);
+    return true;
+  }
+
+  async function dbToggleHype(pinId) {
+    const pin = dreamPins.find(p => p.id === pinId);
+    if (!pin || !currentUser) return;
+    const uid = currentUser.id;
+    const alreadyHyped = (pin.hyped_by || []).includes(uid);
+    const newHypedBy = alreadyHyped
+      ? (pin.hyped_by || []).filter(id => id !== uid)
+      : [...(pin.hyped_by || []), uid];
+    const { error } = await sb.from('dream_board_pins')
+      .update({ hyped_by: newHypedBy }).eq('id', pinId);
+    if (error) { showToast('⚠️ Could not update hype'); return; }
+    pin.hyped_by = newHypedBy;
+  }
+
+  async function addDreamPin(crewId) {
+    const input = document.getElementById('dream-pin-input');
+    const label = input?.value?.trim();
+    if (!label) { showToast('✏️ Enter something to pin first'); return; }
+    if (label.length > 120) { showToast('✏️ Keep it under 120 characters'); return; }
+    input.value = '';
+    input.disabled = true;
+    await dbAddDreamPin(crewId, label);
+    input.disabled = false;
+    rerenderDreamBoard(crewId);
+  }
+
+  async function deleteDreamPin(pinId, crewId) {
+    const ok = await dbDeleteDreamPin(pinId);
+    if (ok) rerenderDreamBoard(crewId);
+  }
+
+  async function toggleHype(pinId, crewId) {
+    await dbToggleHype(pinId);
+    rerenderDreamBoard(crewId);
+  }
+
+  function rerenderDreamBoard(crewId) {
+    const el = document.getElementById('dream-board-section');
+    if (el) el.outerHTML = buildDreamBoardHTML(crewId);
+  }
+
+  function buildDreamBoardHTML(crewId) {
+    const crew = getCrew(crewId);
+    const uid = currentUser?.id;
+    const isLead = crew?.isLead;
+
+    const pinCards = dreamPins.map(pin => {
+      const hyped = (pin.hyped_by || []).includes(uid);
+      const hypeCount = (pin.hyped_by || []).length;
+      const canDelete = pin.added_by === uid || isLead || isAdminUser();
+      return `
+        <div class="dream-pin" id="dream-pin-${escHtml(pin.id)}">
+          <span class="dream-pin-label">${escHtml(pin.label)}</span>
+          <div class="dream-pin-actions">
+            <button class="hype-btn ${hyped ? 'hyped' : ''}"
+              data-pin-id="${escHtml(pin.id)}" data-crew-id="${escHtml(crewId)}"
+              onclick="toggleHype(this.dataset.pinId, this.dataset.crewId)"
+              title="${hyped ? 'Unhype' : 'Hype it'}">
+              🔥<span class="hype-count">${hypeCount > 0 ? hypeCount : ''}</span>
+            </button>
+            ${canDelete ? `<button class="dream-pin-del"
+              data-pin-id="${escHtml(pin.id)}" data-crew-id="${escHtml(crewId)}"
+              onclick="deleteDreamPin(this.dataset.pinId, this.dataset.crewId)"
+              title="Remove pin">×</button>` : ''}
+          </div>
+        </div>`;
+    }).join('');
+
+    const emptyState = dreamPins.length === 0
+      ? `<div class="dream-empty">No pins yet — be the first to dream big 🌟</div>`
+      : '';
+
+    return `
+      <div class="form-group dream-board-section" id="dream-board-section">
+        <label class="form-label">✨ Dream Board <span style="font-weight:400;color:var(--muted);font-size:0.75rem;">· crew wish list</span></label>
+        ${uid ? `
+        <div class="dream-add-row">
+          <input class="form-input dream-pin-input" id="dream-pin-input"
+            placeholder="What show or fest are you dreaming about?"
+            maxlength="120"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();addDreamPin('${escHtml(crewId)}');}">
+          <button class="btn btn-primary dream-add-btn"
+            data-crew-id="${escHtml(crewId)}"
+            onclick="addDreamPin(this.dataset.crewId)">Pin it</button>
+        </div>` : ''}
+        <div class="dream-pins-list">
+          ${emptyState}
+          ${pinCards}
+        </div>
+      </div>`;
   }
 
   // Full-view status set (Lead only) — shows confirmation first
