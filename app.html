@@ -8194,27 +8194,6 @@ async function doProfilePasswordChange() {
         ${connectBlock}
 
         <div class="profile-section" style="${sg(0)}">
-          <h3>⚡ Vibe Tags</h3>
-          ${(() => {
-            const presetVibes = (r.vibeTags||[]).map(v => vibeTagHTML(v, false, false, null)).join('');
-            const customVibes = (r.customVibeTags||[]).map(v => vibeTagHTML(v, true, false, null)).join('');
-            return (presetVibes || customVibes)
-              ? `<div class="profile-vibes">${presetVibes}${customVibes}</div>`
-              : `<div class="fest-empty">No vibe tags yet${r.isYou || perms.isLeaderOfRaver ? ' — edit profile to add some' : ''}</div>`;
-          })()}
-        </div>
-
-        <div class="profile-section" style="${sg(1)}">
-          <h3>🎶 Genres</h3>
-          <div class="tag-edit-wrap">${genreChips}</div>
-        </div>
-
-        <div class="profile-section" style="${sg(2)}">
-          <h3>🎵 Favourite Artists</h3>
-          <div class="tag-edit-wrap">${favChips}</div>
-        </div>
-
-        <div class="profile-section" style="${sg(3)}">
           <h3>🎟️ Festivals — Going To</h3>
           ${upcomingFests.length
             ? upcomingFests.map(f => `
@@ -8226,10 +8205,10 @@ async function doProfilePasswordChange() {
                   </span>
                 </div>`).join('')
             : '<div class="fest-empty">Nothing logged yet</div>'}
-          ${(r.isYou || perms.editFests) ? `<div style="margin-top:8px;"><input class="tag-add-input" placeholder="+ add upcoming festival" id="fest-add-upcoming-${r.id}" list="fest-list-${r.id}" style="width:100%;"><datalist id="fest-list-${r.id}">${festivals.map(f=>`<option value="${f.name.replace(/"/g,'&quot;')}">`).join('')}</datalist><button class="vibe-add-btn" style="margin-top:4px;width:100%;" onclick="const i=document.getElementById('fest-add-upcoming-${r.id}');const f=festivals.find(x=>x.name.toLowerCase()===i.value.trim().toLowerCase());if(f){addBeenTo('${r.id}',f.id);i.value='';}else if(i.value.trim()){showToast('Festival not found — check spelling');}">Add Fest</button></div>` : ''}
+          ${(r.isYou || perms.editFests) ? `<div id="inline-fp-${r.id}" style="margin-top:8px;"></div>` : ''}
         </div>
 
-        <div class="profile-section" style="${sg(4)}">
+        <div class="profile-section" style="${sg(1)}">
           <h3>✅ Festivals — Been To</h3>
           ${pastFests.length
             ? pastFests.map(f => `
@@ -8241,6 +8220,27 @@ async function doProfilePasswordChange() {
                   </span>
                 </div>`).join('')
             : '<div class="fest-empty">Nothing logged yet</div>'}
+        </div>
+
+        <div class="profile-section" style="${sg(2)}">
+          <h3>⚡ Vibe Tags</h3>
+          ${(() => {
+            const presetVibes = (r.vibeTags||[]).map(v => vibeTagHTML(v, false, false, null)).join('');
+            const customVibes = (r.customVibeTags||[]).map(v => vibeTagHTML(v, true, false, null)).join('');
+            return (presetVibes || customVibes)
+              ? `<div class="profile-vibes">${presetVibes}${customVibes}</div>`
+              : `<div class="fest-empty">No vibe tags yet${r.isYou || perms.isLeaderOfRaver ? ' — edit profile to add some' : ''}</div>`;
+          })()}
+        </div>
+
+        <div class="profile-section" style="${sg(3)}">
+          <h3>🎶 Genres</h3>
+          <div class="tag-edit-wrap">${genreChips}</div>
+        </div>
+
+        <div class="profile-section" style="${sg(4)}">
+          <h3>🎵 Favourite Artists</h3>
+          <div class="tag-edit-wrap">${favChips}</div>
         </div>
 
         <div class="profile-section" style="${sg(5)}">
@@ -8330,6 +8330,7 @@ async function doProfilePasswordChange() {
           })()}
         </div>
       `;
+      if (r.isYou || perms.editFests) renderInlineFestPicker(r.id);
     }
     // Swap to profile page (hide nav active states; this is a sub-page)
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -8843,6 +8844,158 @@ async function doProfilePasswordChange() {
     editingFestIds.add(fest.id);
     hideNewFest();
     renderFestPicker();
+  }
+
+  // ── Inline festival picker (view mode — saves immediately) ──────────────────
+  function renderInlineFestPicker(raverId) {
+    const box = document.getElementById(`inline-fp-${raverId}`);
+    if (!box) return;
+    const r = getRaver(raverId);
+    if (!r) return;
+    const addedIds = new Set((r.festIds || []).map(id => String(id)));
+
+    const upcoming = festivals
+      .map(f => ({ ...f, _d: festDate(f) }))
+      .filter(f => f._d && f._d >= TODAY && !addedIds.has(String(f.id)))
+      .sort((a, b) => a._d - b._d)
+      .slice(0, 10);
+
+    const upHtml = upcoming.length
+      ? upcoming.map(f => {
+          const when = `${f._d.getDate()} ${MON_SHORT[f._d.getMonth()]}`;
+          return `<span class="fest-quick-chip" data-fid="${f.id}" onclick="ifpAdd('${raverId}','${f.id}')">${escHtml(f.name)}<span class="fest-quick-date">${when}</span></span>`;
+        }).join('')
+      : `<span class="fest-empty" style="font-size:0.78rem;">All upcoming raves already added</span>`;
+
+    box.innerHTML = `
+      <div class="fest-section-label" style="margin-top:4px;">🔜 Upcoming — tap to add</div>
+      <div class="fest-quick-cloud">${upHtml}</div>
+      <div class="fest-search-wrap" style="margin-top:8px;">
+        <input class="form-input" id="ifp-search-${raverId}" placeholder="🔍 Search all raves…" autocomplete="off" style="font-size:16px;"
+          oninput="ifpSearch('${raverId}',this.value)" onfocus="ifpSearch('${raverId}',this.value)"
+          onblur="setTimeout(()=>{const d=document.getElementById('ifp-results-${raverId}');if(d)d.style.display='none';},200)">
+        <div id="ifp-results-${raverId}" class="fest-search-dropdown" style="display:none;"></div>
+      </div>
+      <button type="button" class="add-fest-btn" id="ifp-show-new-${raverId}" onclick="ifpShowNewForm('${raverId}')" style="margin-top:10px;">+ Add new rave</button>
+      <div id="ifp-new-form-${raverId}" style="display:none;margin-top:12px;">
+        <div style="position:relative;">
+          <input class="form-input" id="ifp-nf-name-${raverId}" placeholder="Rave name (e.g. Dekmantel)" autocomplete="off" style="margin-bottom:4px;font-size:16px;" oninput="ifpNameSuggest('${raverId}',this.value)">
+          <div id="ifp-nf-results-${raverId}" class="fest-search-dropdown" style="display:none;"></div>
+        </div>
+        <div style="display:flex;gap:8px;margin:8px 0;">
+          <input class="form-input" id="ifp-nf-date-${raverId}" type="date" style="flex:1;color-scheme:dark;font-size:16px;">
+          <div class="nf-gb-toggle">
+            <button type="button" class="nf-gb-btn nf-going active" id="ifp-going-btn-${raverId}" onclick="ifpSetGoing('${raverId}',true)">Going</button>
+            <button type="button" class="nf-gb-btn nf-been" id="ifp-been-btn-${raverId}" onclick="ifpSetGoing('${raverId}',false)">Been</button>
+          </div>
+        </div>
+        <input class="form-input" id="ifp-nf-loc-${raverId}" placeholder="Location (e.g. Berlin, DE)" style="margin-bottom:10px;font-size:16px;">
+        <div style="display:flex;gap:8px;">
+          <button type="button" class="btn btn-ghost" style="flex:1;padding:9px;font-size:0.8rem;" onclick="ifpHideNewForm('${raverId}')">Cancel</button>
+          <button type="button" class="btn btn-primary" style="flex:2;padding:9px;font-size:0.8rem;" onclick="ifpCreateFest('${raverId}')">Add Rave 🎉</button>
+        </div>
+      </div>`;
+  }
+
+  function ifpAdd(raverId, festId) {
+    addBeenTo(raverId, festId);
+  }
+
+  function ifpSearch(raverId, q) {
+    const results = document.getElementById(`ifp-results-${raverId}`);
+    if (!results) return;
+    const r = getRaver(raverId);
+    const addedIds = new Set((r?.festIds || []).map(id => String(id)));
+    const query = (q || '').trim().toLowerCase();
+    if (!query) { results.style.display = 'none'; return; }
+    const matches = festivals
+      .filter(f => (f.name.toLowerCase().includes(query) || (f.location || '').toLowerCase().includes(query)) && !addedIds.has(String(f.id)))
+      .slice(0, 8);
+    if (!matches.length) { results.style.display = 'none'; return; }
+    results.innerHTML = matches.map(f => {
+      const d = festDate(f);
+      const when = d ? `${d.getDate()} ${MON_SHORT[d.getMonth()]} ${d.getFullYear()}` : '';
+      const meta = [when, escHtml(f.location)].filter(Boolean).join(' · ');
+      return `<div class="fest-search-item" onmousedown="ifpAdd('${raverId}','${f.id}')">
+        <span class="fest-search-name">${escHtml(f.name)}</span>
+        ${meta ? `<span class="fest-search-meta">${meta}</span>` : ''}
+      </div>`;
+    }).join('');
+    results.style.display = 'block';
+  }
+
+  function ifpShowNewForm(raverId) {
+    const form = document.getElementById(`ifp-new-form-${raverId}`);
+    const btn = document.getElementById(`ifp-show-new-${raverId}`);
+    if (form) form.style.display = 'block';
+    if (btn) btn.style.display = 'none';
+  }
+
+  function ifpHideNewForm(raverId) {
+    const form = document.getElementById(`ifp-new-form-${raverId}`);
+    const btn = document.getElementById(`ifp-show-new-${raverId}`);
+    if (form) form.style.display = 'none';
+    if (btn) btn.style.display = 'block';
+  }
+
+  function ifpSetGoing(raverId, going) {
+    document.getElementById(`ifp-going-btn-${raverId}`)?.classList.toggle('active', going);
+    document.getElementById(`ifp-been-btn-${raverId}`)?.classList.toggle('active', !going);
+    const dateInput = document.getElementById(`ifp-nf-date-${raverId}`);
+    if (dateInput && !dateInput.value) {
+      const d = new Date(TODAY); d.setDate(d.getDate() + (going ? 1 : -1));
+      dateInput.value = d.toISOString().slice(0, 10);
+    }
+  }
+
+  function ifpNameSuggest(raverId, q) {
+    const results = document.getElementById(`ifp-nf-results-${raverId}`);
+    if (!results) return;
+    const query = (q || '').trim().toLowerCase();
+    if (!query) { results.innerHTML = ''; results.style.display = 'none'; return; }
+    const matches = festivals.filter(f => f.name.toLowerCase().includes(query)).slice(0, 5);
+    if (!matches.length) { results.innerHTML = ''; results.style.display = 'none'; return; }
+    results.innerHTML = matches.map(f => {
+      const d = festDate(f);
+      const when = d ? `${d.getDate()} ${MON_SHORT[d.getMonth()]} ${d.getFullYear()}` : '';
+      const meta = [when, escHtml(f.location)].filter(Boolean).join(' · ');
+      return `<div class="fest-search-item" onmousedown="ifpPickExisting('${raverId}','${f.id}')">
+        <span class="fest-search-name">${escHtml(f.name)}</span>
+        ${meta ? `<span class="fest-search-meta">${meta}</span>` : ''}
+      </div>`;
+    }).join('');
+    results.style.display = 'block';
+  }
+
+  function ifpPickExisting(raverId, festId) {
+    const fest = festivals.find(f => String(f.id) === String(festId));
+    if (!fest) return;
+    addBeenTo(raverId, fest.id);
+  }
+
+  function ifpCreateFest(raverId) {
+    const nameEl = document.getElementById(`ifp-nf-name-${raverId}`);
+    const dateEl = document.getElementById(`ifp-nf-date-${raverId}`);
+    const locEl = document.getElementById(`ifp-nf-loc-${raverId}`);
+    const goingBtn = document.getElementById(`ifp-going-btn-${raverId}`);
+    const name = (nameEl?.value || '').trim();
+    let date = dateEl?.value || '';
+    const loc = (locEl?.value || '').trim();
+    const isGoing = goingBtn?.classList.contains('active') ?? true;
+    if (!name) { showToast('Rave needs a name ✍️'); return; }
+    if (!date) {
+      const d = new Date(TODAY); d.setDate(d.getDate() + (isGoing ? 1 : -1));
+      date = d.toISOString().slice(0, 10);
+    }
+    let fest = findFestivalByName(name);
+    if (fest) {
+      showToast(`"${fest.name}" already exists — added ✓`);
+    } else {
+      fest = { id: ++festSeq, name, date, location: loc };
+      festivals.push(fest);
+      showToast(`🎉 Added ${name}`);
+    }
+    addBeenTo(raverId, fest.id);
   }
 
   // Edit the logged-in user's own raver profile from the header button
