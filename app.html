@@ -1203,14 +1203,16 @@
   .dream-add-btn { flex-shrink: 0; padding: 10px 16px; font-size: 0.82rem; }
   .dream-pins-list { display: flex; flex-direction: column; gap: 8px; }
   .dream-pin {
-    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
     background: var(--surface);
     border: 1px solid rgba(255,255,255,0.07);
     border-radius: 10px;
     padding: 10px 12px;
   }
-  .dream-pin-label { font-size: 0.9rem; color: #fff; flex: 1; line-height: 1.4; word-break: break-word; }
-  .dream-pin-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .dream-pin-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+  .dream-pin-label { font-size: 0.9rem; color: #fff; line-height: 1.4; word-break: break-word; }
+  .dream-pin-attr { font-size: 0.7rem; color: var(--muted); opacity: 0.55; }
+  .dream-pin-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; align-self: center; }
   .hype-btn {
     background: none; border: 1.5px solid rgba(255,255,255,0.12); border-radius: 8px;
     padding: 3px 8px; font-size: 0.8rem; cursor: pointer; color: var(--muted);
@@ -2299,6 +2301,35 @@
     cursor: pointer; transition: all 0.18s; white-space: nowrap;
   }
   .vibe-add-btn:hover { background: rgba(0,245,255,0.24); }
+
+  .vibe-emoji-btn-wrap { position: relative; flex-shrink: 0; }
+  .vibe-emoji-btn {
+    background: rgba(191,0,255,0.12); border: 1px solid rgba(191,0,255,0.35);
+    color: #d67fff; border-radius: 100px; padding: 7px 11px;
+    font-size: 1rem; cursor: pointer; transition: all 0.18s;
+    display: inline-flex; align-items: center; gap: 3px;
+    font-family: 'Outfit', sans-serif; white-space: nowrap;
+  }
+  .vibe-emoji-btn:hover, .vibe-emoji-btn.open {
+    background: rgba(191,0,255,0.22); border-color: rgba(191,0,255,0.6);
+    box-shadow: 0 0 12px -3px rgba(191,0,255,0.5);
+  }
+  .vibe-emoji-caret { font-size: 0.55rem; opacity: 0.6; line-height: 1; }
+  .vibe-emoji-picker {
+    position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
+    background: var(--surface2); border: 1px solid rgba(191,0,255,0.3);
+    border-radius: 14px; padding: 10px;
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.45), 0 0 24px rgba(191,0,255,0.12);
+    min-width: 204px;
+  }
+  .vibe-emoji-opt {
+    font-size: 1.25rem; line-height: 1; padding: 5px 3px; border-radius: 8px;
+    cursor: pointer; text-align: center; border: 1px solid transparent;
+    transition: background 0.1s, transform 0.1s;
+  }
+  .vibe-emoji-opt:hover { background: rgba(255,255,255,0.08); transform: scale(1.22); }
+  .vibe-emoji-opt.selected { background: rgba(191,0,255,0.22); border-color: rgba(191,0,255,0.5); }
 
   .vibe-custom-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   .vibe-custom-chip {
@@ -5995,8 +6026,10 @@ async function doProfilePasswordChange() {
   }
 
   const VIBE_EMOJIS = ['🔥','💃','🎧','🪩','✨','🫶','🕺','⚡','🌊','👾','🌀','🎶','🦋','🍄','🥂','🫠'];
+  const CUSTOM_VIBE_EMOJIS = ['🔥','💃','🎧','🪩','✨','🫶','🕺','⚡','🌊','👾','🌀','🎶','🦋','🍄','🥂','🫠','💜','🌙','⭐','🎉','👑','🦄','🌈','🎪'];
   let _vibePickerFestId = null;
   let _vibePickerEmoji  = null;
+  let _customVibeEmoji  = '✨';
 
   function buildVibeRowHTML(festId) {
     const me = squad.find(r => r.isYou);
@@ -7612,9 +7645,21 @@ async function doProfilePasswordChange() {
       const hyped = (pin.hyped_by || []).includes(uid);
       const hypeCount = (pin.hyped_by || []).length;
       const canDelete = pin.added_by === uid || isLead || isAdminUser();
+      let addedByLabel = '';
+      if (pin.added_by) {
+        if (pin.added_by === uid) {
+          addedByLabel = 'you';
+        } else {
+          const adder = getRaver(pin.added_by);
+          if (adder) addedByLabel = displayName(adder).split(' ')[0];
+        }
+      }
       return `
         <div class="dream-pin" id="dream-pin-${escHtml(pin.id)}">
-          <span class="dream-pin-label">${escHtml(pin.label)}</span>
+          <div class="dream-pin-text">
+            <span class="dream-pin-label">${escHtml(pin.label)}</span>
+            ${addedByLabel ? `<span class="dream-pin-attr">added by ${escHtml(addedByLabel)}</span>` : ''}
+          </div>
           <div class="dream-pin-actions">
             <button class="hype-btn ${hyped ? 'hyped' : ''}"
               data-pin-id="${escHtml(pin.id)}" data-crew-id="${escHtml(crewId)}"
@@ -8447,7 +8492,7 @@ async function doProfilePasswordChange() {
     const removeBtn = removableRaverId
       ? ` <span class="vibe-chip-remove" onclick="removeTag('${removableRaverId}','${field}','${vtId.replace(/'/g,"\\'")}')">✕</span>`
       : '';
-    if (isCustom) return `<span class="${cls}">✨ ${escHtml(vtId)}${removeBtn}</span>`;
+    if (isCustom) return `<span class="${cls}">${escHtml(vtId)}${removeBtn}</span>`;
     const p = getPreset(vtId);
     if (!p) return '';
     return `<span class="${cls}" style="background:${p.bg};border-color:${p.color}40;color:${p.color};">${p.icon} ${p.label}${removeBtn}</span>`;
@@ -9284,6 +9329,12 @@ async function doProfilePasswordChange() {
           }).join('')}
         </div>
         <div class="vibe-custom-row">
+          <div class="vibe-emoji-btn-wrap">
+            <button type="button" class="vibe-emoji-btn" id="vibe-emoji-btn" onclick="openCustomEmojiPicker()" title="Pick your tag emoji">
+              <span id="vibe-emoji-display">✨</span><span class="vibe-emoji-caret">▾</span>
+            </button>
+            <div class="vibe-emoji-picker" id="vibe-custom-emoji-picker" style="display:none;"></div>
+          </div>
           <input class="vibe-custom-input" id="vibe-custom-input" placeholder="Add your own vibe tag…" maxlength="30"
             onkeydown="if(event.key==='Enter'){event.preventDefault();addCustomVibe();}">
           <button type="button" class="vibe-add-btn" onclick="addCustomVibe()">Add</button>
@@ -9880,10 +9931,12 @@ async function doProfilePasswordChange() {
     const input = document.getElementById('vibe-custom-input');
     const raw = (input?.value || '').trim();
     if (!raw) return;
-    if (editingCustomVibeTags.includes(raw)) { showToast('Tag already added'); return; }
+    const tag = `${_customVibeEmoji} ${raw}`;
+    if (editingCustomVibeTags.includes(tag)) { showToast('Tag already added'); return; }
     if (editingCustomVibeTags.length >= 10) { showToast('Max 10 custom tags'); return; }
-    editingCustomVibeTags.push(raw);
+    editingCustomVibeTags.push(tag);
     input.value = '';
+    closeCustomEmojiPicker();
     renderCustomVibeTags();
   }
 
@@ -9898,6 +9951,41 @@ async function doProfilePasswordChange() {
     box.innerHTML = editingCustomVibeTags.map((t, i) =>
       `<span class="vibe-custom-chip">${escHtml(t)} <span class="vibe-chip-remove" onclick="removeCustomVibe(${i})">✕</span></span>`
     ).join('');
+  }
+
+  function openCustomEmojiPicker() {
+    const picker = document.getElementById('vibe-custom-emoji-picker');
+    const btn = document.getElementById('vibe-emoji-btn');
+    if (!picker) return;
+    if (picker.style.display !== 'none') { closeCustomEmojiPicker(); return; }
+    picker.innerHTML = CUSTOM_VIBE_EMOJIS.map(e =>
+      `<span class="vibe-emoji-opt${e === _customVibeEmoji ? ' selected' : ''}" onclick="selectCustomVibeEmoji('${e}')">${e}</span>`
+    ).join('');
+    picker.style.display = 'grid';
+    btn?.classList.add('open');
+    setTimeout(() => document.addEventListener('click', _onCustomPickerOutside, { once: true }), 0);
+  }
+
+  function closeCustomEmojiPicker() {
+    const picker = document.getElementById('vibe-custom-emoji-picker');
+    const btn = document.getElementById('vibe-emoji-btn');
+    if (picker) { picker.style.display = 'none'; picker.innerHTML = ''; }
+    btn?.classList.remove('open');
+    document.removeEventListener('click', _onCustomPickerOutside);
+  }
+
+  function _onCustomPickerOutside(e) {
+    const wrap = document.querySelector('.vibe-emoji-btn-wrap');
+    if (!wrap || !wrap.contains(e.target)) closeCustomEmojiPicker();
+    else document.addEventListener('click', _onCustomPickerOutside, { once: true });
+  }
+
+  function selectCustomVibeEmoji(emoji) {
+    _customVibeEmoji = emoji;
+    const disp = document.getElementById('vibe-emoji-display');
+    if (disp) disp.textContent = emoji;
+    closeCustomEmojiPicker();
+    document.getElementById('vibe-custom-input')?.focus();
   }
 
   function parseList(text) {
@@ -10127,7 +10215,7 @@ async function doProfilePasswordChange() {
             <div class="event-name">${f.name} <span class="fest-edit-hint">✏️</span></div>
             <div class="event-meta">${metaLine}</div>
             <div class="going-avatars">${avatarChips}</div>
-            <div id="vibe-picker-${f.id}" style="display:none;margin-top:6px;"></div>
+            ${(() => { const vr = buildVibeRowHTML(f.id); return vr ? `<div class="fest-vibe-row">${vr}</div>` : ''; })()}
             ${toggleBtn}
           </div>
           <div class="event-crew-going">
