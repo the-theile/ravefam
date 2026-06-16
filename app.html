@@ -6589,6 +6589,7 @@ async function doProfilePasswordChange() {
       }, { onConflict: 'uploader_user_id,raver_a_id,raver_b_id' });
       if (!ourPhotosCache[String(viewingRaverId)]) ourPhotosCache[String(viewingRaverId)] = { mine: null, theirs: null };
       ourPhotosCache[String(viewingRaverId)].mine = url;
+      renderSquad();
       const r = squad.find(x => String(x.id) === String(viewingRaverId));
       if (r) openProfile(r.id);
       showToast('📸 Photo saved!');
@@ -6624,6 +6625,7 @@ async function doProfilePasswordChange() {
               .eq('uploader_user_id', currentUser.id).eq('raver_a_id', pair.a).eq('raver_b_id', pair.b).catch(() => {});
           }
           if (ourPhotosCache[String(viewingRaverId)]) ourPhotosCache[String(viewingRaverId)].mine = null;
+          renderSquad();
           const r = squad.find(x => String(x.id) === String(viewingRaverId));
           if (r) openProfile(r.id);
           showToast('Photo removed');
@@ -9377,6 +9379,7 @@ async function doProfilePasswordChange() {
       }
       if (currentUser) dbSaveRaverFestivals(raverId, r.festIds);
       renderInlineFestPicker(raverId);
+      renderSquad(); renderEvents(); renderCrews();
     }
   }
 
@@ -10016,6 +10019,7 @@ async function doProfilePasswordChange() {
     }
     r.festIds = [...(r.festIds || []), editingFestivalId];
     if (currentUser) dbSaveRaverFestivals(raverId, r.festIds);
+    renderSquad(); renderEvents(); renderCrews();
     const goers = festivalGoers(editingFestivalId);
     const note = document.getElementById('re-goers-note');
     if (note) {
@@ -10171,6 +10175,7 @@ async function doProfilePasswordChange() {
     if ((r[field] || []).map(x => x.toLowerCase()).includes(v.toLowerCase())) { showToast('Already on the list'); return; }
     r[field] = [...(r[field] || []), v];
     if (currentUser) dbSaveRaver({ ...r }, r.id);
+    renderSquad();
     openProfile(raverId);
   }
   function removeTag(raverId, field, value) {
@@ -10178,6 +10183,7 @@ async function doProfilePasswordChange() {
     if (!r) return;
     r[field] = (r[field] || []).filter(x => x !== value);
     if (currentUser) dbSaveRaver({ ...r }, r.id);
+    renderSquad();
     openProfile(raverId);
   }
   function addBeenTo(raverId, festId) {
