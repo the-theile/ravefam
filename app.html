@@ -5477,13 +5477,14 @@ async function doProfilePasswordChange() {
           .filter(Boolean)
           .map(r => ({ i: initials(r.name), c: c.color || '#FF2D78', t: '#fff', url: r.avatarUrl || null }));
         // Resolve auth UUID → raver ID.
-        // 1. claimed_by match (QR-claimed stub)
+        // 1. claimed_by match (QR-claimed stub or claimed crew member)
         // 2. own raver (is_you=true, onboarding path) when the current user IS the leader
-        // 3. createdBy match — catches the leader's own raver for non-leader viewers
-        //    after the supplemental crewmate query below populates squad.
+        // NOTE: No createdBy fallback here — supplemental crewmate ravers aren't loaded yet,
+        // so createdBy would incorrectly match ravers the leader created FOR others (e.g. stubs
+        // they added before the member claimed them). Re-resolution below handles this correctly
+        // once the full crewmate data is in squad.
         const leaderRaver = squad.find(r => r.claimedBy === c.leader_id)
-          || (c.leader_id === uid ? squad.find(r => r.isYou) : null)
-          || squad.find(r => r.createdBy === c.leader_id);
+          || (c.leader_id === uid ? squad.find(r => r.isYou) : null);
         crews.push({
           id: c.id,
           name: c.name,
