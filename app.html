@@ -3878,6 +3878,30 @@
   </div>
 </div>
 
+<!-- New Rave Popup (opened from profile editing) -->
+<div class="modal-overlay" id="new-rave-popup-overlay" onclick="if(event.target===this)closeNewRavePopup()">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-title">🎉 Add New Rave</div>
+    <div class="form-group" style="position:relative;">
+      <label class="form-label">Rave Name</label>
+      <input class="form-input" id="nrp-name" placeholder="e.g. Dekmantel" autocomplete="off" style="font-size:16px;" oninput="nrpNameSuggest(this.value)">
+      <div id="nrp-name-results" class="fest-search-dropdown" style="display:none;"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Date</label>
+      <input class="form-input" id="nrp-date" type="date" style="color-scheme:dark;font-size:16px;">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Location</label>
+      <input class="form-input" id="nrp-loc" placeholder="e.g. Berlin, DE" style="font-size:16px;">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeNewRavePopup()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveNewRavePopup()">Add Rave 🔥</button>
+    </div>
+  </div>
+</div>
+
 <!-- Status Change Warning Modal -->
 <div class="modal-overlay" id="status-warn-overlay" onclick="if(event.target===this)closeStatusWarn()">
   <div class="modal" id="status-warn-modal" style="text-align:center;">
@@ -9107,25 +9131,7 @@ async function doProfilePasswordChange() {
           onblur="setTimeout(()=>{const d=document.getElementById('fest-search-results');if(d)d.style.display='none';},200)">
         <div id="fest-search-results" class="fest-search-dropdown" style="display:none;"></div>
       </div>
-      <button type="button" class="add-fest-btn" id="show-new-fest-btn" onclick="showNewFest()" style="margin-top:10px;">+ Add new rave</button>
-      <div id="new-fest-form" style="display:none;margin-top:12px;">
-        <div style="position:relative;">
-          <input class="form-input" id="nf-name" placeholder="Rave name (e.g. Dekmantel)" autocomplete="off" style="margin-bottom:4px;font-size:16px;" oninput="nfNameSuggest(this.value)">
-          <div id="nf-name-results" class="fest-search-dropdown" style="display:none;"></div>
-        </div>
-        <div style="display:flex;gap:8px;margin:8px 0;">
-          <input class="form-input" id="nf-date" type="date" style="flex:1;color-scheme:dark;font-size:16px;">
-          <div class="nf-gb-toggle">
-            <button type="button" class="nf-gb-btn nf-going active" id="nf-going-btn" onclick="setNfGoing(true)">Going</button>
-            <button type="button" class="nf-gb-btn nf-been" id="nf-been-btn" onclick="setNfGoing(false)">Been</button>
-          </div>
-        </div>
-        <input class="form-input" id="nf-loc" placeholder="Location (e.g. Berlin, DE)" style="margin-bottom:10px;font-size:16px;">
-        <div style="display:flex;gap:8px;">
-          <button type="button" class="btn btn-ghost" style="flex:1;padding:9px;font-size:0.8rem;" onclick="hideNewFest()">Cancel</button>
-          <button type="button" class="btn btn-primary" style="flex:2;padding:9px;font-size:0.8rem;" onclick="createFestivalInline()">Add Rave 🎉</button>
-        </div>
-      </div>`;
+      <button type="button" class="add-fest-btn" onclick="openNewRavePopup('profile-editor')" style="margin-top:10px;">+ Add new rave</button>`;
   }
 
   function renderFestSelected() {
@@ -9287,6 +9293,93 @@ async function doProfilePasswordChange() {
     renderFestPicker();
   }
 
+  // ── New Rave Popup (shared by profile editor modal & inline edit mode) ──────
+  let _newRaveCtx = null; // 'profile-editor' or a raverId string
+
+  function openNewRavePopup(ctx) {
+    _newRaveCtx = ctx;
+    document.getElementById('nrp-name').value = '';
+    document.getElementById('nrp-date').value = '';
+    document.getElementById('nrp-loc').value = '';
+    const nr = document.getElementById('nrp-name-results');
+    if (nr) { nr.innerHTML = ''; nr.style.display = 'none'; }
+    document.getElementById('new-rave-popup-overlay').classList.add('open');
+    setTimeout(() => document.getElementById('nrp-name')?.focus(), 50);
+  }
+
+  function closeNewRavePopup() {
+    document.getElementById('new-rave-popup-overlay').classList.remove('open');
+    _newRaveCtx = null;
+  }
+
+  function nrpNameSuggest(q) {
+    const results = document.getElementById('nrp-name-results');
+    if (!results) return;
+    const query = (q || '').trim().toLowerCase();
+    if (!query) { results.innerHTML = ''; results.style.display = 'none'; return; }
+    const matches = festivals.filter(f => f.name.toLowerCase().includes(query)).slice(0, 5);
+    if (!matches.length) { results.innerHTML = ''; results.style.display = 'none'; return; }
+    results.innerHTML = matches.map(f => {
+      const d = festDate(f);
+      const when = d ? `${d.getDate()} ${MON_SHORT[d.getMonth()]} ${d.getFullYear()}` : '';
+      const meta = [when, escHtml(f.location)].filter(Boolean).join(' · ');
+      return `<div class="fest-search-item" onmousedown="nrpPickExisting('${f.id}')">
+        <span class="fest-search-name">${escHtml(f.name)}</span>
+        ${meta ? `<span class="fest-search-meta">${meta}</span>` : ''}
+      </div>`;
+    }).join('');
+    results.style.display = 'block';
+  }
+
+  function nrpPickExisting(id) {
+    const fest = festivals.find(f => String(f.id) === String(id));
+    if (!fest) return;
+    _nrpAddToContext(fest);
+    closeNewRavePopup();
+    showToast(`Added ${fest.name} ✓`);
+  }
+
+  async function saveNewRavePopup() {
+    const name = (document.getElementById('nrp-name')?.value || '').trim();
+    const date = document.getElementById('nrp-date')?.value || '';
+    const location = (document.getElementById('nrp-loc')?.value || '').trim();
+    if (!name) { showToast('Rave needs a name ✍️'); return; }
+    let fest = findFestivalByName(name);
+    if (!fest) {
+      let festId;
+      if (currentUser) {
+        festId = await dbSaveFestival({ name, date, location }, null);
+        if (!festId) return;
+      } else {
+        festId = ++festSeq;
+      }
+      fest = { id: festId, name, date, location };
+      festivals.push(fest);
+      showToast(`🎉 Added ${name}`);
+    } else {
+      showToast(`"${fest.name}" already exists — added ✓`);
+    }
+    _nrpAddToContext(fest);
+    closeNewRavePopup();
+  }
+
+  function _nrpAddToContext(fest) {
+    if (_newRaveCtx === 'profile-editor') {
+      editingFestIds.add(fest.id);
+      renderFestPicker();
+    } else {
+      const raverId = _newRaveCtx;
+      const r = getRaver(raverId);
+      if (!r) return;
+      if (!r.festIds) r.festIds = [];
+      if (!r.festIds.some(fid => String(fid) === String(fest.id))) {
+        r.festIds.push(fest.id);
+      }
+      if (currentUser) dbSaveRaverFestivals(raverId, r.festIds);
+      renderInlineFestPicker(raverId);
+    }
+  }
+
   // ── Inline festival picker (view mode — saves immediately) ──────────────────
   function renderInlineFestPicker(raverId) {
     const box = document.getElementById(`inline-fp-${raverId}`);
@@ -9317,25 +9410,7 @@ async function doProfilePasswordChange() {
           onblur="setTimeout(()=>{const d=document.getElementById('ifp-results-${raverId}');if(d)d.style.display='none';},200)">
         <div id="ifp-results-${raverId}" class="fest-search-dropdown" style="display:none;"></div>
       </div>
-      <button type="button" class="add-fest-btn" id="ifp-show-new-${raverId}" onclick="ifpShowNewForm('${raverId}')" style="margin-top:10px;">+ Add new rave</button>
-      <div id="ifp-new-form-${raverId}" style="display:none;margin-top:12px;">
-        <div style="position:relative;">
-          <input class="form-input" id="ifp-nf-name-${raverId}" placeholder="Rave name (e.g. Dekmantel)" autocomplete="off" style="margin-bottom:4px;font-size:16px;" oninput="ifpNameSuggest('${raverId}',this.value)">
-          <div id="ifp-nf-results-${raverId}" class="fest-search-dropdown" style="display:none;"></div>
-        </div>
-        <div style="display:flex;gap:8px;margin:8px 0;">
-          <input class="form-input" id="ifp-nf-date-${raverId}" type="date" style="flex:1;color-scheme:dark;font-size:16px;">
-          <div class="nf-gb-toggle">
-            <button type="button" class="nf-gb-btn nf-going active" id="ifp-going-btn-${raverId}" onclick="ifpSetGoing('${raverId}',true)">Going</button>
-            <button type="button" class="nf-gb-btn nf-been" id="ifp-been-btn-${raverId}" onclick="ifpSetGoing('${raverId}',false)">Been</button>
-          </div>
-        </div>
-        <input class="form-input" id="ifp-nf-loc-${raverId}" placeholder="Location (e.g. Berlin, DE)" style="margin-bottom:10px;font-size:16px;">
-        <div style="display:flex;gap:8px;">
-          <button type="button" class="btn btn-ghost" style="flex:1;padding:9px;font-size:0.8rem;" onclick="ifpHideNewForm('${raverId}')">Cancel</button>
-          <button type="button" class="btn btn-primary" style="flex:2;padding:9px;font-size:0.8rem;" onclick="ifpCreateFest('${raverId}')">Add Rave 🎉</button>
-        </div>
-      </div>`;
+      <button type="button" class="add-fest-btn" onclick="openNewRavePopup('${raverId}')" style="margin-top:10px;">+ Add new rave</button>`;
   }
 
   function ifpAdd(raverId, festId) {
