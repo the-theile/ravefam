@@ -1229,6 +1229,48 @@
   .dream-pin-del:hover { color: var(--neon-pink); opacity: 1; }
   .dream-empty { font-size: 0.82rem; color: var(--muted); text-align: center; padding: 20px 0; }
 
+  /* Archive */
+  .archive-section { margin-bottom: 0; }
+  .archive-add-area { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+  .archive-add-row  { display: flex; gap: 8px; }
+  .archive-url-input { flex: 1; margin-bottom: 0; }
+  .archive-label-input { flex: 1; margin-bottom: 0; }
+  .archive-drop-btn  { flex-shrink: 0; padding: 10px 16px; font-size: 0.82rem; }
+  .archive-fest-select {
+    width: 100%; padding: 10px 12px; font-size: 0.82rem;
+    background: var(--surface2); color: #fff; border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px; font-family: 'DM Sans', sans-serif; cursor: pointer;
+  }
+  .archive-links-list { display: flex; flex-direction: column; gap: 8px; }
+  .archive-link-card {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .archive-link-main  { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+  .archive-link-label { font-size: 0.9rem; color: #fff; line-height: 1.4; word-break: break-word; }
+  .archive-link-url   { font-size: 0.72rem; color: var(--neon-cyan); opacity: 0.8;
+                        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .archive-link-meta  { font-size: 0.7rem; color: var(--muted); opacity: 0.55;
+                        display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 1px; }
+  .archive-fest-badge { background: rgba(255,255,255,0.07); border-radius: 4px;
+                        padding: 1px 5px; font-size: 0.68rem; color: var(--muted); }
+  .archive-link-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; align-self: center; }
+  .archive-link-open  {
+    background: none; border: 1.5px solid rgba(255,255,255,0.12); border-radius: 8px;
+    padding: 3px 8px; font-size: 0.8rem; cursor: pointer; color: var(--muted);
+    text-decoration: none; display: flex; align-items: center; transition: all 0.15s;
+  }
+  .archive-link-open:hover { border-color: rgba(0,245,255,0.4); color: var(--neon-cyan); }
+  .archive-link-del   {
+    background: none; border: none; color: var(--muted); font-size: 1.1rem;
+    cursor: pointer; padding: 2px 4px; line-height: 1; opacity: 0.6;
+  }
+  .archive-link-del:hover { color: var(--neon-pink); opacity: 1; }
+  .archive-empty { font-size: 0.82rem; color: var(--muted); text-align: center; padding: 20px 0; }
+
   /* Modal */
   .modal-overlay {
     position: fixed;
@@ -4778,7 +4820,7 @@ async function doProfilePasswordChange() {
 
   function showAuthScreen() {
     currentUser = null;
-    squad.length = 0; crews.length = 0; festivals.length = 0; dreamPins = [];
+    squad.length = 0; crews.length = 0; festivals.length = 0; dreamPins = []; archiveLinks = [];
     document.getElementById('app-loading').classList.add('hidden');
     document.getElementById('auth-screen').classList.remove('hidden');
     document.getElementById('main-app').style.display = 'none';
@@ -7341,16 +7383,19 @@ async function doProfilePasswordChange() {
   // ===== Crew detail view =====
   let activeDetailId = null;
   let dreamPins = [];
+  let archiveLinks = [];
 
   async function openDetail(id) {
     activeDetailId = id;
     dreamPins = [];
+    archiveLinks = [];
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById('page-crew-detail').classList.add('active');
     window.scrollTo(0, 0);
     renderDetail(id);
     await dbLoadDreamPins(id);
     rerenderDreamBoard(id);
+    dbLoadArchiveLinks(id).then(() => rerenderArchive(id));
   }
   function closeDetail() {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -7548,6 +7593,7 @@ async function doProfilePasswordChange() {
         <div class="detail-members">${memberList}</div>
       </div>
       ${buildDreamBoardHTML(crew.id)}
+      ${buildArchiveHTML(crew.id)}
       <div class="crew-status-zone">
         <div class="crew-status-zone-header">
           <span class="crew-status-zone-label">Status</span>
@@ -7701,6 +7747,144 @@ async function doProfilePasswordChange() {
         <div class="dream-pins-list">
           ${emptyState}
           ${pinCards}
+        </div>
+      </div>`;
+  }
+
+  // ===== The Archive — crew photo drop links =====
+
+  async function dbLoadArchiveLinks(crewId) {
+    const { data, error } = await sb.from('crew_archive_links')
+      .select('*').eq('crew_id', crewId).order('created_at', { ascending: false });
+    if (error) { console.error('archive load error', error); return; }
+    archiveLinks = data || [];
+  }
+
+  async function dbAddArchiveLink(crewId, url, label, festivalId) {
+    const { data, error } = await sb.from('crew_archive_links')
+      .insert({
+        crew_id: crewId,
+        added_by: currentUser.id,
+        url: url.trim(),
+        label: label.trim() || null,
+        festival_id: festivalId || null
+      })
+      .select().single();
+    if (error) { showToast('⚠️ Could not save link — try again'); return null; }
+    archiveLinks.unshift(data);
+    return data;
+  }
+
+  async function dbDeleteArchiveLink(linkId) {
+    const { error } = await sb.from('crew_archive_links').delete().eq('id', linkId);
+    if (error) { showToast('⚠️ Could not remove link — try again'); return false; }
+    archiveLinks = archiveLinks.filter(l => l.id !== linkId);
+    return true;
+  }
+
+  async function addArchiveLink(crewId) {
+    const urlEl   = document.getElementById('archive-url-input');
+    const labelEl = document.getElementById('archive-label-input');
+    const festEl  = document.getElementById('archive-fest-select');
+    const url = (urlEl?.value || '').trim();
+    if (!url) { showToast('⚠️ Paste a link first'); return; }
+    if (!/^https?:\/\//i.test(url)) { showToast('⚠️ Link must start with http:// or https://'); return; }
+    const label = (labelEl?.value || '').trim();
+    const festivalId = festEl?.value || null;
+    const ok = await dbAddArchiveLink(crewId, url, label, festivalId);
+    if (ok) {
+      if (urlEl) urlEl.value = '';
+      if (labelEl) labelEl.value = '';
+      if (festEl) festEl.value = '';
+      rerenderArchive(crewId);
+    }
+  }
+
+  async function deleteArchiveLink(linkId, crewId) {
+    const ok = await dbDeleteArchiveLink(linkId);
+    if (ok) rerenderArchive(crewId);
+  }
+
+  function rerenderArchive(crewId) {
+    const el = document.getElementById('archive-section');
+    if (el) el.outerHTML = buildArchiveHTML(crewId);
+  }
+
+  function buildArchiveHTML(crewId) {
+    const crew = getCrew(crewId);
+    const uid = currentUser?.id;
+    const isLead = crew?.isLead;
+
+    const sortedFests = [...festivals].sort((a, b) => b.date.localeCompare(a.date));
+    const festOptions = sortedFests.map(f =>
+      `<option value="${escHtml(String(f.id))}">${escHtml(f.name)}</option>`
+    ).join('');
+
+    const cards = archiveLinks.map(link => {
+      const canDelete = link.added_by === uid || isLead || isAdminUser();
+      let addedByLabel = '';
+      if (link.added_by) {
+        if (link.added_by === uid) {
+          addedByLabel = 'you';
+        } else {
+          const adder = squad.find(r => r.claimedBy === link.added_by);
+          if (adder) addedByLabel = displayName(adder).split(' ')[0];
+        }
+      }
+      const fest = link.festival_id
+        ? festivals.find(f => String(f.id) === String(link.festival_id))
+        : null;
+      const displayLabel = link.label || '';
+      let urlDisplay = '';
+      try { urlDisplay = new URL(link.url).hostname; } catch { urlDisplay = link.url; }
+
+      return `
+        <div class="archive-link-card" id="archive-link-${escHtml(link.id)}">
+          <div class="archive-link-main">
+            ${displayLabel ? `<span class="archive-link-label">${escHtml(displayLabel)}</span>` : ''}
+            <span class="archive-link-url">${escHtml(urlDisplay)}</span>
+            <div class="archive-link-meta">
+              ${fest ? `<span class="archive-fest-badge">🎪 ${escHtml(fest.name)}</span>` : ''}
+              ${addedByLabel ? `<span>dropped by ${escHtml(addedByLabel)}</span>` : ''}
+            </div>
+          </div>
+          <div class="archive-link-actions">
+            <a class="archive-link-open" href="${escHtml(link.url)}" target="_blank" rel="noopener noreferrer" title="Open link">↗</a>
+            ${canDelete ? `<button class="archive-link-del"
+              data-link-id="${escHtml(link.id)}" data-crew-id="${escHtml(crewId)}"
+              onclick="deleteArchiveLink(this.dataset.linkId, this.dataset.crewId)"
+              title="Remove link">×</button>` : ''}
+          </div>
+        </div>`;
+    }).join('');
+
+    const emptyState = archiveLinks.length === 0
+      ? `<div class="archive-empty">No drops yet — be the first to archive the memories 📸</div>`
+      : '';
+
+    return `
+      <div class="form-group archive-section" id="archive-section">
+        <label class="form-label">📸 The Archive <span style="font-weight:400;color:var(--muted);font-size:0.75rem;">· crew photo drops</span></label>
+        ${uid ? `
+        <div class="archive-add-area">
+          <div class="archive-add-row">
+            <input class="form-input archive-url-input" id="archive-url-input"
+              placeholder="Paste a Google Drive, Dropbox, or album link"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();addArchiveLink('${escHtml(crewId)}');}">
+            <button class="btn btn-primary archive-drop-btn"
+              data-crew-id="${escHtml(crewId)}"
+              onclick="addArchiveLink(this.dataset.crewId)">Drop it</button>
+          </div>
+          <input class="form-input archive-label-input" id="archive-label-input"
+            placeholder="Give it a name (optional)" maxlength="100">
+          <select class="archive-fest-select" id="archive-fest-select">
+            <option value="">Tag a festival (optional)</option>
+            ${festOptions}
+          </select>
+        </div>` : ''}
+        <div class="archive-links-list">
+          ${emptyState}
+          ${cards}
         </div>
       </div>`;
   }
