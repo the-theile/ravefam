@@ -7,7 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@800;900&family=Outfit:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,700;9..144,800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="jsQR.min.js"></script>
-<!-- qrcode library replaced with api.qrserver.com (no dependency) -->
+<script src="qrcode.min.js"></script>
 <style>
   :root {
     --neon-pink: #FF2D78;
@@ -1537,6 +1537,25 @@
     white-space: nowrap;
   }
   .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* Offline banner */
+  #offline-banner {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 9999;
+    background: #1a1a2e;
+    border-bottom: 1px solid rgba(255,230,0,0.3);
+    color: var(--neon-yellow);
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-align: center;
+    padding: 8px 16px;
+    transform: translateY(-100%);
+    transition: transform 0.3s ease;
+    pointer-events: none;
+  }
+  #offline-banner.visible { transform: translateY(0); }
 
   /* Pulse dot */
   .pulse-dot {
@@ -4011,6 +4030,10 @@
       <input class="form-input" type="text" placeholder="e.g. The Underground" id="crew-name-input">
     </div>
     <div class="form-group">
+      <label class="form-label">Crew Vibe <span style="font-weight:400;color:var(--muted);font-size:0.8rem;">optional</span></label>
+      <textarea class="form-input" id="crew-desc-input" rows="2" maxlength="120" placeholder="" style="resize:none;line-height:1.5;"></textarea>
+    </div>
+    <div class="form-group">
       <label class="form-label">Crew Color</label>
       <div class="color-swatches">
         <div class="color-swatch selected" style="background:#FF2D78" onclick="selectSwatch(this)"></div>
@@ -4274,6 +4297,9 @@
     </div>
   </div>
 </div>
+
+<!-- Offline banner -->
+<div id="offline-banner">📡 No connection — some actions are unavailable</div>
 
 <!-- Toast -->
 <div class="toast" id="toast"></div>
@@ -4987,21 +5013,17 @@ async function doProfilePasswordChange() {
       </div>`;
     document.getElementById('qr-overlay').classList.add('open');
 
-    // Render QR using qrserver.com — no library dependency
+    // Render QR client-side — works offline, no external dependency
     setTimeout(() => {
       const wrap = document.getElementById('qr-canvas-wrap');
       if (!wrap) return;
-      const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=10&data=${encodeURIComponent(claimUrl)}`;
-      const img = document.createElement('img');
-      img.width = 200;
-      img.height = 200;
-      img.style.cssText = 'border-radius:4px;display:block;';
-      img.onerror = () => {
-        wrap.innerHTML = `<div style="padding:12px;font-size:0.78rem;color:var(--muted);">QR unavailable — use the invite code above.</div>`;
-      };
-      img.src = qrSrc;
       wrap.innerHTML = '';
-      wrap.appendChild(img);
+      const canvas = document.createElement('canvas');
+      canvas.style.cssText = 'border-radius:4px;display:block;';
+      wrap.appendChild(canvas);
+      QRCode.toCanvas(canvas, claimUrl, { width: 200, margin: 1 }, (err) => {
+        if (err) wrap.innerHTML = `<div style="padding:12px;font-size:0.78rem;color:var(--muted);">QR unavailable — use the invite code above.</div>`;
+      });
     }, 80);
   }
 
@@ -5454,6 +5476,7 @@ async function doProfilePasswordChange() {
   async function commitClaim() {
     const token = _pendingClaimToken;
     if (!token || !currentUser) return;
+    if (!navigator.onLine) { showToast('📡 No connection — try again when you\'re back online'); return; }
     const btn = document.getElementById('confirm-claim-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Joining…'; }
 
@@ -6324,7 +6347,7 @@ async function doProfilePasswordChange() {
   async function dbSaveCrew(data, id) {
     const uid = currentUser?.id;
     if (!uid) return null;
-    const row = { name: data.name, color: data.color, gradient: data.gradient, status: data.status, totem_photo_url: data.totemPhotoUrl ?? undefined };
+    const row = { name: data.name, color: data.color, gradient: data.gradient, status: data.status, totem_photo_url: data.totemPhotoUrl ?? undefined, description: data.description ?? undefined };
     if (id) {
       const { error } = await sb.from('crews').update(row).eq('id', id);
       if (error) { console.error('crew update error', error); showToast('⚠️ Could not update crew — try again'); }
@@ -7044,6 +7067,8 @@ async function doProfilePasswordChange() {
 
   // Modal
   function openModal() {
+    const el = document.getElementById('crew-desc-input');
+    if (el && !el.value) el.placeholder = CREW_VIBE_PLACEHOLDERS[Math.floor(Math.random() * CREW_VIBE_PLACEHOLDERS.length)];
     document.getElementById('modal-overlay').classList.add('open');
   }
   function closeModal() {
@@ -7580,6 +7605,7 @@ async function doProfilePasswordChange() {
         <span class="crew-status ${s.cls}${crew.isLead ? ' tappable-lead' : ''}"
           ${crew.isLead ? `onclick="toggleStatus('${crew.id}')" title="Tap to change status"` : ''}>${s.label}</span>
       </div>
+      ${crew.description ? `<div style="font-size:0.85rem;color:var(--muted);margin:-4px 0 14px;line-height:1.5;">${escHtml(crew.description)}</div>` : ''}
       ${crewNextFestBlock(crew)}
       ${totemBlock}
       ${addMemberControl}
@@ -8241,15 +8267,27 @@ async function doProfilePasswordChange() {
     }
   }
 
+  const CREW_VIBE_PLACEHOLDERS = [
+    'We don\'t sleep, we rave 🌀',
+    'Lost in the bass, found each other 💜',
+    'Same frequency, different dimensions ✨',
+    'Built on beats, held together by love 🖤',
+    'We arrived together. We leave together. Eventually. 🎶',
+    'The bass brought us here. The people kept us. 🔊',
+    'Strangers at drop one, family by sunrise 🌅',
+    'Our totem is somewhere near the stage 🪩',
+  ];
+
   function createCrew() {
     const name = document.getElementById('crew-name-input').value.trim() || 'New Crew';
+    const description = document.getElementById('crew-desc-input')?.value.trim() || '';
     const selected = document.querySelector('.color-swatch.selected');
     const color = selected ? rgbToHex(selected.style.background) : '#FF2D78';
     const you = squad.find(r => r.isYou);
 
     const gradient = CREW_GRADIENTS[color] || `linear-gradient(135deg,${color},${color})`;
     const newCrew = {
-      id: 'temp_' + Date.now(), name, color,
+      id: 'temp_' + Date.now(), name, color, description,
       gradient,
       status: 'secret', isLead: true,
       leader_id: you?.id ?? null,
@@ -8260,6 +8298,8 @@ async function doProfilePasswordChange() {
     renderCrews();
     closeModal();
     document.getElementById('crew-name-input').value = '';
+    const descEl = document.getElementById('crew-desc-input');
+    if (descEl) descEl.value = '';
     showToast(`🔥 ${name} created — you're the Crew Lead 👑`);
     addNotification(`🔥 You sparked a new crew — ${name} is live in Secret mode. Time to build your lineup before the drop!`);
 
@@ -8270,7 +8310,7 @@ async function doProfilePasswordChange() {
     // Persist async
     if (currentUser) {
       const tempId = newCrew.id;
-      dbSaveCrew({ name, color, gradient, status: 'secret' }, null).then(dbId => {
+      dbSaveCrew({ name, color, gradient, status: 'secret', description }, null).then(dbId => {
         if (dbId) {
           newCrew.id = dbId;
           // Keep activeDetailId (and any pending-add reference) in sync so that
@@ -8418,6 +8458,10 @@ async function doProfilePasswordChange() {
         <input class="form-input" id="crew-edit-name-input" value="${crew.name.replace(/"/g,'&quot;')}" maxlength="40" placeholder="Crew name…">
       </div>
       <div class="form-group">
+        <label class="form-label">Crew Vibe <span style="font-weight:400;color:var(--muted);font-size:0.8rem;">optional</span></label>
+        <textarea class="form-input" id="crew-edit-desc-input" rows="2" maxlength="120" style="resize:none;line-height:1.5;" placeholder="One line that says everything 🌀">${(crew.description || '').replace(/</g,'&lt;')}</textarea>
+      </div>
+      <div class="form-group">
         <label class="form-label">Crew Colour</label>
         <div class="color-swatches">${swatches}</div>
       </div>
@@ -8445,6 +8489,7 @@ async function doProfilePasswordChange() {
     if (!crew) return;
     const newName = document.getElementById('crew-edit-name-input')?.value.trim();
     if (!newName) return;
+    const newDesc = document.getElementById('crew-edit-desc-input')?.value.trim() || '';
     const sel = document.querySelector('#crew-edit-modal-content .crew-edit-swatch.selected');
     const newColor = sel ? rgbToHex(sel.style.background) : crew.color;
     const colorKey = Object.keys(CREW_GRADIENTS).find(k => k.toLowerCase() === newColor.toLowerCase()) || newColor;
@@ -8452,12 +8497,13 @@ async function doProfilePasswordChange() {
     crew.name = newName;
     crew.color = newColor;
     crew.gradient = newGradient;
+    crew.description = newDesc;
     crew.members = crew.members.map(m => ({ ...m, c: newColor }));
     closeCrewEditModal();
     renderCrews();
     renderDetail(id);
     showToast('✅ Crew updated');
-    if (currentUser) dbSaveCrew({ name: newName, color: newColor, gradient: newGradient, status: crew.status, totemPhotoUrl: crew.totemPhotoUrl }, id);
+    if (currentUser) dbSaveCrew({ name: newName, color: newColor, gradient: newGradient, status: crew.status, totemPhotoUrl: crew.totemPhotoUrl, description: newDesc }, id);
   }
 
   // ===== Crew invite link =====
@@ -8531,6 +8577,7 @@ async function doProfilePasswordChange() {
   async function confirmJoinCrew() {
     const token = _pendingCrewJoinToken;
     if (!token || !currentUser) return;
+    if (!navigator.onLine) { showToast('📡 No connection — try again when you\'re back online'); return; }
     const btn = document.getElementById('crew-join-confirm-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Joining…'; }
     const you = squad.find(r => r.isYou);
@@ -10796,6 +10843,30 @@ async function doProfilePasswordChange() {
   }
   function closeConfirm() { document.getElementById('confirm-overlay').classList.remove('open'); }
   function closeConfirmOutside(e) { if (e.target === document.getElementById('confirm-overlay')) closeConfirm(); }
+
+  // ── Offline banner ────────────────────────────────────
+  (function initOfflineBanner() {
+    const banner = document.getElementById('offline-banner');
+    function update() {
+      if (navigator.onLine) {
+        banner.classList.remove('visible');
+      } else {
+        banner.classList.add('visible');
+      }
+    }
+    window.addEventListener('offline', () => {
+      update();
+    });
+    window.addEventListener('online', () => {
+      update();
+      // Auto-retry pending claim if one is queued
+      const pendingClaim = sessionStorage.getItem('pendingClaim');
+      if (pendingClaim && currentUser) {
+        processPendingClaim();
+      }
+    });
+    update();
+  })();
 
   // Toast
   let toastTimer;
