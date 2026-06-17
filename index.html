@@ -1478,18 +1478,24 @@
     let   ig    = document.getElementById('wl-ig').value.trim();
     const email = document.getElementById('wl-email').value.trim();
     if (ig && !ig.startsWith('@')) ig = '@' + ig;
+    const source = new URLSearchParams(window.location.search).get('utm_source') || 'direct';
     errEl.style.display = 'none';
     btn.disabled = true; btn.textContent = 'Joining…';
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/waitlist`, {
         method: 'POST',
         headers: { 'Content-Type':'application/json','apikey':SUPABASE_ANON,'Authorization':`Bearer ${SUPABASE_ANON}`,'Prefer':'return=minimal' },
-        body: JSON.stringify({ name, instagram: ig || null, email: email || null })
+        body: JSON.stringify({ name, instagram: ig || null, email: email || null, source })
       });
       if (!res.ok) throw new Error('Request failed');
+      const notifPayload = { _subject:'🎪 New RaveFAM waitlist signup!', name, instagram: ig||'—', email: email||'—', source };
+      if (email) {
+        notifPayload._replyto = email;
+        notifPayload._autoresponse = `Hey ${name}! 🔥 You're officially on the RaveFAM waitlist.\n\nWe'll hit you up the moment the full experience drops. Get ready — it's going to be legendary. 🖤\n\n— The RaveFAM crew\nmyravefam.com`;
+      }
       fetch('https://formsubmit.co/ajax/bump@myravefam.com', {
         method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'},
-        body: JSON.stringify({ _subject:'🎪 New RaveFAM waitlist signup!', name, instagram: ig||'—', email: email||'—' })
+        body: JSON.stringify(notifPayload)
       }).catch(()=>{});
       document.getElementById('waitlist-form-state').style.display = 'none';
       document.getElementById('waitlist-success').style.display    = 'block';
