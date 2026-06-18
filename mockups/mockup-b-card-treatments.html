@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Card Treatments Comparison</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=Urbanist:wght@800;900&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --neon-pink: #FF2D78;
+    --neon-cyan: #00F5FF;
+    --neon-yellow: #FFE600;
+    --neon-purple: #BF00FF;
+    --neon-green: #39FF14;
+    --bg: #050509;
+    --surface: #0E0E16;
+    --surface2: #16161F;
+    --text: #F0EEFF;
+    --muted: #6A6A8A;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    padding: 32px 20px 60px;
+  }
+
+  .page-title {
+    font-family: 'Urbanist', sans-serif;
+    font-size: 1.4rem;
+    font-weight: 900;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+  .page-desc {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-bottom: 40px;
+  }
+
+  /* Two-column layout */
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px 20px;
+    max-width: 860px;
+  }
+
+  .treatment-block {}
+  .treatment-label {
+    font-family: 'Urbanist', sans-serif;
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .treatment-name {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--text);
+    margin-bottom: 2px;
+  }
+  .treatment-desc {
+    font-size: 0.72rem;
+    color: var(--muted);
+    margin-bottom: 14px;
+    line-height: 1.45;
+  }
+  .card-pair { display: flex; flex-direction: column; gap: 10px; }
+
+  /* ── SHARED CARD INTERNALS ── */
+  .card-body {
+    padding: 14px 14px 10px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .date-block { text-align: center; min-width: 34px; flex-shrink: 0; padding-top: 2px; }
+  .date-day {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 800; font-size: 1.4rem; line-height: 1;
+    color: var(--accent, rgba(255,255,255,0.5));
+  }
+  .date-mon {
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.55rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1.5px;
+    color: var(--muted); margin-top: 2px;
+  }
+  .info { flex: 1; min-width: 0; }
+  .event-name {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 800; font-size: 0.9rem;
+    color: var(--text); line-height: 1.25; margin-bottom: 3px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .event-meta {
+    font-size: 0.7rem; color: var(--muted);
+    display: flex; align-items: center; gap: 5px; margin-bottom: 10px;
+  }
+  .countdown-chip {
+    font-size: 0.58rem; font-weight: 700;
+    font-family: 'Outfit', sans-serif;
+    color: var(--neon-yellow);
+  }
+  .meta-sep { opacity: 0.35; }
+
+  .attendee-section { margin-bottom: 7px; }
+  .section-label {
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.55rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 5px;
+  }
+  .section-label.green { color: rgba(57,255,20,0.7); }
+  .section-label.cyan  { color: rgba(0,245,255,0.6); }
+
+  .avatar-row { display: flex; flex-wrap: wrap; gap: 0; row-gap: 5px; }
+  .avatar-wrap { position: relative; margin-right: -8px; flex-shrink: 0; }
+  .avatar-wrap.end { margin-right: 8px; }
+  .avatar {
+    width: 27px; height: 27px; border-radius: 50%;
+    border: 2px solid var(--surface);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Outfit', sans-serif; font-weight: 800;
+    font-size: 0.6rem; color: #fff; flex-shrink: 0;
+  }
+  .vibe-badge {
+    position: absolute; bottom: -2px; right: -2px;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--surface2); border: 1.5px solid var(--surface);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.55rem; z-index: 5; pointer-events: none;
+  }
+  .count-label {
+    font-family: 'Outfit', sans-serif; font-size: 0.6rem; font-weight: 700;
+    letter-spacing: 0.03em; align-self: center; margin-left: 10px; flex-shrink: 0;
+  }
+  .count-label.green { color: var(--neon-green); }
+  .count-label.cyan  { color: var(--neon-cyan); }
+  .count-label.muted { color: var(--muted); }
+
+  .action-bar { display: flex; border-top: 1px solid rgba(255,255,255,0.05); }
+  .action-btn {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    gap: 4px; padding: 8px 4px;
+    font-family: 'Outfit', sans-serif; font-size: 0.65rem; font-weight: 700;
+    color: var(--muted); background: transparent; border: none;
+    cursor: pointer; transition: all 0.15s; letter-spacing: 0.02em; position: relative;
+  }
+  .action-btn + .action-btn::before {
+    content: ''; position: absolute; left: 0; top: 22%; height: 56%; width: 1px;
+    background: rgba(255,255,255,0.06);
+  }
+  .action-btn.going-btn.active { color: var(--neon-green); background: rgba(57,255,20,0.04); }
+  .state-chip {
+    display: inline-block;
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.55rem; font-weight: 700;
+    letter-spacing: 1px; text-transform: uppercase;
+    border-radius: 4px; padding: 2px 6px; margin-bottom: 8px;
+  }
+  .state-chip.going { background: rgba(57,255,20,0.12); color: #39FF14; }
+  .state-chip.neutral { background: rgba(255,255,255,0.05); color: var(--muted); }
+
+  /* ════════════════════════════════════════
+     TREATMENT 1 — ATMOSPHERIC (AMBIENT GLOW)
+  ════════════════════════════════════════ */
+  .t1 .card {
+    background: var(--surface);
+    border-radius: 18px;
+    border-left: 4px solid var(--accent, #444);
+    overflow: hidden; cursor: pointer;
+    transition: all 0.22s;
+  }
+  .t1 .card.going {
+    --accent: #39FF14;
+    border: 1px solid rgba(57,255,20,0.28);
+    border-left: 4px solid #39FF14;
+    box-shadow:
+      0 0 0 1px rgba(57,255,20,0.08),
+      0 0 28px rgba(57,255,20,0.22),
+      0 0 60px rgba(57,255,20,0.08),
+      0 6px 20px rgba(0,0,0,0.5);
+  }
+  .t1 .card.neutral {
+    --accent: #BF00FF;
+    border: 1px solid rgba(191,0,255,0.15);
+    border-left: 4px solid #BF00FF;
+    box-shadow:
+      0 0 18px rgba(191,0,255,0.08),
+      0 4px 14px rgba(0,0,0,0.4);
+  }
+
+  /* ════════════════════════════════════════
+     TREATMENT 2 — BOLD (GRADIENT BORDER)
+  ════════════════════════════════════════ */
+  .t2 .card {
+    background: var(--surface);
+    border-radius: 18px;
+    position: relative;
+    overflow: hidden; cursor: pointer;
+    transition: all 0.22s;
+    /* padding to accommodate the pseudo-element border */
+    isolation: isolate;
+  }
+  /* gradient border via pseudo-element */
+  .t2 .card::before {
+    content: '';
+    position: absolute; inset: 0;
+    border-radius: 18px;
+    padding: 1.5px;
+    background: var(--grad-border, linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.04)));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .t2 .card.going {
+    --grad-border: linear-gradient(135deg, #39FF14 0%, #00F5FF 50%, #BF00FF 100%);
+    box-shadow: 0 0 24px rgba(57,255,20,0.15), 0 6px 20px rgba(0,0,0,0.45);
+  }
+  .t2 .card.neutral {
+    --grad-border: linear-gradient(135deg, #BF00FF 0%, #FF2D78 60%, rgba(255,255,255,0.06) 100%);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+  }
+  /* left accent bar as overlay since we can't use border-left with this technique */
+  .t2 .card .accent-bar {
+    position: absolute; left: 0; top: 0; bottom: 0;
+    width: 4px;
+    background: var(--accent-color, #BF00FF);
+    border-radius: 18px 0 0 18px;
+    z-index: 1;
+  }
+  .t2 .card.going .accent-bar { background: #39FF14; }
+  .t2 .card .card-body, .t2 .card .action-bar { position: relative; z-index: 1; }
+  .t2 .card .card-body { padding-left: 18px; }
+
+  /* ════════════════════════════════════════
+     TREATMENT 3 — STRUCTURED (THICK BRIGHT BORDER)
+  ════════════════════════════════════════ */
+  .t3 .card {
+    background: var(--surface);
+    border-radius: 18px;
+    overflow: hidden; cursor: pointer;
+    transition: all 0.22s;
+  }
+  .t3 .card.going {
+    --accent: #39FF14;
+    border: 2px solid rgba(57,255,20,0.55);
+    border-left: 5px solid #39FF14;
+    box-shadow:
+      inset 0 1px 0 rgba(57,255,20,0.08),
+      inset 0 0 20px rgba(57,255,20,0.04),
+      0 4px 16px rgba(0,0,0,0.5);
+  }
+  .t3 .card.neutral {
+    --accent: #BF00FF;
+    border: 2px solid rgba(191,0,255,0.3);
+    border-left: 5px solid #BF00FF;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.05),
+      0 4px 14px rgba(0,0,0,0.4);
+  }
+
+  /* ════════════════════════════════════════
+     TREATMENT 4 — LAYERED (LEFT BAR BLEEDS)
+  ════════════════════════════════════════ */
+  .t4 .card {
+    background: var(--surface);
+    border-radius: 18px;
+    overflow: hidden; cursor: pointer;
+    transition: all 0.22s;
+  }
+  .t4 .card.going {
+    --accent: #39FF14;
+    border: 1px solid rgba(57,255,20,0.2);
+    border-left: 5px solid #39FF14;
+    box-shadow:
+      -6px 0 30px rgba(57,255,20,0.3),
+      -2px 0 10px rgba(57,255,20,0.2),
+      inset 4px 0 24px rgba(57,255,20,0.06),
+      0 4px 18px rgba(0,0,0,0.45);
+  }
+  .t4 .card.neutral {
+    --accent: #BF00FF;
+    border: 1px solid rgba(191,0,255,0.12);
+    border-left: 5px solid #BF00FF;
+    box-shadow:
+      -6px 0 20px rgba(191,0,255,0.18),
+      inset 4px 0 16px rgba(191,0,255,0.04),
+      0 4px 14px rgba(0,0,0,0.4);
+  }
+</style>
+</head>
+<body>
+
+<h1 class="page-title">Card Treatments</h1>
+<p class="page-desc">Each column: Going state (top) + Neutral state (bottom)</p>
+
+<div class="grid">
+
+  <!-- ── TREATMENT 1: ATMOSPHERIC ── -->
+  <div class="treatment-block t1">
+    <div class="treatment-label" style="color:#39FF14">Option 1</div>
+    <div class="treatment-name">Atmospheric</div>
+    <div class="treatment-desc">Soft outer glow radiates from each card. Color matches the event accent. Going = bright glow, neutral = faint halo.</div>
+    <div class="card-pair">
+
+      <div>
+        <div class="state-chip going">Going</div>
+        <div class="card going">
+          <div class="card-body">
+            <div class="date-block"><div class="date-day">1</div><div class="date-mon">Aug</div></div>
+            <div class="info">
+              <div class="event-name">Zeds Dead – Factory Town</div>
+              <div class="event-meta"><span>📍 Miami, FL</span><span class="meta-sep">·</span><span class="countdown-chip">⏳ 6 wks</span></div>
+              <div class="attendee-section">
+                <div class="section-label green">Going</div>
+                <div class="avatar-row">
+                  <div class="avatar-wrap"><div class="avatar" style="background:linear-gradient(135deg,#FF2D78,#BF00FF)">J</div><div class="vibe-badge">🔥</div></div>
+                  <div class="avatar-wrap"><div class="avatar" style="background:linear-gradient(135deg,#BF00FF,#00F5FF)">D</div></div>
+                  <div class="avatar-wrap end"><div class="avatar" style="background:linear-gradient(135deg,#00F5FF,#39FF14)">A</div></div>
+                  <span class="count-label green">3 going</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="action-bar">
+            <button class="action-btn">✦ Vibe</button>
+            <button class="action-btn going-btn active">🎟 Going</button>
+            <button class="action-btn">👀 Maybe</button>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="state-chip neutral">Neutral</div>
+        <div class="card neutral">
+          <div class="card-body">
+            <div class="date-block"><div class="date-day">26</div><div class="date-mon">Oct</div></div>
+            <div class="info">
+              <div class="event-name">Electric Forest</div>
+              <div class="event-meta"><span>📍 Rothbury, MI</span><span class="meta-sep">·</span><span class="countdown-chip">⏳ 18 wks</span></div>
+              <div class="attendee-section">
+                <div class="section-label green">Going</div>
+                <div class="avatar-row">
+                  <div class="avatar-wrap"><div class="avatar" style="background:linear-gradient(135deg,#FF2D78,#BF00FF)">J</div></div>
+                  <div class="avatar-wrap end"><div class="avatar" style="background:linear-gradient(135deg,#BF00FF,#00F5FF)">D</div><div class="vibe-badge">⚡</div></div>
+                  <span class="count-label muted">2 going</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="action-bar">
+            <button class="action-btn">✦ Vibe</button>
+            <button class="action-btn going-btn">🎟 Going</button>
+            <button class="action-btn">👀 Maybe</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── TREATMENT 2: GRADIENT BORDER ── -->
+  <div class="treatment-block t2">
+    <div class="treatment-label" style="color:#FF2D78">Option 2</div>
+    <div class="treatment-name">Gradient Border</div>
+    <div class="treatment-desc">The card outline itself is a neon gradient. Going = green→cyan→purple. Neutral = purple→pink. Premium, bold.</div>
+    <div class="card-pair">
+
+      <div>
+        <div class="state-chip going">Going</div>
+        <div class="card going">
+          <div class="accent-bar"></div>
+          <div class="card-body">
+            <div class="date-block"><div class="date-day">1</div><div class="date-mon">Aug</div></div>
+            <div class="info">
+              <div class="event-name">Zeds Dead – Factory Town</div>
+              <div class="event-meta"><span>📍 Miami, FL</span><span class="meta-sep">·</span><span class="countdown-chip">⏳ 6 wks</span></div>
+              <div class="attendee-section">
+                <div class="section-label green">Going</div>
+                <div class="avatar-row">
+                  <div class="avatar-wrap"><div class="avatar" style="background:linear-gradient(135deg,#FF2D78,#BF00FF)">J</div><div class="vibe-badge">🔥</div></div>
+                  <div class="avatar-wrap"><div class="avatar" style="background:linear-gradient(135deg,#BF00FF,#00F5FF)">D</div></div>
+                  <div class="avatar-wrap end"><div class="avatar" style="background:linear-gradient(135deg,#00F5FF,#39FF14)">A</div></div>
+                  <span class="count-label green">3 going</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="action-bar">
+            <button class="action-btn">✦ Vibe</button>
+            <button class="action-btn going-btn active">🎟 Going</button>
+            <button class="action-btn">👀 Maybe</button>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="state-chip neutral">Neutral</div>
+        <div class="card neutral">
+          <div class="accent-bar"></div>
+          <div class="card-body">
+            <div class="date-block"><div class="date-day">26</div><div class="date-mon">Oct</div></div>
+            <div class="info">
+              <div class="event-name">Electric Forest</div>
+              <div class="event-meta"><span>📍 Rothbury, MI</span><span class="meta-sep">·</span><span class="countdown-chip">⏳ 18 wks</span></div>
+              <div class="attendee-section">
+                <div class="section-label green">Going</div>
+                <div class="avatar-row">
+                  <div class="avatar-wrap"><div class="avatar" style="background:linear-gradient(135deg,#FF2D78,#BF00FF)">J</div></div>
+                  <div class="avatar-wrap end"><div class="avatar" style="background:linear-gradient(135deg,#BF00FF,#00F5FF)">D</div><div class="vibe-badge">⚡</div></div>
+                  <span class="count-label muted">2 going</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="action-bar">
+            <button class="action-btn">✦ Vibe</button>
+            <button class="action-btn going-btn">🎟 Going</button>
+            <button class="action-btn">👀 Maybe</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── TREATMENT 3: STRUCTURED ── -->
+  <div class="treatment-block t3">
+    <div class="treatment-label" style="color:#00F5FF">Option 3</div>
+    <div class="treatment-name">Structured</div>
+    <div class="treatment-desc">Thicker 2px border, high opacity, slightly heavier left bar (5px). A faint inset glow adds depth. Crisp and deliberate.</div>
+    <div class="card-pair">
+
+      <div>
+        <div class="state-chip going">Going</div>
+        <div class="card going">
+          <div class="card-body">
+            <div class="date-block"><div class="date-day">1</div><div class="date-mon">Aug</div></div>
+            <div class="info">
+              <div class="event-name">Zeds Dead – Factory Town</div>
+              <div class="event-meta"><span>📍 Miami, FL</span><span class="meta-sep">·</span><span class="countdown-chip">⏳ 6 wks</span></div>
+              <div class="attendee-section">
+                <div class="section-label green">Going</div>
+                <div class="avatar-row">
+                  <div class="avatar-wrap"><div class="avatar" style="background:linear-gradient(135deg,#FF2D78,#BF00FF)">J</div><div class="vibe-badge">🔥</div></div>
+                  <div class="avatar-wrap"><div class="avatar" style="background:linear-gradient(135deg,#BF00FF,#00F5FF)">D</div></div>
+                  <div class="avatar-wrap end"><div class="avatar" style="background:linear-gradient(135deg,#00F5FF,#39FF14)">A</div></div>
+                  <span class="count-label green">3 going</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="action-bar">
+            <button class="action-btn">✦ Vibe</button>
+            <button class="action-btn going-btn active">🎟 Going</button>
+            <button class="action-btn">👀 Maybe</button>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="state-chip neutral">Neutral</div>
+        <div class="card neutral">
+          <div class="card-body">
+            <div class="date-block"><div class="date-day">26</div><div class="date-mon">Oct</div></div>
+            <div class="info">
+              <div class="event-name">Electric Forest</div>
+              <div class="event-meta"><span>📍 Rothbury, MI</span><span class="meta-sep">·</span><span class="countdown-chip">⏳ 18 wks</span></div>
+              <div class="attendee-section">
+                <div class="section-label green">Going</div>
+                <div class="avatar-row">
+                  <div class="avatar-wrap"><div class="avatar" style="background:linear-gradient(135deg,#FF2D78,#BF00FF)">J</div></div>
+                  <div class="avatar-wrap end"><div class="avatar" style="background:linear-gradient(135deg,#BF00FF,#00F5FF)">D</div><div class="vibe-badge">⚡</div></div>
+                  <span class="count-label muted">2 going</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="action-bar">
+            <button class="action-btn">✦ Vibe</button>
+            <button class="action-btn going-btn">🎟 Going</button>
+            <button class="action-btn">👀 Maybe</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── TREATMENT 4: LAYERED ── -->
+  <div class="treatment-block t4">
+    <div class="treatment-label" style="color:#BF00FF">Option 4</div>
+    <div class="treatment-name">Layered</div>
+    <div class="treatment-desc">The left accent bar casts light — outward glow + an inward bleed into the card. Like the card is lit from the side.</div>
+    <div class="card-pair">
+
+      <div>
+        <div class="state-chip going">Going</div>
+        <div class="card going">
+          <div class="card-body">
+            <div class="date-block"><div class="date-day">1</div><div class="date-mon">Aug</div></div>
+            <div class="info">
+              <div class="event-name">Zeds Dead – Factory Town</div>
+              <div class="event-meta"><span>📍 Miami, FL</span><span class="meta-sep">·</span><span class="countdown-chip">⏳ 6 wks</span></div>
+              <div class="attendee-section">
+                <div class="section-label green">Going</div>
+                <div class="avatar-row">
+                  <div class="avatar-wrap"><div class="avatar" style="background:linear-gradient(135deg,#FF2D78,#BF00FF)">J</div><div class="vibe-badge">🔥</div></div>
+                  <div class="avatar-wrap"><div class="avatar" style="background:linear-gradient(135deg,#BF00FF,#00F5FF)">D</div></div>
+                  <div class="avatar-wrap end"><div class="avatar" style="background:linear-gradient(135deg,#00F5FF,#39FF14)">A</div></div>
+                  <span class="count-label green">3 going</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="action-bar">
+            <button class="action-btn">✦ Vibe</button>
+            <button class="action-btn going-btn active">🎟 Going</button>
+            <button class="action-btn">👀 Maybe</button>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="state-chip neutral">Neutral</div>
+        <div class="card neutral">
+          <div class="card-body">
+            <div class="date-block"><div class="date-day">26</div><div class="date-mon">Oct</div></div>
+            <div class="info">
+              <div class="event-name">Electric Forest</div>
+              <div class="event-meta"><span>📍 Rothbury, MI</span><span class="meta-sep">·</span><span class="countdown-chip">⏳ 18 wks</span></div>
+              <div class="attendee-section">
+                <div class="section-label green">Going</div>
+                <div class="avatar-row">
+                  <div class="avatar-wrap"><div class="avatar" style="background:linear-gradient(135deg,#FF2D78,#BF00FF)">J</div></div>
+                  <div class="avatar-wrap end"><div class="avatar" style="background:linear-gradient(135deg,#BF00FF,#00F5FF)">D</div><div class="vibe-badge">⚡</div></div>
+                  <span class="count-label muted">2 going</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="action-bar">
+            <button class="action-btn">✦ Vibe</button>
+            <button class="action-btn going-btn">🎟 Going</button>
+            <button class="action-btn">👀 Maybe</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
