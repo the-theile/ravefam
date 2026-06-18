@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1200">
+<title>OG Design 1 — Feature Refresh</title>
+<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@800;900&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    width: 1200px;
+    height: 630px;
+    overflow: hidden;
+    background: #050509;
+    font-family: 'Outfit', sans-serif;
+  }
+
+  .canvas {
+    position: relative;
+    width: 1200px;
+    height: 630px;
+    background: #050509;
+    overflow: hidden;
+  }
+
+  /* Scanlines */
+  .scanlines {
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      to bottom,
+      transparent 0px,
+      transparent 3px,
+      rgba(255,255,255,0.012) 3px,
+      rgba(255,255,255,0.012) 4px
+    );
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* Glow blobs */
+  .blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    z-index: 0;
+  }
+  .blob-pink { width: 340px; height: 340px; background: #FF2D78; opacity: 0.08; top: -80px; left: -60px; }
+  .blob-cyan { width: 260px; height: 260px; background: #00F5FF; opacity: 0.06; bottom: -60px; right: 300px; }
+  .blob-green { width: 200px; height: 200px; background: #39FF14; opacity: 0.05; top: 200px; right: -40px; }
+
+  .content {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 44px 56px 36px;
+  }
+
+  /* Header row */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 48px;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .eq-mark {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 28px;
+  }
+
+  .eq-bar {
+    width: 5px;
+    border-radius: 3px;
+    background: #39FF14;
+    box-shadow: 0 0 8px rgba(57,255,20,0.5);
+  }
+
+  .eq-bar:nth-child(1) { height: 18px; }
+  .eq-bar:nth-child(2) { height: 28px; }
+  .eq-bar:nth-child(3) { height: 22px; }
+
+  .wordmark {
+    font-family: 'Urbanist', sans-serif;
+    font-weight: 900;
+    font-size: 28px;
+    letter-spacing: -0.5px;
+    line-height: 1;
+  }
+  .wordmark span.rave { color: #F0EEFF; }
+  .wordmark span.fam { color: #39FF14; }
+
+  .url {
+    font-size: 15px;
+    color: #6A6A8A;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+  }
+
+  /* Main body */
+  .body {
+    display: flex;
+    flex: 1;
+    gap: 40px;
+    align-items: center;
+  }
+
+  /* Left: headline */
+  .left {
+    flex: 0 0 52%;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(57,255,20,0.08);
+    border: 1px solid rgba(57,255,20,0.25);
+    border-radius: 100px;
+    padding: 5px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #39FF14;
+    letter-spacing: 1.5px;
+    width: fit-content;
+  }
+
+  .headline {
+    font-family: 'Urbanist', sans-serif;
+    font-weight: 900;
+    line-height: 1.05;
+  }
+
+  .headline .line1 {
+    display: block;
+    font-size: 64px;
+    color: #F0EEFF;
+  }
+
+  .headline .line2 {
+    display: block;
+    font-size: 64px;
+    background: linear-gradient(90deg, #FF2D78 0%, #00F5FF 55%, #39FF14 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .tagline {
+    font-size: 18px;
+    color: #6A6A8A;
+    font-weight: 500;
+    margin-top: 4px;
+  }
+
+  /* Right: pills grid */
+  .right {
+    flex: 0 0 44%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .pill {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px;
+    border-radius: 14px;
+    border: 1px solid;
+    background: rgba(255,255,255,0.03);
+  }
+
+  .pill-icon {
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  .pill-label {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+  }
+
+  .pill-pink { border-color: rgba(255,45,120,0.4); }
+  .pill-pink .pill-label { color: #FF2D78; }
+  .pill-cyan { border-color: rgba(0,245,255,0.4); }
+  .pill-cyan .pill-label { color: #00F5FF; }
+  .pill-purple { border-color: rgba(191,0,255,0.4); }
+  .pill-purple .pill-label { color: #BF00FF; }
+  .pill-green { border-color: rgba(57,255,20,0.4); }
+  .pill-green .pill-label { color: #39FF14; }
+  .pill-yellow { border-color: rgba(255,230,0,0.4); }
+  .pill-yellow .pill-label { color: #FFE600; }
+  .pill-orange { border-color: rgba(255,140,0,0.4); }
+  .pill-orange .pill-label { color: #FF8C00; }
+
+  /* Footer */
+  .footer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    font-size: 13px;
+    color: #6A6A8A;
+    font-weight: 500;
+    gap: 20px;
+  }
+
+  .footer-dot {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: #6A6A8A;
+  }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="blob blob-pink"></div>
+  <div class="blob blob-cyan"></div>
+  <div class="blob blob-green"></div>
+  <div class="scanlines"></div>
+
+  <div class="content">
+    <div class="header">
+      <div class="logo">
+        <div class="eq-mark">
+          <div class="eq-bar"></div>
+          <div class="eq-bar"></div>
+          <div class="eq-bar"></div>
+        </div>
+        <div class="wordmark"><span class="rave">Rave</span><span class="fam">FAM</span></div>
+      </div>
+      <div class="url">myravefam.com</div>
+    </div>
+
+    <div class="body">
+      <div class="left">
+        <div class="eyebrow">LIVE · RARE · WILD</div>
+        <h1 class="headline">
+          <span class="line1">Your crew deserves</span>
+          <span class="line2">a real home base</span>
+        </h1>
+        <p class="tagline">Your Crew. Your Raves. Your Tribe.</p>
+      </div>
+
+      <div class="right">
+        <div class="pill pill-pink">
+          <span class="pill-icon">👥</span>
+          <span class="pill-label">Crews</span>
+        </div>
+        <div class="pill pill-cyan">
+          <span class="pill-icon">🎪</span>
+          <span class="pill-label">Festivals</span>
+        </div>
+        <div class="pill pill-purple">
+          <span class="pill-icon">📸</span>
+          <span class="pill-label">The Archive</span>
+        </div>
+        <div class="pill pill-green">
+          <span class="pill-icon">🎵</span>
+          <span class="pill-label">FAM Jams</span>
+        </div>
+        <div class="pill pill-yellow">
+          <span class="pill-icon">📊</span>
+          <span class="pill-label">FAM Poll</span>
+        </div>
+        <div class="pill pill-orange">
+          <span class="pill-icon">🏆</span>
+          <span class="pill-label">FAM Pins</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span>Free to start</span>
+      <div class="footer-dot"></div>
+      <span>No credit card</span>
+      <div class="footer-dot"></div>
+      <span>Join the waitlist</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>
