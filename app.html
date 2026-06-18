@@ -6195,6 +6195,28 @@ async function doProfilePasswordChange() {
     navigator.clipboard.writeText(url).then(() => showToast('📋 Link copied!')).catch(() => showToast('⚠️ Copy failed'));
   }
 
+  let _reloadDebounce = null;
+  function setupRealtimeSync() {
+    if (!currentUser) return;
+    const scheduleReload = () => {
+      clearTimeout(_reloadDebounce);
+      _reloadDebounce = setTimeout(async () => {
+        try {
+          await loadAllData();
+          renderSquad();
+          renderCrews();
+          renderEvents();
+        } catch(e) { /* silent — UI already shows error state if render fails */ }
+      }, 800);
+    };
+    sb.channel('app-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'crew_members' }, scheduleReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'crews' }, scheduleReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'raver_festivals' }, scheduleReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => dbLoadNotifications())
+      .subscribe();
+  }
+
   async function bootApp() {
     try {
       await loadAllData();
@@ -6210,6 +6232,7 @@ async function doProfilePasswordChange() {
     countChecks();
     // Load persisted notifications from DB
     dbLoadNotifications();
+    setupRealtimeSync();
     const me = squad.find(r => r.isYou);
     if (!me && !currentUser?.user_metadata?.onboarded) {
       // New user with no profile yet — run onboarding
@@ -7815,7 +7838,22 @@ async function doProfilePasswordChange() {
     return html;
   }
 
+  function sectionErrorHTML(section) {
+    return `<div class="es-block" style="grid-column:1/-1;padding:40px 24px;">
+      <div class="es-icon">⚠️</div>
+      <div class="es-headline">Something went wrong</div>
+      <div class="es-sub">We couldn't load this section.</div>
+      <button class="btn btn-ghost" onclick="retryRender('${section}')" style="margin-top:12px;">Try again</button>
+    </div>`;
+  }
+  function retryRender(section) {
+    if (section === 'crews') renderCrews();
+    else if (section === 'members') renderSquad();
+    else if (section === 'events') renderEvents();
+  }
+
   function renderCrews() {
+    try {
     const grid = document.getElementById('crew-grid');
     const addCard = grid.querySelector('.crew-add-card');
     const query = (document.getElementById('crew-search')?.value || '').toLowerCase().trim();
@@ -7902,6 +7940,7 @@ async function doProfilePasswordChange() {
     // Update dynamic count
     const countEl = document.getElementById('crews-count');
     if (countEl) countEl.textContent = crews.length ? crews.length + ' active' : '';
+    } catch(err) { console.error('[renderCrews]', err); const el = document.getElementById('crew-grid'); if (el) el.innerHTML = sectionErrorHTML('crews'); }
   }
 
   // Quick tap: change status (Lead only) — shows confirmation first
@@ -8108,7 +8147,7 @@ async function doProfilePasswordChange() {
           <label class="form-label">Status</label>
           <div style="font-size:0.85rem;color:var(--muted);">Set by the Crew Lead — you can't change this.</div>
         </div>
-        ${ /* TODO: gate on currentUser */ !isSecret && !isAlreadyMember ? `<button class="btn ${canJoin?'btn-primary':'btn-ghost'}" style="width:100%;padding:12px;"
+        ${ currentUser && !isSecret && !isAlreadyMember ? `<button class="btn ${canJoin?'btn-primary':'btn-ghost'}" style="width:100%;padding:12px;"
           onclick="${canJoin ? `joinCrew('${crew.id}')` : `showToast('🔒 This crew is Locked In — ask the Lead for an invite')`}">
           ${canJoin ? '➕ Join this crew' : '🔒 Locked — invite only'}
         </button>` : ''}`;
@@ -10762,6 +10801,7 @@ async function doProfilePasswordChange() {
   }
 
   function renderSquad() {
+    try {
     const grid = document.getElementById('members-grid');
     grid.innerHTML = '';
     const query = (document.getElementById('raver-search')?.value || '').toLowerCase().trim();
@@ -10834,6 +10874,7 @@ async function doProfilePasswordChange() {
     add.onclick = () => openProfileEditor();
     add.innerHTML = `<div style="font-size:1.5rem">+</div><div style="font-family:'Outfit',sans-serif;font-weight:700;font-size:0.82rem;">Add Raver</div>`;
     grid.appendChild(add);
+    } catch(err) { console.error('[renderSquad]', err); const el = document.getElementById('members-grid'); if (el) el.innerHTML = sectionErrorHTML('members'); }
   }
 
   // ===== Dedicated profile page =====
@@ -11112,7 +11153,7 @@ async function doProfilePasswordChange() {
         ${photoCountdownBlock}
 
         <div class="profile-actions" data-raver-id="${r.id}">
-          ${ /* TODO: gate on currentUser */ (r.isYou || (perms.isLeaderOfRaver && !perms.isClaimed)) ? `<button class="btn btn-primary" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="enterProfileEditMode(this.dataset.raverId)">✏️ Edit Profile</button>` : ''}
+          ${ currentUser && (r.isYou || (perms.isLeaderOfRaver && !perms.isClaimed)) ? `<button class="btn btn-primary" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="enterProfileEditMode(this.dataset.raverId)">✏️ Edit Profile</button>` : ''}
           ${perms.canDisconnect ? `<button class="btn btn-ghost btn-disconnect" data-raver-id="${r.id}" onclick="showDisconnectConfirm(this.dataset.raverId)" title="Disconnect account">🔗</button>` : ''}
           ${(perms.canDelete || (!r.isYou && isAdminUser())) ? `<button class="btn btn-ghost" style="padding:11px;color:var(--neon-pink);border-color:rgba(255,45,120,0.3);" data-raver-id="${r.id}" onclick="showDeleteRaverConfirm(this.dataset.raverId)">🗑️</button>` : ''}
         </div>
@@ -12314,6 +12355,7 @@ async function doProfilePasswordChange() {
   let activeFestId = null;
 
   function renderEvents() {
+    try {
     const list = document.getElementById('events-list');
     if (!list) return;
 
@@ -12415,6 +12457,7 @@ async function doProfilePasswordChange() {
       ? `<div class="fest-empty" style="padding:20px;text-align:center;color:var(--muted);">No raves found for "${escHtml(query)}"</div>`
       : `<div class="fest-empty es-block" style="padding:32px 20px"><div class="es-icon">🎟️</div><div class="es-headline">Your calendar is looking too clean</div><div class="es-sub">Add a festival, club night, or that warehouse party on Saturday.</div></div>`;
     list.innerHTML = html;
+    } catch(err) { console.error('[renderEvents]', err); const el = document.getElementById('events-list'); if (el) el.innerHTML = sectionErrorHTML('events'); }
   }
 
   // ===== Location autocomplete (Nominatim / OpenStreetMap) =====
@@ -13256,6 +13299,10 @@ async function doProfilePasswordChange() {
 
   // Initialise badge on load
   document.addEventListener('DOMContentLoaded', updateNotifBadge);
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(console.warn);
+  }
 
 </script>
 <script>
