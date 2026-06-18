@@ -2584,10 +2584,12 @@
   .met-edit-hint { font-size: 0.65rem; color: var(--neon-pink); opacity: 0.6; margin-top: 2px; }
   .met-edit-area {
     width: 100%; background: transparent; border: none;
+    border-bottom: 1px solid transparent;
     color: var(--text); font-size: 0.82rem; line-height: 1.5;
     resize: none; outline: none; padding: 0; box-sizing: border-box;
-    min-height: 64px; font-family: inherit;
+    min-height: 64px; font-family: inherit; transition: border-color 0.15s;
   }
+  .met-edit-area:focus { border-bottom-color: var(--neon-cyan); }
   .met-bubble-actions { display: flex; gap: 6px; margin-top: 4px; }
   .met-bubble-actions button {
     flex: 1; padding: 6px 0; font-size: 0.72rem; border-radius: 8px;
@@ -4156,6 +4158,15 @@
   }
   .profile-fam-pin:hover .profile-pin-tooltip { display:block; }
 
+  /* Respect user's motion preference — collapse all decorative animations to instant */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
 </style>
 </head>
 <body>
@@ -5377,13 +5388,13 @@ async function doProfilePasswordChange() {
           document.getElementById('claim-intercept').classList.remove('open');
           if (data?.error === 'invalid_token') sessionStorage.removeItem('pendingClaim');
         }
-      });
+      }).catch(() => { document.getElementById('claim-intercept').classList.remove('open'); });
     } else {
       const pendingJoin = sessionStorage.getItem('pendingCrewJoin');
       if (pendingJoin) {
         sb.rpc('get_crew_by_invite_token', { p_token: pendingJoin }).then(({ data }) => {
           if (data && !data.error) showPreAuthIntercept({ crew: data, raver: null }, pendingJoin);
-        });
+        }).catch(() => {});
       }
     }
   }
@@ -6492,7 +6503,7 @@ async function doProfilePasswordChange() {
             font-size:0.7rem;font-weight:700;color:#fff;font-family:'Outfit',sans-serif;
             overflow:hidden;flex-shrink:0;
           ">${r.avatarUrl
-            ? `<img src="${r.avatarUrl}" style="width:100%;height:100%;object-fit:cover;" loading="lazy">`
+            ? `<img src="${r.avatarUrl}" style="width:100%;height:100%;object-fit:cover;" loading="lazy" alt="${escHtml(r.name)}">`
             : initials(r.name)
           }</div>`).join('')
           + (extra > 0 ? `<div style="
@@ -6647,7 +6658,7 @@ async function doProfilePasswordChange() {
         ? `background:transparent;overflow:hidden;padding:0;`
         : `background:${r.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)'};`;
       const dotInner = r.avatarUrl
-        ? `<img src="${r.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="">`
+        ? `<img src="${r.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${escHtml(firstName)}'s avatar">`
         : '';
       html += `<div class="fest-vibe-item">
         <div class="fest-vibe-dot" style="${dotStyle}">${dotInner}</div>
@@ -8013,10 +8024,10 @@ async function doProfilePasswordChange() {
     renderDetail(id);
     await dbLoadDreamPins(id);
     rerenderDreamBoard(id);
-    dbLoadArchiveLinks(id).then(() => rerenderArchive(id));
-    dbLoadPolls(id).then(() => rerenderPolls(id));
-    dbLoadJams(id).then(() => rerenderJams(id));
-    dbLoadAchievements(id).then(() => { rerenderFamPins(id); checkAndAwardBadges(id); });
+    dbLoadArchiveLinks(id).then(() => rerenderArchive(id)).catch(console.warn);
+    dbLoadPolls(id).then(() => rerenderPolls(id)).catch(console.warn);
+    dbLoadJams(id).then(() => rerenderJams(id)).catch(console.warn);
+    dbLoadAchievements(id).then(() => { rerenderFamPins(id); checkAndAwardBadges(id); }).catch(console.warn);
   }
   function closeDetail() {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -9043,7 +9054,7 @@ async function doProfilePasswordChange() {
     const row = document.createElement('div');
     row.className = 'poll-option-input-row';
     row.innerHTML = `<input class="form-input" placeholder="Option ${_createPollOptionCount}" maxlength="80" style="margin-bottom:0;">
-      <button class="poll-option-remove" onclick="removePollOption(this)">×</button>`;
+      <button class="poll-option-remove" onclick="removePollOption(this)" aria-label="Remove option">×</button>`;
     inputs.appendChild(row);
     if (_createPollOptionCount >= 4) document.getElementById('poll-add-option-btn').style.display = 'none';
   }
@@ -9317,7 +9328,7 @@ async function doProfilePasswordChange() {
     const fest = jam.festival_id ? festivals.find(f => String(f.id) === String(jam.festival_id)) : null;
 
     const coverHTML = jam.cover_url
-      ? `<img class="jam-cover" src="${escHtml(jam.cover_url)}" alt="" loading="lazy">`
+      ? `<img class="jam-cover" src="${escHtml(jam.cover_url)}" alt="${escHtml(jam.title || 'Playlist cover')}" loading="lazy">`
       : `<div class="jam-cover-placeholder">${escHtml((plat.label[0] || '♫'))}</div>`;
 
     let tagHTML = '';
@@ -10795,8 +10806,8 @@ async function doProfilePasswordChange() {
     const theirPhoto = cached?.theirs  ?? null;
     if (!myPhoto && !theirPhoto) return '';
     const slots = [];
-    if (myPhoto)    slots.push(`<div class="our-photo-slot"><img src="${myPhoto}" alt=""></div>`);
-    if (theirPhoto) slots.push(`<div class="our-photo-slot" style="transform:rotate(2deg);"><img src="${theirPhoto}" alt=""></div>`);
+    if (myPhoto)    slots.push(`<div class="our-photo-slot"><img src="${myPhoto}" alt="Our photo"></div>`);
+    if (theirPhoto) slots.push(`<div class="our-photo-slot" style="transform:rotate(2deg);"><img src="${theirPhoto}" alt="Our photo"></div>`);
     return `<div class="member-photos"><div class="our-photos-col"><div class="our-photos-slots">${slots.join('')}</div></div></div>`;
   }
 
@@ -11339,13 +11350,13 @@ async function doProfilePasswordChange() {
         const section = document.getElementById('how-we-met-section');
         const raver = getRaver(_profileId);
         if (section && raver) section.innerHTML = howWeMetSectionHTML(_profileId, stories, raver);
-      });
+      }).catch(console.warn);
       loadOurPhotos(_profileId).then(() => {
         // Re-render the photo slots in place without a full profile re-render
         const photoSection = document.getElementById('our-photos-async-wrap');
         const raver = getRaver(_profileId);
         if (photoSection && raver) photoSection.innerHTML = ourPhotoSectionHTML(_profileId);
-      });
+      }).catch(console.warn);
     }
   }
 
@@ -12237,7 +12248,7 @@ async function doProfilePasswordChange() {
       openProfile(r.id);
       showToast(`✅ Updated ${r.name}`);
       if (currentUser) {
-        dbSaveRaver(data, r.id).then(() => dbSaveRaverFestivals(r.id, data.festIds));
+        dbSaveRaver(data, r.id).then(() => dbSaveRaverFestivals(r.id, data.festIds)).catch(console.warn);
       }
     } else {
       const newId = 'temp_' + Date.now();
@@ -12319,7 +12330,7 @@ async function doProfilePasswordChange() {
             });
             if (anyCrewUpdated) renderCrews();
           }
-        });
+        }).catch(console.warn);
       }
     }
   }
