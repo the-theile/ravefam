@@ -471,7 +471,7 @@
   .add-label { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.85rem; }
 
   /* Upcoming Events */
-  .events-list { display: flex; flex-direction: column; gap: 12px; }
+  .events-list { display: flex; flex-direction: column; gap: 20px; padding: 0 6px; }
 
   .event-item {
     background: var(--surface);
@@ -639,24 +639,37 @@
     font-size: 0.85rem; pointer-events: none;
   }
 
-  /* Layered treatment — going state (bright green left-bleed) */
+  /* Layered treatment — going: glow uses event's own accent colour (--card-rgb set inline) */
   .event-item-going {
-    border-color: rgba(57,255,20,0.2) !important;
-    border-left-color: #39FF14 !important;
-    box-shadow: -6px 0 30px rgba(57,255,20,0.28), -2px 0 10px rgba(57,255,20,0.18), inset 4px 0 24px rgba(57,255,20,0.06), 0 4px 18px rgba(0,0,0,0.45);
+    border-color: rgba(var(--card-rgb), 0.22);
+    box-shadow: -6px 0 30px rgba(var(--card-rgb), 0.28), -2px 0 10px rgba(var(--card-rgb), 0.18), inset 4px 0 24px rgba(var(--card-rgb), 0.06), 0 4px 18px rgba(0,0,0,0.45);
   }
   .event-item-going:hover {
-    border-color: rgba(57,255,20,0.35) !important;
-    box-shadow: -8px 0 36px rgba(57,255,20,0.35), -2px 0 12px rgba(57,255,20,0.22), inset 4px 0 28px rgba(57,255,20,0.08), 0 8px 24px rgba(0,0,0,0.5);
+    border-color: rgba(var(--card-rgb), 0.38);
+    box-shadow: -8px 0 36px rgba(var(--card-rgb), 0.35), -2px 0 12px rgba(var(--card-rgb), 0.22), inset 4px 0 28px rgba(var(--card-rgb), 0.08), 0 8px 24px rgba(0,0,0,0.5);
   }
-  /* Layered treatment — interested state (softer cyan left-bleed) */
-  .event-item-interested {
-    border-color: rgba(0,245,255,0.15) !important;
-    border-left-color: #00F5FF !important;
-    box-shadow: -5px 0 22px rgba(0,245,255,0.2), inset 3px 0 18px rgba(0,245,255,0.04), 0 4px 14px rgba(0,0,0,0.4);
+  /* Interested — no glow, just a subtly brighter border */
+  .event-item-interested { border-color: rgba(255,255,255,0.13); }
+
+  /* Color picker in Edit Rave popup */
+  .color-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 8px;
+    margin-top: 8px;
   }
-  .event-item-interested:hover {
-    box-shadow: -7px 0 28px rgba(0,245,255,0.28), inset 3px 0 22px rgba(0,245,255,0.06), 0 8px 22px rgba(0,0,0,0.45);
+  .color-swatch {
+    aspect-ratio: 1;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2.5px solid transparent;
+    transition: transform 0.15s, border-color 0.15s;
+  }
+  .color-swatch:hover { transform: scale(1.18); }
+  .color-swatch.selected {
+    border-color: #fff;
+    transform: scale(1.12);
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.25);
   }
 
   /* Members page */
@@ -6187,7 +6200,7 @@ async function doProfilePasswordChange() {
       .order('date', { ascending: true });
     if (!fErr && dbFests) {
       dbFests.forEach(f => {
-        festivals.push({ id: f.id, name: f.name, date: f.date, location: f.location || '' });
+        festivals.push({ id: f.id, name: f.name, date: f.date, location: f.location || '', color: f.color || null });
       });
     }
 
@@ -6787,7 +6800,7 @@ async function doProfilePasswordChange() {
   async function dbSaveFestival(data, id) {
     const uid = currentUser?.id;
     if (!uid) return null;
-    const row = { name: data.name, date: data.date, location: data.location };
+    const row = { name: data.name, date: data.date, location: data.location, color: data.color || null };
     if (id) {
       const { error } = await sb.from('festivals').update(row).eq('id', id);
       if (error) { console.error('festival update error', error); showToast('⚠️ Could not update rave — try again'); }
@@ -12223,9 +12236,16 @@ async function doProfilePasswordChange() {
 
   // ===== Raves tab — browse & manage the catalog =====
   const FALLBACK_COLORS = ['#FF2D78','#00F5FF','#FFE600','#BF00FF','#39FF14','#FF6B35'];
+  const CARD_PALETTE = [
+    '#FF2D78','#FF0055','#FF6B35','#FFB800',
+    '#FFE600','#C4FF00','#39FF14','#00FF88',
+    '#00F5FF','#0099FF','#7B2FFF','#BF00FF',
+    '#FF00CC','#FF3D9A','#FF8C00','#00FFD1'
+  ];
 
   // String-hash a festival's id to a consistent accent color (works with UUIDs)
   function festColor(f) {
+    if (f.color) return f.color;
     const s = String(f.id);
     let h = 0;
     for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
@@ -12274,9 +12294,11 @@ async function doProfilePasswordChange() {
       // Layered shadow — derive RGB from event accent for neutral cards
       const rgb = color.replace('#','').match(/.{2}/g).map(v => parseInt(v,16)).join(',');
       const stateClass = youGoing ? ' event-item-going' : youInterested ? ' event-item-interested' : '';
-      const cardStyle = (youGoing || youInterested)
-        ? `border-left:5px solid ${color}`
-        : `border-left:5px solid ${color};box-shadow:-5px 0 20px rgba(${rgb},0.15),inset 3px 0 16px rgba(${rgb},0.04),0 4px 14px rgba(0,0,0,0.4)`;
+      const cardStyle = youGoing
+        ? `--card-rgb:${rgb};border-left:5px solid ${color}`
+        : youInterested
+          ? `border-left:5px solid ${color}`
+          : `border-left:5px solid ${color};box-shadow:-5px 0 20px rgba(${rgb},0.15),inset 3px 0 16px rgba(${rgb},0.04),0 4px 14px rgba(0,0,0,0.4)`;
 
       // All avatars shown — vibe emoji badge on corner, full bubble revealed on hover
       const buildAvatarRow = (people, showVibes) => people.map((w, idx) => {
@@ -12422,12 +12444,24 @@ async function doProfilePasswordChange() {
   // ===== Rave editor (create / edit / delete a catalog item) =====
   let editingFestivalId = null;
   let pendingDeleteFestId = null;
+  let editRaveColor = null;
+
+  function pickRaveColor(color) {
+    editRaveColor = color;
+    document.querySelectorAll('#fe-color-grid .color-swatch').forEach(s =>
+      s.classList.toggle('selected', s.dataset.color === color)
+    );
+  }
 
   function openRaveEditor(id) {
     editingFestivalId = id || null;
     activeFestId = id || null;
     const f = id ? getFestival(id) : null;
     const goers = id ? festivalGoers(id) : [];
+    editRaveColor = f?.color || festColor(f || { id: 'new' });
+    const swatchHtml = CARD_PALETTE.map(c =>
+      `<div class="color-swatch${c === editRaveColor ? ' selected' : ''}" data-color="${c}" style="background:${c};" onclick="pickRaveColor('${c}')"></div>`
+    ).join('');
     document.getElementById('rave-edit-modal').innerHTML = `
       <div class="modal-title">${f ? '✏️ Edit Rave' : '🎉 Add Rave'}</div>
       ${fieldRow('Rave Name','fe-name', f?.name, 'e.g. Awakenings or Basement at Fabric this Friday')}
@@ -12445,6 +12479,10 @@ async function doProfilePasswordChange() {
             onblur="setTimeout(closeLoc,200)">
           <div class="loc-dropdown" id="loc-dropdown"></div>
         </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Card Colour</label>
+        <div class="color-picker-grid" id="fe-color-grid">${swatchHtml}</div>
       </div>
       ${f ? `<div class="fest-goers-note" id="re-goers-note">${goers.length ? goers.length + ' tribe member' + (goers.length!==1?'s':'') + ' linked: ' + goers.map(g=>escHtml(g.name.split(' ')[0])).join(', ') : 'No tribe members linked yet'}</div>
       <div class="fest-search-wrap" style="margin-top:8px;margin-bottom:4px;">
@@ -12593,16 +12631,17 @@ async function doProfilePasswordChange() {
     if (!name) { showToast('Rave needs a name ✍️'); return; }
     if (!date) { showToast('Pick a date 📅'); return; }
 
+    const color = editRaveColor || null;
     if (editingFestivalId) {
       const f = getFestival(editingFestivalId);
-      Object.assign(f, { name, date, location });
+      Object.assign(f, { name, date, location, color });
       showToast(`✅ Updated ${name}`);
-      if (currentUser) dbSaveFestival({ name, date, location }, editingFestivalId);
+      if (currentUser) dbSaveFestival({ name, date, location, color }, editingFestivalId);
     } else {
       const dupe = findFestivalByName(name);
       if (dupe) { showToast(`"${dupe.name}" already exists`); return; }
       const tempId = 'temp_' + Date.now();
-      const newFest = { id: tempId, name, date, location };
+      const newFest = { id: tempId, name, date, location, color };
       festivals.push(newFest);
       showToast(`🎉 Added ${name}`);
       addNotification(`🗓️ ${name} is on the radar! The rave is in the calendar — now get the crew onboard.`);
@@ -12610,7 +12649,7 @@ async function doProfilePasswordChange() {
       const _raveMsg = `🗓️ A new rave just dropped on the radar: ${name}${date ? ' on ' + date : ''}. Check it out in the Events tab — is the crew going?`;
       crews.forEach(c => { if (c.isLead) notifyCrewMembers(c, _raveMsg); });
       if (currentUser) {
-        dbSaveFestival({ name, date, location }, null).then(dbId => {
+        dbSaveFestival({ name, date, location, color }, null).then(dbId => {
           if (dbId) newFest.id = dbId;
         });
       }
