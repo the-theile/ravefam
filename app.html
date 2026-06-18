@@ -476,148 +476,146 @@
   .event-item {
     background: var(--surface);
     border: 1px solid rgba(255,255,255,0.07);
-    border-radius: 16px;
-    padding: 18px 22px;
+    border-radius: 18px;
     display: flex;
-    align-items: center;
-    gap: 18px;
-    transition: all 0.2s;
-    cursor: pointer;
+    flex-direction: column;
+    transition: all 0.22s;
+    overflow: hidden;
   }
-  .event-item:hover { border-color: rgba(255,255,255,0.14); transform: translateX(3px); }
+  .event-item:hover { border-color: rgba(255,255,255,0.14); transform: translateY(-2px); }
 
-  .event-date {
-    text-align: center;
-    min-width: 46px;
+  .event-item-body {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 16px 16px 12px;
   }
+
+  .event-date { text-align: center; min-width: 38px; flex-shrink: 0; padding-top: 2px; }
   .event-day {
     font-family: 'Outfit', sans-serif;
-    font-weight: 700;
-    font-size: 1.5rem;
+    font-weight: 800;
+    font-size: 1.6rem;
     line-height: 1;
   }
   .event-month {
-    font-size: 0.65rem;
+    font-size: 0.58rem;
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 1.5px;
     color: var(--muted);
+    margin-top: 2px;
   }
 
-  .event-divider {
-    width: 3px;
-    height: 44px;
-    border-radius: 100px;
-    flex-shrink: 0;
-  }
+  .event-divider { display: none; }
 
-  .event-info { flex: 1; }
+  .event-info { flex: 1; min-width: 0; }
   .event-name {
     font-family: 'Outfit', sans-serif;
-    font-weight: 700;
-    font-size: 1rem;
-    margin-bottom: 3px;
+    font-weight: 800;
+    font-size: 1.05rem;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  .event-meta { font-size: 0.78rem; color: var(--muted); }
-  /* Stacked avatar row replacing name chips */
+  .event-meta { font-size: 0.76rem; color: var(--muted); margin-bottom: 12px; }
+
+  .attendee-section { margin-bottom: 8px; }
+  .attendee-section:last-child { margin-bottom: 0; }
+  .attendee-section-label {
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.58rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    margin-bottom: 5px;
+  }
+  .attendee-section-label.going { color: rgba(57,255,20,0.7); }
+  .attendee-section-label.interested { color: rgba(0,245,255,0.6); }
+
   .going-avatars {
-    display: flex; align-items: flex-end;
-    margin-top: 9px; padding-top: 46px; overflow: visible;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 5px;
+    overflow: visible;
   }
   .going-avatar {
     cursor: pointer;
     transition: transform 0.15s;
     position: relative;
+    margin-right: -9px;
+    flex-shrink: 0;
   }
+  .going-avatar.row-end { margin-right: 8px; }
   .going-avatar:hover { transform: scale(1.15) translateY(-2px); z-index: 10; }
-  /* Vibe bubble floating above an avatar */
+
+  /* Corner emoji badge — always visible, shows vibe at a glance */
+  .vibe-emoji-badge {
+    position: absolute;
+    bottom: -2px; right: -2px;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: var(--surface2);
+    border: 1.5px solid var(--surface);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.6rem; line-height: 1;
+    z-index: 5; pointer-events: none;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  }
+  /* Full vibe bubble — revealed on hover */
   .going-vibe-bubble {
-    position: absolute; bottom: calc(100% + 4px); left: 0; z-index: 5;
+    position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 20;
     background: var(--surface2);
     border: 1px solid rgba(255,45,120,0.28);
     border-radius: 10px 10px 10px 2px;
-    padding: 4px 8px;
+    padding: 4px 9px;
     display: inline-flex; align-items: center; gap: 5px;
     white-space: nowrap; font-size: 0.9rem;
     pointer-events: none;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.3), 0 0 8px rgba(255,45,120,0.07);
+    opacity: 0;
+    transition: opacity 0.15s;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.35), 0 0 8px rgba(255,45,120,0.08);
   }
-  .going-vibe-bubble.is-mine {
-    pointer-events: auto; cursor: pointer;
-    border-color: rgba(255,45,120,0.5);
-    transition: background 0.15s, border-color 0.15s;
-  }
-  .going-vibe-bubble.is-mine:hover {
-    background: rgba(255,45,120,0.08); border-color: rgba(255,45,120,0.7);
-  }
-  .going-vibe-add {
-    pointer-events: auto; cursor: pointer;
-    font-size: 0.67rem; font-family: 'Outfit', sans-serif; font-weight: 700;
-    color: rgba(255,45,120,0.7);
-    border: 1.5px dashed rgba(255,45,120,0.38);
-    background: rgba(255,45,120,0.04);
-    transition: all 0.15s;
-  }
-  .going-vibe-add:hover {
-    color: var(--neon-pink); border-color: var(--neon-pink);
-    background: rgba(255,45,120,0.08);
-  }
+  .going-avatar:hover .going-vibe-bubble { opacity: 1; }
+  .going-vibe-bubble.is-mine { pointer-events: auto; cursor: pointer; border-color: rgba(255,45,120,0.5); }
   .going-vibe-caption {
-    font-size: 0.65rem; color: rgba(255,255,255,0.82);
+    font-size: 0.62rem; color: rgba(255,255,255,0.82);
     max-width: 90px; overflow: hidden; text-overflow: ellipsis;
   }
 
-  .going-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    margin-top: 8px;
-    font-size: 0.72rem;
+  .going-count-inline {
     font-family: 'Outfit', sans-serif;
-    font-weight: 700;
-    border-radius: 20px;
-    padding: 4px 11px;
-    border: 1.5px solid var(--border);
-    background: transparent;
-    color: var(--muted);
-    cursor: pointer;
-    transition: all 0.15s;
-    letter-spacing: 0.02em;
+    font-size: 0.65rem; font-weight: 700; letter-spacing: 0.03em;
+    align-self: center; margin-left: 12px; flex-shrink: 0;
   }
-  .going-toggle:hover { border-color: #39FF14; color: #39FF14; }
-  .going-toggle-active {
-    border-color: #39FF14 !important;
-    color: #39FF14 !important;
-    background: rgba(57,255,20,0.09) !important;
-    font-size: 0.8rem !important;
-    padding: 5px 13px !important;
-    letter-spacing: 0.03em !important;
-  }
-  .interested-toggle:hover { border-color: #00F5FF; color: #00F5FF; }
-  .interested-toggle-active {
-    border-color: #00F5FF !important;
-    color: #00F5FF !important;
-    background: rgba(0,245,255,0.09) !important;
-    font-size: 0.8rem !important;
-    padding: 5px 13px !important;
-    letter-spacing: 0.03em !important;
-  }
-  .interested-avatars { margin-top: 6px; opacity: 0.5; padding-top: 0; }
-  .interested-count-label { font-size: 0.68rem; color: #00F5FF; opacity: 0.7; margin-top: 2px; letter-spacing: 0.02em; }
-  .fest-toggle-row { display: inline-flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-  .fest-toggle-row .going-toggle { margin-top: 0; }
+  .going-count-inline.green { color: var(--neon-green); }
+  .going-count-inline.cyan  { color: var(--neon-cyan); }
+  .going-count-inline.muted { color: var(--muted); }
 
-  .event-crew-going {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 4px;
+  .interested-avatars { opacity: 0.75; }
+
+  /* Bottom action bar */
+  .event-action-bar { display: flex; border-top: 1px solid rgba(255,255,255,0.05); }
+  .event-action-btn {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    gap: 5px; padding: 9px 4px;
+    font-family: 'Outfit', sans-serif; font-size: 0.72rem; font-weight: 700;
+    color: var(--muted); background: transparent; border: none;
+    cursor: pointer; transition: all 0.15s; letter-spacing: 0.02em;
+    position: relative;
   }
-  .going-count {
-    font-family: 'Outfit', sans-serif;
-    font-weight: 800;
-    font-size: 1.1rem;
+  .event-action-btn + .event-action-btn::before {
+    content: ''; position: absolute;
+    left: 0; top: 22%; height: 56%; width: 1px;
+    background: rgba(255,255,255,0.06);
   }
-  .going-label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .event-action-btn:hover { color: var(--text); }
+  .event-action-btn.vibe-action:hover { color: var(--neon-pink); }
+  .event-action-btn.going-action.active { color: var(--neon-green); background: rgba(57,255,20,0.05); }
+  .event-action-btn.interested-action.active { color: var(--neon-cyan); background: rgba(0,245,255,0.05); }
+
+  .event-crew-going { display: none; }
 
   /* Raves search */
   .rave-search-wrap { position: relative; margin-bottom: 16px; }
@@ -641,14 +639,24 @@
     font-size: 0.85rem; pointer-events: none;
   }
 
-  /* Going glow — you've marked yourself as attending */
+  /* Layered treatment — going state (bright green left-bleed) */
   .event-item-going {
-    border-color: rgba(57,255,20,0.4) !important;
-    box-shadow: 0 0 20px rgba(57,255,20,0.1);
+    border-color: rgba(57,255,20,0.2) !important;
+    border-left-color: #39FF14 !important;
+    box-shadow: -6px 0 30px rgba(57,255,20,0.28), -2px 0 10px rgba(57,255,20,0.18), inset 4px 0 24px rgba(57,255,20,0.06), 0 4px 18px rgba(0,0,0,0.45);
   }
   .event-item-going:hover {
-    border-color: rgba(57,255,20,0.65) !important;
-    box-shadow: 0 0 28px rgba(57,255,20,0.18);
+    border-color: rgba(57,255,20,0.35) !important;
+    box-shadow: -8px 0 36px rgba(57,255,20,0.35), -2px 0 12px rgba(57,255,20,0.22), inset 4px 0 28px rgba(57,255,20,0.08), 0 8px 24px rgba(0,0,0,0.5);
+  }
+  /* Layered treatment — interested state (softer cyan left-bleed) */
+  .event-item-interested {
+    border-color: rgba(0,245,255,0.15) !important;
+    border-left-color: #00F5FF !important;
+    box-shadow: -5px 0 22px rgba(0,245,255,0.2), inset 3px 0 18px rgba(0,245,255,0.04), 0 4px 14px rgba(0,0,0,0.4);
+  }
+  .event-item-interested:hover {
+    box-shadow: -7px 0 28px rgba(0,245,255,0.28), inset 3px 0 22px rgba(0,245,255,0.06), 0 8px 22px rgba(0,0,0,0.45);
   }
 
   /* Members page */
@@ -12263,72 +12271,68 @@ async function doProfilePasswordChange() {
       const youInterested = you && (you.interestedFestIds || []).some(fid => String(fid) === String(f.id));
       const interestedPeople = festivalInterestedGoers(f.id);
 
-      // Stacked avatar chips — each with an optional vibe bubble floating above
-      let avatarChips;
-      if (goers.length) {
-        const shown = goers.slice(0, 5);
-        avatarChips = shown.map(w => {
-          const dn = displayName(w);
-          const bg = w.avatarUrl ? 'transparent;overflow:hidden;padding:0' : extractFirstColor(w.gradient);
-          const inner = w.avatarUrl
-            ? `<img src="${w.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${initials(dn)}">`
-            : initials(dn).toUpperCase();
+      // Layered shadow — derive RGB from event accent for neutral cards
+      const rgb = color.replace('#','').match(/.{2}/g).map(v => parseInt(v,16)).join(',');
+      const stateClass = youGoing ? ' event-item-going' : youInterested ? ' event-item-interested' : '';
+      const cardStyle = (youGoing || youInterested)
+        ? `border-left:5px solid ${color}`
+        : `border-left:5px solid ${color};box-shadow:-5px 0 20px rgba(${rgb},0.15),inset 3px 0 16px rgba(${rgb},0.04),0 4px 14px rgba(0,0,0,0.4)`;
+
+      // All avatars shown — vibe emoji badge on corner, full bubble revealed on hover
+      const buildAvatarRow = (people, showVibes) => people.map((w, idx) => {
+        const dn = displayName(w);
+        const bg = w.avatarUrl ? 'transparent;overflow:hidden;padding:0' : extractFirstColor(w.gradient);
+        const inner = w.avatarUrl
+          ? `<img src="${w.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${initials(dn)}">`
+          : initials(dn).toUpperCase();
+        const isLast = idx === people.length - 1;
+        let badgeHtml = '', bubbleHtml = '';
+        if (showVibes) {
           const vibe = (festVibesCache[String(f.id)] || []).find(v => String(v.raverId) === String(w.id));
           const isMeW = you && String(w.id) === String(you.id);
-          let bubbleHtml = '';
           if (vibe) {
+            badgeHtml = `<div class="vibe-emoji-badge">${vibe.emoji}</div>`;
             const captionHtml = vibe.caption ? `<span class="going-vibe-caption">${escHtml(vibe.caption)}</span>` : '';
             const cls = `going-vibe-bubble${isMeW ? ' is-mine' : ''}`;
             const click = isMeW ? `onclick="event.stopPropagation(); openVibePicker('${f.id}')"` : '';
             bubbleHtml = `<div class="${cls}" ${click}>${vibe.emoji}${captionHtml}</div>`;
-          } else if (isMeW) {
-            bubbleHtml = `<div class="going-vibe-bubble going-vibe-add" onclick="event.stopPropagation(); openVibePicker('${f.id}')">✦ vibe</div>`;
           }
-          return `<div class="avatar going-avatar" style="background:${bg};" data-raver-id="${w.id}" onclick="event.stopPropagation(); openProfile(this.dataset.raverId, false, 'members')" title="${dn}">${inner}${bubbleHtml}</div>`;
-        }).join('');
-        if (goers.length > 5) avatarChips += `<div class="avatar avatar-count">+${goers.length - 5}</div>`;
-      } else {
-        avatarChips = '<span style="font-size:0.74rem;color:var(--muted);">Nobody from the tribe yet</span>';
-      }
+        }
+        return `<div class="avatar going-avatar${isLast ? ' row-end' : ''}" style="background:${bg};" data-raver-id="${w.id}" onclick="event.stopPropagation(); openProfile(this.dataset.raverId, false, 'members')" title="${dn}">${inner}${bubbleHtml}${badgeHtml}</div>`;
+      }).join('');
 
-      // Build interested avatar row (faded, no vibe bubbles)
-      let interestedChips = '';
-      if (interestedPeople.length) {
-        const shownI = interestedPeople.slice(0, 5);
-        interestedChips = shownI.map(w => {
-          const dn = displayName(w);
-          const bg = w.avatarUrl ? 'transparent;overflow:hidden;padding:0' : extractFirstColor(w.gradient);
-          const inner = w.avatarUrl
-            ? `<img src="${w.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${initials(dn)}">`
-            : initials(dn).toUpperCase();
-          return `<div class="avatar going-avatar" style="background:${bg};" data-raver-id="${w.id}" onclick="event.stopPropagation(); openProfile(this.dataset.raverId, false, 'members')" title="${dn}">${inner}</div>`;
-        }).join('');
-        if (interestedPeople.length > 5) interestedChips += `<div class="avatar avatar-count">+${interestedPeople.length - 5}</div>`;
-      }
+      const goingSection = goers.length
+        ? `<div class="attendee-section">
+            <div class="attendee-section-label going">Going</div>
+            <div class="going-avatars">${buildAvatarRow(goers, true)}<span class="going-count-inline ${youGoing ? 'green' : 'muted'}">${goers.length} going</span></div>
+           </div>`
+        : `<div class="attendee-section"><span style="font-size:0.74rem;color:var(--muted)">Nobody from the tribe yet</span></div>`;
 
-      const toggleBtns = `<div class="fest-toggle-row">
-        <button class="going-toggle${youGoing ? ' going-toggle-active' : ''}" data-fest-id="${f.id}" onclick="event.stopPropagation(); toggleGoingToFest(this.dataset.festId)">${youGoing ? '🎟️ Going' : '＋ Going'}</button>
-        <button class="going-toggle interested-toggle${youInterested ? ' interested-toggle-active' : ''}" data-fest-id="${f.id}" onclick="event.stopPropagation(); toggleInterestedInFest(this.dataset.festId)">👀 Interested</button>
-      </div>`;
+      const interestedSection = interestedPeople.length
+        ? `<div class="attendee-section">
+            <div class="attendee-section-label interested">Interested</div>
+            <div class="going-avatars interested-avatars">${buildAvatarRow(interestedPeople, false)}<span class="going-count-inline cyan">${interestedPeople.length} interested</span></div>
+           </div>`
+        : '';
 
       return `
-        <div class="event-item event-item-clickable${youGoing ? ' event-item-going' : ''}" data-fest-id="${f.id}" onclick="activeFestId=this.dataset.festId; openRaveEditor(this.dataset.festId)" title="Tap to edit ${escHtml(f.name)}">
-          <div class="event-date">
-            <div class="event-day" style="color:${color}">${day}</div>
-            <div class="event-month">${mon}</div>
+        <div class="event-item event-item-clickable${stateClass}" data-fest-id="${f.id}" style="${cardStyle}" onclick="activeFestId=this.dataset.festId; openRaveEditor(this.dataset.festId)" title="Tap to edit ${escHtml(f.name)}">
+          <div class="event-item-body">
+            <div class="event-date">
+              <div class="event-day" style="color:${color}">${day}</div>
+              <div class="event-month">${mon}</div>
+            </div>
+            <div class="event-info">
+              <div class="event-name">${f.name} <span class="fest-edit-hint">✏️</span></div>
+              <div class="event-meta">${metaLine}</div>
+              ${goingSection}
+              ${interestedSection}
+            </div>
           </div>
-          <div class="event-divider" style="background:${color}"></div>
-          <div class="event-info">
-            <div class="event-name">${f.name} <span class="fest-edit-hint">✏️</span></div>
-            <div class="event-meta">${metaLine}</div>
-            <div class="going-avatars">${avatarChips}</div>
-            ${interestedChips ? `<div class="going-avatars interested-avatars">${interestedChips}</div><div class="interested-count-label">👀 ${interestedPeople.length} interested</div>` : ''}
-            ${(() => { const vr = buildVibeRowHTML(f.id); return vr ? `<div class="fest-vibe-row">${vr}</div>` : ''; })()}
-            ${toggleBtns}
-          </div>
-          <div class="event-crew-going">
-            <div class="going-count" style="color:${color}">${goers.length}</div>
-            <div class="going-label">going</div>
+          <div class="event-action-bar">
+            <button class="event-action-btn vibe-action" onclick="event.stopPropagation(); openVibePicker('${f.id}')">✦ Vibe</button>
+            <button class="event-action-btn going-action${youGoing ? ' active' : ''}" onclick="event.stopPropagation(); toggleGoingToFest('${f.id}')">${youGoing ? '🎟️ Going' : '＋ Going'}</button>
+            <button class="event-action-btn interested-action${youInterested ? ' active' : ''}" onclick="event.stopPropagation(); toggleInterestedInFest('${f.id}')">👀 Interested</button>
           </div>
         </div>`;
     };
