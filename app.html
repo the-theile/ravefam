@@ -7804,14 +7804,14 @@ async function doProfilePasswordChange() {
   let crewFeedEvents = [];
 
   const BADGE_DEFINITIONS = [
-    { id:'first_festival_together', name:'First Festival Together', emoji:'🎪',
-      description:'First festival attended together as a crew.', type:'crew', threshold:1, progressLabel:'festivals together' },
-    { id:'ten_festivals_strong', name:'10 Festivals Strong', emoji:'🏆',
-      description:'10 festivals attended together.', type:'crew', threshold:10, progressLabel:'festivals together' },
+    { id:'first_festival_together', name:'First Rave Together', emoji:'🎪',
+      description:'First rave attended together as a crew.', type:'crew', threshold:1, progressLabel:'raves together' },
+    { id:'ten_festivals_strong', name:'10 Raves Strong', emoji:'🏆',
+      description:'10 raves attended together.', type:'crew', threshold:10, progressLabel:'raves together' },
     { id:'poll_master', name:'Poll Master', emoji:'🗳️',
       description:'Created 20+ polls with ≥80% crew participation.', type:'individual', threshold:20, progressLabel:'qualifying polls created' },
     { id:'playlist_architect', name:'Playlist Architect', emoji:'🎵',
-      description:'Added playlists totalling ≥50 tracks.', type:'individual', threshold:50, progressLabel:'tracks contributed' },
+      description:'Added 7+ playlists to this crew.', type:'individual', threshold:7, progressLabel:'playlists added' },
     { id:'archive_mvp', name:'Archive MVP', emoji:'📸',
       description:'First to upload 5+ archive links in this crew.', type:'individual', threshold:5, progressLabel:'archive links uploaded' },
     { id:'dream_board_legend', name:'Dream Board Legend', emoji:'📌',
@@ -9443,8 +9443,16 @@ async function doProfilePasswordChange() {
     const crew = getCrew(crewId);
     let current = 0;
 
-    if (badgeId === 'first_festival_together' || badgeId === 'ten_festivals_strong') {
-      const people = crewSquad(crew);
+    if (badgeId === 'first_festival_together') {
+      const people = [...new Map(crewSquad(crew).map(p => [String(p.id), p])).values()];
+      if (people.length < 2) { current = 0; }
+      else {
+        const allFestSets = people.map(p => new Set((p.festIds || []).map(String)));
+        const firstSet = allFestSets[0];
+        current = [...firstSet].filter(fid => allFestSets.every(s => s.has(fid))).length;
+      }
+    } else if (badgeId === 'ten_festivals_strong') {
+      const people = [...new Map(crewSquad(crew).map(p => [String(p.id), p])).values()];
       const festCounts = {};
       people.forEach(p => {
         (p.festIds || []).forEach(fid => {
@@ -9470,9 +9478,7 @@ async function doProfilePasswordChange() {
           return votes >= voteThreshold;
         }).length;
       } else if (badgeId === 'playlist_architect') {
-        current = crewJams
-          .filter(j => j.added_by === raverAuthId && (j.track_count || 0) > 0)
-          .reduce((sum, j) => sum + (j.track_count || 0), 0);
+        current = crewJams.filter(j => j.added_by === raverAuthId).length;
       } else if (badgeId === 'archive_mvp') {
         current = archiveLinks.filter(l => l.added_by === raverAuthId).length;
       } else if (badgeId === 'dream_board_legend') {
