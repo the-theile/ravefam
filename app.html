@@ -6245,6 +6245,7 @@ async function doProfilePasswordChange() {
           leader_id: leaderRaver?.id ?? null,
           totemPhotoUrl: c.totem_photo_url || null,
           invite_token: c.invite_token || null,
+          createdAt: c.created_at || null,
           squadIds,
           members: members.length ? members : []
         });
@@ -7848,6 +7849,14 @@ async function doProfilePasswordChange() {
       description:'First rave attended together as a crew.', type:'crew', threshold:1, progressLabel:'raves together' },
     { id:'ten_festivals_strong', name:'10 Raves Strong', emoji:'🏆',
       description:'10 raves attended together.', type:'crew', threshold:10, progressLabel:'raves together' },
+    { id:'twenty_five_raves_strong', name:'25 Raves Deep', emoji:'⚡',
+      description:'25 raves attended together.', type:'crew', threshold:25, progressLabel:'raves together' },
+    { id:'hundred_raves_strong', name:'Rave Royalty', emoji:'👑',
+      description:'100 raves attended together.', type:'crew', threshold:100, progressLabel:'raves together' },
+    { id:'one_year_crew', name:'Year One', emoji:'🎂',
+      description:'Crew has been raving together for 1 year.', type:'crew', threshold:1, progressLabel:'years together' },
+    { id:'full_house', name:'Full House', emoji:'🤝',
+      description:'Every crew member voted on the same poll.', type:'crew', threshold:1, progressLabel:'full-participation polls' },
     { id:'poll_master', name:'Poll Master', emoji:'🗳️',
       description:'Created 20+ polls with ≥80% crew participation.', type:'individual', threshold:20, progressLabel:'qualifying polls created' },
     { id:'playlist_architect', name:'Playlist Architect', emoji:'🎵',
@@ -8759,6 +8768,7 @@ async function doProfilePasswordChange() {
     if (existing) { showToast('You\'ve already voted on this one 👀'); return; }
     await dbVotePoll(pollId, String(voteValue));
     rerenderPolls(crewId);
+    checkAndAwardBadges(crewId);
   }
 
   async function deletePoll(pollId, crewId) {
@@ -9491,7 +9501,7 @@ async function doProfilePasswordChange() {
         const firstSet = allFestSets[0];
         current = [...firstSet].filter(fid => allFestSets.every(s => s.has(fid))).length;
       }
-    } else if (badgeId === 'ten_festivals_strong') {
+    } else if (badgeId === 'ten_festivals_strong' || badgeId === 'twenty_five_raves_strong' || badgeId === 'hundred_raves_strong') {
       const people = [...new Map(crewSquad(crew).map(p => [String(p.id), p])).values()];
       const festCounts = {};
       people.forEach(p => {
@@ -9501,6 +9511,20 @@ async function doProfilePasswordChange() {
         });
       });
       current = Object.values(festCounts).filter(c => c >= 2).length;
+    } else if (badgeId === 'one_year_crew') {
+      if (crew.createdAt) {
+        current = Math.floor((Date.now() - new Date(crew.createdAt).getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+      }
+    } else if (badgeId === 'full_house') {
+      const people = [...new Map(crewSquad(crew).map(p => [String(p.id), p])).values()];
+      const claimedAuthIds = people.map(p => p.claimedBy || p.claimed_by).filter(Boolean);
+      if (claimedAuthIds.length >= 2) {
+        const claimedSet = new Set(claimedAuthIds);
+        current = Object.values(crewPollVotes).filter(votes => {
+          const voterIds = new Set(votes.map(v => v.voter_user_id));
+          return [...claimedSet].every(id => voterIds.has(id));
+        }).length;
+      }
     } else {
       const raverAuthId = (() => {
         const r = squad.find(r => String(r.id) === String(raverId));
