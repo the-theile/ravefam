@@ -2291,53 +2291,25 @@
     border-radius: 50%;
     display: block;
   }
-  .avatar-edit-hint {
-    position: absolute;
-    bottom: 0; left: 0; right: 0;
-    height: 34px;
-    background: rgba(0,0,0,0.5);
-    border-radius: 0 0 999px 999px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 0.8rem;
-    pointer-events: none;
+  .avatar-col {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    flex-shrink: 0;
   }
-  .avatar-and-menu {
-    position: relative;
-    display: inline-block;
+  .avatar-photo-btns {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
   }
-  .avatar-menu {
-    position: absolute;
-    top: calc(100% + 8px);
-    left: 50%;
-    transform: translateX(-50%) translateY(-4px);
-    background: rgba(12,12,20,0.97);
-    border: 1.5px solid rgba(255,255,255,0.18);
-    border-radius: 14px;
-    padding: 6px;
-    min-width: 170px;
-    z-index: 200;
-    display: flex; flex-direction: column; gap: 2px;
-    opacity: 0; visibility: hidden; pointer-events: none;
-    transition: opacity 0.15s, transform 0.15s;
-    backdrop-filter: blur(8px);
-  }
-  .avatar-menu.open {
-    opacity: 1; visibility: visible; pointer-events: auto;
-    transform: translateX(-50%) translateY(0);
-  }
-  .avatar-menu-item {
+  .avatar-photo-btn {
     background: none; border: none;
-    color: var(--text);
-    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.92rem;
-    padding: 11px 14px;
-    text-align: left; cursor: pointer;
-    border-radius: 9px; width: 100%;
-    transition: background 0.12s;
+    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.78rem;
+    cursor: pointer; padding: 5px 10px; border-radius: 6px;
+    color: var(--muted); transition: color 0.15s, background 0.15s;
+    white-space: nowrap; display: block;
   }
-  .avatar-menu-item:hover, .avatar-menu-item:active {
-    background: rgba(255,255,255,0.09);
+  .avatar-photo-btn:hover, .avatar-photo-btn:active {
+    color: var(--text); background: rgba(255,255,255,0.07);
   }
-  .avatar-menu-remove { color: var(--neon-pink); }
+  .avatar-photo-btn-remove { color: rgba(255,45,120,0.7); }
+  .avatar-photo-btn-remove:hover { color: var(--neon-pink); background: rgba(255,45,120,0.08); }
 
   /* Crew Totem Photo */
   .crew-totem-thumb {
@@ -7042,21 +7014,6 @@ async function doProfilePasswordChange() {
     document.getElementById('photo-confirm-overlay').classList.remove('open');
   }
 
-  function openAvatarMenu(raverId, event) {
-    event.stopPropagation();
-    const menu = document.getElementById('avatar-menu-' + raverId);
-    if (!menu) return;
-    const isOpen = menu.classList.contains('open');
-    closeAvatarMenu();
-    if (!isOpen) {
-      menu.classList.add('open');
-      setTimeout(() => document.addEventListener('click', closeAvatarMenu, { once: true }), 0);
-    }
-  }
-
-  function closeAvatarMenu() {
-    document.querySelectorAll('.avatar-menu.open').forEach(m => m.classList.remove('open'));
-  }
 
   async function removeProfilePhoto(raverId) {
     showPhotoConfirm({
@@ -10919,18 +10876,17 @@ async function doProfilePasswordChange() {
       ? `<img class="profile-avatar-photo" src="${r.avatarUrl}" alt="${r.name}">`
       : initials(r.name).toUpperCase();
     const avatarEl = showAvatarUpload
-      ? `<div class="avatar-and-menu">
-           <div class="profile-avatar profile-avatar-wrap" style="background:${avatarBg};${avatarOverflow}cursor:pointer;" onclick="openAvatarMenu('${r.id}',event)">
-             ${avatarContent}
-             <div class="avatar-edit-hint">📷</div>
+      ? `<div class="avatar-col">
+           <div class="profile-avatar-ring paused" style="margin-top:0;cursor:default;">
+             <div class="profile-avatar" style="background:${avatarBg};${avatarOverflow}">${avatarContent}</div>
            </div>
-           <input type="file" accept="image/*" id="avatar-file-${r.id}" style="display:none"
-                  data-raver-id="${r.id}" onchange="handleProfilePhotoUpload(event,this.dataset.raverId)">
-           <div class="avatar-menu" id="avatar-menu-${r.id}">
-             <button class="avatar-menu-item" onclick="event.stopPropagation();document.getElementById('avatar-file-${r.id}').click();closeAvatarMenu()">
-               ${r.avatarUrl ? '🔄 Change photo' : '📷 Upload photo'}
-             </button>
-             ${r.avatarUrl ? `<button class="avatar-menu-item avatar-menu-remove" onclick="event.stopPropagation();closeAvatarMenu();removeProfilePhoto('${r.id}')">🗑️ Remove photo</button>` : ''}
+           <div class="avatar-photo-btns">
+             <label class="avatar-photo-btn">
+               📷 ${r.avatarUrl ? 'Change photo' : 'Upload photo'}
+               <input type="file" accept="image/*" style="display:none"
+                      data-raver-id="${r.id}" onchange="handleProfilePhotoUpload(event,this.dataset.raverId)">
+             </label>
+             ${r.avatarUrl ? `<button class="avatar-photo-btn avatar-photo-btn-remove" data-raver-id="${r.id}" onclick="removeProfilePhoto(this.dataset.raverId)">🗑️ Remove photo</button>` : ''}
            </div>
          </div>`
       : `<div class="profile-avatar" style="background:${avatarBg};${avatarOverflow}">${avatarContent}</div>`;
