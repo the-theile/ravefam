@@ -588,6 +588,19 @@
     padding: 5px 13px !important;
     letter-spacing: 0.03em !important;
   }
+  .interested-toggle:hover { border-color: #00F5FF; color: #00F5FF; }
+  .interested-toggle-active {
+    border-color: #00F5FF !important;
+    color: #00F5FF !important;
+    background: rgba(0,245,255,0.09) !important;
+    font-size: 0.8rem !important;
+    padding: 5px 13px !important;
+    letter-spacing: 0.03em !important;
+  }
+  .interested-avatars { margin-top: 6px; opacity: 0.5; padding-top: 0; }
+  .interested-count-label { font-size: 0.68rem; color: #00F5FF; opacity: 0.7; margin-top: 2px; letter-spacing: 0.02em; }
+  .fest-toggle-row { display: inline-flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .fest-toggle-row .going-toggle { margin-top: 0; }
 
   .event-crew-going {
     display: flex;
@@ -6171,7 +6184,7 @@ async function doProfilePasswordChange() {
     // Exclude merged stubs — those were absorbed into the user's own profile.
     const { data: dbRavers, error: rErr } = await sb
       .from('ravers')
-      .select('*, raver_festivals(festival_id)')
+      .select('*, raver_festivals(festival_id), raver_festival_interest(festival_id)')
       .or(`created_by.eq.${uid},claimed_by.eq.${uid}`)
       .neq('status', 'merged');
     if (!rErr && dbRavers) {
@@ -6192,6 +6205,7 @@ async function doProfilePasswordChange() {
           genres: r.genres || [],
           favArtists: r.fav_artists || [],
           festIds: (r.raver_festivals || []).map(rf => rf.festival_id),
+          interestedFestIds: (r.raver_festival_interest || []).map(rf => rf.festival_id),
           instagram: r.instagram || '',
           radiate: r.radiate || '',
           phone: r.phone || '',
@@ -6267,7 +6281,7 @@ async function doProfilePasswordChange() {
     if (missingIds.length) {
       const { data: crewRavers } = await sb
         .from('ravers')
-        .select('*, raver_festivals(festival_id)')
+        .select('*, raver_festivals(festival_id), raver_festival_interest(festival_id)')
         .in('id', missingIds)
         .neq('status', 'merged');
       if (crewRavers) {
@@ -6286,6 +6300,7 @@ async function doProfilePasswordChange() {
             genres: r.genres || [],
             favArtists: r.fav_artists || [],
             festIds: (r.raver_festivals || []).map(rf => rf.festival_id),
+            interestedFestIds: (r.raver_festival_interest || []).map(rf => rf.festival_id),
             instagram: r.instagram || '',
             radiate: r.radiate || '',
             phone: r.phone_visible ? (r.phone || '') : '',
@@ -6745,6 +6760,15 @@ async function doProfilePasswordChange() {
       const rows = festIds.map(fid => ({ raver_id: raverId, festival_id: fid }));
       const { error } = await sb.from('raver_festivals').insert(rows);
       if (error) { console.error('raver_festivals insert error', error); showToast('⚠️ Could not save festival attendance'); }
+    }
+  }
+
+  async function dbSaveRaverFestivalInterest(raverId, interestedFestIds) {
+    await sb.from('raver_festival_interest').delete().eq('raver_id', raverId);
+    if (interestedFestIds.length) {
+      const rows = interestedFestIds.map(fid => ({ raver_id: raverId, festival_id: fid }));
+      const { error } = await sb.from('raver_festival_interest').insert(rows);
+      if (error) { console.error('raver_festival_interest insert error', error); showToast('⚠️ Could not save interest'); }
     }
   }
 
@@ -10008,11 +10032,13 @@ async function doProfilePasswordChange() {
         renderDetail(activeDetailId);
         showToast(`🗑️ ${firstName}'s profile deleted`);
         if (currentUser && !String(raverId).startsWith('temp_')) {
-          sb.from('raver_festivals').delete().eq('raver_id', raverId).then(() =>
-            sb.from('crew_members').delete().eq('raver_id', raverId).then(() =>
-              sb.from('ravers').delete().eq('id', raverId).then(({ error }) => {
-                if (error) showToast('⚠️ Could not fully delete — refresh and try again');
-              })
+          sb.from('raver_festival_interest').delete().eq('raver_id', raverId).then(() =>
+            sb.from('raver_festivals').delete().eq('raver_id', raverId).then(() =>
+              sb.from('crew_members').delete().eq('raver_id', raverId).then(() =>
+                sb.from('ravers').delete().eq('id', raverId).then(({ error }) => {
+                  if (error) showToast('⚠️ Could not fully delete — refresh and try again');
+                })
+              )
             )
           );
         }
@@ -10561,7 +10587,7 @@ async function doProfilePasswordChange() {
       base: 'Manchester, UK', gradient: 'linear-gradient(135deg,#FF2D78,#BF00FF)',
       genres: ['Techno','Industrial'],
       favArtists: ['Amelie Lens','I Hate Models','Charlotte de Witte'],
-      festIds: [1, 3, 4, 5],
+      festIds: [1, 3, 4, 5], interestedFestIds: [],
       crew: 'Bass Syndicate',
       instagram: '@jamied', phone: '+44 7700 900111',
       metStory: "This is you — the one keeping the tribe together.",
@@ -10574,7 +10600,7 @@ async function doProfilePasswordChange() {
       base: 'London, UK', gradient: 'linear-gradient(135deg,#BF00FF,#00F5FF)',
       genres: ['House','Disco'],
       favArtists: ['Peggy Gou','HAAi'],
-      festIds: [1, 6, 7],
+      festIds: [1, 6, 7], interestedFestIds: [],
       crew: 'Bass Syndicate',
       instagram: '@mayabeats', phone: '+44 7700 900222',
       metStory: "Met in the queue at Fabric in 2022 — bonded over a shared poncho in the rain.",
@@ -10587,7 +10613,7 @@ async function doProfilePasswordChange() {
       base: 'Bristol, UK', gradient: 'linear-gradient(135deg,#FF6B35,#FFE600)',
       genres: ['Drum & Bass'],
       favArtists: ['Sub Focus','Chase & Status'],
-      festIds: [1, 8],
+      festIds: [1, 8], interestedFestIds: [],
       crew: 'Bass Syndicate',
       instagram: '@alex_raves', phone: '+44 7700 900333',
       metStory: "Alex's brother knows Jamie from uni. Joined the tribe in 2023.",
@@ -10600,7 +10626,7 @@ async function doProfilePasswordChange() {
       base: 'Berlin, DE', gradient: 'linear-gradient(135deg,#00B4D8,#39FF14)',
       genres: ['Minimal','Techno'],
       favArtists: ['Ricardo Villalobos','Zip'],
-      festIds: [1, 2, 4, 9],
+      festIds: [1, 2, 4, 9], interestedFestIds: [],
       crew: 'Bass Syndicate',
       instagram: '@rosa_bass', phone: '+49 151 23456789',
       metStory: "Our Berlin local. Met at Panorama Bar at 6am — became the crew's hotel-booker.",
@@ -10613,7 +10639,7 @@ async function doProfilePasswordChange() {
       base: 'Berlin, DE', gradient: 'linear-gradient(135deg,#00F5FF,#39FF14)',
       genres: ['Industrial','Hard Techno'],
       favArtists: ['Perc','SPFDJ'],
-      festIds: [1, 10],
+      festIds: [1, 10], interestedFestIds: [],
       crew: 'Deep Waters',
       instagram: '@tk_berlin', phone: '+49 151 98765432',
       metStory: "Rosa's flatmate. Tagged along to Awakenings 2023 and never left.",
@@ -12199,6 +12225,10 @@ async function doProfilePasswordChange() {
     return squad.filter(p => (p.festIds || []).some(fid => String(fid) === String(festId)));
   }
 
+  function festivalInterestedGoers(festId) {
+    return squad.filter(p => (p.interestedFestIds || []).some(fid => String(fid) === String(festId)));
+  }
+
   // Active festival being edited (UUID-safe global, same pattern as activeDetailId)
   let activeFestId = null;
 
@@ -12226,6 +12256,8 @@ async function doProfilePasswordChange() {
       const metaLine = `📍 ${f.location || 'Location TBD'}` + (isUpcoming ? ` · ⏳ ${countdownLabel(f._d)}` : (f._d ? ` · ${f._d.getFullYear()}` : ''));
       const you = squad.find(r => r.isYou);
       const youGoing = you && (you.festIds || []).some(fid => String(fid) === String(f.id));
+      const youInterested = you && (you.interestedFestIds || []).some(fid => String(fid) === String(f.id));
+      const interestedPeople = festivalInterestedGoers(f.id);
 
       // Stacked avatar chips — each with an optional vibe bubble floating above
       let avatarChips;
@@ -12255,7 +12287,25 @@ async function doProfilePasswordChange() {
         avatarChips = '<span style="font-size:0.74rem;color:var(--muted);">Nobody from the tribe yet</span>';
       }
 
-      const toggleBtn = `<button class="going-toggle${youGoing ? ' going-toggle-active' : ''}" data-fest-id="${f.id}" onclick="event.stopPropagation(); toggleGoingToFest(this.dataset.festId)">${youGoing ? '🎟️ Going' : '＋ Going'}</button>`;
+      // Build interested avatar row (faded, no vibe bubbles)
+      let interestedChips = '';
+      if (interestedPeople.length) {
+        const shownI = interestedPeople.slice(0, 5);
+        interestedChips = shownI.map(w => {
+          const dn = displayName(w);
+          const bg = w.avatarUrl ? 'transparent;overflow:hidden;padding:0' : extractFirstColor(w.gradient);
+          const inner = w.avatarUrl
+            ? `<img src="${w.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${initials(dn)}">`
+            : initials(dn).toUpperCase();
+          return `<div class="avatar going-avatar" style="background:${bg};" data-raver-id="${w.id}" onclick="event.stopPropagation(); openProfile(this.dataset.raverId, false, 'members')" title="${dn}">${inner}</div>`;
+        }).join('');
+        if (interestedPeople.length > 5) interestedChips += `<div class="avatar avatar-count">+${interestedPeople.length - 5}</div>`;
+      }
+
+      const toggleBtns = `<div class="fest-toggle-row">
+        <button class="going-toggle${youGoing ? ' going-toggle-active' : ''}" data-fest-id="${f.id}" onclick="event.stopPropagation(); toggleGoingToFest(this.dataset.festId)">${youGoing ? '🎟️ Going' : '＋ Going'}</button>
+        <button class="going-toggle interested-toggle${youInterested ? ' interested-toggle-active' : ''}" data-fest-id="${f.id}" onclick="event.stopPropagation(); toggleInterestedInFest(this.dataset.festId)">👀 Interested</button>
+      </div>`;
 
       return `
         <div class="event-item event-item-clickable${youGoing ? ' event-item-going' : ''}" data-fest-id="${f.id}" onclick="activeFestId=this.dataset.festId; openRaveEditor(this.dataset.festId)" title="Tap to edit ${escHtml(f.name)}">
@@ -12268,8 +12318,9 @@ async function doProfilePasswordChange() {
             <div class="event-name">${f.name} <span class="fest-edit-hint">✏️</span></div>
             <div class="event-meta">${metaLine}</div>
             <div class="going-avatars">${avatarChips}</div>
+            ${interestedChips ? `<div class="going-avatars interested-avatars">${interestedChips}</div><div class="interested-count-label">👀 ${interestedPeople.length} interested</div>` : ''}
             ${(() => { const vr = buildVibeRowHTML(f.id); return vr ? `<div class="fest-vibe-row">${vr}</div>` : ''; })()}
-            ${toggleBtn}
+            ${toggleBtns}
           </div>
           <div class="event-crew-going">
             <div class="going-count" style="color:${color}">${goers.length}</div>
@@ -12412,6 +12463,8 @@ async function doProfilePasswordChange() {
       showToast('Removed from your raves');
     } else {
       const fest = festivals.find(f => String(f.id) === String(festId));
+      // Mutually exclusive: clear Interested if switching to Going
+      you.interestedFestIds = (you.interestedFestIds || []).filter(fid => String(fid) !== String(festId));
       you.festIds.push(fest ? fest.id : festId);
       showToast(`✅ You're going to ${fest?.name || 'that rave'}!`);
       addNotification(`🎪 You're locked in for ${fest?.name || 'that rave'}! Pack your kit, charge the glowsticks, and get ready for the frequencies.`);
@@ -12419,7 +12472,34 @@ async function doProfilePasswordChange() {
     renderEvents();
     renderSquad();
     renderCrews();
-    if (currentUser) dbSaveRaverFestivals(you.id, you.festIds);
+    if (currentUser) {
+      dbSaveRaverFestivals(you.id, you.festIds);
+      dbSaveRaverFestivalInterest(you.id, you.interestedFestIds || []);
+    }
+  }
+
+  function toggleInterestedInFest(festId) {
+    const you = squad.find(r => r.isYou);
+    if (!you) return;
+    if (!you.interestedFestIds) you.interestedFestIds = [];
+    const isInterested = you.interestedFestIds.some(fid => String(fid) === String(festId));
+    if (isInterested) {
+      you.interestedFestIds = you.interestedFestIds.filter(fid => String(fid) !== String(festId));
+      showToast('Removed from interested');
+    } else {
+      const fest = festivals.find(f => String(f.id) === String(festId));
+      // Mutually exclusive: clear Going if switching to Interested
+      you.festIds = (you.festIds || []).filter(fid => String(fid) !== String(festId));
+      you.interestedFestIds.push(fest ? fest.id : festId);
+      showToast(`👀 Watching ${fest?.name || 'that rave'}`);
+    }
+    renderEvents();
+    renderSquad();
+    renderCrews();
+    if (currentUser) {
+      dbSaveRaverFestivals(you.id, you.festIds || []);
+      dbSaveRaverFestivalInterest(you.id, you.interestedFestIds);
+    }
   }
 
   function closeRaveEditor() {
@@ -12917,7 +12997,7 @@ async function doProfilePasswordChange() {
     }
     squad.push({
       id: inserted.id, name, handle, isYou: true,
-      genres: Array.from(_obGenres), gradient, festIds: [],
+      genres: Array.from(_obGenres), gradient, festIds: [], interestedFestIds: [],
       base: '', crew: '', instagram: '', radiate: '', phone: '', metStory: '', notes: '',
       favArtists: [], vibeTags: [], customVibeTags: [], blockedTags: [],
       avatarUrl: null, createdBy: uid, claimedBy: uid, status: 'claimed', qrToken,
