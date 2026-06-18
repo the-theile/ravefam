@@ -9443,7 +9443,15 @@ async function doProfilePasswordChange() {
     const crew = getCrew(crewId);
     let current = 0;
 
-    if (badgeId === 'first_festival_together' || badgeId === 'ten_festivals_strong') {
+    if (badgeId === 'first_festival_together') {
+      const people = [...new Map(crewSquad(crew).map(p => [String(p.id), p])).values()];
+      if (people.length < 2) { current = 0; }
+      else {
+        const allFestSets = people.map(p => new Set((p.festIds || []).map(String)));
+        const firstSet = allFestSets[0];
+        current = [...firstSet].filter(fid => allFestSets.every(s => s.has(fid))).length;
+      }
+    } else if (badgeId === 'ten_festivals_strong') {
       const people = [...new Map(crewSquad(crew).map(p => [String(p.id), p])).values()];
       const festCounts = {};
       people.forEach(p => {
