@@ -9292,23 +9292,27 @@ async function doProfilePasswordChange() {
     if (!_addJamCrewId || !_addJamMeta) return;
     const title = document.getElementById('jam-title-input')?.value?.trim();
     if (!title) { showToast('✏️ Give the playlist a name'); return; }
-    const tag        = document.getElementById('jam-tag-select')?.value || null;
+    const tag         = document.getElementById('jam-tag-select')?.value || null;
     const description = document.getElementById('jam-desc-input')?.value?.trim() || null;
-    const festivalId = document.getElementById('jam-fest-select')?.value || null;
+    const festivalId  = document.getElementById('jam-fest-select')?.value || null;
+
+    // Capture before closeAddJamModal() nulls them
+    const crewId = _addJamCrewId;
+    const meta   = _addJamMeta;
 
     closeAddJamModal();
 
-    const jam = await dbAddJam(_addJamCrewId, {
-      url: _addJamMeta.url,
-      platform: _addJamMeta.platform,
+    const jam = await dbAddJam(crewId, {
+      url: meta.url,
+      platform: meta.platform,
       title,
-      coverUrl: _addJamMeta.cover_url || null,
-      trackCount: _addJamMeta.track_count || null,
+      coverUrl: meta.cover_url || null,
+      trackCount: meta.track_count || null,
       tag,
       description,
       festivalId
     });
-    if (jam) rerenderJams(_addJamCrewId);
+    if (jam) rerenderJams(crewId);
   }
 
   function closeAddJamModal() {
