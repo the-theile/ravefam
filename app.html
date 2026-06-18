@@ -2164,6 +2164,39 @@
   }
   .notif-empty-icon { font-size: 2rem; margin-bottom: 10px; }
 
+  /* ===== SHARED EMPTY STATE BLOCK ===== */
+  .es-block {
+    padding: 40px 20px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .es-icon {
+    font-size: 2.6rem;
+    margin-bottom: 6px;
+    filter: drop-shadow(0 0 12px rgba(255,45,120,0.45));
+    animation: esFloat 3.5s ease-in-out infinite;
+  }
+  .es-headline {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 800;
+    font-size: 1rem;
+    color: #fff;
+    letter-spacing: -0.01em;
+  }
+  .es-sub {
+    font-size: 0.82rem;
+    color: var(--muted);
+    line-height: 1.6;
+    max-width: 240px;
+  }
+  @keyframes esFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+  }
+
   /* ===== CREW STATUS ZONE (bottom of detail modal) ===== */
   .crew-status-zone {
     margin-top: 20px;
@@ -4694,9 +4727,10 @@
       </div>
     </div>
     <div class="notif-list" id="notif-list">
-      <div class="notif-empty">
-        <div class="notif-empty-icon">🔔</div>
-        No notifications yet — crew activity will show up here.
+      <div class="notif-empty es-block">
+        <div class="es-icon">🔔</div>
+        <div class="es-headline">All quiet on the dancefloor</div>
+        <div class="es-sub">Crew moves, RSVPs, and drops will light this up when things get going.</div>
       </div>
     </div>
     <div class="notif-drawer-footer">
@@ -7777,9 +7811,11 @@ async function doProfilePasswordChange() {
         emptyMsg.id = 'crews-empty-state';
         emptyMsg.style.cssText = 'grid-column:1/-1;text-align:center;padding:40px 24px 20px;';
         emptyMsg.innerHTML = `
-          <div style="font-size:2.5rem;margin-bottom:12px;">👑</div>
-          <div style="font-family:'Outfit',sans-serif;font-weight:800;font-size:1.1rem;color:#fff;margin-bottom:8px;">You haven't built your first crew yet</div>
-          <div style="font-size:0.85rem;color:var(--muted);line-height:1.6;max-width:260px;margin:0 auto;">Let's change that — tap below to create your crew and start collecting your ravers.</div>
+          <div class="es-block" style="padding:40px 24px 20px">
+            <div class="es-icon">👑</div>
+            <div class="es-headline">You're crewless — and that's a crime</div>
+            <div class="es-sub">Build your first crew and start rounding up your ravers.</div>
+          </div>
         `;
         grid.insertBefore(emptyMsg, addCard);
       }
@@ -8017,7 +8053,7 @@ async function doProfilePasswordChange() {
               ${right}
             </div>`;
         }).join('')
-      : '<div class="fest-empty">No linked tribe members yet</div>';
+      : '<div class="fest-empty">No tribe linked yet</div>';
 
     // Lead controls vs read-only — split into addMemberControl and statusControl
     let addMemberControl = '';
@@ -8262,7 +8298,7 @@ async function doProfilePasswordChange() {
     }).join('');
 
     const emptyState = dreamPins.length === 0
-      ? `<div class="dream-empty">No pins yet — be the first to dream big 🌟</div>`
+      ? `<div class="dream-empty es-block"><div class="es-icon">✨</div><div class="es-headline">The board is wide open</div><div class="es-sub">Pin the fests you're manifesting and get the crew hyped.</div></div>`
       : '';
 
     return `
@@ -8394,7 +8430,7 @@ async function doProfilePasswordChange() {
     }).join('');
 
     const emptyState = archiveLinks.length === 0
-      ? `<div class="archive-empty">No drops yet — be the first to archive the memories 📸</div>`
+      ? `<div class="archive-empty es-block"><div class="es-icon">📸</div><div class="es-headline">No memories dropped yet</div><div class="es-sub">Be the first to archive the chaos. Link your album and let the crew relive it.</div></div>`
       : '';
 
     return `
@@ -8563,7 +8599,7 @@ async function doProfilePasswordChange() {
 
     const cards = crewPolls.map(poll => renderPollCard(poll, accentColor, uid)).join('');
     const emptyState = crewPolls.length === 0
-      ? `<div class="poll-empty">No polls yet — drop one and let the crew decide 🗳️</div>`
+      ? `<div class="poll-empty es-block"><div class="es-icon">🗳️</div><div class="es-headline">No vibes put to a vote yet</div><div class="es-sub">Drop a poll and let the crew steer the ship.</div></div>`
       : '';
 
     return `
@@ -9188,9 +9224,9 @@ async function doProfilePasswordChange() {
 
     const cards = visible.map(jam => renderJamCard(jam, uid, isLead, crewId)).join('');
     const emptyMsg = crewJams.length === 0
-      ? `<div class="jam-empty">No FAM Jams yet — drop the first playlist 🎵</div>`
+      ? `<div class="jam-empty es-block"><div class="es-icon">🎧</div><div class="es-headline">Dead air detected</div><div class="es-sub">Someone drop the first playlist — for the love of the music gods.</div></div>`
       : visible.length === 0
-      ? `<div class="jam-empty">No playlists match these filters</div>`
+      ? `<div class="jam-empty" style="text-align:center;padding:20px 0;color:var(--muted);font-size:0.82rem;">No playlists match these filters</div>`
       : '';
 
     return `
@@ -10796,7 +10832,7 @@ async function doProfilePasswordChange() {
             <span>${escHtml(f.name)}<span class="fest-loc">📍 ${escHtml(f.location || 'TBD')}</span></span>
             <span class="fest-when">${festWhenLabel(f)} <span class="fest-cd">⏳ ${countdownLabel(f._d)}</span></span>
           </div>`).join('')
-      : '<div class="fest-empty">Nothing logged yet</div>';
+      : '<div class="fest-empty">No raves lined up yet</div>';
 
     // Past: most recent first, year shown
     const pastFests = raverPast(r);
@@ -10806,7 +10842,7 @@ async function doProfilePasswordChange() {
             <span>${escHtml(f.name)}<span class="fest-loc">📍 ${escHtml(f.location || 'TBD')}</span></span>
             <span class="fest-when">${f._d.getFullYear()}</span>
           </div>`).join('')
-      : '<div class="fest-empty">Nothing logged yet</div>';
+      : '<div class="fest-empty">No raves in your history yet</div>';
 
     // Personal next-rave countdown banner
     let nextBanner = '';
@@ -10844,10 +10880,10 @@ async function doProfilePasswordChange() {
         onkeydown="if(event.key==='Enter'&&this.value.trim()){addTag('${r.id}','${field}',this.value);this.value='';}" style="margin-top:4px;">`;
     const genreChips = r.genres.length
       ? r.genres.map(g => tagChip(g, 'genres')).join('')
-      : '<span class="fest-empty" style="font-size:0.8rem;">None logged yet</span>';
+      : '<span class="fest-empty" style="font-size:0.8rem;">No genres tracked yet — what moves you?</span>';
     const favChips = r.favArtists.length
       ? r.favArtists.map(a => tagChip(a, 'favArtists')).join('')
-      : '<span class="fest-empty" style="font-size:0.8rem;">None logged yet</span>';
+      : '<span class="fest-empty" style="font-size:0.8rem;">No artists pinned yet — who are you dying to see?</span>';
 
     // Connect buttons — show instagram if public; show phone if owned or phone_visible
     const connectBtns = [];
@@ -11075,7 +11111,7 @@ async function doProfilePasswordChange() {
                     ${(r.isYou || perms.editFests) ? `<button class="tag-remove-btn" title="Remove" onclick="removeBeenTo('${r.id}','${f.id}')" style="flex-shrink:0;">&nbsp;✕</button>` : ''}
                   </span>
                 </div>`).join('')
-            : '<div class="fest-empty">Nothing logged yet</div>'}
+            : '<div class="fest-empty">No raves lined up yet</div>'}
           ${(r.isYou || perms.editFests) ? `<div id="inline-fp-${r.id}" style="margin-top:8px;"></div>` : ''}
         </div>
 
@@ -11090,7 +11126,7 @@ async function doProfilePasswordChange() {
                     ${(r.isYou || perms.editFests) ? `<button class="tag-remove-btn" title="Remove" onclick="removeBeenTo('${r.id}','${f.id}')" style="flex-shrink:0;">&nbsp;✕</button>` : ''}
                   </span>
                 </div>`).join('')
-            : '<div class="fest-empty">Nothing logged yet</div>'}
+            : '<div class="fest-empty">No raves in your history yet</div>'}
         </div>
 
         <div class="profile-section" style="${sg(2)}">
@@ -11100,7 +11136,7 @@ async function doProfilePasswordChange() {
             const customVibes = (r.customVibeTags||[]).map(v => vibeTagHTML(v, true, false, null)).join('');
             return (presetVibes || customVibes)
               ? `<div class="profile-vibes">${presetVibes}${customVibes}</div>`
-              : `<div class="fest-empty">No vibe tags yet${r.isYou || perms.isLeaderOfRaver ? ' — edit profile to add some' : ''}</div>`;
+              : `<div class="fest-empty">No vibes tagged yet${r.isYou || perms.isLeaderOfRaver ? ' — what\'s your flavor? Edit profile to add some' : ' — what\'s their flavor?'}</div>`;
           })()}
         </div>
 
@@ -11118,7 +11154,7 @@ async function doProfilePasswordChange() {
           <h3>🎪 Crews</h3>
           ${(() => {
             const raverCrews = crews.filter(c => (c.squadIds || []).some(sid => String(sid) === String(r.id)));
-            if (!raverCrews.length) return '<div class="fest-empty">Not in any crews yet</div>';
+            if (!raverCrews.length) return '<div class="fest-empty">Still flying solo — no crews yet</div>';
             return raverCrews.map(c => {
               const isLead = c.isLead && String(c.leader_id) === String(r.id);
               const statusLabel = { 'recruiting': '🟢 Recruiting', 'locked-in': '🔒 Locked In', 'secret': '🤫 Secret' }[c.status] || c.status;
@@ -11218,7 +11254,7 @@ async function doProfilePasswordChange() {
 
         <div class="profile-section" style="${sg(1)}">
           <h3>📝 Notes</h3>
-          ${r.isYou ? `<div class="profile-note">${r.notes ? escHtml(r.notes) : '<span class="fest-empty">No notes yet</span>'}</div>` : (() => {
+          ${r.isYou ? `<div class="profile-note">${r.notes ? escHtml(r.notes) : '<span class="fest-empty">No notes yet — a secret only you can read</span>'}</div>` : (() => {
             const savedNotes = escHtml(viewerNotesCache[String(r.id)] || '');
             return `<p style="font-size:0.72rem;color:var(--muted);margin-bottom:8px;line-height:1.4;">Private — only you can see this.</p>
               <textarea id="viewer-notes-${r.id}" class="inline-notes-area"
@@ -11552,7 +11588,7 @@ async function doProfilePasswordChange() {
           const col = (d && d >= TODAY) ? '#39FF14' : '#00F5FF';
           return `<span class="fest-sel-chip" style="--chip-col:${col};">${escHtml(f.name)}<button class="tag-remove-btn" onclick="festRemoveSel('${f.id}')">✕</button></span>`;
         }).join('')
-      : `<span class="fest-empty" style="font-size:0.78rem;">No raves added yet — tap below to add</span>`;
+      : `<span class="fest-empty" style="font-size:0.78rem;">No raves in your history yet — let's fix that</span>`;
 
     // Upcoming quick-tap chips (next 10)
     const upcoming = festivals
@@ -11592,7 +11628,7 @@ async function doProfilePasswordChange() {
           const col = (d && d >= TODAY) ? '#39FF14' : '#00F5FF';
           return `<span class="fest-sel-chip" style="--chip-col:${col};">${escHtml(f.name)}<button class="tag-remove-btn" onclick="festRemoveSel('${f.id}')">✕</button></span>`;
         }).join('')
-      : `<span class="fest-empty" style="font-size:0.78rem;">No raves added yet — tap below to add</span>`;
+      : `<span class="fest-empty" style="font-size:0.78rem;">No raves in your history yet — let's fix that</span>`;
   }
 
   function festToggleQuick(id, el) {
@@ -12356,7 +12392,7 @@ async function doProfilePasswordChange() {
     if (past.length) html += `<div class="fest-group-label" style="margin:22px 0 10px;">📼 Past</div>` + past.map(card).join('');
     if (!up.length && !past.length) html = query
       ? `<div class="fest-empty" style="padding:20px;text-align:center;color:var(--muted);">No raves found for "${escHtml(query)}"</div>`
-      : '<div class="fest-empty" style="padding:20px;text-align:center;">No raves yet — add a festival, club night, or that warehouse party on Saturday.</div>';
+      : `<div class="fest-empty es-block" style="padding:32px 20px"><div class="es-icon">🎟️</div><div class="es-headline">Your calendar is looking too clean</div><div class="es-sub">Add a festival, club night, or that warehouse party on Saturday.</div></div>`;
     list.innerHTML = html;
   }
 
@@ -13129,7 +13165,7 @@ async function doProfilePasswordChange() {
     const el = document.getElementById('notif-list');
     if (!el) return;
     if (!list.length) {
-      el.innerHTML = `<div class="notif-empty"><div class="notif-empty-icon">\ud83d\udd14</div>No notifications yet \u2014 crew activity will show up here.</div>`;
+      el.innerHTML = `<div class="notif-empty es-block"><div class="es-icon">\ud83d\udd14</div><div class="es-headline">All quiet on the dancefloor</div><div class="es-sub">Crew moves, RSVPs, and drops will light this up when things get going.</div></div>`;
       return;
     }
     el.innerHTML = list.map(n => `
