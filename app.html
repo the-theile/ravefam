@@ -13852,6 +13852,19 @@ async function doProfilePasswordChange() {
   }
 
   let _statsSelectedCrewId = null;
+  let _wrappedEggClicks = 0;
+  let _wrappedEggTimer = null;
+
+  function handleWrappedEgg() {
+    _wrappedEggClicks++;
+    clearTimeout(_wrappedEggTimer);
+    if (_wrappedEggClicks >= 3) {
+      _wrappedEggClicks = 0;
+      openWrapped();
+    } else {
+      _wrappedEggTimer = setTimeout(() => { _wrappedEggClicks = 0; }, 600);
+    }
+  }
 
   function switchStatTab(tab, el) {
     document.querySelectorAll('.stats-subtab').forEach(t => t.classList.remove('active'));
@@ -13928,17 +13941,20 @@ async function doProfilePasswordChange() {
       </div>
     </div>`;
 
-    // Rave Wrapped button (5+ raves) or unlock gate
-    if (totalRaves >= 5) {
+    // Rave Wrapped — locked until Dec 15, secret triple-tap on ✨ to bypass
+    const isWrappedSeason = now.getMonth() === 11 && now.getDate() >= 15;
+    if (isWrappedSeason && totalRaves >= 5) {
       html += `<button class="stats-wrapped-btn" onclick="openWrapped()">✨ See My Rave Wrapped ${thisYear}</button>`;
     } else {
-      const needed = 5 - totalRaves;
-      const pct = Math.round((totalRaves / 5) * 100);
+      const lockedSub = !isWrappedSeason
+        ? `Returns on 15 December — something good is coming`
+        : `Log ${5 - totalRaves} more rave${5 - totalRaves !== 1 ? 's' : ''} to unlock your year-in-review card`;
+      const pct = !isWrappedSeason ? 0 : Math.round((totalRaves / 5) * 100);
       html += `<div class="stats-locked">
-        <div class="stats-locked-icon">✨</div>
+        <div class="stats-locked-icon" onclick="handleWrappedEgg()" style="cursor:pointer;user-select:none;">✨</div>
         <div class="stats-locked-title">Rave Wrapped ${thisYear}</div>
-        <div class="stats-locked-sub">Log ${needed} more rave${needed !== 1 ? 's' : ''} to unlock your year-in-review card</div>
-        <div class="stats-progress-bar"><div class="stats-progress-fill" style="width:${pct}%"></div></div>
+        <div class="stats-locked-sub">${lockedSub}</div>
+        ${isWrappedSeason ? `<div class="stats-progress-bar"><div class="stats-progress-fill" style="width:${pct}%"></div></div>` : ''}
       </div>`;
     }
 
