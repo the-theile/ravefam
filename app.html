@@ -12904,10 +12904,11 @@ async function doProfilePasswordChange() {
         return `<div class="avatar going-avatar${isLast ? ' row-end' : ''}" style="background:${bg};" data-raver-id="${w.id}" onclick="event.stopPropagation(); openProfile(this.dataset.raverId, false, 'members')" title="${dn}">${inner}${bubbleHtml}${badgeHtml}</div>`;
       }).join('');
 
+      const goingLabel = isUpcoming ? 'Going' : 'Sent It';
       const goingSection = goers.length
         ? `<div class="attendee-section">
-            <div class="attendee-section-label going">Going</div>
-            <div class="going-avatars">${buildAvatarRow(goers, true)}<span class="going-count-inline ${youGoing ? 'green' : 'muted'}">${goers.length} going</span></div>
+            <div class="attendee-section-label going">${goingLabel}</div>
+            <div class="going-avatars">${buildAvatarRow(goers, true)}<span class="going-count-inline ${youGoing ? 'green' : 'muted'}">${goers.length} ${isUpcoming ? 'going' : 'sent it'}</span></div>
            </div>`
         : `<div class="attendee-section"><span style="font-size:0.74rem;color:var(--muted)">Nobody from the tribe yet</span></div>`;
 
@@ -12940,7 +12941,7 @@ async function doProfilePasswordChange() {
           ${vibeSection}
           <div class="event-action-bar">
             <button class="event-action-btn vibe-action" onclick="event.stopPropagation(); openVibePicker('${f.id}')">✦ Vibe</button>
-            <button class="event-action-btn going-action${youGoing ? ' active' : ''}" onclick="event.stopPropagation(); toggleGoingToFest('${f.id}')">${youGoing ? '🎟️ Going' : '＋ Going'}</button>
+            <button class="event-action-btn going-action${youGoing ? ' active' : ''}" onclick="event.stopPropagation(); toggleGoingToFest('${f.id}')">${isUpcoming ? (youGoing ? '🎟️ Going' : '＋ Going') : (youGoing ? '🎟️ Sent It' : '＋ Sent It')}</button>
             <button class="event-action-btn interested-action${youInterested ? ' active' : ''}" onclick="event.stopPropagation(); toggleInterestedInFest('${f.id}')">👀 Interested</button>
           </div>
         </div>`;
@@ -13102,11 +13103,12 @@ async function doProfilePasswordChange() {
       showToast('Removed from your raves');
     } else {
       const fest = festivals.find(f => String(f.id) === String(festId));
+      const isPast = fest && festDate(fest) < TODAY;
       // Mutually exclusive: clear Interested if switching to Going
       you.interestedFestIds = (you.interestedFestIds || []).filter(fid => String(fid) !== String(festId));
       you.festIds.push(fest ? fest.id : festId);
-      showToast(`✅ You're going to ${fest?.name || 'that rave'}!`);
-      addNotification(`🎪 You're locked in for ${fest?.name || 'that rave'}! Pack your kit, charge the glowsticks, and get ready for the frequencies.`);
+      showToast(isPast ? `🎟️ Sent it at ${fest?.name || 'that rave'}!` : `✅ You're going to ${fest?.name || 'that rave'}!`);
+      addNotification(isPast ? `🎟️ Logged! You sent it at ${fest?.name || 'that rave'}.` : `🎪 You're locked in for ${fest?.name || 'that rave'}! Pack your kit, charge the glowsticks, and get ready for the frequencies.`);
     }
     renderEvents();
     renderSquad();
