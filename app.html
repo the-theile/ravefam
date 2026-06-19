@@ -11158,8 +11158,10 @@ async function doProfilePasswordChange() {
 
   function getFestival(id) { return festivals.find(f => f.id === id); }
   // Find an existing festival by name (case-insensitive), for de-duping
-  function findFestivalByName(name) {
+  function findFestivalByName(name, date) {
     const n = (name||'').trim().toLowerCase();
+    const d = (date||'').trim();
+    if (d) return festivals.find(f => f.name.toLowerCase() === n && (f.date||'') === d);
     return festivals.find(f => f.name.toLowerCase() === n);
   }
 
@@ -12296,7 +12298,7 @@ async function doProfilePasswordChange() {
       const d = new Date(TODAY); d.setDate(d.getDate() + (nfIsGoing ? 1 : -1));
       date = d.toISOString().slice(0, 10);
     }
-    let fest = findFestivalByName(name);
+    let fest = findFestivalByName(name, date);
     if (fest) {
       showToast(`"${fest.name}" already exists — added ✓`);
     } else {
@@ -12360,7 +12362,7 @@ async function doProfilePasswordChange() {
     const date = document.getElementById('nrp-date')?.value || '';
     const location = (document.getElementById('nrp-loc')?.value || '').trim();
     if (!name) { showToast('Rave needs a name ✍️'); return; }
-    let fest = findFestivalByName(name);
+    let fest = findFestivalByName(name, date);
     if (!fest) {
       let festId;
       if (currentUser) {
@@ -12520,7 +12522,7 @@ async function doProfilePasswordChange() {
       const d = new Date(TODAY); d.setDate(d.getDate() + (isGoing ? 1 : -1));
       date = d.toISOString().slice(0, 10);
     }
-    let fest = findFestivalByName(name);
+    let fest = findFestivalByName(name, date);
     if (fest) {
       showToast(`"${fest.name}" already exists — added ✓`);
     } else {
@@ -13230,7 +13232,7 @@ async function doProfilePasswordChange() {
       showToast(`✅ Updated ${name}`);
       if (currentUser) dbSaveFestival({ name, date, location, color, days }, editingFestivalId);
     } else {
-      const dupe = findFestivalByName(name);
+      const dupe = findFestivalByName(name, date);
       if (dupe) { showToast(`"${dupe.name}" already exists`); return; }
       const tempId = 'temp_' + Date.now();
       const newFest = { id: tempId, name, date, location, color, days };
