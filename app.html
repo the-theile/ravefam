@@ -13607,7 +13607,11 @@ async function doProfilePasswordChange() {
     if (input)  input.className = 'ob-inline-field';
     clearTimeout(_obHandleDebounce);
     _obHandleDebounce = setTimeout(async () => {
-      const { data } = await sb.from('ravers').select('id').ilike('handle', handle).maybeSingle();
+      const _obExisting = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
+      const { data } = await sb.from('ravers').select('id')
+        .ilike('handle', handle)
+        .neq('id', _obExisting?.id || '00000000-0000-0000-0000-000000000000')
+        .maybeSingle();
       if (data) {
         if (status) { status.textContent = `@${handle} is taken 😔`; status.className = 'ob-handle-status ob-err'; }
         if (input)  input.className = 'ob-inline-field ob-invalid';
@@ -13634,29 +13638,52 @@ async function doProfilePasswordChange() {
     const { ok, handle } = validateHandleFormat(raw);
     if (!name || !ok || !_obHandleValid) return;
     if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
-    const uid      = currentUser.id;
-    const gradient = 'linear-gradient(135deg,#FF2D78,#BF00FF)';
-    const qrToken  = crypto?.randomUUID?.() || (Math.random().toString(36).slice(2) + Date.now().toString(36));
-    const { data: inserted, error } = await sb.from('ravers').insert({
-      name, handle, genres: Array.from(_obGenres),
-      is_you: true, claimed_by: uid, created_by: uid, status: 'claimed',
-      gradient, qr_token: qrToken,
-      base: '', crew_name: '', instagram: '', radiate: '', phone: '', met_story: '', notes: '',
-      fav_artists: [], vibe_tags: [], custom_vibe_tags: [], blocked_tags: [],
-      updated_at: new Date().toISOString(),
-    }).select().single();
+    const uid = currentUser.id;
+
+    // If the user already has a raver record (e.g. from claiming a crew spot before
+    // completing onboarding), update it rather than inserting a duplicate.
+    const existingRaver = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
+    let savedId, error;
+    if (existingRaver) {
+      const { error: err } = await sb.from('ravers')
+        .update({ name, handle, genres: Array.from(_obGenres), updated_at: new Date().toISOString() })
+        .eq('id', existingRaver.id);
+      error = err;
+      if (!error) {
+        const idx = squad.findIndex(r => r.id === existingRaver.id);
+        if (idx !== -1) Object.assign(squad[idx], { name, handle, genres: Array.from(_obGenres) });
+        savedId = existingRaver.id;
+      }
+    } else {
+      const gradient = 'linear-gradient(135deg,#FF2D78,#BF00FF)';
+      const qrToken  = crypto?.randomUUID?.() || (Math.random().toString(36).slice(2) + Date.now().toString(36));
+      const { data: inserted, error: err } = await sb.from('ravers').insert({
+        name, handle, genres: Array.from(_obGenres),
+        is_you: true, claimed_by: uid, created_by: uid, status: 'claimed',
+        gradient, qr_token: qrToken,
+        base: '', instagram: '', radiate: '', phone: '', met_story: '', notes: '',
+        fav_artists: [], vibe_tags: [], custom_vibe_tags: [], blocked_tags: [],
+        updated_at: new Date().toISOString(),
+      }).select().single();
+      error = err;
+      if (!error && inserted) {
+        savedId = inserted.id;
+        squad.push({
+          id: inserted.id, name, handle, isYou: true,
+          genres: Array.from(_obGenres), gradient, festIds: [], interestedFestIds: [],
+          base: '', crew: '', instagram: '', radiate: '', phone: '', metStory: '', notes: '',
+          favArtists: [], vibeTags: [], customVibeTags: [], blockedTags: [],
+          avatarUrl: null, createdBy: uid, claimedBy: uid, status: 'claimed', qrToken,
+        });
+      }
+    }
+
     if (error) {
+      console.error('obStep2Next save error', error);
       showToast('⚠️ Could not save — try again');
       if (btn) { btn.disabled = false; btn.textContent = "I'm Ready →"; }
       return;
     }
-    squad.push({
-      id: inserted.id, name, handle, isYou: true,
-      genres: Array.from(_obGenres), gradient, festIds: [], interestedFestIds: [],
-      base: '', crew: '', instagram: '', radiate: '', phone: '', metStory: '', notes: '',
-      favArtists: [], vibeTags: [], customVibeTags: [], blockedTags: [],
-      avatarUrl: null, createdBy: uid, claimedBy: uid, status: 'claimed', qrToken,
-    });
     addNotification("✨ Profile locked in! You're now on the grid — scan QR codes, join crews, and let the fam find you in the wild.");
     showToast('✅ Identity confirmed. The fam will find you. 🎤');
     obGoToStep(3);
