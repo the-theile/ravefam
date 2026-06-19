@@ -12115,11 +12115,15 @@ async function doProfilePasswordChange() {
     editingCustomVibeTags = [...(r?.customVibeTags || [])];
     editingGenres         = new Set((r?.genres || []).filter(g => _allPresets.includes(g.toLowerCase())));
     editingCustomGenres   = (r?.genres || []).filter(g => !_allPresets.includes(g.toLowerCase()));
+    const _fab = document.getElementById('qr-fab');
+    if (_fab) _fab.style.display = 'none';
     openProfile(id, true);
   }
 
   function cancelProfileEdit(id) {
     editingId = null;
+    const _fab = document.getElementById('qr-fab');
+    if (_fab) _fab.style.display = '';
     openProfile(id);
   }
 
@@ -12210,6 +12214,7 @@ async function doProfilePasswordChange() {
   ];
 
   function saveProfile() {
+    console.log('[saveProfile] called, editingId=', editingId);
     const name = val('pf-name');
     if (!name) { showToast('Give them a name first ✍️'); return; }
     const rawHandle = (val('pf-handle') || '').trim().toLowerCase().replace(/^@/, '');
@@ -12246,15 +12251,22 @@ async function doProfilePasswordChange() {
     }
 
     if (editingId) {
-      const r = getRaver(editingId);
-      if (!r) { showToast('⚠️ Profile not found — try again'); return; }
-      Object.assign(r, data);
-      closeProfileEditor();
-      renderSquad(); renderCrews(); renderEvents();
-      openProfile(r.id);
-      showToast(`✅ Updated ${r.name}`);
-      if (currentUser) {
-        dbSaveRaver(data, r.id).then(() => dbSaveRaverFestivals(r.id, data.festIds)).catch(console.warn);
+      try {
+        const r = getRaver(editingId);
+        if (!r) { showToast('⚠️ Profile not found — try again'); return; }
+        Object.assign(r, data);
+        closeProfileEditor();
+        const _fab = document.getElementById('qr-fab');
+        if (_fab) _fab.style.display = '';
+        renderSquad(); renderCrews(); renderEvents();
+        openProfile(r.id);
+        showToast(`✅ Updated ${r.name}`);
+        if (currentUser) {
+          dbSaveRaver(data, r.id).then(() => dbSaveRaverFestivals(r.id, data.festIds)).catch(console.warn);
+        }
+      } catch(err) {
+        console.error('[saveProfile]', err);
+        showToast('⚠️ Save error: ' + (err.message || 'unknown'));
       }
     } else {
       const newId = 'temp_' + Date.now();
