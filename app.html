@@ -5243,13 +5243,13 @@
     const email = document.getElementById('login-email').value.trim();
     if (!email) { authError('Enter your email address above, then click Send me a magic link.'); return; }
     const btn = document.getElementById('magic-link-btn');
-    btn.disabled = true;
+    if (btn) btn.disabled = true;
     clearAuthMessages();
     const { error } = await sb.auth.signInWithOtp({
       email,
       options: { emailRedirectTo: window.location.origin + window.location.pathname }
     });
-    btn.disabled = false;
+    if (btn) btn.disabled = false;
     if (error) { authError(error.message); return; }
     authSuccess('Magic link sent! Check your inbox — the link logs you straight in.');
   }
@@ -5357,6 +5357,8 @@ async function doProfilePasswordChange() {
 
   function showAuthScreen() {
     currentUser = null;
+    if (_realtimeChannel) { _realtimeChannel.unsubscribe(); _realtimeChannel = null; }
+    clearTimeout(_reloadDebounce);
     squad.length = 0; crews.length = 0; festivals.length = 0; dreamPins = []; archiveLinks = [];
     document.getElementById('app-loading').classList.add('hidden');
     document.getElementById('auth-screen').classList.remove('hidden');
@@ -6207,8 +6209,10 @@ async function doProfilePasswordChange() {
   }
 
   let _reloadDebounce = null;
+  let _realtimeChannel = null;
   function setupRealtimeSync() {
     if (!currentUser) return;
+    if (_realtimeChannel) { _realtimeChannel.unsubscribe(); _realtimeChannel = null; }
     const scheduleReload = () => {
       clearTimeout(_reloadDebounce);
       _reloadDebounce = setTimeout(async () => {
@@ -6220,7 +6224,7 @@ async function doProfilePasswordChange() {
         } catch(e) { /* silent — UI already shows error state if render fails */ }
       }, 800);
     };
-    sb.channel('app-live')
+    _realtimeChannel = sb.channel('app-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'crew_members' }, scheduleReload)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'crews' }, scheduleReload)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'raver_festivals' }, scheduleReload)
@@ -10109,11 +10113,11 @@ async function doProfilePasswordChange() {
   function saveEditUnclaimed() {
     const r = getRaver(_editUnclaimedRaverId);
     if (!r) return;
-    const name = document.getElementById('edit-unclaimed-name').value.trim();
+    const name = document.getElementById('edit-unclaimed-name')?.value.trim();
     if (!name) { showToast('⚠️ Name can\'t be empty'); return; }
     r.name = name;
-    r.handle = document.getElementById('edit-unclaimed-handle').value.trim();
-    r.notes = document.getElementById('edit-unclaimed-note').value.trim();
+    r.handle = document.getElementById('edit-unclaimed-handle')?.value.trim() || '';
+    r.notes = document.getElementById('edit-unclaimed-note')?.value.trim() || '';
     closeEditUnclaimedModal();
     renderCrews();
     renderDetail(activeDetailId);
@@ -10147,15 +10151,18 @@ async function doProfilePasswordChange() {
         renderDetail(activeDetailId);
         showToast(`🗑️ ${firstName}'s profile deleted`);
         if (currentUser && !String(raverId).startsWith('temp_')) {
-          sb.from('raver_festival_interest').delete().eq('raver_id', raverId).then(() =>
-            sb.from('raver_festivals').delete().eq('raver_id', raverId).then(() =>
-              sb.from('crew_members').delete().eq('raver_id', raverId).then(() =>
-                sb.from('ravers').delete().eq('id', raverId).then(({ error }) => {
-                  if (error) showToast('⚠️ Could not fully delete — refresh and try again');
-                })
-              )
-            )
-          );
+          (async () => {
+            try {
+              await sb.from('raver_festival_interest').delete().eq('raver_id', raverId);
+              await sb.from('raver_festivals').delete().eq('raver_id', raverId);
+              await sb.from('crew_members').delete().eq('raver_id', raverId);
+              const { error } = await sb.from('ravers').delete().eq('id', raverId);
+              if (error) showToast('⚠️ Could not fully delete — refresh and try again');
+            } catch(err) {
+              console.error('Delete cascade error:', err);
+              showToast('⚠️ Deletion failed — please refresh and try again');
+            }
+          })();
         }
       }
     );
@@ -10215,8 +10222,8 @@ async function doProfilePasswordChange() {
   ];
 
   function createCrew() {
-    const name = document.getElementById('crew-name-input').value.trim() || 'New Crew';
-    const description = document.getElementById('crew-desc-input')?.value.trim() || '';
+    const name = (document.getElementById('crew-name-input').value.trim() || 'New Crew').slice(0, 60);
+    const description = (document.getElementById('crew-desc-input')?.value.trim() || '').slice(0, 120);
     const selected = document.querySelector('.color-swatch.selected');
     const color = selected ? rgbToHex(selected.style.background) : '#FF2D78';
     const you = squad.find(r => r.isYou);
@@ -10517,6 +10524,11 @@ async function doProfilePasswordChange() {
     const btn = document.getElementById('crew-join-confirm-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Joining…'; }
     const you = squad.find(r => r.isYou);
+    // Guard: already a member of this crew (client-side check before hitting the RPC)
+    if (you) {
+      const alreadyIn = crews.some(c => (c.squadIds || []).some(id => String(id) === String(you.id)) && c.invite_token === token);
+      if (alreadyIn) { showToast('👋 You\'re already in this crew!'); closeCrewJoinModal(); return; }
+    }
     const name   = you ? null : document.getElementById('crew-join-name')?.value.trim();
     const handle = you ? null : document.getElementById('crew-join-handle')?.value.trim();
     if (!you && !name) {
@@ -10526,6 +10538,7 @@ async function doProfilePasswordChange() {
     }
     const { data, error } = await sb.rpc('join_crew_via_invite', { p_token: token, p_name: name || null, p_handle: handle || null });
     if (error || !data) { showToast('⚠️ Something went wrong. Try again.'); if (btn) { btn.disabled = false; btn.textContent = '🎉 Claim My Spot'; } return; }
+    if (data.error === 'already_member')  { showToast('👋 You\'re already in this crew!'); closeCrewJoinModal(); return; }
     if (data.error === 'not_recruiting')  { showToast(`⚠️ This crew isn't recruiting right now.`); closeCrewJoinModal(); return; }
     if (data.error === 'invalid_token')   { showToast('⚠️ This invite link has expired.'); closeCrewJoinModal(); return; }
     if (data.error === 'name_required')   { showToast('⚠️ Enter your name to join.'); if (btn) { btn.disabled = false; btn.textContent = '🎉 Claim My Spot'; } return; }
@@ -12728,9 +12741,9 @@ async function doProfilePasswordChange() {
   }
 
   function saveRave() {
-    const name = val('fe-name');
+    const name = val('fe-name')?.slice(0, 100);
     const date = document.getElementById('fe-date').value;
-    const location = val('fe-loc');
+    const location = (val('fe-loc') || '').slice(0, 100);
     if (!name) { showToast('Rave needs a name ✍️'); return; }
     if (!date) { showToast('Pick a date 📅'); return; }
 
