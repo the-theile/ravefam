@@ -6484,8 +6484,6 @@ async function doProfilePasswordChange() {
     }
 
     closeScanner();
-    // Hide any stale onboarding screen that was queued before the claim completed.
-    document.getElementById('onboarding-screen')?.classList.remove('show');
     await loadAllData();
     renderSquad(); renderCrews(); renderEvents();
     // Notify the new member (local feed)
@@ -6702,9 +6700,8 @@ async function doProfilePasswordChange() {
     setupRealtimeSync();
     const me = squad.find(r => r.isYou);
     if (!me && !currentUser?.user_metadata?.onboarded) {
-      // New user with no profile yet — run onboarding, but skip if a claim is
-      // already being processed (the claim flow will call showOnboarding if needed).
-      if (!sessionStorage.getItem('pendingClaim')) setTimeout(showOnboarding, 400);
+      // New user with no profile yet — run onboarding
+      setTimeout(showOnboarding, 400);
     } else if (me && !me.handle) {
       // Has a profile but never set a handle — require it now
       setTimeout(showHandlePicker, 400);
@@ -13610,7 +13607,11 @@ async function doProfilePasswordChange() {
     if (input)  input.className = 'ob-inline-field';
     clearTimeout(_obHandleDebounce);
     _obHandleDebounce = setTimeout(async () => {
-      const { data } = await sb.from('ravers').select('id').ilike('handle', handle).maybeSingle();
+      const _obExisting = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
+      const { data } = await sb.from('ravers').select('id')
+        .ilike('handle', handle)
+        .neq('id', _obExisting?.id || '00000000-0000-0000-0000-000000000000')
+        .maybeSingle();
       if (data) {
         if (status) { status.textContent = `@${handle} is taken 😔`; status.className = 'ob-handle-status ob-err'; }
         if (input)  input.className = 'ob-inline-field ob-invalid';
