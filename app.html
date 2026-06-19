@@ -4232,7 +4232,7 @@
     <!-- Beta banner -->
     <div style="background:rgba(255,45,120,0.12);border:1px solid rgba(255,45,120,0.3);border-radius:14px;padding:12px 24px;margin:0 0 28px;text-align:center;font-size:0.9rem;color:var(--neon-pink);display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;">
       <span class="beta-badge">BETA</span>
-      🚧 <strong>RaveFAM BETA — Sound system still warming up!</strong> Full crew sync &amp; mobile experience dropping very soon. Come test the prototype with us 🔥
+      🚧 Sound system still warming up!
     </div>
 
     <!-- Headline -->
@@ -12794,9 +12794,16 @@ async function doProfilePasswordChange() {
       const newFest = { id: tempId, name, date, location, color };
       festivals.push(newFest);
       showToast(`🎉 Added ${name}`);
-      addNotification(`🗓️ ${name} is on the radar! The rave is in the calendar — now get the crew onboard.`);
+      const _isPastRave = date && new Date(date + 'T23:59:59') < new Date();
+      if (_isPastRave) {
+        addNotification(`🗓️ ${name} logged! The rave has been added to the archives — track who was there.`);
+      } else {
+        addNotification(`🗓️ ${name} is on the radar! The rave is in the calendar — now get the crew onboard.`);
+      }
       // Notify all claimed crew members about the new rave
-      const _raveMsg = `🗓️ A new rave just dropped on the radar: ${name}${date ? ' on ' + date : ''}. Check it out in the Events tab — is the crew going?`;
+      const _raveMsg = _isPastRave
+        ? `🗓️ ${name}${date ? ' on ' + date : ''} has been added to the archives. Check it out in the Events tab — was the crew there?`
+        : `🗓️ A new rave just dropped on the radar: ${name}${date ? ' on ' + date : ''}. Check it out in the Events tab — is the crew going?`;
       crews.forEach(c => { if (c.isLead) notifyCrewMembers(c, _raveMsg); });
       if (currentUser) {
         dbSaveFestival({ name, date, location, color }, null).then(dbId => {
