@@ -6709,14 +6709,21 @@ async function doProfilePasswordChange() {
     if (_vibePickerFestId && _vibePickerFestId !== String(festId)) closeVibePicker(_vibePickerFestId);
     _vibePickerFestId = String(festId);
     const me = squad.find(r => r.isYou);
-    if (!me) return;
+    if (!me) { showToast('Claim your profile to add a vibe ✨'); return; }
     const existing = (festVibesCache[String(festId)] || []).find(v => String(v.raverId) === String(me.id));
     _vibePickerEmoji = existing?.emoji || null;
     const emojiGrid = VIBE_EMOJIS.map(e =>
       `<span class="fest-vibe-picker-emoji${e === _vibePickerEmoji ? ' selected' : ''}" onclick="event.stopPropagation(); selectVibeEmoji('${e}')">${e}</span>`
     ).join('');
-    const pickerEl = document.getElementById(`vibe-picker-${festId}`);
-    if (!pickerEl) return;
+    let pickerEl = document.getElementById(`vibe-picker-${festId}`);
+    if (!pickerEl) {
+      const card = document.querySelector(`[data-fest-id="${festId}"]`);
+      if (!card) return;
+      pickerEl = document.createElement('div');
+      pickerEl.id = `vibe-picker-${festId}`;
+      pickerEl.style.cssText = 'display:none;padding:0 8px 8px;';
+      card.appendChild(pickerEl);
+    }
     pickerEl.innerHTML = `<div class="fest-vibe-picker" onclick="event.stopPropagation()">
       <div class="fest-vibe-picker-grid">${emojiGrid}</div>
       <input class="fest-vibe-picker-input" id="vibe-caption-input-${festId}" placeholder="add a hype line…" maxlength="80" value="${escHtml(existing?.caption || '')}" onclick="event.stopPropagation()">
@@ -13426,5 +13433,7 @@ async function doProfilePasswordChange() {
 })();
 </script>
 <script defer src="/_vercel/insights/script.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+<script>eruda.init();</script>
 </body>
 </html>
