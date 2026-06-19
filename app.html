@@ -8070,7 +8070,8 @@ async function doProfilePasswordChange() {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
     document.getElementById('page-' + page).classList.add('active');
-    el.classList.add('active');
+    if (el) el.classList.add('active');
+    else document.querySelector(`.nav-tab[onclick*="'${page}'"]`)?.classList.add('active');
   }
 
   // Modal
@@ -12942,7 +12943,6 @@ async function doProfilePasswordChange() {
             <button class="event-action-btn going-action${youGoing ? ' active' : ''}" onclick="event.stopPropagation(); toggleGoingToFest('${f.id}')">${youGoing ? '🎟️ Going' : '＋ Going'}</button>
             <button class="event-action-btn interested-action${youInterested ? ' active' : ''}" onclick="event.stopPropagation(); toggleInterestedInFest('${f.id}')">👀 Interested</button>
           </div>
-          <div id="vibe-picker-${f.id}" style="display:none;padding:0 8px 8px;"></div>
         </div>`;
     };
 
@@ -13092,6 +13092,7 @@ async function doProfilePasswordChange() {
     document.getElementById('rave-edit-overlay').classList.add('open');
   }
   function toggleGoingToFest(festId) {
+    if (String(festId).startsWith('temp_')) { showToast('Still saving — try again in a moment'); return; }
     const you = squad.find(r => r.isYou);
     if (!you) return;
     if (!you.festIds) you.festIds = [];
@@ -13117,6 +13118,7 @@ async function doProfilePasswordChange() {
   }
 
   function toggleInterestedInFest(festId) {
+    if (String(festId).startsWith('temp_')) { showToast('Still saving — try again in a moment'); return; }
     const you = squad.find(r => r.isYou);
     if (!you) return;
     if (!you.interestedFestIds) you.interestedFestIds = [];
@@ -13251,7 +13253,14 @@ async function doProfilePasswordChange() {
       crews.forEach(c => { if (c.isLead) notifyCrewMembers(c, _raveMsg); });
       if (currentUser) {
         dbSaveFestival({ name, date, location, color, days }, null).then(dbId => {
-          if (dbId) newFest.id = dbId;
+          if (!dbId) return;
+          newFest.id = dbId;
+          // If a racing loadAllData() cleared the array before the save returned,
+          // re-add the festival so it's not silently lost.
+          if (!festivals.some(f => String(f.id) === String(dbId))) {
+            festivals.push(newFest);
+          }
+          renderEvents();
         });
       }
     }
