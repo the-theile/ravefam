@@ -11635,7 +11635,7 @@ async function doProfilePasswordChange() {
     renderCustomGenres();
     // Write new genre to community pool
     if (currentUser) {
-      sb.from('community_genres').upsert({ name: v }, { onConflict: 'name', ignoreDuplicates: true }).catch(() => {});
+      sb.from('community_genres').upsert({ name: v }, { onConflict: 'name', ignoreDuplicates: true }).then(null, () => {});
       if (!communityGenres.some(g => g.toLowerCase() === v.toLowerCase())) communityGenres.push(v);
     }
   }
@@ -12244,7 +12244,7 @@ async function doProfilePasswordChange() {
       const known = new Set(allArtistSuggestions().map(a => a.toLowerCase()));
       data.favArtists.forEach(a => {
         if (!known.has(a.toLowerCase())) {
-          sb.from('community_artists').upsert({ name: a }, { onConflict: 'name', ignoreDuplicates: true }).catch(() => {});
+          sb.from('community_artists').upsert({ name: a }, { onConflict: 'name', ignoreDuplicates: true }).then(null, () => {});
           communityArtists.push(a);
         }
       });
