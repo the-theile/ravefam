@@ -4328,7 +4328,7 @@
         Already have an account? <a href="#" onclick="showAuthTab('login');return false;" style="color:var(--neon-pink);text-decoration:none;font-weight:600;">Log in →</a>
       </p>
       <p style="text-align:center;margin-top:10px;font-size:0.75rem;color:var(--muted);">
-        By signing up you agree to our <a href="/terms.html" style="color:var(--muted);text-decoration:underline;">Terms</a> and <a href="/privacy.html" style="color:var(--muted);text-decoration:underline;">Privacy Policy</a>
+        By <span id="secret-signup-trigger" onclick="unlockSignup()" style="cursor:default;">signing up</span> you agree to our <a href="/terms.html" style="color:var(--muted);text-decoration:underline;">Terms</a> and <a href="/privacy.html" style="color:var(--muted);text-decoration:underline;">Privacy Policy</a>
       </p>
     </div>
 
@@ -5141,6 +5141,9 @@
   const SUPA_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2cGdvcGNpaW9xYnFtampqaWdoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3NTY2OTUsImV4cCI6MjA5NjMzMjY5NX0.DAgcx2UsGV1gUCQzHdGmv1Pu0rXlJdQxhn-bf1wGsiI';
   const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
 
+  // Fire-and-forget pageview
+  sb.rpc('log_pageview', { p_path: location.pathname, p_referrer: document.referrer });
+
   let currentUser = null;  // holds the logged-in Supabase user object
   const ADMIN_EMAIL = 'theile.secure@proton.me';
   function isAdminUser() { return currentUser?.email?.toLowerCase() === ADMIN_EMAIL; }
@@ -5311,6 +5314,16 @@ async function doProfilePasswordChange() {
     setAuthBusy(false);
     if (error) { authError(error.message); return; }
     // onAuthStateChange will fire and handle the rest
+  }
+
+  function unlockSignup() {
+    const banner = document.querySelector('#auth-signup-form > div[style*="background:#fff3cd"]');
+    if (banner) banner.remove();
+    const btn = document.getElementById('signup-btn');
+    btn.textContent = 'Create Account 🎉';
+    btn.onclick = doSignup;
+    const trigger = document.getElementById('secret-signup-trigger');
+    if (trigger) trigger.outerHTML = 'signing up';
   }
 
   async function doSignup() {
