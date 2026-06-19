@@ -346,11 +346,13 @@
 
   // ── RPC helper ──
   async function rpc(fn, params = {}) {
+    const { data: { session } } = await sb.auth.getSession();
+    const token = session?.access_token || SUPA_KEY;
     const res = await fetch(`${SUPA_URL}/rest/v1/rpc/${fn}`, {
       method: 'POST',
       headers: {
         'apikey': SUPA_KEY,
-        'Authorization': 'Bearer ' + SUPA_KEY,
+        'Authorization': 'Bearer ' + token,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(params)
