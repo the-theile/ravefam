@@ -9647,14 +9647,12 @@ async function doProfilePasswordChange() {
       }
     } else if (badgeId === 'ten_festivals_strong' || badgeId === 'twenty_five_raves_strong' || badgeId === 'hundred_raves_strong') {
       const people = [...new Map(crewSquad(crew).map(p => [String(p.id), p])).values()];
-      const festCounts = {};
-      people.forEach(p => {
-        (p.festIds || []).forEach(fid => {
-          const key = String(fid);
-          festCounts[key] = (festCounts[key] || 0) + 1;
-        });
-      });
-      current = Object.values(festCounts).filter(c => c >= 2).length;
+      if (people.length < 2) { current = 0; }
+      else {
+        const allFestSets = people.map(p => new Set((p.festIds || []).map(String)));
+        const firstSet = allFestSets[0];
+        current = [...firstSet].filter(fid => allFestSets.every(s => s.has(fid))).length;
+      }
     } else if (badgeId === 'one_year_crew') {
       if (crew.createdAt) {
         current = Math.floor((Date.now() - new Date(crew.createdAt).getTime()) / (365.25 * 24 * 60 * 60 * 1000));
