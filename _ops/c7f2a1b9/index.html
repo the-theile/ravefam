@@ -123,6 +123,22 @@
   .confirm-actions{display:flex;gap:10px;}
   .confirm-actions .act-btn{flex:1;padding:11px;font-size:0.82rem;text-align:center;}
 
+  /* ── Trend chart ── */
+  .trend-wrap{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px 20px 14px;margin-bottom:28px;}
+  .trend-header{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px;}
+  .trend-title{font-family:'Outfit',sans-serif;font-weight:700;font-size:0.78rem;color:#fff;}
+  .trend-meta{font-family:'Outfit',sans-serif;font-size:0.7rem;color:var(--muted);}
+  .trend-chart{display:flex;align-items:flex-end;gap:3px;height:64px;}
+  .trend-bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;}
+  .trend-bar{width:100%;border-radius:3px 3px 0 0;background:var(--pink);min-height:2px;transition:opacity 0.15s;}
+  .trend-bar:hover{opacity:0.75;}
+  .trend-labels{display:flex;justify-content:space-between;margin-top:6px;font-family:'Outfit',sans-serif;font-size:0.6rem;color:var(--muted);}
+
+  /* ── Top ravers table ── */
+  .data-table-head.ravers-head{grid-template-columns:1fr 70px 70px 70px;}
+  .data-row.ravers-row{grid-template-columns:1fr 70px 70px 70px;}
+  .ravers-row .cell-center{text-align:center;font-family:'Outfit',sans-serif;font-weight:700;font-size:0.85rem;}
+
   /* ── Toast ── */
   .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--surface2);border:1px solid rgba(255,255,255,0.1);border-radius:100px;padding:11px 22px;font-family:'Outfit',sans-serif;font-weight:600;font-size:0.82rem;z-index:300;transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1);white-space:nowrap;}
   .toast.show{transform:translateX(-50%) translateY(0);}
@@ -215,6 +231,17 @@
     </div>
   </div>
 
+  <!-- Signup trend -->
+  <div class="section-head">Growth</div>
+  <div class="trend-wrap">
+    <div class="trend-header">
+      <div class="trend-title">📅 New Signups — Last 30 Days</div>
+      <div class="trend-meta" id="trend-meta">Loading…</div>
+    </div>
+    <div class="trend-chart" id="trend-chart"><div class="shimmer" style="width:100%;height:100%;"></div></div>
+    <div class="trend-labels"><span id="trend-label-start">—</span><span id="trend-label-end">—</span></div>
+  </div>
+
   <!-- Waitlist banner -->
   <div class="section-head">Waitlist</div>
   <div class="waitlist-bar">
@@ -252,6 +279,23 @@
       <div class="detail-card-title"><div class="dot" style="background:#00F5FF"></div>Top Pages</div>
       <div id="top-paths-rows"><div style="color:var(--muted);font-size:0.8rem;">Loading…</div></div>
     </div>
+    <div class="detail-card">
+      <div class="detail-card-title"><div class="dot" style="background:#FF6B35"></div>Crew Sizes</div>
+      <div id="crew-size-rows"><div style="color:var(--muted);font-size:0.8rem;">Loading…</div></div>
+    </div>
+    <div class="detail-card">
+      <div class="detail-card-title"><div class="dot" style="background:#FFE600"></div>Waitlist Sources</div>
+      <div id="waitlist-source-rows"><div style="color:var(--muted);font-size:0.8rem;">Loading…</div></div>
+    </div>
+  </div>
+
+  <!-- Top ravers -->
+  <div class="section-head">Top Ravers</div>
+  <div class="data-table-wrap">
+    <div class="data-table-head ravers-head">
+      <span>Raver</span><span style="text-align:center">Crews</span><span style="text-align:center">RSVPs</span><span style="text-align:center">Total</span>
+    </div>
+    <div id="top-ravers-rows"><div class="empty-state">Loading…</div></div>
   </div>
 
   <!-- Registered users -->
@@ -437,6 +481,63 @@
     ).join('');
   }
 
+  function renderTrend(trend) {
+    if (!trend || !trend.length) return;
+    const max = Math.max(...trend.map(d => d.count), 1);
+    const total = trend.reduce((s, d) => s + d.count, 0);
+    document.getElementById('trend-meta').textContent =
+      `${total} signup${total !== 1 ? 's' : ''} in 30 days`;
+    document.getElementById('trend-label-start').textContent =
+      new Date(trend[0].day).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+    document.getElementById('trend-label-end').textContent =
+      new Date(trend[trend.length - 1].day).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+    document.getElementById('trend-chart').innerHTML = trend.map(d => {
+      const pct = Math.max((d.count / max) * 100, d.count > 0 ? 4 : 2);
+      const label = new Date(d.day).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+      return `<div class="trend-bar-wrap" title="${label}: ${d.count}">
+        <div class="trend-bar" style="height:${pct}%;opacity:${d.count > 0 ? 1 : 0.18};"></div>
+      </div>`;
+    }).join('');
+  }
+
+  function renderCrewSizes(dist) {
+    const el = document.getElementById('crew-size-rows');
+    if (!dist || !dist.length) { el.innerHTML = '<div style="color:var(--muted);font-size:0.8rem;">No crews yet</div>'; return; }
+    const colors = { 'Empty':'var(--muted)', 'Solo (1)':'#FFE600', 'Small (2–5)':'#FF6B35', 'Medium (6–15)':'#39FF14', 'Large (16+)':'#FF2D78' };
+    document.getElementById('crew-size-rows').innerHTML = dist.map(d =>
+      `<div class="table-row">
+        <span>${d.bucket}</span>
+        <span class="table-row-val" style="color:${colors[d.bucket]||'var(--text)'}">${d.crews}</span>
+      </div>`
+    ).join('');
+  }
+
+  function renderWaitlistSources(entries) {
+    const counts = {};
+    for (const w of entries) {
+      const src = w.source || 'direct';
+      counts[src] = (counts[src] || 0) + 1;
+    }
+    const sorted = Object.entries(counts).sort(([, a], [, b]) => b - a);
+    detailRows('waitlist-source-rows', sorted.length
+      ? sorted.map(([src, n]) => [src, n, '#FFE600'])
+      : [['No data yet', '—', 'var(--muted)']]
+    );
+  }
+
+  function renderTopRavers(ravers) {
+    const el = document.getElementById('top-ravers-rows');
+    if (!ravers || !ravers.length) { el.innerHTML = '<div class="empty-state">No activity yet</div>'; return; }
+    el.innerHTML = ravers.map(r => `
+      <div class="data-row ravers-row">
+        <span>${esc(r.name) || '—'}<br><span class="cell-muted">@${esc(r.handle) || '—'}</span></span>
+        <span class="cell-center" style="color:#FF6B35">${r.crew_count}</span>
+        <span class="cell-center" style="color:#FFE600">${r.rsvp_count}</span>
+        <span class="cell-center" style="color:#00F5FF">${r.total}</span>
+      </div>`
+    ).join('');
+  }
+
   // ── Confirm sheet ──
   let pendingAction = null;
 
@@ -532,15 +633,18 @@
     ['stat-users','stat-ravers','stat-crews','stat-fests','stat-members','stat-rsvps','stat-pv-today','stat-pv-total'].forEach(id => {
       document.getElementById(id).innerHTML = '<div class="shimmer"></div>';
     });
-    document.getElementById('users-rows').innerHTML    = '<div class="empty-state">Loading…</div>';
-    document.getElementById('waitlist-rows').innerHTML = '<div class="empty-state">Loading…</div>';
+    document.getElementById('users-rows').innerHTML       = '<div class="empty-state">Loading…</div>';
+    document.getElementById('waitlist-rows').innerHTML    = '<div class="empty-state">Loading…</div>';
+    document.getElementById('top-ravers-rows').innerHTML  = '<div class="empty-state">Loading…</div>';
+    document.getElementById('trend-chart').innerHTML      = '<div class="shimmer" style="width:100%;height:100%;"></div>';
 
     try {
-      const [stats, users, waitlist, pvStats] = await Promise.all([
+      const [stats, users, waitlist, pvStats, growth] = await Promise.all([
         rpc('get_admin_stats'),
         rpc('get_admin_users'),
         rpc('get_admin_waitlist'),
-        rpc('get_pageview_stats')
+        rpc('get_pageview_stats'),
+        rpc('get_growth_stats')
       ]);
 
       document.getElementById('stat-users').textContent   = stats.users           ?? '—';
@@ -587,8 +691,13 @@
         : [['No data yet', '—', 'var(--muted)']]
       );
 
+      const waitlistArr = Array.isArray(waitlist) ? waitlist : (waitlist ? [waitlist] : []);
       renderUsers(Array.isArray(users) ? users : (users ? [users] : []));
-      renderWaitlist(Array.isArray(waitlist) ? waitlist : (waitlist ? [waitlist] : []));
+      renderWaitlist(waitlistArr);
+      renderWaitlistSources(waitlistArr);
+      renderTrend(growth?.signup_trend || []);
+      renderCrewSizes(growth?.crew_size_dist || []);
+      renderTopRavers(growth?.top_ravers || []);
 
       document.getElementById('status-dot').className = 'status-dot';
       document.getElementById('status-text').textContent = 'Live · tvpgopciioqbqmjjjigh.supabase.co';
