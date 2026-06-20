@@ -8619,7 +8619,7 @@ async function doProfilePasswordChange() {
           } else {
             right = `<span class="detail-member-arrow">›</span>`;
           }
-          const pDisplayFirst = displayName(p).split(' ')[0];
+          const pDisplayFirst = escHtml(displayName(p).split(' ')[0]);
           const nameDisplay = isLeader
             ? `<span style="display:flex;align-items:center;gap:5px;">${pDisplayFirst}${p.isYou ? ' (You)' : ''} <span title="Crew Leader" style="font-size:1rem;">👑</span> ${statusDot}</span>`
             : `<span>${pDisplayFirst}${p.isYou ? ' (You)' : ''} ${statusDot}</span>`;
@@ -10834,7 +10834,7 @@ async function doProfilePasswordChange() {
         <div class="crew-pick-item${sel ? ' selected' : ''}" onclick="toggleCrewPick('${String(c.id).replace(/'/g,"\\'")}')">
           <div class="crew-pick-dot" style="background:${safeColor(c.color)}"></div>
           <div class="crew-pick-info">
-            <div class="crew-pick-name">${c.name}</div>
+            <div class="crew-pick-name">${escHtml(c.name)}</div>
             <div class="crew-pick-count">${count} ${count === 1 ? 'member' : 'members'}</div>
           </div>
           <div class="crew-pick-check">${checkmark}</div>
@@ -11504,7 +11504,7 @@ async function doProfilePasswordChange() {
     const showInstagram = r.isYou || perms.editInstagram || (perms.isClaimed && !!r.instagram);
     if (showInstagram && r.instagram) {
       const ig = r.instagram.replace('@','');
-      connectBtns.push(`<a class="connect-btn connect-ig" href="https://instagram.com/${ig}" target="_blank" rel="noopener">📷 Instagram</a>`);
+      connectBtns.push(`<a class="connect-btn connect-ig" href="https://instagram.com/${escHtml(ig)}" target="_blank" rel="noopener">📷 Instagram</a>`);
     }
     // Phone: show if it's your profile, unclaimed (crew member can see), or claimed + owner opted in
     const sharedPhone = r.isYou ? r.phone : (perms.editPhone && !perms.isClaimed ? r.phone : (perms.isClaimed && r.phoneVisible ? r.phone : null));
@@ -11522,7 +11522,7 @@ async function doProfilePasswordChange() {
     const avatarBg = r.avatarUrl ? 'transparent' : r.gradient;
     const avatarOverflow = r.avatarUrl ? 'overflow:hidden;padding:0;' : '';
     const avatarContent = r.avatarUrl
-      ? `<img class="profile-avatar-photo" src="${r.avatarUrl}" alt="${r.name}">`
+      ? `<img class="profile-avatar-photo" src="${escHtml(r.avatarUrl)}" alt="${escHtml(r.name)}">`
       : initials(r.name).toUpperCase();
     const avatarEl = showAvatarUpload
       ? `<div class="avatar-col">
@@ -11768,7 +11768,7 @@ async function doProfilePasswordChange() {
                 <div class="profile-crew-card" onclick="openDetail('${c.id}')" style="--crew-col:${safeColor(c.color)};">
                   <div class="profile-crew-bar" style="background:${c.gradient};"></div>
                   <div class="profile-crew-body">
-                    <div class="profile-crew-name">${c.name}</div>
+                    <div class="profile-crew-name">${escHtml(c.name)}</div>
                     <div class="profile-crew-meta">
                       ${isLead ? '<span class="pcb lead">👑 Lead</span>' : '<span class="pcb member">🎧 Member</span>'}
                       <span class="pcb" style="background:rgba(255,255,255,0.05);color:var(--muted);border:1px solid rgba(255,255,255,0.1);">${statusLabel}</span>
@@ -12975,7 +12975,7 @@ async function doProfilePasswordChange() {
             bubbleHtml = `<div class="${cls}" ${click}>${vibe.emoji}${captionHtml}</div>`;
           }
         }
-        return `<div class="avatar going-avatar${isLast ? ' row-end' : ''}" style="background:${bg};" data-raver-id="${w.id}" onclick="event.stopPropagation(); openProfile(this.dataset.raverId, false, 'members')" title="${dn}">${inner}${bubbleHtml}${badgeHtml}</div>`;
+        return `<div class="avatar going-avatar${isLast ? ' row-end' : ''}" style="background:${bg};" data-raver-id="${w.id}" onclick="event.stopPropagation(); openProfile(this.dataset.raverId, false, 'members')" title="${escHtml(dn)}">${inner}${bubbleHtml}${badgeHtml}</div>`;
       }).join('');
 
       const goingLabel = isUpcoming ? 'Going' : 'Sent It';
