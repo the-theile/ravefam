@@ -5811,6 +5811,12 @@ async function doProfilePasswordChange() {
     if (_realtimeChannel) { _realtimeChannel.unsubscribe(); _realtimeChannel = null; }
     clearTimeout(_reloadDebounce);
     squad.length = 0; crews.length = 0; festivals.length = 0; dreamPins = []; archiveLinks = [];
+    crewPolls = []; crewJams = []; crewJamVibes = [];
+    crewAchievements = []; raverAchievements = []; crewFeedEvents = [];
+    _notifications = [];
+    Object.keys(nicknameCache).forEach(k => delete nicknameCache[k]);
+    Object.keys(festVibesCache).forEach(k => delete festVibesCache[k]);
+    Object.keys(metStoriesCache).forEach(k => delete metStoriesCache[k]);
     document.getElementById('app-loading').classList.add('hidden');
     document.getElementById('auth-screen').classList.remove('hidden');
     document.getElementById('main-app').style.display = 'none';
@@ -5942,7 +5948,7 @@ async function doProfilePasswordChange() {
     const r = getRaver(raverId);
     if (!r || !r.qrToken) { showToast('⚠️ No QR token for this raver'); return; }
     const crew = crews.find(c => (c.squadIds || []).some(id => String(id) === String(raverId)));
-    const color = crew?.color || '#FF2D78';
+    const color = safeColor(crew?.color, '#FF2D78');
     const gradient = crew?.gradient || `linear-gradient(135deg,${color},${color})`;
     // Build claim URL — works for both hosted and local file:// contexts
     const base = (window.location.origin && window.location.origin !== 'null')
@@ -6274,7 +6280,7 @@ async function doProfilePasswordChange() {
     const crew  = data?.crew  || null;
     _pendingClaimToken = token;
 
-    const crewColor   = crew?.color || '#FF2D78';
+    const crewColor   = safeColor(crew?.color, '#FF2D78');
     const crewName    = crew?.name  || 'a crew';
     const memberCount = crew?.member_count ?? 0;
     const statusLabel = crew?.status === 'locked-in' ? '🔒 Locked In' : '🌐 Recruiting';
@@ -6505,23 +6511,23 @@ async function doProfilePasswordChange() {
     const raver    = previewData?.raver  || {};
     const crew     = previewData?.crew   || {};
     const crewName = crew.name  || 'the crew';
-    const crewColor= crew.color || '#00F5FF';
+    const crewColor= safeColor(crew.color, '#00F5FF');
     const raverName= raver.name || 'Raver';
     const gradient = raver.gradient || `linear-gradient(135deg,${crewColor},${crewColor}88)`;
     const primaryColor = gradient.match(/#[0-9A-Fa-f]{6}/)?.[0] || crewColor;
     const avatarContent = raver.avatar_url
-      ? `<img src="${raver.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="${raverName}">`
+      ? `<img src="${escHtml(raver.avatar_url)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="${escHtml(raverName)}">`
       : (raver.name ? initials(raver.name) : '🎉');
 
     document.getElementById('success-content').innerHTML = `
       <div class="success-bg-radial" style="background:radial-gradient(ellipse 320px 280px at 50% 30%,${primaryColor}35 0%,${crewColor}18 45%,transparent 72%);"></div>
       <div class="success-check" style="background:${gradient};box-shadow:0 0 55px ${primaryColor}60,0 0 110px ${primaryColor}28;">${avatarContent}</div>
       <div class="success-badge" style="color:${crewColor};border-color:${crewColor}55;box-shadow:0 0 14px ${crewColor}28;">IN THE FAM 🎉</div>
-      <div class="success-crew-name" style="text-shadow:0 0 50px ${crewColor}55;">${crewName}</div>
+      <div class="success-crew-name" style="text-shadow:0 0 50px ${crewColor}55;">${escHtml(crewName)}</div>
       <div class="success-tagline">The bassline just got louder.</div>
       <div class="success-raver-pill" style="border-color:${primaryColor}30;">
         <div class="success-raver-avatar" style="background:${gradient};">${avatarContent}</div>
-        <span class="success-raver-name">${raverName}</span>
+        <span class="success-raver-name">${escHtml(raverName)}</span>
       </div>
       <div class="success-cta">
         <button class="btn-claim" onclick="closeSuccessScreen();switchTab('crews',document.querySelector('.nav-tab'));">View My Crews →</button>
@@ -6602,7 +6608,7 @@ async function doProfilePasswordChange() {
   function showPreAuthIntercept(previewData, token) {
     const crew      = previewData?.crew  || {};
     const raver     = previewData?.raver || {};
-    const crewColor = crew.color || '#00F5FF';
+    const crewColor = safeColor(crew.color, '#00F5FF');
     const crewName  = crew.name;
     const raverName = raver.name;
 
@@ -7313,21 +7319,51 @@ async function doProfilePasswordChange() {
   }
 
   async function dbSaveRaverFestivals(raverId, festIds) {
-    // Delete existing links then re-insert
-    await sb.from('raver_festivals').delete().eq('raver_id', raverId);
-    if (festIds.length) {
+    const newIdStrs = festIds.map(String);
+    if (newIdStrs.length > 0) {
+      // Upsert new rows first — if this fails, bail before deleting anything
       const rows = festIds.map(fid => ({ raver_id: raverId, festival_id: fid }));
-      const { error } = await sb.from('raver_festivals').insert(rows);
-      if (error) { console.error('raver_festivals insert error', error); showToast('⚠️ Could not save festival attendance'); }
+      const { error } = await sb.from('raver_festivals')
+        .upsert(rows, { onConflict: 'raver_id,festival_id', ignoreDuplicates: true });
+      if (error) {
+        console.error('raver_festivals upsert error', error);
+        showToast('⚠️ Could not save festival attendance');
+        return;
+      }
+      // Now remove rows that are no longer in the list
+      const { data: existing } = await sb.from('raver_festivals').select('festival_id').eq('raver_id', raverId);
+      if (existing) {
+        const toDelete = existing.map(r => r.festival_id).filter(id => !newIdStrs.includes(String(id)));
+        if (toDelete.length) {
+          await sb.from('raver_festivals').delete().eq('raver_id', raverId).in('festival_id', toDelete);
+        }
+      }
+    } else {
+      // Intentionally clearing all RSVPs
+      await sb.from('raver_festivals').delete().eq('raver_id', raverId);
     }
   }
 
   async function dbSaveRaverFestivalInterest(raverId, interestedFestIds) {
-    await sb.from('raver_festival_interest').delete().eq('raver_id', raverId);
-    if (interestedFestIds.length) {
+    const newIdStrs = interestedFestIds.map(String);
+    if (newIdStrs.length > 0) {
       const rows = interestedFestIds.map(fid => ({ raver_id: raverId, festival_id: fid }));
-      const { error } = await sb.from('raver_festival_interest').insert(rows);
-      if (error) { console.error('raver_festival_interest insert error', error); showToast('⚠️ Could not save interest'); }
+      const { error } = await sb.from('raver_festival_interest')
+        .upsert(rows, { onConflict: 'raver_id,festival_id', ignoreDuplicates: true });
+      if (error) {
+        console.error('raver_festival_interest upsert error', error);
+        showToast('⚠️ Could not save interest');
+        return;
+      }
+      const { data: existing } = await sb.from('raver_festival_interest').select('festival_id').eq('raver_id', raverId);
+      if (existing) {
+        const toDelete = existing.map(r => r.festival_id).filter(id => !newIdStrs.includes(String(id)));
+        if (toDelete.length) {
+          await sb.from('raver_festival_interest').delete().eq('raver_id', raverId).in('festival_id', toDelete);
+        }
+      }
+    } else {
+      await sb.from('raver_festival_interest').delete().eq('raver_id', raverId);
     }
   }
 
@@ -7461,10 +7497,12 @@ async function doProfilePasswordChange() {
   // Compress an image File to a Blob (for Supabase Storage uploads)
   function compressImageToBlob(file, maxDim, quality) {
     quality = quality || 0.85;
-    return new Promise(resolve => {
+    return new Promise((resolve, reject) => {
       const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Could not read file'));
       reader.onload = e => {
         const img = new Image();
+        img.onerror = () => reject(new Error('Image failed to load'));
         img.onload = () => {
           let w = img.width, h = img.height;
           if (w > maxDim || h > maxDim) {
@@ -7474,7 +7512,7 @@ async function doProfilePasswordChange() {
           const canvas = document.createElement('canvas');
           canvas.width = w; canvas.height = h;
           canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-          canvas.toBlob(resolve, 'image/jpeg', quality);
+          canvas.toBlob(b => b ? resolve(b) : reject(new Error('Canvas export failed')), 'image/jpeg', quality);
         };
         img.src = e.target.result;
       };
@@ -7522,6 +7560,7 @@ async function doProfilePasswordChange() {
     const file = event.target.files[0];
     if (!file) return;
     event.target.value = '';
+    if (file.size > 10 * 1024 * 1024) { showToast('⚠️ Photo must be under 10 MB'); return; }
     const r = getRaver(raverId);
     if (!r) return;
     if (r.avatarUrl) {
@@ -7588,6 +7627,7 @@ async function doProfilePasswordChange() {
     const file = event.target.files[0];
     if (!file) return;
     event.target.value = '';
+    if (file.size > 10 * 1024 * 1024) { showToast('⚠️ Photo must be under 10 MB'); return; }
     const crew = getCrew(crewId);
     if (!crew) return;
     if (crew.totemPhotoUrl) {
@@ -7979,6 +8019,7 @@ async function doProfilePasswordChange() {
     const file = event.target.files[0];
     if (!file) return;
     event.target.value = '';
+    if (file.size > 10 * 1024 * 1024) { showToast('⚠️ Photo must be under 10 MB'); return; }
     const storagePath = ourPhotoStoragePath(viewingRaverId);
     const pair = ourPhotoPair(viewingRaverId);
     if (!storagePath || !pair || !currentUser) return;
@@ -8756,10 +8797,13 @@ async function doProfilePasswordChange() {
     const newHypedBy = alreadyHyped
       ? (pin.hyped_by || []).filter(id => id !== uid)
       : [...(pin.hyped_by || []), uid];
+    // Optimistic update first — a second rapid tap now reads the updated state
+    // and correctly toggles back, preventing duplicate hyps.
+    const prev = pin.hyped_by;
+    pin.hyped_by = newHypedBy;
     const { error } = await sb.from('dream_board_pins')
       .update({ hyped_by: newHypedBy }).eq('id', pinId);
-    if (error) { showToast('⚠️ Could not update hype'); return; }
-    pin.hyped_by = newHypedBy;
+    if (error) { pin.hyped_by = prev; showToast('⚠️ Could not update hype'); return; }
   }
 
   async function addDreamPin(crewId) {
@@ -8767,12 +8811,14 @@ async function doProfilePasswordChange() {
     const label = input?.value?.trim();
     if (!label) { showToast('✏️ Enter something to pin first'); return; }
     if (label.length > 120) { showToast('✏️ Keep it under 120 characters'); return; }
-    input.value = '';
     input.disabled = true;
-    await dbAddDreamPin(crewId, label);
+    const pin = await dbAddDreamPin(crewId, label);
     input.disabled = false;
-    rerenderDreamBoard(crewId);
-    checkAndAwardBadges(crewId);
+    if (pin) {
+      input.value = '';
+      rerenderDreamBoard(crewId);
+      checkAndAwardBadges(crewId);
+    }
   }
 
   async function deleteDreamPin(pinId, crewId) {
@@ -9128,7 +9174,7 @@ async function doProfilePasswordChange() {
   function buildPollsHTML(crewId) {
     const crew = getCrew(crewId);
     const uid = currentUser?.id;
-    const accentColor = crew?.color || 'var(--neon-pink)';
+    const accentColor = safeColor(crew?.color, '#FF2D78');
 
     const cards = crewPolls.map(poll => renderPollCard(poll, accentColor, uid)).join('');
     const emptyState = crewPolls.length === 0
@@ -9841,7 +9887,7 @@ async function doProfilePasswordChange() {
 
     const linkedPoll = jam.poll_id ? crewPolls.find(p => p.id === jam.poll_id) : null;
     const linkedPollHTML = linkedPoll
-      ? `<div class="jam-linked-poll">${renderPollCard(linkedPoll, getCrew(crewId)?.color || 'var(--neon-pink)', uid)}</div>`
+      ? `<div class="jam-linked-poll">${renderPollCard(linkedPoll, safeColor(getCrew(crewId)?.color), uid)}</div>`
       : '';
 
     const nominateBtn = uid && !jam.poll_id
@@ -10783,7 +10829,7 @@ async function doProfilePasswordChange() {
         : '';
       return `
         <div class="crew-pick-item${sel ? ' selected' : ''}" onclick="toggleCrewPick('${String(c.id).replace(/'/g,"\\'")}')">
-          <div class="crew-pick-dot" style="background:${c.color}"></div>
+          <div class="crew-pick-dot" style="background:${safeColor(c.color)}"></div>
           <div class="crew-pick-info">
             <div class="crew-pick-name">${c.name}</div>
             <div class="crew-pick-count">${count} ${count === 1 ? 'member' : 'members'}</div>
@@ -11260,6 +11306,9 @@ async function doProfilePasswordChange() {
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
       .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   }
+  function safeColor(v, fallback = '#FF2D78') {
+    return /^#[0-9A-Fa-f]{3,6}$/.test(v) ? v : fallback;
+  }
   function extractFirstColor(gradient) {
     return /#[0-9A-Fa-f]{6}/.exec(gradient)?.[0] || '#ffffff';
   }
@@ -11534,9 +11583,9 @@ async function doProfilePasswordChange() {
           <div class="profile-hero-bar" style="background:${r.gradient}"></div>
           ${avatarEl}
           <div class="profile-id">
-            <input class="profile-edit-hero-input" id="pf-name" value="${(r.name||'').replace(/"/g,'&quot;')}" placeholder="Name">
+            <input class="profile-edit-hero-input" id="pf-name" value="${(r.name||'').replace(/"/g,'&quot;')}" placeholder="Name" maxlength="80">
             ${handleField}
-            <input class="profile-edit-hero-input base-input" id="pf-base" value="${(r.base||'').replace(/"/g,'&quot;')}" placeholder="📍 Home base">
+            <input class="profile-edit-hero-input base-input" id="pf-base" value="${(r.base||'').replace(/"/g,'&quot;')}" placeholder="📍 Home base" maxlength="60">
           </div>
         </div>
 
@@ -11547,9 +11596,9 @@ async function doProfilePasswordChange() {
 
         <div class="profile-section">
           <h3>📱 Contact</h3>
-          ${fieldRow('Instagram','pf-instagram', r.instagram, '@samraves')}
-          ${fieldRow('Radiate','pf-radiate', r.radiate, 'e.g. @samraves')}
-          ${fieldRow('Phone','pf-phone', r.phone, '+44 7700 900000')}
+          ${fieldRow('Instagram','pf-instagram', r.instagram, '@samraves', false, 30)}
+          ${fieldRow('Radiate','pf-radiate', r.radiate, 'e.g. @samraves', false, 50)}
+          ${fieldRow('Phone','pf-phone', r.phone, '+44 7700 900000', false, 20)}
           ${isOwnProfile ? `
             <div class="phone-visibility-row">
               <input type="checkbox" id="pf-phone-visible" ${r.phoneVisible ? 'checked' : ''}>
@@ -11713,7 +11762,7 @@ async function doProfilePasswordChange() {
               const statusLabel = { 'recruiting': '🟢 Recruiting', 'locked-in': '🔒 Locked In', 'secret': '🤫 Secret' }[c.status] || c.status;
               const memberCount = (c.squadIds || []).length;
               return `
-                <div class="profile-crew-card" onclick="openDetail('${c.id}')" style="--crew-col:${c.color};">
+                <div class="profile-crew-card" onclick="openDetail('${c.id}')" style="--crew-col:${safeColor(c.color)};">
                   <div class="profile-crew-bar" style="background:${c.gradient};"></div>
                   <div class="profile-crew-body">
                     <div class="profile-crew-name">${c.name}</div>
@@ -11937,11 +11986,12 @@ async function doProfilePasswordChange() {
   let editingVibeTags = new Set();
   let editingCustomVibeTags = [];
 
-  function fieldRow(label, id, value, placeholder, textarea) {
+  function fieldRow(label, id, value, placeholder, textarea, maxlength) {
     const v = (value || '').replace(/"/g,'&quot;');
+    const ml = maxlength ? ` maxlength="${maxlength}"` : '';
     const input = textarea
-      ? `<textarea class="form-input" id="${id}" placeholder="${placeholder}">${escHtml(value || '')}</textarea>`
-      : `<input class="form-input" id="${id}" value="${v}" placeholder="${placeholder}">`;
+      ? `<textarea class="form-input" id="${id}" placeholder="${placeholder}"${ml}>${escHtml(value || '')}</textarea>`
+      : `<input class="form-input" id="${id}" value="${v}" placeholder="${placeholder}"${ml}>`;
     return `<div class="form-group"><label class="form-label">${label}</label>${input}</div>`;
   }
 
@@ -12742,7 +12792,10 @@ async function doProfilePasswordChange() {
         openProfile(r.id);
         showToast(`✅ Updated ${r.name}`);
         if (currentUser) {
-          dbSaveRaver(data, r.id).then(() => dbSaveRaverFestivals(r.id, data.festIds)).catch(console.warn);
+          dbSaveRaver(data, r.id).then(() => dbSaveRaverFestivals(r.id, data.festIds)).catch(e => {
+            console.warn('[saveProfile] DB sync failed:', e);
+            showToast('⚠️ Profile saved locally — sync failed, try again');
+          });
         }
       } catch(err) {
         console.error('[saveProfile]', err);
@@ -12885,7 +12938,7 @@ async function doProfilePasswordChange() {
       const mon = f._d ? MON_SHORT[f._d.getMonth()].toUpperCase() : '';
       const goers = festivalGoers(f.id);
       const isUpcoming = f._d && f._d >= TODAY;
-      const metaLine = `📍 ${f.location || 'Location TBD'}` + (isUpcoming ? ` · ⏳ ${countdownLabel(f._d)}` : (f._d ? ` · ${f._d.getFullYear()}` : ''));
+      const metaLine = `📍 ${escHtml(f.location || 'Location TBD')}` + (isUpcoming ? ` · ⏳ ${countdownLabel(f._d)}` : (f._d ? ` · ${f._d.getFullYear()}` : ''));
       const you = squad.find(r => r.isYou);
       const youGoing = you && (you.festIds || []).some(fid => String(fid) === String(f.id));
       const youInterested = you && (you.interestedFestIds || []).some(fid => String(fid) === String(f.id));
@@ -12951,7 +13004,7 @@ async function doProfilePasswordChange() {
               <div class="event-month">${mon}</div>
             </div>
             <div class="event-info">
-              <div class="event-name">${f.name} <span class="fest-edit-hint">✏️</span></div>
+              <div class="event-name">${escHtml(f.name)} <span class="fest-edit-hint">✏️</span></div>
               <div class="event-meta">${metaLine}</div>
               ${goingSection}
               ${interestedSection}
@@ -13072,7 +13125,7 @@ async function doProfilePasswordChange() {
     ).join('');
     document.getElementById('rave-edit-modal').innerHTML = `
       <div class="modal-title">${f ? '✏️ Edit Rave' : '🎉 Add Rave'}</div>
-      ${fieldRow('Rave Name','fe-name', f?.name, 'e.g. Awakenings or Basement at Fabric this Friday')}
+      ${fieldRow('Rave Name','fe-name', f?.name, 'e.g. Awakenings or Basement at Fabric this Friday', false, 100)}
       <div class="form-group">
         <label class="form-label">Date</label>
         <input class="form-input" id="fe-date" type="date" value="${(() => { if (!f) return ''; if (f.date) return f.date; const d = festDate(f); if (!d || isNaN(d)) return ''; return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })()}" style="color-scheme:dark;">
@@ -13081,7 +13134,7 @@ async function doProfilePasswordChange() {
         <label class="form-label">Location</label>
         <div class="loc-autocomplete-wrap">
           <input class="form-input" id="fe-loc" value="${(f?.location||'').replace(/"/g,'&quot;')}"
-            placeholder="e.g. Amsterdam, NL" autocomplete="off"
+            placeholder="e.g. Amsterdam, NL" autocomplete="off" maxlength="100"
             oninput="locSearchDebounce(this.value)"
             onkeydown="locKeydown(event)"
             onblur="setTimeout(closeLoc,200)">
@@ -13781,7 +13834,11 @@ async function doProfilePasswordChange() {
     _notifications.unshift(n);
     if (_notifications.length > 100) _notifications.splice(100);
     updateNotifBadge();
-    if (document.getElementById('notif-drawer-overlay').classList.contains('open')) renderNotifList();
+    if (document.getElementById('notif-drawer-overlay').classList.contains('open')) {
+      n.read = true;
+      updateNotifBadge();
+      renderNotifList();
+    }
     if (currentUser) {
       sb.from('notifications').insert({ user_id: currentUser.id, crew_id: null, message })
         .select('id').single()
@@ -13867,7 +13924,24 @@ async function doProfilePasswordChange() {
   document.addEventListener('DOMContentLoaded', updateNotifBadge);
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch(console.warn);
+    navigator.serviceWorker.register('/sw.js').then(reg => {
+      reg.onupdatefound = () => {
+        const sw = reg.installing;
+        sw.onstatechange = () => {
+          if (sw.state === 'installed' && navigator.serviceWorker.controller) {
+            const t = document.getElementById('toast');
+            if (t) {
+              t.textContent = '✨ Update available — tap to refresh';
+              t.style.cursor = 'pointer';
+              t.onclick = () => location.reload();
+              t.classList.add('show');
+              clearTimeout(toastTimer);
+              toastTimer = setTimeout(() => t.classList.remove('show'), 10000);
+            }
+          }
+        };
+      };
+    }).catch(console.warn);
   }
 
   // ===== STATS PAGE =====
@@ -13911,6 +13985,18 @@ async function doProfilePasswordChange() {
   }
 
   let _statsSelectedCrewId = null;
+  let _wrappedStarTaps   = 0;
+  let _wrappedUnlocked   = false;
+
+  function wrappedStarTap() {
+    _wrappedStarTaps++;
+    if (_wrappedStarTaps >= 3) {
+      _wrappedUnlocked = true;
+      _wrappedStarTaps = 0;
+      loadStatsPage();
+      showToast('✨ You found it. Rave Wrapped unlocked!');
+    }
+  }
 
   function switchStatTab(tab, el) {
     document.querySelectorAll('.stats-subtab').forEach(t => t.classList.remove('active'));
@@ -13987,9 +14073,18 @@ async function doProfilePasswordChange() {
       </div>
     </div>`;
 
-    // Rave Wrapped button (5+ raves) or unlock gate
-    if (totalRaves >= 5) {
+    // Rave Wrapped button (5+ raves, December only) or lock/unlock gate
+    const isDecember = now.getMonth() === 11;
+    if (totalRaves >= 5 && (isDecember || _wrappedUnlocked)) {
       html += `<button class="stats-wrapped-btn" onclick="openWrapped()">✨ See My Rave Wrapped ${thisYear}</button>`;
+    } else if (totalRaves >= 5) {
+      html += `<div>
+        <button class="stats-wrapped-btn" style="opacity:0.4;pointer-events:none;" tabindex="-1" aria-disabled="true">✨ See My Rave Wrapped ${thisYear}</button>
+        <div style="text-align:center;margin-top:10px;">
+          <span onclick="wrappedStarTap()" style="font-size:1.5rem;cursor:pointer;user-select:none;" title="✨" role="button" aria-label="Unlock Rave Wrapped">✨</span>
+          <div style="color:var(--muted);font-size:0.78rem;margin-top:5px;">🔒 Available in December</div>
+        </div>
+      </div>`;
     } else {
       const needed = 5 - totalRaves;
       const pct = Math.round((totalRaves / 5) * 100);
@@ -14144,7 +14239,7 @@ async function doProfilePasswordChange() {
       </div>
       <div class="stats-section-card">
         <div class="stats-section-title">🏆 Rave Leaderboard</div>
-        ${lb.map((m, i) => {
+        ${lb.length ? lb.map((m, i) => {
           const isYou = you && String(m.id) === String(you.id);
           const isOG = ogMember && String(m.id) === String(ogMember.id);
           const rank = i < 3 ? rankIcons[i] : `<span style="font-size:0.75rem;">${i+1}</span>`;
@@ -14154,7 +14249,7 @@ async function doProfilePasswordChange() {
             <div class="stats-lb-name${isYou ? ' you' : ''}">${escHtml(m.name)}${isOG ? `<span class="stats-lb-og">OG</span>` : ''}</div>
             <div class="stats-lb-val">${m.raveCount} rave${m.raveCount!==1?'s':''}</div>
           </div>`;
-        }).join('')}
+        }).join('') : '<div class="archive-empty" style="padding:16px 0;">No raves logged yet — start adding raves to see who leads the pack 🏆</div>'}
       </div>
       ${pairwiseHtml}
     `;
@@ -14239,10 +14334,13 @@ async function doProfilePasswordChange() {
             try { await navigator.share({ files: [file], title: 'My Rave Life — RaveFAM' }); } catch {}
           } else {
             const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url; a.download = 'my-rave-life.png'; a.click();
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
-            showToast('📥 Wrapped card downloaded!');
+            try {
+              const a = document.createElement('a');
+              a.href = url; a.download = 'my-rave-life.png'; a.click();
+              showToast('📥 Wrapped card downloaded!');
+            } finally {
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
+            }
           }
         }, 'image/png');
       } else {
