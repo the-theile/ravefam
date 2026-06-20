@@ -5942,7 +5942,7 @@ async function doProfilePasswordChange() {
     const r = getRaver(raverId);
     if (!r || !r.qrToken) { showToast('⚠️ No QR token for this raver'); return; }
     const crew = crews.find(c => (c.squadIds || []).some(id => String(id) === String(raverId)));
-    const color = crew?.color || '#FF2D78';
+    const color = safeColor(crew?.color, '#FF2D78');
     const gradient = crew?.gradient || `linear-gradient(135deg,${color},${color})`;
     // Build claim URL — works for both hosted and local file:// contexts
     const base = (window.location.origin && window.location.origin !== 'null')
@@ -6274,7 +6274,7 @@ async function doProfilePasswordChange() {
     const crew  = data?.crew  || null;
     _pendingClaimToken = token;
 
-    const crewColor   = crew?.color || '#FF2D78';
+    const crewColor   = safeColor(crew?.color, '#FF2D78');
     const crewName    = crew?.name  || 'a crew';
     const memberCount = crew?.member_count ?? 0;
     const statusLabel = crew?.status === 'locked-in' ? '🔒 Locked In' : '🌐 Recruiting';
@@ -6505,7 +6505,7 @@ async function doProfilePasswordChange() {
     const raver    = previewData?.raver  || {};
     const crew     = previewData?.crew   || {};
     const crewName = crew.name  || 'the crew';
-    const crewColor= crew.color || '#00F5FF';
+    const crewColor= safeColor(crew.color, '#00F5FF');
     const raverName= raver.name || 'Raver';
     const gradient = raver.gradient || `linear-gradient(135deg,${crewColor},${crewColor}88)`;
     const primaryColor = gradient.match(/#[0-9A-Fa-f]{6}/)?.[0] || crewColor;
@@ -6602,7 +6602,7 @@ async function doProfilePasswordChange() {
   function showPreAuthIntercept(previewData, token) {
     const crew      = previewData?.crew  || {};
     const raver     = previewData?.raver || {};
-    const crewColor = crew.color || '#00F5FF';
+    const crewColor = safeColor(crew.color, '#00F5FF');
     const crewName  = crew.name;
     const raverName = raver.name;
 
@@ -9163,7 +9163,7 @@ async function doProfilePasswordChange() {
   function buildPollsHTML(crewId) {
     const crew = getCrew(crewId);
     const uid = currentUser?.id;
-    const accentColor = crew?.color || 'var(--neon-pink)';
+    const accentColor = safeColor(crew?.color, '#FF2D78');
 
     const cards = crewPolls.map(poll => renderPollCard(poll, accentColor, uid)).join('');
     const emptyState = crewPolls.length === 0
@@ -9876,7 +9876,7 @@ async function doProfilePasswordChange() {
 
     const linkedPoll = jam.poll_id ? crewPolls.find(p => p.id === jam.poll_id) : null;
     const linkedPollHTML = linkedPoll
-      ? `<div class="jam-linked-poll">${renderPollCard(linkedPoll, getCrew(crewId)?.color || 'var(--neon-pink)', uid)}</div>`
+      ? `<div class="jam-linked-poll">${renderPollCard(linkedPoll, safeColor(getCrew(crewId)?.color), uid)}</div>`
       : '';
 
     const nominateBtn = uid && !jam.poll_id
@@ -10818,7 +10818,7 @@ async function doProfilePasswordChange() {
         : '';
       return `
         <div class="crew-pick-item${sel ? ' selected' : ''}" onclick="toggleCrewPick('${String(c.id).replace(/'/g,"\\'")}')">
-          <div class="crew-pick-dot" style="background:${c.color}"></div>
+          <div class="crew-pick-dot" style="background:${safeColor(c.color)}"></div>
           <div class="crew-pick-info">
             <div class="crew-pick-name">${c.name}</div>
             <div class="crew-pick-count">${count} ${count === 1 ? 'member' : 'members'}</div>
@@ -11295,6 +11295,9 @@ async function doProfilePasswordChange() {
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
       .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   }
+  function safeColor(v, fallback = '#FF2D78') {
+    return /^#[0-9A-Fa-f]{3,6}$/.test(v) ? v : fallback;
+  }
   function extractFirstColor(gradient) {
     return /#[0-9A-Fa-f]{6}/.exec(gradient)?.[0] || '#ffffff';
   }
@@ -11748,7 +11751,7 @@ async function doProfilePasswordChange() {
               const statusLabel = { 'recruiting': '🟢 Recruiting', 'locked-in': '🔒 Locked In', 'secret': '🤫 Secret' }[c.status] || c.status;
               const memberCount = (c.squadIds || []).length;
               return `
-                <div class="profile-crew-card" onclick="openDetail('${c.id}')" style="--crew-col:${c.color};">
+                <div class="profile-crew-card" onclick="openDetail('${c.id}')" style="--crew-col:${safeColor(c.color)};">
                   <div class="profile-crew-bar" style="background:${c.gradient};"></div>
                   <div class="profile-crew-body">
                     <div class="profile-crew-name">${c.name}</div>
