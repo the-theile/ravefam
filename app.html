@@ -11539,9 +11539,9 @@ async function doProfilePasswordChange() {
           <div class="profile-hero-bar" style="background:${r.gradient}"></div>
           ${avatarEl}
           <div class="profile-id">
-            <input class="profile-edit-hero-input" id="pf-name" value="${(r.name||'').replace(/"/g,'&quot;')}" placeholder="Name">
+            <input class="profile-edit-hero-input" id="pf-name" value="${(r.name||'').replace(/"/g,'&quot;')}" placeholder="Name" maxlength="80">
             ${handleField}
-            <input class="profile-edit-hero-input base-input" id="pf-base" value="${(r.base||'').replace(/"/g,'&quot;')}" placeholder="📍 Home base">
+            <input class="profile-edit-hero-input base-input" id="pf-base" value="${(r.base||'').replace(/"/g,'&quot;')}" placeholder="📍 Home base" maxlength="60">
           </div>
         </div>
 
@@ -11552,9 +11552,9 @@ async function doProfilePasswordChange() {
 
         <div class="profile-section">
           <h3>📱 Contact</h3>
-          ${fieldRow('Instagram','pf-instagram', r.instagram, '@samraves')}
-          ${fieldRow('Radiate','pf-radiate', r.radiate, 'e.g. @samraves')}
-          ${fieldRow('Phone','pf-phone', r.phone, '+44 7700 900000')}
+          ${fieldRow('Instagram','pf-instagram', r.instagram, '@samraves', false, 30)}
+          ${fieldRow('Radiate','pf-radiate', r.radiate, 'e.g. @samraves', false, 50)}
+          ${fieldRow('Phone','pf-phone', r.phone, '+44 7700 900000', false, 20)}
           ${isOwnProfile ? `
             <div class="phone-visibility-row">
               <input type="checkbox" id="pf-phone-visible" ${r.phoneVisible ? 'checked' : ''}>
@@ -11942,11 +11942,12 @@ async function doProfilePasswordChange() {
   let editingVibeTags = new Set();
   let editingCustomVibeTags = [];
 
-  function fieldRow(label, id, value, placeholder, textarea) {
+  function fieldRow(label, id, value, placeholder, textarea, maxlength) {
     const v = (value || '').replace(/"/g,'&quot;');
+    const ml = maxlength ? ` maxlength="${maxlength}"` : '';
     const input = textarea
-      ? `<textarea class="form-input" id="${id}" placeholder="${placeholder}">${escHtml(value || '')}</textarea>`
-      : `<input class="form-input" id="${id}" value="${v}" placeholder="${placeholder}">`;
+      ? `<textarea class="form-input" id="${id}" placeholder="${placeholder}"${ml}>${escHtml(value || '')}</textarea>`
+      : `<input class="form-input" id="${id}" value="${v}" placeholder="${placeholder}"${ml}>`;
     return `<div class="form-group"><label class="form-label">${label}</label>${input}</div>`;
   }
 
@@ -12747,7 +12748,10 @@ async function doProfilePasswordChange() {
         openProfile(r.id);
         showToast(`✅ Updated ${r.name}`);
         if (currentUser) {
-          dbSaveRaver(data, r.id).then(() => dbSaveRaverFestivals(r.id, data.festIds)).catch(console.warn);
+          dbSaveRaver(data, r.id).then(() => dbSaveRaverFestivals(r.id, data.festIds)).catch(e => {
+            console.warn('[saveProfile] DB sync failed:', e);
+            showToast('⚠️ Profile saved locally — sync failed, try again');
+          });
         }
       } catch(err) {
         console.error('[saveProfile]', err);
@@ -13077,7 +13081,7 @@ async function doProfilePasswordChange() {
     ).join('');
     document.getElementById('rave-edit-modal').innerHTML = `
       <div class="modal-title">${f ? '✏️ Edit Rave' : '🎉 Add Rave'}</div>
-      ${fieldRow('Rave Name','fe-name', f?.name, 'e.g. Awakenings or Basement at Fabric this Friday')}
+      ${fieldRow('Rave Name','fe-name', f?.name, 'e.g. Awakenings or Basement at Fabric this Friday', false, 100)}
       <div class="form-group">
         <label class="form-label">Date</label>
         <input class="form-input" id="fe-date" type="date" value="${(() => { if (!f) return ''; if (f.date) return f.date; const d = festDate(f); if (!d || isNaN(d)) return ''; return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })()}" style="color-scheme:dark;">
@@ -13086,7 +13090,7 @@ async function doProfilePasswordChange() {
         <label class="form-label">Location</label>
         <div class="loc-autocomplete-wrap">
           <input class="form-input" id="fe-loc" value="${(f?.location||'').replace(/"/g,'&quot;')}"
-            placeholder="e.g. Amsterdam, NL" autocomplete="off"
+            placeholder="e.g. Amsterdam, NL" autocomplete="off" maxlength="100"
             oninput="locSearchDebounce(this.value)"
             onkeydown="locKeydown(event)"
             onblur="setTimeout(closeLoc,200)">
@@ -14191,7 +14195,7 @@ async function doProfilePasswordChange() {
       </div>
       <div class="stats-section-card">
         <div class="stats-section-title">🏆 Rave Leaderboard</div>
-        ${lb.map((m, i) => {
+        ${lb.length ? lb.map((m, i) => {
           const isYou = you && String(m.id) === String(you.id);
           const isOG = ogMember && String(m.id) === String(ogMember.id);
           const rank = i < 3 ? rankIcons[i] : `<span style="font-size:0.75rem;">${i+1}</span>`;
@@ -14201,7 +14205,7 @@ async function doProfilePasswordChange() {
             <div class="stats-lb-name${isYou ? ' you' : ''}">${escHtml(m.name)}${isOG ? `<span class="stats-lb-og">OG</span>` : ''}</div>
             <div class="stats-lb-val">${m.raveCount} rave${m.raveCount!==1?'s':''}</div>
           </div>`;
-        }).join('')}
+        }).join('') : '<div class="archive-empty" style="padding:16px 0;">No raves logged yet — start adding raves to see who leads the pack 🏆</div>'}
       </div>
       ${pairwiseHtml}
     `;
