@@ -5811,6 +5811,12 @@ async function doProfilePasswordChange() {
     if (_realtimeChannel) { _realtimeChannel.unsubscribe(); _realtimeChannel = null; }
     clearTimeout(_reloadDebounce);
     squad.length = 0; crews.length = 0; festivals.length = 0; dreamPins = []; archiveLinks = [];
+    crewPolls = []; crewJams = []; crewJamVibes = [];
+    crewAchievements = []; raverAchievements = []; crewFeedEvents = [];
+    _notifications = [];
+    Object.keys(nicknameCache).forEach(k => delete nicknameCache[k]);
+    Object.keys(festVibesCache).forEach(k => delete festVibesCache[k]);
+    Object.keys(metStoriesCache).forEach(k => delete metStoriesCache[k]);
     document.getElementById('app-loading').classList.add('hidden');
     document.getElementById('auth-screen').classList.remove('hidden');
     document.getElementById('main-app').style.display = 'none';
@@ -8791,10 +8797,13 @@ async function doProfilePasswordChange() {
     const newHypedBy = alreadyHyped
       ? (pin.hyped_by || []).filter(id => id !== uid)
       : [...(pin.hyped_by || []), uid];
+    // Optimistic update first — a second rapid tap now reads the updated state
+    // and correctly toggles back, preventing duplicate hyps.
+    const prev = pin.hyped_by;
+    pin.hyped_by = newHypedBy;
     const { error } = await sb.from('dream_board_pins')
       .update({ hyped_by: newHypedBy }).eq('id', pinId);
-    if (error) { showToast('⚠️ Could not update hype'); return; }
-    pin.hyped_by = newHypedBy;
+    if (error) { pin.hyped_by = prev; showToast('⚠️ Could not update hype'); return; }
   }
 
   async function addDreamPin(crewId) {
@@ -8802,12 +8811,14 @@ async function doProfilePasswordChange() {
     const label = input?.value?.trim();
     if (!label) { showToast('✏️ Enter something to pin first'); return; }
     if (label.length > 120) { showToast('✏️ Keep it under 120 characters'); return; }
-    input.value = '';
     input.disabled = true;
-    await dbAddDreamPin(crewId, label);
+    const pin = await dbAddDreamPin(crewId, label);
     input.disabled = false;
-    rerenderDreamBoard(crewId);
-    checkAndAwardBadges(crewId);
+    if (pin) {
+      input.value = '';
+      rerenderDreamBoard(crewId);
+      checkAndAwardBadges(crewId);
+    }
   }
 
   async function deleteDreamPin(pinId, crewId) {
