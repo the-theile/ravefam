@@ -7461,10 +7461,12 @@ async function doProfilePasswordChange() {
   // Compress an image File to a Blob (for Supabase Storage uploads)
   function compressImageToBlob(file, maxDim, quality) {
     quality = quality || 0.85;
-    return new Promise(resolve => {
+    return new Promise((resolve, reject) => {
       const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Could not read file'));
       reader.onload = e => {
         const img = new Image();
+        img.onerror = () => reject(new Error('Image failed to load'));
         img.onload = () => {
           let w = img.width, h = img.height;
           if (w > maxDim || h > maxDim) {
@@ -7474,7 +7476,7 @@ async function doProfilePasswordChange() {
           const canvas = document.createElement('canvas');
           canvas.width = w; canvas.height = h;
           canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-          canvas.toBlob(resolve, 'image/jpeg', quality);
+          canvas.toBlob(b => b ? resolve(b) : reject(new Error('Canvas export failed')), 'image/jpeg', quality);
         };
         img.src = e.target.result;
       };
@@ -7522,6 +7524,7 @@ async function doProfilePasswordChange() {
     const file = event.target.files[0];
     if (!file) return;
     event.target.value = '';
+    if (file.size > 10 * 1024 * 1024) { showToast('⚠️ Photo must be under 10 MB'); return; }
     const r = getRaver(raverId);
     if (!r) return;
     if (r.avatarUrl) {
@@ -7588,6 +7591,7 @@ async function doProfilePasswordChange() {
     const file = event.target.files[0];
     if (!file) return;
     event.target.value = '';
+    if (file.size > 10 * 1024 * 1024) { showToast('⚠️ Photo must be under 10 MB'); return; }
     const crew = getCrew(crewId);
     if (!crew) return;
     if (crew.totemPhotoUrl) {
@@ -7979,6 +7983,7 @@ async function doProfilePasswordChange() {
     const file = event.target.files[0];
     if (!file) return;
     event.target.value = '';
+    if (file.size > 10 * 1024 * 1024) { showToast('⚠️ Photo must be under 10 MB'); return; }
     const storagePath = ourPhotoStoragePath(viewingRaverId);
     const pair = ourPhotoPair(viewingRaverId);
     if (!storagePath || !pair || !currentUser) return;
@@ -13781,7 +13786,11 @@ async function doProfilePasswordChange() {
     _notifications.unshift(n);
     if (_notifications.length > 100) _notifications.splice(100);
     updateNotifBadge();
-    if (document.getElementById('notif-drawer-overlay').classList.contains('open')) renderNotifList();
+    if (document.getElementById('notif-drawer-overlay').classList.contains('open')) {
+      n.read = true;
+      updateNotifBadge();
+      renderNotifList();
+    }
     if (currentUser) {
       sb.from('notifications').insert({ user_id: currentUser.id, crew_id: null, message })
         .select('id').single()
@@ -13867,7 +13876,24 @@ async function doProfilePasswordChange() {
   document.addEventListener('DOMContentLoaded', updateNotifBadge);
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch(console.warn);
+    navigator.serviceWorker.register('/sw.js').then(reg => {
+      reg.onupdatefound = () => {
+        const sw = reg.installing;
+        sw.onstatechange = () => {
+          if (sw.state === 'installed' && navigator.serviceWorker.controller) {
+            const t = document.getElementById('toast');
+            if (t) {
+              t.textContent = '✨ Update available — tap to refresh';
+              t.style.cursor = 'pointer';
+              t.onclick = () => location.reload();
+              t.classList.add('show');
+              clearTimeout(toastTimer);
+              toastTimer = setTimeout(() => t.classList.remove('show'), 10000);
+            }
+          }
+        };
+      };
+    }).catch(console.warn);
   }
 
   // ===== STATS PAGE =====
@@ -14260,10 +14286,13 @@ async function doProfilePasswordChange() {
             try { await navigator.share({ files: [file], title: 'My Rave Life — RaveFAM' }); } catch {}
           } else {
             const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url; a.download = 'my-rave-life.png'; a.click();
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
-            showToast('📥 Wrapped card downloaded!');
+            try {
+              const a = document.createElement('a');
+              a.href = url; a.download = 'my-rave-life.png'; a.click();
+              showToast('📥 Wrapped card downloaded!');
+            } finally {
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
+            }
           }
         }, 'image/png');
       } else {
