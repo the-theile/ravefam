@@ -1263,7 +1263,7 @@
   .hype-count { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.75rem; }
   .dream-pin-del {
     background: none; border: none; color: var(--muted); font-size: 1.1rem;
-    cursor: pointer; padding: 2px 4px; line-height: 1; opacity: 0.6;
+    cursor: pointer; padding: 8px; line-height: 1; opacity: 0.6;
   }
   .dream-pin-del:hover { color: var(--neon-pink); opacity: 1; }
   .dream-empty { font-size: 0.82rem; color: var(--muted); text-align: center; padding: 20px 0; }
@@ -1305,7 +1305,7 @@
   .archive-link-open:hover { border-color: rgba(0,245,255,0.4); color: var(--neon-cyan); }
   .archive-link-del   {
     background: none; border: none; color: var(--muted); font-size: 1.1rem;
-    cursor: pointer; padding: 2px 4px; line-height: 1; opacity: 0.6;
+    cursor: pointer; padding: 8px; line-height: 1; opacity: 0.6;
   }
   .archive-link-del:hover { color: var(--neon-pink); opacity: 1; }
   .archive-empty { font-size: 0.82rem; color: var(--muted); text-align: center; padding: 20px 0; }
@@ -1874,6 +1874,7 @@
     z-index: 300;
     transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
     white-space: nowrap;
+    max-width: calc(100vw - 32px);
   }
   .toast.show { transform: translateX(-50%) translateY(0); }
 
@@ -5459,7 +5460,7 @@
     <div class="onboard-title">Drop your identity 🪩</div>
     <div class="onboard-sub">Your name and tag — so your crew can find you in the wild. Everything else you can fill in later.</div>
     <input class="ob-inline-field" id="ob-name-input" type="text"
-      placeholder="Your name" autocomplete="off" spellcheck="false"
+      placeholder="Your name" autocomplete="off" spellcheck="false" maxlength="80"
       oninput="obCheckStep2Ready()" style="margin-bottom:10px;">
     <div class="ob-handle-wrap">
       <span class="ob-at">@</span>
@@ -5736,9 +5737,9 @@ async function doProfilePasswordChange() {
     if (error) { authError(error.message); return; }
     authSuccess('✅ Password updated!');
     // Password saved — boot the app; user is already authenticated
-    const { data: { user } } = await sb.auth.getUser();
-    _bootedUserId = user.id;
-    showApp(user);
+    const { data } = await sb.auth.getUser();
+    const user = data?.user;
+    if (user) { _bootedUserId = user.id; showApp(user); }
   }
 
   async function doLogin() {
@@ -7245,15 +7246,15 @@ async function doProfilePasswordChange() {
   function startEditMetStory(raverId) {
     const cloud = document.getElementById(`met-cloud-mine-${raverId}`);
     if (!cloud) return;
-    const current = (metStoriesCache[String(raverId)]?.mine || '').replace(/&amp;/g,'&').replace(/&lt;/g,'<');
+    const current = metStoriesCache[String(raverId)]?.mine || '';
     cloud.innerHTML = `
-      <textarea class="met-edit-area" id="met-edit-${raverId}" placeholder="How did you two meet?" maxlength="2000">${current}</textarea>
+      <textarea class="met-edit-area" id="met-edit-${raverId}" placeholder="How did you two meet?" maxlength="2000"></textarea>
       <div class="met-bubble-actions">
         <button onclick="cancelEditMetStory('${raverId}')">Cancel</button>
         <button class="met-save-btn" onclick="doneEditMetStory('${raverId}')">Save ✓</button>
       </div>`;
     const ta = document.getElementById(`met-edit-${raverId}`);
-    if (ta) { ta.focus(); ta.selectionStart = ta.value.length; }
+    if (ta) { ta.value = current; ta.focus(); ta.selectionStart = ta.value.length; }
   }
 
   function cancelEditMetStory(raverId) {
@@ -7926,6 +7927,7 @@ async function doProfilePasswordChange() {
         r.status = 'unclaimed';
         r.isYou = false;
       }
+      delete metStoriesCache[String(raverId)];
       renderSquad();
       openProfile(raverId);
       showToast('🔗 Account disconnected — profile is now unclaimed');
@@ -9563,7 +9565,8 @@ async function doProfilePasswordChange() {
     const expiresAt = expiryHours
       ? new Date(Date.now() + parseInt(expiryHours, 10) * 3600000).toISOString()
       : null;
-    closeCreatePollModal();
+    const submitBtn = document.querySelector('#create-poll-overlay .btn-primary');
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Launching…'; }
     const poll = await dbCreatePoll(_createPollCrewId, {
       question: q,
       pollType: _createPollType,
@@ -9571,7 +9574,14 @@ async function doProfilePasswordChange() {
       isAnonymous: _createPollAnonymous,
       expiresAt
     });
-    if (poll) { rerenderPolls(_createPollCrewId); checkAndAwardBadges(_createPollCrewId); }
+    if (poll) {
+      closeCreatePollModal();
+      rerenderPolls(_createPollCrewId);
+      checkAndAwardBadges(_createPollCrewId);
+    } else {
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Launch it 🚀'; }
+      showToast('⚠️ Could not create poll — try again');
+    }
   }
 
   function closeCreatePollModal() {
@@ -10055,7 +10065,8 @@ async function doProfilePasswordChange() {
     const crewId = _addJamCrewId;
     const meta   = _addJamMeta;
 
-    closeAddJamModal();
+    const submitBtn = document.querySelector('#add-jam-overlay .btn-primary');
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Dropping…'; }
 
     const jam = await dbAddJam(crewId, {
       url: meta.url,
@@ -10067,7 +10078,14 @@ async function doProfilePasswordChange() {
       description,
       festivalId
     });
-    if (jam) { rerenderJams(crewId); checkAndAwardBadges(crewId); }
+    if (jam) {
+      closeAddJamModal();
+      rerenderJams(crewId);
+      checkAndAwardBadges(crewId);
+    } else {
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Drop it 🎵'; }
+      showToast('⚠️ Could not save jam — try again');
+    }
   }
 
   function closeAddJamModal() {
