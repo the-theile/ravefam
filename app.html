@@ -13911,6 +13911,18 @@ async function doProfilePasswordChange() {
   }
 
   let _statsSelectedCrewId = null;
+  let _wrappedStarTaps   = 0;
+  let _wrappedUnlocked   = false;
+
+  function wrappedStarTap() {
+    _wrappedStarTaps++;
+    if (_wrappedStarTaps >= 3) {
+      _wrappedUnlocked = true;
+      _wrappedStarTaps = 0;
+      loadStatsPage();
+      showToast('✨ You found it. Rave Wrapped unlocked!');
+    }
+  }
 
   function switchStatTab(tab, el) {
     document.querySelectorAll('.stats-subtab').forEach(t => t.classList.remove('active'));
@@ -13987,9 +13999,18 @@ async function doProfilePasswordChange() {
       </div>
     </div>`;
 
-    // Rave Wrapped button (5+ raves) or unlock gate
-    if (totalRaves >= 5) {
+    // Rave Wrapped button (5+ raves, December only) or lock/unlock gate
+    const isDecember = now.getMonth() === 11;
+    if (totalRaves >= 5 && (isDecember || _wrappedUnlocked)) {
       html += `<button class="stats-wrapped-btn" onclick="openWrapped()">✨ See My Rave Wrapped ${thisYear}</button>`;
+    } else if (totalRaves >= 5) {
+      html += `<div>
+        <button class="stats-wrapped-btn" style="opacity:0.4;pointer-events:none;" tabindex="-1" aria-disabled="true">✨ See My Rave Wrapped ${thisYear}</button>
+        <div style="text-align:center;margin-top:10px;">
+          <span onclick="wrappedStarTap()" style="font-size:1.5rem;cursor:pointer;user-select:none;" title="✨" role="button" aria-label="Unlock Rave Wrapped">✨</span>
+          <div style="color:var(--muted);font-size:0.78rem;margin-top:5px;">🔒 Available in December</div>
+        </div>
+      </div>`;
     } else {
       const needed = 5 - totalRaves;
       const pct = Math.round((totalRaves / 5) * 100);
