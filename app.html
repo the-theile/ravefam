@@ -6294,7 +6294,7 @@ async function doProfilePasswordChange() {
       : `<span class="claim-tag">Raver</span>`;
 
     const avatarContent = raver.avatar_url
-      ? `<img src="${raver.avatar_url}" style="width:100%;height:100%;object-fit:cover;" alt="${escHtml(raver.name || '')}">`
+      ? `<img src="${escHtml(raver.avatar_url)}" style="width:100%;height:100%;object-fit:cover;" alt="${escHtml(raver.name || '')}">`
       : (raver.name ? initials(raver.name) : '?');
 
     // Detect merge scenario: does this user already have an active raver profile?
@@ -6546,6 +6546,8 @@ async function doProfilePasswordChange() {
     if (canvas) { const ctx = canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height); }
     if (window._confettiFrame) { cancelAnimationFrame(window._confettiFrame); window._confettiFrame = null; }
     if (window._successAutoClose) { clearTimeout(window._successAutoClose); window._successAutoClose = null; }
+    const me = squad.find(r => r.isYou);
+    if (me && !me.handle) setTimeout(showHandlePicker, 300);
   }
 
   // ── Confetti ──────────────────────────────────────────
@@ -6639,7 +6641,7 @@ async function doProfilePasswordChange() {
       avatarEl.style.background = grad;
       avatarEl.style.boxShadow  = `0 0 32px ${crewColor}55`;
       if (raver.avatar_url) {
-        avatarEl.innerHTML = `<img src="${raver.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="${escHtml(raver.name||'')}">`;
+        avatarEl.innerHTML = `<img src="${escHtml(raver.avatar_url)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="${escHtml(raver.name||'')}">`;
       } else if (raver.name) {
         avatarEl.textContent = initials(raver.name);
       } else {
@@ -6706,7 +6708,7 @@ async function doProfilePasswordChange() {
     dbLoadNotifications();
     setupRealtimeSync();
     const me = squad.find(r => r.isYou);
-    if (!me && !currentUser?.user_metadata?.onboarded) {
+    if (!me && !currentUser?.user_metadata?.onboarded && !_pendingClaimToken && !_pendingCrewJoinToken) {
       // New user with no profile yet — run onboarding
       setTimeout(showOnboarding, 400);
     } else if (me && !me.handle) {
@@ -6965,7 +6967,7 @@ async function doProfilePasswordChange() {
             font-size:0.7rem;font-weight:700;color:#fff;font-family:'Outfit',sans-serif;
             overflow:hidden;flex-shrink:0;
           ">${r.avatarUrl
-            ? `<img src="${r.avatarUrl}" style="width:100%;height:100%;object-fit:cover;" loading="lazy" alt="${escHtml(r.name)}">`
+            ? `<img src="${escHtml(r.avatarUrl)}" style="width:100%;height:100%;object-fit:cover;" loading="lazy" alt="${escHtml(r.name)}">`
             : initials(r.name)
           }</div>`).join('')
           + (extra > 0 ? `<div style="
@@ -7120,7 +7122,7 @@ async function doProfilePasswordChange() {
         ? `background:transparent;overflow:hidden;padding:0;`
         : `background:${r.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)'};`;
       const dotInner = r.avatarUrl
-        ? `<img src="${r.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${escHtml(firstName)}'s avatar">`
+        ? `<img src="${escHtml(r.avatarUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${escHtml(firstName)}'s avatar">`
         : '';
       html += `<div class="fest-vibe-item">
         <div class="fest-vibe-dot" style="${dotStyle}">${dotInner}</div>
@@ -7986,7 +7988,7 @@ async function doProfilePasswordChange() {
 
     const mySlot = myPhoto
       ? `<div class="our-photo-slot">
-           <img src="${myPhoto}" alt="Your photo" style="cursor:zoom-in;" onclick="openPhotoLightbox(this.src)">
+           <img src="${escHtml(myPhoto)}" alt="Your photo" style="cursor:zoom-in;" onclick="openPhotoLightbox(this.src)">
            <button class="our-photo-remove" data-viewing="${viewingRaverId}" data-slot="mine"
              onclick="removeOurPhoto(this.dataset.viewing,'mine')" title="Remove">✕</button>
          </div>`
@@ -8002,7 +8004,7 @@ async function doProfilePasswordChange() {
 
     const theirSlot = theirPhoto
       ? `<div class="our-photo-slot" style="transform:rotate(2deg);">
-           <img src="${theirPhoto}" alt="Their photo" style="cursor:zoom-in;" onclick="openPhotoLightbox(this.src)">
+           <img src="${escHtml(theirPhoto)}" alt="Their photo" style="cursor:zoom-in;" onclick="openPhotoLightbox(this.src)">
          </div>`
       : `<div class="our-photo-slot" style="transform:rotate(2deg);">
            <div class="our-photo-slot-empty"></div>
@@ -8350,7 +8352,7 @@ async function doProfilePasswordChange() {
     const shown = members.slice(0, 4);
     let html = shown.map(m => {
       if (m.url) {
-        return `<div class="avatar" style="background:transparent;overflow:hidden;padding:0;flex-shrink:0;"><img src="${m.url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${m.i}"></div>`;
+        return `<div class="avatar" style="background:transparent;overflow:hidden;padding:0;flex-shrink:0;"><img src="${escHtml(m.url)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${escHtml(m.i)}"></div>`;
       }
       return `<div class="avatar" style="background:${m.c};color:${m.t}">${m.i.slice(0,2).toUpperCase()}</div>`;
     }).join('');
@@ -8443,7 +8445,7 @@ async function doProfilePasswordChange() {
           ? `<div class="secret-eye-badge eye-secret" title="Secret — only you can see this crew"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg></div>`
           : `<div class="secret-eye-badge eye-open" title="Crew is visible to members"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>`}
         <div class="crew-card-head">
-          ${crew.totemPhotoUrl ? `<img class="crew-totem-thumb" src="${crew.totemPhotoUrl}" alt="Crew totem">` : ''}
+          ${crew.totemPhotoUrl ? `<img class="crew-totem-thumb" src="${escHtml(crew.totemPhotoUrl)}" alt="Crew totem">` : ''}
           <div class="crew-name">${escHtml(crew.name)}</div>
           <span class="crew-status ${s.cls}${crew.isLead ? ' tappable' : ''}"
                 onclick="event.stopPropagation(); toggleStatus('${crew.id}')"
@@ -8619,7 +8621,7 @@ async function doProfilePasswordChange() {
           } else {
             right = `<span class="detail-member-arrow">›</span>`;
           }
-          const pDisplayFirst = displayName(p).split(' ')[0];
+          const pDisplayFirst = escHtml(displayName(p).split(' ')[0]);
           const nameDisplay = isLeader
             ? `<span style="display:flex;align-items:center;gap:5px;">${pDisplayFirst}${p.isYou ? ' (You)' : ''} <span title="Crew Leader" style="font-size:1rem;">👑</span> ${statusDot}</span>`
             : `<span>${pDisplayFirst}${p.isYou ? ' (You)' : ''} ${statusDot}</span>`;
@@ -8681,7 +8683,7 @@ async function doProfilePasswordChange() {
           <div class="form-group crew-totem-section">
             <div class="section-banner"><span class="banner-inner">📸 Crew Totem</span></div>
             <div class="totem-photo-wrap">
-              <img src="${crew.totemPhotoUrl}" alt="Crew totem">
+              <img src="${escHtml(crew.totemPhotoUrl)}" alt="Crew totem">
               <div class="totem-photo-actions">
                 <label class="btn btn-ghost" style="flex:1;padding:9px;font-size:0.78rem;text-align:center;cursor:pointer;">
                   🔄 Replace
@@ -8705,7 +8707,7 @@ async function doProfilePasswordChange() {
     } else if (crew.totemPhotoUrl) {
       totemBlock = `
         <div style="margin-bottom:16px;">
-          <img src="${crew.totemPhotoUrl}" alt="Crew totem" style="width:100%;max-height:150px;object-fit:cover;border-radius:12px;display:block;">
+          <img src="${escHtml(crew.totemPhotoUrl)}" alt="Crew totem" style="width:100%;max-height:150px;object-fit:cover;border-radius:12px;display:block;">
         </div>`;
     } else {
       totemBlock = '';
@@ -10834,7 +10836,7 @@ async function doProfilePasswordChange() {
         <div class="crew-pick-item${sel ? ' selected' : ''}" onclick="toggleCrewPick('${String(c.id).replace(/'/g,"\\'")}')">
           <div class="crew-pick-dot" style="background:${safeColor(c.color)}"></div>
           <div class="crew-pick-info">
-            <div class="crew-pick-name">${c.name}</div>
+            <div class="crew-pick-name">${escHtml(c.name)}</div>
             <div class="crew-pick-count">${count} ${count === 1 ? 'member' : 'members'}</div>
           </div>
           <div class="crew-pick-check">${checkmark}</div>
@@ -10880,7 +10882,7 @@ async function doProfilePasswordChange() {
         .filter(Boolean)
         .map(r => ({ i: initials(r.name), c: crew.color, t: '#fff', url: r.avatarUrl || null }));
       addedTo.push(crew.name);
-      if (currentUser) dbSaveCrewMembers(crew.id, crew.squadIds);
+      if (currentUser) dbAddCrewMember(crew.id, raverId);
     });
     closeCrewPick();
     renderCrews();
@@ -11077,6 +11079,8 @@ async function doProfilePasswordChange() {
       const joinedCrew = getCrew(data.crew_id);
       if (joinedCrew) openDetail(data.crew_id);
     }
+    const meAfterJoin = squad.find(r => r.isYou);
+    if (meAfterJoin && !meAfterJoin.handle) setTimeout(showHandlePicker, 400);
   }
 
   // Map each crew color to a vibrant 2-stop gradient
@@ -11318,7 +11322,7 @@ async function doProfilePasswordChange() {
   function raverAvatarHTML(photoUrl, gradient, name, divClass, divStyle) {
     divStyle = divStyle || '';
     if (photoUrl) {
-      return `<div class="${divClass}" style="${divStyle}background:transparent;overflow:hidden;padding:0;flex-shrink:0;"><img src="${photoUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${escHtml(name)}"></div>`;
+      return `<div class="${divClass}" style="${divStyle}background:transparent;overflow:hidden;padding:0;flex-shrink:0;"><img src="${escHtml(photoUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${escHtml(name)}"></div>`;
     }
     return `<div class="${divClass}" style="${divStyle}background:${gradient}">${initials(name).toUpperCase()}</div>`;
   }
@@ -11348,8 +11352,8 @@ async function doProfilePasswordChange() {
     const theirPhoto = cached?.theirs  ?? null;
     if (!myPhoto && !theirPhoto) return '';
     const slots = [];
-    if (myPhoto)    slots.push(`<div class="our-photo-slot"><img src="${myPhoto}" alt="Our photo"></div>`);
-    if (theirPhoto) slots.push(`<div class="our-photo-slot" style="transform:rotate(2deg);"><img src="${theirPhoto}" alt="Our photo"></div>`);
+    if (myPhoto)    slots.push(`<div class="our-photo-slot"><img src="${escHtml(myPhoto)}" alt="Our photo"></div>`);
+    if (theirPhoto) slots.push(`<div class="our-photo-slot" style="transform:rotate(2deg);"><img src="${escHtml(theirPhoto)}" alt="Our photo"></div>`);
     return `<div class="member-photos"><div class="our-photos-col"><div class="our-photos-slots">${slots.join('')}</div></div></div>`;
   }
 
@@ -11504,7 +11508,7 @@ async function doProfilePasswordChange() {
     const showInstagram = r.isYou || perms.editInstagram || (perms.isClaimed && !!r.instagram);
     if (showInstagram && r.instagram) {
       const ig = r.instagram.replace('@','');
-      connectBtns.push(`<a class="connect-btn connect-ig" href="https://instagram.com/${ig}" target="_blank" rel="noopener">📷 Instagram</a>`);
+      connectBtns.push(`<a class="connect-btn connect-ig" href="https://instagram.com/${escHtml(ig)}" target="_blank" rel="noopener">📷 Instagram</a>`);
     }
     // Phone: show if it's your profile, unclaimed (crew member can see), or claimed + owner opted in
     const sharedPhone = r.isYou ? r.phone : (perms.editPhone && !perms.isClaimed ? r.phone : (perms.isClaimed && r.phoneVisible ? r.phone : null));
@@ -11522,7 +11526,7 @@ async function doProfilePasswordChange() {
     const avatarBg = r.avatarUrl ? 'transparent' : r.gradient;
     const avatarOverflow = r.avatarUrl ? 'overflow:hidden;padding:0;' : '';
     const avatarContent = r.avatarUrl
-      ? `<img class="profile-avatar-photo" src="${r.avatarUrl}" alt="${r.name}">`
+      ? `<img class="profile-avatar-photo" src="${escHtml(r.avatarUrl)}" alt="${escHtml(r.name)}">`
       : initials(r.name).toUpperCase();
     const avatarEl = showAvatarUpload
       ? `<div class="avatar-col">
@@ -11768,7 +11772,7 @@ async function doProfilePasswordChange() {
                 <div class="profile-crew-card" onclick="openDetail('${c.id}')" style="--crew-col:${safeColor(c.color)};">
                   <div class="profile-crew-bar" style="background:${c.gradient};"></div>
                   <div class="profile-crew-body">
-                    <div class="profile-crew-name">${c.name}</div>
+                    <div class="profile-crew-name">${escHtml(c.name)}</div>
                     <div class="profile-crew-meta">
                       ${isLead ? '<span class="pcb lead">👑 Lead</span>' : '<span class="pcb member">🎧 Member</span>'}
                       <span class="pcb" style="background:rgba(255,255,255,0.05);color:var(--muted);border:1px solid rgba(255,255,255,0.1);">${statusLabel}</span>
@@ -11899,10 +11903,10 @@ async function doProfilePasswordChange() {
     document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
     if (profileOrigin === 'crews') {
       document.getElementById('page-crews').classList.add('active');
-      document.querySelectorAll('.nav-tab').forEach(t => { if (t.textContent.trim() === 'My Crews') t.classList.add('active'); });
+      document.querySelector('.nav-tab[onclick*="\'crews\'"]')?.classList.add('active');
     } else {
       document.getElementById('page-members').classList.add('active');
-      document.querySelectorAll('.nav-tab').forEach(t => { if (t.textContent.trim() === 'Ravers') t.classList.add('active'); });
+      document.querySelector('.nav-tab[onclick*="\'members\'"]')?.classList.add('active');
     }
   }
 
@@ -11940,7 +11944,7 @@ async function doProfilePasswordChange() {
           .map(sid => squad.find(x => String(x.id) === String(sid)))
           .filter(Boolean)
           .map(x => ({ i: initials(x.name), c: c.color, t: '#fff' }));
-        if (currentUser) dbSaveCrewMembers(c.id, c.squadIds);
+        if (currentUser) dbRemoveCrewMember(c.id, raverId);
       }
     });
     // Remove from squad
@@ -11990,11 +11994,10 @@ async function doProfilePasswordChange() {
   let editingCustomVibeTags = [];
 
   function fieldRow(label, id, value, placeholder, textarea, maxlength) {
-    const v = (value || '').replace(/"/g,'&quot;');
     const ml = maxlength ? ` maxlength="${maxlength}"` : '';
     const input = textarea
       ? `<textarea class="form-input" id="${id}" placeholder="${placeholder}"${ml}>${escHtml(value || '')}</textarea>`
-      : `<input class="form-input" id="${id}" value="${v}" placeholder="${placeholder}"${ml}>`;
+      : `<input class="form-input" id="${id}" value="${escHtml(value || '')}" placeholder="${placeholder}"${ml}>`;
     return `<div class="form-group"><label class="form-label">${label}</label>${input}</div>`;
   }
 
@@ -12035,7 +12038,7 @@ async function doProfilePasswordChange() {
 
     // Full editor: onboarding (new user creating own profile)
     const claimedHandle = r?.claimedBy && r?.handle
-      ? `<div class="form-group"><label class="form-label">Handle</label><div style="font-size:0.88rem;color:var(--muted);padding:11px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;">${r.handle} <span style="font-size:0.72rem;color:var(--neon-green);margin-left:6px;">✓ Claimed</span></div></div>`
+      ? `<div class="form-group"><label class="form-label">Handle</label><div style="font-size:0.88rem;color:var(--muted);padding:11px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;">${escHtml(r.handle)} <span style="font-size:0.72rem;color:var(--neon-green);margin-left:6px;">✓ Claimed</span></div></div>`
       : '';
     const handleField = isOwnProfile
       ? fieldRow('Handle','pf-handle', r?.handle, 'e.g. @samraves')
@@ -12084,7 +12087,7 @@ async function doProfilePasswordChange() {
         <div class="genre-preset-cloud" id="genre-preset-cloud">
           ${allGenrePresets().map(g => {
             const picked = (r?.genres || []).map(x=>x.toLowerCase()).includes(g.toLowerCase()) ? ' picked' : '';
-            return `<span class="genre-preset${picked}" style="--chip-col:${genreColor(g)};" onclick="toggleGenrePick('${g.replace(/'/g,"\\'").replace(/"/g,'&quot;')}', this)">${g}</span>`;
+            return `<span class="genre-preset${picked}" style="--chip-col:${genreColor(g)};" onclick="toggleGenrePick('${g.replace(/'/g,"\\'").replace(/"/g,'&quot;')}', this)">${escHtml(g)}</span>`;
           }).join('')}
         </div>
         <div class="vibe-custom-row">
@@ -12096,7 +12099,7 @@ async function doProfilePasswordChange() {
       </div>
       <div class="form-group">
         <label class="form-label">🎵 Favourite Artists</label>
-        <input class="form-input" id="pf-favs" value="${(r?.favArtists?.join(', ')||'').replace(/"/g,'&quot;')}" placeholder="Amelie Lens, Peggy Gou">
+        <input class="form-input" id="pf-favs" value="${escHtml(r?.favArtists?.join(', ')||'')}" placeholder="Amelie Lens, Peggy Gou">
         ${_artistSuggestHtml}
       </div>
       <div class="form-group">
@@ -12836,7 +12839,6 @@ async function doProfilePasswordChange() {
             .filter(Boolean)
             .map(x => ({ i: initials(x.name), c: crew.color, t: '#fff' }));
           renderCrews();
-          if (currentUser) dbSaveCrewMembers(crew.id, crew.squadIds);
           openDetail(crew.id);
           showToast(`🎉 Created ${r.name} and added to ${crew.name}`);
         }
@@ -12879,7 +12881,7 @@ async function doProfilePasswordChange() {
               anyCrewUpdated = true;
               // Only persist once the crew itself also has a real DB ID
               if (!String(crew.id).startsWith('temp_')) {
-                dbSaveCrewMembers(crew.id, crew.squadIds);
+                dbAddCrewMember(crew.id, inserted.id);
               }
             });
             if (anyCrewUpdated) renderCrews();
@@ -12961,7 +12963,7 @@ async function doProfilePasswordChange() {
         const dn = displayName(w);
         const bg = w.avatarUrl ? 'transparent;overflow:hidden;padding:0' : extractFirstColor(w.gradient);
         const inner = w.avatarUrl
-          ? `<img src="${w.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${initials(dn)}">`
+          ? `<img src="${escHtml(w.avatarUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${escHtml(initials(dn))}">`
           : initials(dn).toUpperCase();
         const isLast = idx === people.length - 1;
         let badgeHtml = '', bubbleHtml = '';
@@ -12976,7 +12978,7 @@ async function doProfilePasswordChange() {
             bubbleHtml = `<div class="${cls}" ${click}>${vibe.emoji}${captionHtml}</div>`;
           }
         }
-        return `<div class="avatar going-avatar${isLast ? ' row-end' : ''}" style="background:${bg};" data-raver-id="${w.id}" onclick="event.stopPropagation(); openProfile(this.dataset.raverId, false, 'members')" title="${dn}">${inner}${bubbleHtml}${badgeHtml}</div>`;
+        return `<div class="avatar going-avatar${isLast ? ' row-end' : ''}" style="background:${bg};" data-raver-id="${w.id}" onclick="event.stopPropagation(); openProfile(this.dataset.raverId, false, 'members')" title="${escHtml(dn)}">${inner}${bubbleHtml}${badgeHtml}</div>`;
       }).join('');
 
       const goingLabel = isUpcoming ? 'Going' : 'Sent It';
@@ -13412,7 +13414,7 @@ async function doProfilePasswordChange() {
     const progressBar = document.getElementById('progress-bar');
     if (!progressLabel || !progressBar) return;
     const all = document.querySelectorAll('.check-item');
-    total = all.length;
+    const total = all.length;
     checked = document.querySelectorAll('.check-item.checked').length;
     progressLabel.textContent = `${checked} of ${total} complete`;
     progressBar.style.width = `${(checked/total)*100}%`;
