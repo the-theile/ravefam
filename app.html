@@ -10880,7 +10880,7 @@ async function doProfilePasswordChange() {
         .filter(Boolean)
         .map(r => ({ i: initials(r.name), c: crew.color, t: '#fff', url: r.avatarUrl || null }));
       addedTo.push(crew.name);
-      if (currentUser) dbSaveCrewMembers(crew.id, crew.squadIds);
+      if (currentUser) dbAddCrewMember(crew.id, raverId);
     });
     closeCrewPick();
     renderCrews();
@@ -11899,10 +11899,10 @@ async function doProfilePasswordChange() {
     document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
     if (profileOrigin === 'crews') {
       document.getElementById('page-crews').classList.add('active');
-      document.querySelectorAll('.nav-tab').forEach(t => { if (t.textContent.trim() === 'My Crews') t.classList.add('active'); });
+      document.querySelector('.nav-tab[onclick*="\'crews\'"]')?.classList.add('active');
     } else {
       document.getElementById('page-members').classList.add('active');
-      document.querySelectorAll('.nav-tab').forEach(t => { if (t.textContent.trim() === 'Ravers') t.classList.add('active'); });
+      document.querySelector('.nav-tab[onclick*="\'members\'"]')?.classList.add('active');
     }
   }
 
@@ -12836,7 +12836,6 @@ async function doProfilePasswordChange() {
             .filter(Boolean)
             .map(x => ({ i: initials(x.name), c: crew.color, t: '#fff' }));
           renderCrews();
-          if (currentUser) dbSaveCrewMembers(crew.id, crew.squadIds);
           openDetail(crew.id);
           showToast(`🎉 Created ${r.name} and added to ${crew.name}`);
         }
@@ -12879,7 +12878,7 @@ async function doProfilePasswordChange() {
               anyCrewUpdated = true;
               // Only persist once the crew itself also has a real DB ID
               if (!String(crew.id).startsWith('temp_')) {
-                dbSaveCrewMembers(crew.id, crew.squadIds);
+                dbAddCrewMember(crew.id, inserted.id);
               }
             });
             if (anyCrewUpdated) renderCrews();
@@ -13412,7 +13411,7 @@ async function doProfilePasswordChange() {
     const progressBar = document.getElementById('progress-bar');
     if (!progressLabel || !progressBar) return;
     const all = document.querySelectorAll('.check-item');
-    total = all.length;
+    const total = all.length;
     checked = document.querySelectorAll('.check-item.checked').length;
     progressLabel.textContent = `${checked} of ${total} complete`;
     progressBar.style.width = `${(checked/total)*100}%`;
