@@ -7313,21 +7313,51 @@ async function doProfilePasswordChange() {
   }
 
   async function dbSaveRaverFestivals(raverId, festIds) {
-    // Delete existing links then re-insert
-    await sb.from('raver_festivals').delete().eq('raver_id', raverId);
-    if (festIds.length) {
+    const newIdStrs = festIds.map(String);
+    if (newIdStrs.length > 0) {
+      // Upsert new rows first — if this fails, bail before deleting anything
       const rows = festIds.map(fid => ({ raver_id: raverId, festival_id: fid }));
-      const { error } = await sb.from('raver_festivals').insert(rows);
-      if (error) { console.error('raver_festivals insert error', error); showToast('⚠️ Could not save festival attendance'); }
+      const { error } = await sb.from('raver_festivals')
+        .upsert(rows, { onConflict: 'raver_id,festival_id', ignoreDuplicates: true });
+      if (error) {
+        console.error('raver_festivals upsert error', error);
+        showToast('⚠️ Could not save festival attendance');
+        return;
+      }
+      // Now remove rows that are no longer in the list
+      const { data: existing } = await sb.from('raver_festivals').select('festival_id').eq('raver_id', raverId);
+      if (existing) {
+        const toDelete = existing.map(r => r.festival_id).filter(id => !newIdStrs.includes(String(id)));
+        if (toDelete.length) {
+          await sb.from('raver_festivals').delete().eq('raver_id', raverId).in('festival_id', toDelete);
+        }
+      }
+    } else {
+      // Intentionally clearing all RSVPs
+      await sb.from('raver_festivals').delete().eq('raver_id', raverId);
     }
   }
 
   async function dbSaveRaverFestivalInterest(raverId, interestedFestIds) {
-    await sb.from('raver_festival_interest').delete().eq('raver_id', raverId);
-    if (interestedFestIds.length) {
+    const newIdStrs = interestedFestIds.map(String);
+    if (newIdStrs.length > 0) {
       const rows = interestedFestIds.map(fid => ({ raver_id: raverId, festival_id: fid }));
-      const { error } = await sb.from('raver_festival_interest').insert(rows);
-      if (error) { console.error('raver_festival_interest insert error', error); showToast('⚠️ Could not save interest'); }
+      const { error } = await sb.from('raver_festival_interest')
+        .upsert(rows, { onConflict: 'raver_id,festival_id', ignoreDuplicates: true });
+      if (error) {
+        console.error('raver_festival_interest upsert error', error);
+        showToast('⚠️ Could not save interest');
+        return;
+      }
+      const { data: existing } = await sb.from('raver_festival_interest').select('festival_id').eq('raver_id', raverId);
+      if (existing) {
+        const toDelete = existing.map(r => r.festival_id).filter(id => !newIdStrs.includes(String(id)));
+        if (toDelete.length) {
+          await sb.from('raver_festival_interest').delete().eq('raver_id', raverId).in('festival_id', toDelete);
+        }
+      }
+    } else {
+      await sb.from('raver_festival_interest').delete().eq('raver_id', raverId);
     }
   }
 
