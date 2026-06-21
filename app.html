@@ -5772,9 +5772,18 @@ async function doProfilePasswordChange() {
     if (password.length < 6) { authError('Password must be at least 6 characters.'); return; }
     setAuthBusy(true); clearAuthMessages();
     const phone = document.getElementById('signup-phone').value.trim();
+    // Carry any pending crew-claim / crew-join token onto the email confirmation
+    // link, so verifying the email drops the user straight back into the claim
+    // (logged in, no re-scan, no manual login) instead of losing the invite.
+    const pendingClaim = sessionStorage.getItem('pendingClaim');
+    const pendingJoin  = sessionStorage.getItem('pendingCrewJoin');
+    const base = window.location.origin + window.location.pathname;
+    const redirect = pendingClaim ? `${base}?claim=${encodeURIComponent(pendingClaim)}`
+                   : pendingJoin  ? `${base}?join=${encodeURIComponent(pendingJoin)}`
+                   : base;
     const { data, error } = await sb.auth.signUp({
       email, password,
-      options: { data: { full_name: name, phone } }
+      options: { data: { full_name: name, phone }, emailRedirectTo: redirect }
     });
     setAuthBusy(false);
     if (error) { authError(error.message); return; }
@@ -5782,6 +5791,11 @@ async function doProfilePasswordChange() {
     // If enabled, prompt the user to check their inbox.
     if (data.session) {
       // session ready — onAuthStateChange handles transition
+    } else if (pendingClaim || pendingJoin) {
+      // Joining a crew — the confirmation link logs them in AND returns them to
+      // the claim, so they don't need to come back and log in manually.
+      authSuccess("✅ Almost there! Check your email and tap the confirmation link — it'll drop you straight into your crew. No need to log back in.");
+      showAuthTab('login');
     } else {
       authSuccess('✅ Almost there! Check your email for a confirmation link, then log in.');
       showAuthTab('login');
@@ -5791,6 +5805,7 @@ async function doProfilePasswordChange() {
   async function doLogout() {
     sessionStorage.removeItem('pendingClaim');
     sessionStorage.removeItem('pendingCrewJoin');
+    localStorage.removeItem('pendingClaimToken');
     await sb.auth.signOut();
     // onAuthStateChange will fire SIGNED_OUT and flip back to auth screen
   }
@@ -5907,7 +5922,10 @@ async function doProfilePasswordChange() {
     const token = params.get('claim') || localStorage.getItem('pendingClaimToken');
     if (token) {
       sessionStorage.setItem('pendingClaim', token);
-      localStorage.removeItem('pendingClaimToken');
+      // Keep a localStorage backup so the token survives the email-verification
+      // round trip even if the confirmation link opens in a different tab/browser
+      // (sessionStorage is per-tab). Cleared in commitClaim() / doLogout().
+      localStorage.setItem('pendingClaimToken', token);
     }
     const joinToken = params.get('join');
     if (joinToken) sessionStorage.setItem('pendingCrewJoin', joinToken);
@@ -6479,6 +6497,7 @@ async function doProfilePasswordChange() {
 
     // Claim succeeded — safe to clear the pending token from storage
     sessionStorage.removeItem('pendingClaim');
+    localStorage.removeItem('pendingClaimToken');
 
     // Persist any edits the user made in the review form
     const claimedId = result?.claimed_id || result?.merged_into;
@@ -6546,8 +6565,9 @@ async function doProfilePasswordChange() {
     if (canvas) { const ctx = canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height); }
     if (window._confettiFrame) { cancelAnimationFrame(window._confettiFrame); window._confettiFrame = null; }
     if (window._successAutoClose) { clearTimeout(window._successAutoClose); window._successAutoClose = null; }
-    const me = squad.find(r => r.isYou);
-    if (me && !me.handle) setTimeout(showHandlePicker, 300);
+    // First-time members run the full genre/handle wizard now that they've
+    // claimed their spot (no "welcome back" popup mid-onboarding).
+    runFirstTimeSetup();
   }
 
   // ── Confetti ──────────────────────────────────────────
@@ -6707,14 +6727,26 @@ async function doProfilePasswordChange() {
     // Load persisted notifications from DB
     dbLoadNotifications();
     setupRealtimeSync();
+    // Launch first-time setup (genre/handle wizard) unless a claim/join is still
+    // pending — in that case the claim preview is showing and setup runs after
+    // the claim completes (see closeSuccessScreen → runFirstTimeSetup).
+    if (!_pendingClaimToken && !_pendingCrewJoinToken) {
+      runFirstTimeSetup({ allowWelcome: true });
+    }
+  }
+
+  // Decide what (if anything) to show a user once they're in the app: the full
+  // genre/handle wizard for brand-new members, a handle prompt for profiles that
+  // never set one, or the "welcome back" popup for established ravers. Called at
+  // boot and again right after a QR claim succeeds. showOnboarding() updates an
+  // existing claimed raver in place (see obStep2Next), so it's safe post-claim.
+  function runFirstTimeSetup({ allowWelcome = false } = {}) {
     const me = squad.find(r => r.isYou);
-    if (!me && !currentUser?.user_metadata?.onboarded && !_pendingClaimToken && !_pendingCrewJoinToken) {
-      // New user with no profile yet — run onboarding
+    if (!currentUser?.user_metadata?.onboarded) {
       setTimeout(showOnboarding, 400);
     } else if (me && !me.handle) {
-      // Has a profile but never set a handle — require it now
       setTimeout(showHandlePicker, 400);
-    } else if (me && me.handle) {
+    } else if (allowWelcome && me && me.handle) {
       setTimeout(showWelcomePopup, 600);
     }
   }
