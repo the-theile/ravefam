@@ -12,6 +12,66 @@ test.describe('QR invite modal', () => {
   });
 });
 
+test.describe('invite prompt after adding a raver', () => {
+  async function addRaver(page, name) {
+    await page.evaluate(() => openProfileEditor());
+    await page.locator('#pf-name').fill(name);
+    await page.evaluate(() => saveProfile());
+  }
+
+  test('Skip-for-now path offers the invite, then opens the QR modal', async ({ page }) => {
+    const errors = await bootAuthedApp(page);
+    await addRaver(page, 'Newbie One');
+
+    await expect(page.locator('#crew-pick-overlay')).toHaveClass(/open/);
+    await page.getByRole('button', { name: 'Skip for now' }).click();
+
+    await expect(page.locator('#invite-prompt-overlay')).toHaveClass(/open/);
+    await expect(page.locator('#invite-prompt-modal')).toContainText('Invite Newbie now?');
+
+    await page.getByRole('button', { name: /Show QR/ }).click();
+    await expect(page.locator('#qr-overlay')).toHaveClass(/open/);
+    await expect(page.locator('#invite-prompt-overlay')).not.toHaveClass(/open/);
+    expect(errors).toEqual([]);
+  });
+
+  test('Send a link uses the native share sheet with the claim URL', async ({ page }) => {
+    const errors = await bootAuthedApp(page);
+    await page.evaluate(() => {
+      window.__shared = [];
+      navigator.share = (payload) => { window.__shared.push(payload); return Promise.resolve(); };
+    });
+    await addRaver(page, 'Newbie Three');
+
+    await expect(page.locator('#crew-pick-overlay')).toHaveClass(/open/);
+    await page.getByRole('button', { name: 'Skip for now' }).click();
+
+    await expect(page.locator('#invite-prompt-overlay')).toHaveClass(/open/);
+    await page.getByRole('button', { name: /Send a link/ }).click();
+    await expect(page.locator('#invite-prompt-overlay')).not.toHaveClass(/open/);
+
+    const shared = await page.evaluate(() => window.__shared);
+    expect(shared.length).toBe(1);
+    expect(shared[0].url).toContain('?claim=');
+    expect(errors).toEqual([]);
+  });
+
+  test("picking a crew (Let's go) also offers the invite, skip lands on profile", async ({ page }) => {
+    const errors = await bootAuthedApp(page);
+    await addRaver(page, 'Newbie Two');
+
+    await expect(page.locator('#crew-pick-overlay')).toHaveClass(/open/);
+    await page.locator('.crew-pick-item').first().click();
+    await page.locator('#crew-pick-modal').getByRole('button', { name: /Let's go/ }).click();
+
+    await expect(page.locator('#invite-prompt-overlay')).toHaveClass(/open/);
+    await page.getByRole('button', { name: 'Skip, invite later' }).click();
+    await expect(page.locator('#invite-prompt-overlay')).not.toHaveClass(/open/);
+    await expect(page.locator('#page-profile')).toHaveClass(/active/);
+    expect(errors).toEqual([]);
+  });
+});
+
 test.describe('crew invite link', () => {
   test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
 

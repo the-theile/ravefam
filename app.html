@@ -5173,6 +5173,11 @@
   </div>
 </div>
 
+<!-- Invite Prompt Modal (shown after the Crew Pick step for a new raver) -->
+<div class="modal-overlay" id="invite-prompt-overlay" onclick="if(event.target===this)closeInvitePrompt()">
+  <div class="modal" id="invite-prompt-modal"><!-- filled by JS --></div>
+</div>
+
 <!-- Delete Rave Bottom Sheet -->
 <div class="bottom-sheet-overlay" id="delete-rave-sheet-overlay" onclick="if(event.target===this)closeDeleteRaveSheet()">
   <div class="bottom-sheet">
@@ -6031,19 +6036,27 @@ async function doProfilePasswordChange() {
     showCrewJoinModal(token, data);
   }
 
+  // Build a raver's claim URL — works for both hosted and local file:// contexts.
+  function raverClaimUrl(r) {
+    const base = (window.location.origin && window.location.origin !== 'null')
+      ? window.location.origin + window.location.pathname
+      : window.location.href.split('?')[0];
+    return `${base}?claim=${r.qrToken}`;
+  }
+
   function showQRModal(raverId) {
     const r = getRaver(raverId);
     if (!r || !r.qrToken) { showToast('⚠️ No QR token for this raver'); return; }
     const crew = crews.find(c => (c.squadIds || []).some(id => String(id) === String(raverId)));
     const color = safeColor(crew?.color, '#FF2D78');
     const gradient = crew?.gradient || `linear-gradient(135deg,${color},${color})`;
-    // Build claim URL — works for both hosted and local file:// contexts
-    const base = (window.location.origin && window.location.origin !== 'null')
-      ? window.location.origin + window.location.pathname
-      : window.location.href.split('?')[0];
-    const claimUrl = `${base}?claim=${r.qrToken}`;
+    const claimUrl = raverClaimUrl(r);
     // 6-char alphanumeric invite code derived from qrToken
     const inviteCode = r.qrToken.replace(/-/g, '').slice(0, 6).toUpperCase();
+    const canShare = typeof navigator !== 'undefined' && !!navigator.share;
+    const shareBtn = canShare
+      ? `<button class="qr-copy-btn" onclick="shareInviteLink('${raverId}')">🔗 Share link</button>`
+      : '';
 
     document.getElementById('qr-modal').innerHTML = `
       <div class="qr-color-bar" style="background:${gradient}"></div>
@@ -6064,7 +6077,8 @@ async function doProfilePasswordChange() {
         <div style="font-family:'Fraunces',sans-serif;font-weight:800;font-size:2rem;letter-spacing:0.14em;color:#fff;text-shadow:0 0 20px ${color}88;">${inviteCode}</div>
         <div style="font-size:0.7rem;color:var(--muted);margin-top:2px;">They enter this at ravefam.com or on sign-up</div>
       </div>
-      <div style="display:flex;gap:10px;justify-content:center;margin-top:14px;">
+      <div style="display:flex;gap:10px;justify-content:center;margin-top:14px;flex-wrap:wrap;">
+        ${shareBtn}
         <button class="qr-copy-btn" onclick="copyClaimLink('${claimUrl}')">📋 Copy link</button>
         <button class="btn btn-ghost" style="padding:8px 18px;font-size:0.8rem;" onclick="closeQRModal()">Close</button>
       </div>`;
@@ -11056,7 +11070,7 @@ async function doProfilePasswordChange() {
     });
     closeCrewPick();
     renderCrews();
-    if (raver) openProfile(raver.id, false, 'members');
+    maybeOfferInvite(raverId);
     if (addedTo.length) {
       const label = addedTo.length === 1 ? addedTo[0] : addedTo.slice(0,-1).join(', ') + ' & ' + addedTo[addedTo.length-1];
       showToast(`🎉 ${raver?.name?.split(' ')[0] || 'Raver'} added to ${label}`);
@@ -11066,16 +11080,89 @@ async function doProfilePasswordChange() {
   function closeCrewPickAndProfile() {
     const raverId = _crewPickRaverId;
     closeCrewPick();
-    if (raverId) {
-      const r = getRaver(raverId);
-      if (r) openProfile(r.id, false, 'members');
-    }
+    if (raverId) maybeOfferInvite(raverId);
   }
 
   function closeCrewPick() {
     document.getElementById('crew-pick-overlay').classList.remove('open');
     _crewPickRaverId = null;
     _crewPickSelected = new Set();
+  }
+
+  // ===== Invite Prompt (shown after the Crew Pick step for a new raver) =====
+
+  let _invitePromptRaverId = null;
+
+  // Opens the raver profile underneath, then layers the invite prompt on top
+  // (only when signed in — guests have no qr_token / backend to invite with).
+  function maybeOfferInvite(raverId) {
+    const r = getRaver(raverId);
+    if (r) openProfile(r.id, false, 'members');
+    if (currentUser && raverId) openInvitePrompt(raverId);
+  }
+
+  function openInvitePrompt(raverId) {
+    const r = getRaver(raverId);
+    if (!r) return;
+    _invitePromptRaverId = raverId;
+    const firstName = escHtml(r.name.split(' ')[0]);
+    document.getElementById('invite-prompt-modal').innerHTML = `
+      <div style="font-size:2.6rem;text-align:center;margin-bottom:8px">📲</div>
+      <div class="modal-title" style="text-align:center;margin-bottom:6px">Invite ${firstName} now?</div>
+      <p style="text-align:center;font-size:0.83rem;color:var(--muted);margin:0 0 4px;line-height:1.5">
+        Show a QR code, share an invite code, or send a link so they can claim their spot and join the fam.</p>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px;">
+        <button class="btn btn-primary" onclick="showInviteQR()">Show QR &amp; code 🔥</button>
+        <button class="btn btn-ghost" onclick="shareInviteFromPrompt()">Send a link 🔗</button>
+        <button class="btn btn-ghost" onclick="closeInvitePrompt()">Skip, invite later</button>
+      </div>`;
+    document.getElementById('invite-prompt-overlay').classList.add('open');
+  }
+
+  function closeInvitePrompt() {
+    document.getElementById('invite-prompt-overlay').classList.remove('open');
+    _invitePromptRaverId = null;
+  }
+
+  // Share the raver's claim link via the native share sheet, falling back to
+  // copying it to the clipboard when the Web Share API isn't available.
+  async function shareInviteLink(raverId) {
+    const r = getRaver(raverId);
+    if (!r || !r.qrToken) { showToast('⚠️ No invite link for this raver yet'); return; }
+    const url = raverClaimUrl(r);
+    const firstName = r.name.split(' ')[0];
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Join my crew on RaveFAM 🔥',
+          text: `${firstName ? firstName + ', join' : 'Join'} my crew on RaveFAM — tap to claim your spot:`,
+          url,
+        });
+      } catch (e) { /* user dismissed the share sheet — no-op */ }
+    } else {
+      copyClaimLink(url);
+    }
+  }
+
+  function shareInviteFromPrompt() {
+    const raverId = _invitePromptRaverId;
+    closeInvitePrompt();
+    shareInviteLink(raverId);
+  }
+
+  // Open the existing QR modal; if the qr_token is still in-flight from the async
+  // dbSaveRaver insert, wait briefly for it before falling back to a toast.
+  function showInviteQR() {
+    const raverId = _invitePromptRaverId;
+    closeInvitePrompt();
+    const r = getRaver(raverId);
+    if (r && r.qrToken) { showQRModal(raverId); return; }
+    let tries = 0;
+    const t = setInterval(() => {
+      const rr = getRaver(raverId);
+      if (rr && rr.qrToken) { clearInterval(t); showQRModal(raverId); }
+      else if (++tries > 20) { clearInterval(t); showToast('⚠️ Invite code still generating — try the 📲 button in a sec'); }
+    }, 150);
   }
 
   // ===== Crew Edit (rename + recolour) =====
