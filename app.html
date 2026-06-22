@@ -8064,16 +8064,26 @@ async function doProfilePasswordChange() {
     const colMap = { name: 'name', base: 'base', instagram: 'instagram', radiate: 'radiate', phone: 'phone' };
     const col = colMap[fieldKey];
     if (!col) return;
+    const prev = r[fieldKey];
     r[fieldKey] = value;
-    showToast('✅ Saved');
-    // Re-render the inline field display
+    // Optimistically reflect the change in the inline display…
     const wrap = document.getElementById(`ief-wrap-${raverId}-${fieldKey}`);
     if (wrap) wrap.innerHTML = inlineEditDisplay(raverId, fieldKey, value);
     renderSquad();
-    if (currentUser) {
+    // …but only confirm "Saved" once the DB write actually lands. If it fails
+    // (e.g. RLS), roll the value back so the UI never claims a save that didn't.
+    if (currentUser && !String(raverId).startsWith('temp_')) {
       const { error } = await sb.from('ravers').update({ [col]: value }).eq('id', String(raverId));
-      if (error) { console.error('saveFieldForRaver error', error); showToast('⚠️ Save failed'); }
+      if (error) {
+        console.error('saveFieldForRaver error', error);
+        r[fieldKey] = prev;
+        if (wrap) wrap.innerHTML = inlineEditDisplay(raverId, fieldKey, prev);
+        renderSquad();
+        showToast('⚠️ Save failed — please try again');
+        return;
+      }
     }
+    showToast('✅ Saved');
   }
 
   function startPrivatePhoneEdit(raverId, currentValue) {
@@ -12207,6 +12217,7 @@ async function doProfilePasswordChange() {
         <div class="modal-title">➕ Add Raver</div>
         <p style="font-size:0.82rem;color:var(--muted);margin-bottom:18px;line-height:1.5;">Just the basics — you can fill in more details by tapping their name in the crew later.</p>
         ${fieldRow('Name','pf-name', '', 'e.g. Sam P.')}
+        ${fieldRow('Home Base','pf-base', '', 'e.g. Berlin, DE')}
         ${fieldRow('Phone Number','pf-phone', '', 'e.g. +44 7700 900000')}
         ${fieldRow('Instagram','pf-instagram', '', 'e.g. @samraves')}
         ${fieldRow('Radiate','pf-radiate', '', 'e.g. @samraves')}
