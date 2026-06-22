@@ -1917,6 +1917,45 @@
   }
   #offline-banner-close:hover { opacity: 1; }
 
+  /* Update-available banner */
+  #update-banner {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    background: #10141f;
+    border-bottom: 1px solid rgba(57,255,20,0.4);
+    color: var(--neon-green);
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 600;
+    text-align: center;
+    padding: 9px 16px;
+    transform: translateY(-100%);
+    transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  #update-banner.visible { transform: translateY(0); }
+  #update-banner-btn {
+    background: var(--neon-green);
+    color: #04210a;
+    border: none;
+    border-radius: 100px;
+    padding: 5px 15px;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.78rem;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: transform 0.12s, filter 0.12s;
+  }
+  #update-banner-btn:hover { filter: brightness(1.1); }
+  #update-banner-btn:active { transform: scale(0.96); }
+  #update-banner-btn:disabled { opacity: 0.7; cursor: default; }
+
   /* Pulse dot */
   .pulse-dot {
     width: 8px; height: 8px;
@@ -5275,6 +5314,9 @@
 
 <!-- Offline banner -->
 <div id="offline-banner">📡 No connection — some actions are unavailable<button id="offline-banner-close" aria-label="Dismiss">✕</button></div>
+
+<!-- Update-available banner -->
+<div id="update-banner"><span>✨ A new version of RaveFAM is ready</span><button id="update-banner-btn">Update now</button></div>
 
 <!-- Toast -->
 <div class="toast" id="toast"></div>
@@ -14021,24 +14063,53 @@ async function doProfilePasswordChange() {
   document.addEventListener('DOMContentLoaded', updateNotifBadge);
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').then(reg => {
-      reg.onupdatefound = () => {
-        const sw = reg.installing;
-        sw.onstatechange = () => {
-          if (sw.state === 'installed' && navigator.serviceWorker.controller) {
-            const t = document.getElementById('toast');
-            if (t) {
-              t.textContent = '✨ Update available — tap to refresh';
-              t.style.cursor = 'pointer';
-              t.onclick = () => location.reload();
-              t.classList.add('show');
-              clearTimeout(toastTimer);
-              toastTimer = setTimeout(() => t.classList.remove('show'), 10000);
-            }
+    navigator.serviceWorker.register('/sw.js').catch(console.warn);
+
+    // ── Auto update detection ─────────────────────────────────────────
+    // The entire app lives in app.html, which the service worker serves
+    // network-first, so a reload always pulls the newest deploy. We watch
+    // app.html's version token (ETag) and surface a persistent banner the
+    // moment a new build ships — no manual cache-version bumps required.
+    (function initUpdateChecker() {
+      const banner = document.getElementById('update-banner');
+      const btn    = document.getElementById('update-banner-btn');
+      if (!banner || !btn) return;
+
+      let knownTag    = null;   // version token of the build currently running
+      let updateShown = false;
+
+      btn.addEventListener('click', () => {
+        btn.disabled = true;
+        btn.textContent = 'Updating…';
+        location.reload();      // network-first SW fetches the latest app.html
+      });
+
+      async function versionTag() {
+        const res = await fetch('/app.html', { method: 'HEAD', cache: 'no-store' });
+        if (!res || !res.ok) return null;
+        return res.headers.get('etag')
+            || res.headers.get('last-modified')
+            || res.headers.get('content-length');
+      }
+
+      async function check() {
+        if (updateShown || !navigator.onLine || document.hidden) return;
+        try {
+          const tag = await versionTag();
+          if (!tag) return;
+          if (knownTag === null) { knownTag = tag; return; }   // baseline = current build
+          if (tag !== knownTag) {
+            updateShown = true;
+            banner.classList.add('visible');
           }
-        };
-      };
-    }).catch(console.warn);
+        } catch (_) { /* offline or transient — try again on the next tick */ }
+      }
+
+      check();                                       // establish baseline
+      setInterval(check, 90 * 1000);                 // re-check every 90s
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+      window.addEventListener('focus', check);
+    })();
   }
 
   // ===== STATS PAGE =====

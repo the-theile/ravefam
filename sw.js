@@ -1,4 +1,4 @@
-const CACHE = 'ravefam-v3';
+const CACHE = 'ravefam-v4';
 const PRECACHE = [
   '/',
   '/app.html',
@@ -21,17 +21,44 @@ self.addEventListener('activate', e => {
   );
 });
 
+function isHTMLRequest(req) {
+  return req.mode === 'navigate' ||
+    (req.headers.get('accept') || '').includes('text/html');
+}
+
 self.addEventListener('fetch', e => {
-  const url = e.request.url;
+  const req = e.request;
+  const url = req.url;
   // Always go to network for Supabase API and external resources
   if (url.includes('supabase.co') || url.includes('fonts.') || url.includes('cdn.')) return;
-  // Cache-first for same-origin GET requests
-  if (e.request.method !== 'GET') return;
+  if (req.method !== 'GET') return;
+
+  // Network-first for HTML/navigation: the whole app lives in app.html,
+  // so this guarantees every new deploy is picked up on reload. We fall
+  // back to the cached copy only when the network is unavailable.
+  if (isHTMLRequest(req)) {
+    e.respondWith(
+      fetch(req).then(res => {
+        if (res && res.ok) {
+          const clone = res.clone();
+          caches.open(CACHE).then(c => c.put(req, clone));
+        }
+        return res;
+      }).catch(async () =>
+        (await caches.match(req)) ||
+        (await caches.match('/app.html')) ||
+        (await caches.match('/'))
+      )
+    );
+    return;
+  }
+
+  // Cache-first for other same-origin static assets (vendor libs, icons).
   e.respondWith(
-    caches.match(e.request).then(cached => cached || fetch(e.request).then(res => {
+    caches.match(req).then(cached => cached || fetch(req).then(res => {
       if (res.ok) {
         const clone = res.clone();
-        caches.open(CACHE).then(c => c.put(e.request, clone));
+        caches.open(CACHE).then(c => c.put(req, clone));
       }
       return res;
     }))
