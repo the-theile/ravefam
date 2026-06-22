@@ -618,6 +618,75 @@
 
   .event-crew-going { display: none; }
 
+  /* Your Next Rave card (pinned to top of the Raves page) */
+  .next-rave-card {
+    position: relative;
+    background: linear-gradient(135deg, rgba(57,255,20,0.07), rgba(0,245,255,0.05)), var(--surface2);
+    border: 1px solid rgba(57,255,20,0.22);
+    border-left: 4px solid var(--neon-green);
+    border-radius: 16px;
+    padding: 15px 16px;
+    margin-bottom: 16px;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    overflow: hidden;
+  }
+  .next-rave-card:hover { transform: translateY(-1px); box-shadow: 0 6px 22px rgba(57,255,20,0.12); }
+  .next-rave-card:active { transform: scale(0.995); }
+  .nrc-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+  .nrc-label {
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.62rem;
+    letter-spacing: 1.5px; text-transform: uppercase; color: var(--neon-green);
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .nrc-badge {
+    font-size: 0.58rem; letter-spacing: 0.5px; font-weight: 700;
+    color: var(--neon-cyan); background: rgba(0,245,255,0.12);
+    border: 1px solid rgba(0,245,255,0.3); border-radius: 100px; padding: 2px 8px;
+  }
+  .nrc-countdown {
+    display: inline-flex; align-items: baseline; gap: 5px; flex-shrink: 0;
+    background: rgba(57,255,20,0.12); border: 1px solid rgba(57,255,20,0.3);
+    border-radius: 100px; padding: 4px 12px;
+  }
+  .nrc-countdown b {
+    font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 1.15rem;
+    color: var(--neon-green); line-height: 1;
+  }
+  .nrc-countdown span { font-size: 0.7rem; color: var(--neon-green); font-family: 'DM Sans', sans-serif; }
+  .nrc-name {
+    font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.15rem;
+    color: #fff; line-height: 1.2;
+  }
+  .nrc-meta { font-size: 0.78rem; color: var(--muted); margin-top: 3px; }
+  .nrc-crew {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin-top: 12px; padding-top: 11px; border-top: 1px solid rgba(255,255,255,0.07);
+  }
+  .nrc-crew-avatars { display: flex; align-items: center; }
+  .nrc-crew-avatars .nrc-av {
+    width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--surface2);
+    margin-left: -6px; display: flex; align-items: center; justify-content: center;
+    font-size: 0.62rem; font-weight: 700; color: #fff; font-family: 'Outfit', sans-serif;
+    overflow: hidden; flex-shrink: 0;
+  }
+  .nrc-crew-avatars .nrc-av:first-child { margin-left: 0; }
+  .nrc-crew-label { font-size: 0.74rem; color: var(--text); }
+  .next-rave-card.nrc-empty {
+    border-left-color: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.08);
+    background: var(--surface2); cursor: default;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  }
+  .nrc-empty-text { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.92rem; color: var(--text); }
+  .nrc-empty-sub { font-size: 0.76rem; color: var(--muted); margin-top: 2px; }
+  .nrc-add-btn {
+    background: var(--neon-green); color: #04210a; border: none; border-radius: 100px;
+    padding: 8px 16px; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.8rem;
+    cursor: pointer; white-space: nowrap; flex-shrink: 0; transition: filter 0.12s, transform 0.12s;
+  }
+  .nrc-add-btn:hover { filter: brightness(1.1); }
+  .nrc-add-btn:active { transform: scale(0.96); }
+
   /* Raves search */
   .rave-search-wrap { position: relative; margin-bottom: 16px; }
   .rave-search {
@@ -4919,6 +4988,7 @@
         <div class="section-title">Raves</div>
         <button class="btn btn-ghost" style="font-size:0.78rem;" onclick="openRaveEditor()">+ Add Rave</button>
       </div>
+      <div id="next-rave-card-slot"><!-- "Your Next Rave" card rendered by JS --></div>
       <div class="rave-search-wrap">
         <span class="rave-search-icon">🔍</span>
         <input class="rave-search" id="rave-search" type="text" placeholder="Search raves…" oninput="renderEvents()" autocomplete="off">
@@ -13015,10 +13085,82 @@ async function doProfilePasswordChange() {
   // Active festival being edited (UUID-safe global, same pattern as activeDetailId)
   let activeFestId = null;
 
+  // "Your Next Rave" card — pinned above the Raves search. Highlights the
+  // soonest rave YOU are going to; if you're not going to anything yet, it
+  // falls back to your soonest Interested rave. Empty → a friendly add CTA.
+  function renderNextRaveCard() {
+    try {
+      const slot = document.getElementById('next-rave-card-slot');
+      if (!slot) return;
+      const you = squad.find(r => r.isYou);
+      if (!you) { slot.innerHTML = ''; return; }
+
+      let next = raverUpcoming(you)[0];
+      let interestedOnly = false;
+      if (!next) {
+        const interested = (you.interestedFestIds || [])
+          .map(getFestival).filter(Boolean)
+          .map(f => ({ ...f, _d: festDate(f) }))
+          .filter(f => f._d && f._d >= TODAY)
+          .sort((a, b) => a._d - b._d);
+        next = interested[0];
+        interestedOnly = !!next;
+      }
+
+      if (!next) {
+        slot.innerHTML = `
+          <div class="next-rave-card nrc-empty">
+            <div>
+              <div class="nrc-empty-text">🎟️ No raves on the horizon</div>
+              <div class="nrc-empty-sub">Lock in your next one and rally the crew.</div>
+            </div>
+            <button class="nrc-add-btn" onclick="openRaveEditor()">＋ Add a rave</button>
+          </div>`;
+        return;
+      }
+
+      const color = festColor(next);
+      const days  = daysUntil(next._d);
+      const goers = festivalGoers(next.id).filter(r => !r.isYou);
+      const shown = goers.slice(0, 6);
+      const crewHtml = goers.length ? `
+        <div class="nrc-crew">
+          <div class="nrc-crew-avatars">
+            ${shown.map(r => `<div class="nrc-av" style="background:${r.avatarUrl ? 'transparent' : extractFirstColor(r.gradient)}">${
+              r.avatarUrl
+                ? `<img src="${escHtml(r.avatarUrl)}" style="width:100%;height:100%;object-fit:cover;" loading="lazy" alt="${escHtml(initials(displayName(r)))}">`
+                : initials(displayName(r)).toUpperCase()
+            }</div>`).join('')}
+          </div>
+          <span class="nrc-crew-label">${goers.length} from your crew going</span>
+        </div>` : '';
+
+      const countHtml = days === 0
+        ? `<b>TODAY</b>`
+        : `<b>${days}</b><span>${days === 1 ? 'day' : 'days'}</span>`;
+
+      slot.innerHTML = `
+        <div class="next-rave-card" style="border-left-color:${color}" onclick="activeFestId='${next.id}'; openRaveEditor('${next.id}')" title="Tap to open ${escHtml(next.name)}">
+          <div class="nrc-head">
+            <span class="nrc-label">Your Next Rave${interestedOnly ? '<span class="nrc-badge">👀 Interested</span>' : ''}</span>
+            <span class="nrc-countdown">${countHtml}</span>
+          </div>
+          <div class="nrc-name">${escHtml(next.name)}</div>
+          <div class="nrc-meta">📍 ${escHtml(next.location || 'Location TBD')} · ⏳ ${countdownLabel(next._d)}</div>
+          ${crewHtml}
+        </div>`;
+    } catch (err) {
+      console.error('[renderNextRaveCard]', err);
+      const slot = document.getElementById('next-rave-card-slot');
+      if (slot) slot.innerHTML = '';
+    }
+  }
+
   function renderEvents() {
     try {
     const list = document.getElementById('events-list');
     if (!list) return;
+    renderNextRaveCard();
 
     const query = (document.getElementById('rave-search')?.value || '').toLowerCase().trim();
 
