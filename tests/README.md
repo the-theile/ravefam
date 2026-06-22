@@ -42,6 +42,10 @@ Per-domain flow coverage:
   state, My/Crew subtab toggle.
 - **`notifications.spec.js`** — add sets the unread badge + persists, drawer
   renders & clears the badge, clear-all empties the list.
+- **`crew_detail.spec.js`** — dream-board pin, archive link (+ http validation),
+  poll create/vote/delete, jam add; each shows in its section and persists.
+- **`invites.spec.js`** — QR invite modal renders the code from `qr_token`; crew
+  invite-link generation persists a token and copies the join URL.
 
 ## Running
 
