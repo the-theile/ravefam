@@ -640,6 +640,19 @@
     font-size: 0.85rem; pointer-events: none;
   }
 
+  /* Raves filter pills */
+  .rave-filter-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+  .rave-filter-pill {
+    padding: 5px 12px; border-radius: 20px; font-size: 0.76rem; font-weight: 600;
+    background: rgba(255,255,255,0.05); border: 1.5px solid rgba(255,255,255,0.1);
+    color: var(--muted); cursor: pointer; transition: all 0.15s;
+    font-family: 'Outfit', sans-serif;
+  }
+  .rave-filter-pill:hover { border-color: rgba(255,45,120,0.4); color: #fff; }
+  .rave-filter-pill.active { background: rgba(255,45,120,0.1); border-color: rgba(255,45,120,0.5); color: var(--neon-pink); }
+  .rave-filter-pill.going-pill.active { background: rgba(57,255,20,0.1); border-color: rgba(57,255,20,0.5); color: var(--neon-green); }
+  .rave-filter-pill.interested-pill.active { background: rgba(0,245,255,0.1); border-color: rgba(0,245,255,0.5); color: var(--neon-cyan); }
+
   /* Layered treatment — going: glow uses event's own accent colour (--card-rgb set inline) */
   .event-item-going {
     border-color: rgba(var(--card-rgb), 0.22);
@@ -4871,6 +4884,7 @@
         <span class="rave-search-icon">🔍</span>
         <input class="rave-search" id="rave-search" type="text" placeholder="Search raves…" oninput="renderEvents()" autocomplete="off">
       </div>
+      <div class="rave-filter-bar" id="rave-filter-bar"><!-- rendered by JS --></div>
       <div class="events-list" id="events-list">
         <!-- rendered by JS from the festivals catalog -->
       </div>
@@ -8522,6 +8536,7 @@ async function doProfilePasswordChange() {
   let crewJams = [];
   let crewJamVibes = [];
   let _jamFilters = { tag: null, festivalId: null };
+  let _raveFilters = { time: null, status: null }; // time: 'upcoming'|'past'|null, status: 'going'|'interested'|null
   let crewAchievements = [];
   let raverAchievements = [];
   let crewFeedEvents = [];
@@ -9816,6 +9831,11 @@ async function doProfilePasswordChange() {
   function toggleJamFilter(crewId, type, val) {
     _jamFilters[type] = _jamFilters[type] === val ? null : val;
     rerenderJams(crewId);
+  }
+
+  function toggleRaveFilter(axis, val) {
+    _raveFilters[axis] = _raveFilters[axis] === val ? null : val;
+    renderEvents();
   }
 
   function buildJamsHTML(crewId) {
@@ -12960,12 +12980,31 @@ async function doProfilePasswordChange() {
 
     const query = (document.getElementById('rave-search')?.value || '').toLowerCase().trim();
 
+    // Render filter pills (active state mirrors _raveFilters)
+    const filterBar = document.getElementById('rave-filter-bar');
+    if (filterBar) {
+      const pill = (axis, val, label, extraClass) =>
+        `<button class="rave-filter-pill${extraClass ? ' ' + extraClass : ''}${_raveFilters[axis] === val ? ' active' : ''}" onclick="toggleRaveFilter('${axis}','${val}')">${label}</button>`;
+      filterBar.innerHTML =
+        pill('time', 'upcoming', '⏳ Upcoming') +
+        pill('time', 'past', '📼 Past') +
+        pill('status', 'going', '🎟️ Going', 'going-pill') +
+        pill('status', 'interested', '👀 Interested', 'interested-pill');
+    }
+
+    const you = squad.find(r => r.isYou);
     const withDates = festivals.map((f, idx) => ({ ...f, _d: festDate(f), _idx: idx }));
-    const filtered = query
+    let filtered = query
       ? withDates.filter(f =>
           f.name.toLowerCase().includes(query) ||
           (f.location || '').toLowerCase().includes(query))
       : withDates;
+    // Status axis — filter to raves where YOU are going / interested
+    if (_raveFilters.status === 'going') {
+      filtered = filtered.filter(f => you && (you.festIds || []).some(fid => String(fid) === String(f.id)));
+    } else if (_raveFilters.status === 'interested') {
+      filtered = filtered.filter(f => you && (you.interestedFestIds || []).some(fid => String(fid) === String(f.id)));
+    }
     const up = filtered.filter(f => f._d && f._d >= TODAY).sort((a,b) => a._d - b._d);
     const past = filtered.filter(f => !f._d || f._d < TODAY).sort((a,b) => (b._d||0) - (a._d||0));
 
@@ -13056,12 +13095,19 @@ async function doProfilePasswordChange() {
         </div>`;
     };
 
+    const showUp = _raveFilters.time !== 'past';
+    const showPast = _raveFilters.time !== 'upcoming';
     let html = '';
-    if (up.length) html += `<div class="fest-group-label" style="margin:4px 0 10px;">🔜 Upcoming</div>` + up.map(card).join('');
-    if (past.length) html += `<div class="fest-group-label" style="margin:22px 0 10px;">📼 Past</div>` + past.map(card).join('');
-    if (!up.length && !past.length) html = query
-      ? `<div class="fest-empty" style="padding:20px;text-align:center;color:var(--muted);">No raves found for "${escHtml(query)}"</div>`
-      : `<div class="fest-empty es-block" style="padding:32px 20px"><div class="es-icon">🎟️</div><div class="es-headline">Your calendar is looking too clean</div><div class="es-sub">Add a festival, club night, or that warehouse party on Saturday.</div></div>`;
+    if (showUp && up.length) html += `<div class="fest-group-label" style="margin:4px 0 10px;">🔜 Upcoming</div>` + up.map(card).join('');
+    if (showPast && past.length) html += `<div class="fest-group-label" style="margin:22px 0 10px;">📼 Past</div>` + past.map(card).join('');
+    if (!html) {
+      const hasFilters = _raveFilters.time || _raveFilters.status;
+      html = query
+        ? `<div class="fest-empty" style="padding:20px;text-align:center;color:var(--muted);">No raves found for "${escHtml(query)}"</div>`
+        : hasFilters
+          ? `<div class="fest-empty" style="padding:20px;text-align:center;color:var(--muted);">No raves match these filters</div>`
+          : `<div class="fest-empty es-block" style="padding:32px 20px"><div class="es-icon">🎟️</div><div class="es-headline">Your calendar is looking too clean</div><div class="es-sub">Add a festival, club night, or that warehouse party on Saturday.</div></div>`;
+    }
     list.innerHTML = html;
     } catch(err) { console.error('[renderEvents]', err); const el = document.getElementById('events-list'); if (el) el.innerHTML = sectionErrorHTML('events'); }
   }
