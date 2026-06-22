@@ -8314,6 +8314,14 @@ async function doProfilePasswordChange() {
     return parseFestDate(f && f.when);
   }
 
+  // A rave counts toward "achieved" stats only once it has actually happened.
+  // Mirrors the Past/Upcoming split on the Raves page: anything dated today or
+  // later is still upcoming, so future RSVPs are excluded from stats totals.
+  function isFestAchieved(f) {
+    const d = festDate(f);
+    return !(d && d >= TODAY);
+  }
+
   function parseFestDate(when) {
     if (!when) return null;
     const s = when.toLowerCase().trim();
@@ -14229,7 +14237,8 @@ async function doProfilePasswordChange() {
     }
 
     const myFestIds = you.festIds || [];
-    const myFests = festivals.filter(f => myFestIds.some(id => String(id) === String(f.id)));
+    // Stats reflect only raves that have actually happened — future RSVPs are excluded.
+    const myFests = festivals.filter(f => myFestIds.some(id => String(id) === String(f.id)) && isFestAchieved(f));
     const now = new Date();
     const thisYear = now.getFullYear();
     const totalRaves = myFests.length;
@@ -14372,7 +14381,9 @@ async function doProfilePasswordChange() {
 
     const crewFestIds = new Set();
     crewMembers.forEach(m => (m.festIds || []).forEach(fid => crewFestIds.add(String(fid))));
-    const crewFests = festivals.filter(f => crewFestIds.has(String(f.id)));
+    // Crew stats reflect only raves that have actually happened — future RSVPs are excluded.
+    const crewFests = festivals.filter(f => crewFestIds.has(String(f.id)) && isFestAchieved(f));
+    const achievedFestIds = new Set(crewFests.map(f => String(f.id)));
 
     const sharedFests = crewFests.filter(f =>
       crewMembers.filter(m => (m.festIds || []).some(fid => String(fid) === String(f.id))).length >= 2
@@ -14385,7 +14396,7 @@ async function doProfilePasswordChange() {
 
     const lb = crewMembers.map(m => ({
       ...m,
-      raveCount: (m.festIds || []).length,
+      raveCount: (m.festIds || []).filter(fid => achievedFestIds.has(String(fid))).length,
       vibeCount: Object.values(festVibesCache).filter(vibes => vibes.some(v => String(v.raverId) === String(m.id))).length
     })).sort((a,b) => b.raveCount - a.raveCount);
 
@@ -14399,7 +14410,7 @@ async function doProfilePasswordChange() {
         .filter(m => String(m.id) !== String(you.id))
         .map(m => ({
           name: m.name,
-          count: (you.festIds || []).filter(fid => (m.festIds || []).some(mfid => String(mfid) === String(fid))).length
+          count: (you.festIds || []).filter(fid => achievedFestIds.has(String(fid)) && (m.festIds || []).some(mfid => String(mfid) === String(fid))).length
         }))
         .filter(p => p.count > 0)
         .sort((a,b) => b.count - a.count);
@@ -14464,7 +14475,8 @@ async function doProfilePasswordChange() {
     const you = squad.find(r => r.isYou);
     if (!you) return;
 
-    const myFests = festivals.filter(f => (you.festIds || []).some(id => String(id) === String(f.id)));
+    // Only count raves that have actually happened — future RSVPs are excluded.
+    const myFests = festivals.filter(f => (you.festIds || []).some(id => String(id) === String(f.id)) && isFestAchieved(f));
     const now = new Date();
     const thisYear = now.getFullYear();
     const totalRaves = myFests.length;
