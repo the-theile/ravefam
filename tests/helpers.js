@@ -86,10 +86,16 @@ async function installSupabaseStub(page, opts = {}) {
   const session = opts.session ?? null;
   const data = opts.data ?? {};
 
+  // Session produced by signInWithPassword / signUp (defaults to the initial
+  // session). Pass loginSession explicitly to test the login transition from a
+  // signed-out start.
+  const loginSession = opts.loginSession !== undefined ? opts.loginSession : session;
+
   await page.route(SUPABASE_URL, async route => {
     const body = `
       (function () {
         const SESSION = ${JSON.stringify(session)};
+        const LOGIN = ${JSON.stringify(loginSession)};
         const SEED = ${JSON.stringify(data)};
         const store = JSON.parse(JSON.stringify(SEED));
         let idc = 0;
@@ -212,9 +218,9 @@ async function installSupabaseStub(page, opts = {}) {
             onAuthStateChange(cb) { authCb = cb; setTimeout(() => cb('INITIAL_SESSION', SESSION), 0); return { data: { subscription: { unsubscribe() {} } } }; },
             getUser() { return Promise.resolve({ data: { user: SESSION?.user ?? null }, error: null }); },
             getSession() { return Promise.resolve({ data: { session: SESSION }, error: null }); },
-            signInWithPassword() { return Promise.resolve({ data: { session: SESSION }, error: null }); },
+            signInWithPassword() { if (authCb) setTimeout(() => authCb('SIGNED_IN', LOGIN), 0); return Promise.resolve({ data: { session: LOGIN }, error: null }); },
             signInWithOtp() { return Promise.resolve({ data: {}, error: null }); },
-            signUp() { return Promise.resolve({ data: { session: SESSION }, error: null }); },
+            signUp() { if (LOGIN && authCb) setTimeout(() => authCb('SIGNED_IN', LOGIN), 0); return Promise.resolve({ data: { session: LOGIN }, error: null }); },
             signOut() { if (authCb) setTimeout(() => authCb('SIGNED_OUT', null), 0); return Promise.resolve({ error: null }); },
             updateUser() { return Promise.resolve({ data: { user: SESSION?.user ?? null }, error: null }); },
             resetPasswordForEmail() { return Promise.resolve({ data: {}, error: null }); },

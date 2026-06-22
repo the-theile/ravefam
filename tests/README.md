@@ -27,6 +27,22 @@ no backend, no auth, and no external network.
   change crew status — each **mutates the store and is verified by re-running
   `loadAllData()`** (a real re-fetch), plus an upsert/onConflict de-dup check.
 
+Per-domain flow coverage:
+- **`auth.spec.js`** — login transitions to the app, logout returns to auth,
+  tab toggle, empty-login validation, forgot-password success.
+- **`onboarding.spec.js`** — a new user sees the wizard; an onboarded user
+  doesn't.
+- **`crews.spec.js`** — detail roster, edit name, status change, delete
+  (cascades to memberships), search.
+- **`ravers.spec.js`** — view a profile, edit base via the form, add a vibe
+  tag / genre in edit mode (persisted), raver search.
+- **`raves.spec.js`** — RSVP going/interested via the UI helpers, Going /
+  Interested filters, rave search.
+- **`stats.spec.js`** — hero numbers reflect attended *past* raves, empty
+  state, My/Crew subtab toggle.
+- **`notifications.spec.js`** — add sets the unread badge + persists, drawer
+  renders & clears the badge, clear-all empties the list.
+
 ## Running
 
 ```bash
