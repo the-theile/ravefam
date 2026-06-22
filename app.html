@@ -13361,7 +13361,21 @@ async function doProfilePasswordChange() {
       const _raveMsg = _isPastRave
         ? `🗓️ ${name}${date ? ' on ' + date : ''} has been added to the archives. Check it out in the Events tab — was the crew there?`
         : `🗓️ A new rave just dropped on the radar: ${name}${date ? ' on ' + date : ''}. Check it out in the Events tab — is the crew going?`;
-      crews.forEach(c => { if (c.isLead) notifyCrewMembers(c, _raveMsg); });
+      // Notify each claimed crew member once (de-duped across all crews the user leads),
+      // and show the broadcast in the leader's own feed a single time.
+      const _ledCrews = crews.filter(c => c.isLead);
+      if (_ledCrews.length) {
+        const _members = new Set();
+        _ledCrews.forEach(c => {
+          crewSquad(c).forEach(p => {
+            if ((p.claimedBy || p.status === 'claimed') && p.claimedBy && p.claimedBy !== currentUser?.id) {
+              _members.add(p.claimedBy);
+            }
+          });
+        });
+        _members.forEach(memberId => dbAddNotification(memberId, null, _raveMsg));
+        addNotification(_raveMsg);
+      }
       if (currentUser) {
         dbSaveFestival({ name, date, location, color, days }, null).then(dbId => {
           if (!dbId) return;
