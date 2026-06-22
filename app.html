@@ -8221,7 +8221,38 @@ async function doProfilePasswordChange() {
     return `data:image/svg+xml;base64,${encoded}`;
   }
 
+  // --- Double-tap a tab to refresh that view from the server ---
+  const REFRESHABLE_TABS = new Set(['crews', 'events', 'members', 'stats']);
+  let _lastTabTap = { page: null, time: 0 };
+  let _tabRefreshing = false;
+
+  async function refreshTab(page) {
+    if (_tabRefreshing) return;            // ignore overlapping refreshes
+    if (!REFRESHABLE_TABS.has(page)) return;
+    _tabRefreshing = true;
+    showToast('Refreshing…');
+    try {
+      await loadAllData();
+      renderSquad(); renderCrews(); renderEvents();
+      if (page === 'stats') loadStatsPage();
+      showToast('Refreshed ✓');
+    } catch (err) {
+      console.error('[refreshTab]', err);
+      showToast('Could not refresh — try again');
+    } finally {
+      _tabRefreshing = false;
+    }
+  }
+
   function switchTab(page, el) {
+    const _now = Date.now();
+    if (_lastTabTap.page === page && _now - _lastTabTap.time < 400
+        && REFRESHABLE_TABS.has(page)) {
+      _lastTabTap = { page: null, time: 0 };  // reset so a 3rd tap starts fresh
+      refreshTab(page);
+    } else {
+      _lastTabTap = { page, time: _now };
+    }
     document.querySelectorAll('.modal-overlay.open').forEach(o => o.classList.remove('open'));
     editingId = null;
     _pendingAddToCrew = null;
