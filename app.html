@@ -7457,6 +7457,31 @@ async function doProfilePasswordChange() {
     }
   }
 
+  // Targeted single-row RSVP writes. Unlike the full-list save helpers above,
+  // these only touch the one festival the user acted on, so a stale client list
+  // can never prune rows added out-of-band (e.g. RSVPs migrated by a profile merge).
+  async function dbAddRaverFestival(raverId, festId) {
+    const { error } = await sb.from('raver_festivals')
+      .upsert([{ raver_id: raverId, festival_id: festId }], { onConflict: 'raver_id,festival_id', ignoreDuplicates: true });
+    if (error) { console.error('raver_festivals add error', error); showToast('⚠️ Could not save festival attendance'); }
+  }
+
+  async function dbRemoveRaverFestival(raverId, festId) {
+    const { error } = await sb.from('raver_festivals').delete().eq('raver_id', raverId).eq('festival_id', festId);
+    if (error) { console.error('raver_festivals remove error', error); showToast('⚠️ Could not update festival attendance'); }
+  }
+
+  async function dbAddRaverFestivalInterest(raverId, festId) {
+    const { error } = await sb.from('raver_festival_interest')
+      .upsert([{ raver_id: raverId, festival_id: festId }], { onConflict: 'raver_id,festival_id', ignoreDuplicates: true });
+    if (error) { console.error('raver_festival_interest add error', error); showToast('⚠️ Could not save interest'); }
+  }
+
+  async function dbRemoveRaverFestivalInterest(raverId, festId) {
+    const { error } = await sb.from('raver_festival_interest').delete().eq('raver_id', raverId).eq('festival_id', festId);
+    if (error) { console.error('raver_festival_interest remove error', error); showToast('⚠️ Could not update interest'); }
+  }
+
   async function dbSaveFestival(data, id) {
     const uid = currentUser?.id;
     if (!uid) return null;
@@ -8031,7 +8056,7 @@ async function doProfilePasswordChange() {
     const r = getRaver(raverId);
     if (!r) return;
     r.festIds = (r.festIds || []).filter(id => String(id) !== String(festId));
-    if (currentUser) dbSaveRaverFestivals(raverId, r.festIds);
+    if (currentUser) dbRemoveRaverFestival(raverId, festId);
     renderSquad(); renderEvents(); renderCrews();
     openProfile(raverId);
   }
@@ -12563,7 +12588,7 @@ async function doProfilePasswordChange() {
       if (!r.festIds.some(fid => String(fid) === String(fest.id))) {
         r.festIds.push(fest.id);
       }
-      if (currentUser) dbSaveRaverFestivals(raverId, r.festIds);
+      if (currentUser) dbAddRaverFestival(raverId, fest.id);
       renderInlineFestPicker(raverId);
       renderSquad(); renderEvents(); renderCrews();
     }
@@ -13311,8 +13336,14 @@ async function doProfilePasswordChange() {
     renderSquad();
     renderCrews();
     if (currentUser) {
-      dbSaveRaverFestivals(you.id, you.festIds);
-      dbSaveRaverFestivalInterest(you.id, you.interestedFestIds || []);
+      if (isGoing) {
+        // Was going, now removed
+        dbRemoveRaverFestival(you.id, festId);
+      } else {
+        // Now going — add, and clear any Interested on the same rave (mutually exclusive)
+        dbAddRaverFestival(you.id, festId);
+        dbRemoveRaverFestivalInterest(you.id, festId);
+      }
     }
   }
 
@@ -13336,8 +13367,14 @@ async function doProfilePasswordChange() {
     renderSquad();
     renderCrews();
     if (currentUser) {
-      dbSaveRaverFestivals(you.id, you.festIds || []);
-      dbSaveRaverFestivalInterest(you.id, you.interestedFestIds);
+      if (isInterested) {
+        // Was interested, now removed
+        dbRemoveRaverFestivalInterest(you.id, festId);
+      } else {
+        // Now interested — add, and clear any Going on the same rave (mutually exclusive)
+        dbAddRaverFestivalInterest(you.id, festId);
+        dbRemoveRaverFestival(you.id, festId);
+      }
     }
   }
 
@@ -13389,7 +13426,7 @@ async function doProfilePasswordChange() {
       showToast('Already linked'); return;
     }
     r.festIds = [...(r.festIds || []), editingFestivalId];
-    if (currentUser) dbSaveRaverFestivals(raverId, r.festIds);
+    if (currentUser) dbAddRaverFestival(raverId, editingFestivalId);
     renderSquad(); renderEvents(); renderCrews();
     const goers = festivalGoers(editingFestivalId);
     const note = document.getElementById('re-goers-note');
@@ -13593,7 +13630,7 @@ async function doProfilePasswordChange() {
     if (!r) return;
     if ((r.festIds || []).includes(festId)) { showToast('Already on their list'); return; }
     r.festIds = [...(r.festIds || []), festId];
-    if (currentUser) dbSaveRaverFestivals(raverId, r.festIds);
+    if (currentUser) dbAddRaverFestival(raverId, festId);
     renderSquad(); renderEvents(); renderCrews();
     openProfile(raverId);
   }
