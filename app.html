@@ -5867,8 +5867,22 @@ async function doProfilePasswordChange() {
   }
 
   // ===== APP SHOW / HIDE =====
+  // Debug console (eruda) is loaded for everyone but only *shown* to the
+  // maintainer — gated by account email, with a localStorage escape hatch
+  // (set rf_eruda=1) for debugging on a specific device / before login.
+  const ERUDA_ALLOWED_EMAILS = ['theile.secure@proton.me'];
+  let _erudaInited = false;
+  function maybeInitEruda() {
+    if (_erudaInited || !window.eruda) return;
+    const email = (currentUser?.email || '').toLowerCase();
+    const allowed = ERUDA_ALLOWED_EMAILS.includes(email)
+      || localStorage.getItem('rf_eruda') === '1';
+    if (allowed) { try { eruda.init(); _erudaInited = true; } catch (e) {} }
+  }
+
   function showApp(user) {
     currentUser = user;
+    maybeInitEruda();
     document.getElementById('claim-intercept').classList.remove('open');
     document.getElementById('app-loading').classList.add('hidden');
     document.getElementById('auth-screen').classList.add('hidden');
@@ -14678,6 +14692,6 @@ async function doProfilePasswordChange() {
 </script>
 <script defer src="/_vercel/insights/script.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-<script>if (window.eruda) eruda.init();</script>
+<script>try { if (typeof maybeInitEruda === 'function') maybeInitEruda(); } catch (e) {}</script>
 </body>
 </html>
