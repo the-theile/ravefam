@@ -6,11 +6,13 @@
 // local static server so that service-worker registration and relative paths
 // behave like production.
 const { defineConfig, devices } = require('@playwright/test');
+const fs = require('fs');
 
-// In this environment the browser binaries live in a shared, pre-installed
-// location rather than the default per-project cache. Respect an explicit
-// PLAYWRIGHT_BROWSERS_PATH if set; otherwise fall back to the shared path.
-if (!process.env.PLAYWRIGHT_BROWSERS_PATH) {
+// Some sandboxes ship browsers in a shared, pre-installed location instead of
+// the default per-project cache. If the caller hasn't set PLAYWRIGHT_BROWSERS_PATH
+// and that shared path exists, use it. On CI / normal dev it won't exist, so we
+// fall through to Playwright's standard cache (populated by `playwright install`).
+if (!process.env.PLAYWRIGHT_BROWSERS_PATH && fs.existsSync('/opt/pw-browsers')) {
   process.env.PLAYWRIGHT_BROWSERS_PATH = '/opt/pw-browsers';
 }
 
