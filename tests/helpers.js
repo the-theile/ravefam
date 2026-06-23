@@ -56,6 +56,17 @@ function seedData() {
         met_story: '', notes: '', qr_token: 'qr-sam',
         vibe_tags: [], custom_vibe_tags: [],
       },
+      {
+        // A CLAIMED crew member with their own account — has an inbox, so adding
+        // them to a festival should notify them.
+        id: 'r-kai', name: 'Kai M.', handle: 'kaibeats',
+        is_you: false, created_by: TEST_UID, claimed_by: 'kai-uid', status: 'claimed',
+        base: 'Lisbon, PT', gradient: 'linear-gradient(135deg,#BF00FF,#FF2D78)',
+        avatar_url: null, blocked_tags: [], genres: ['Techno'], fav_artists: [],
+        instagram: '', radiate: '', phone: '', phone_visible: false,
+        met_story: '', notes: '', qr_token: 'qr-kai',
+        vibe_tags: [], custom_vibe_tags: [],
+      },
     ],
     crews: [
       {
@@ -67,6 +78,7 @@ function seedData() {
     crew_members: [
       { crew_id: 'c1', raver_id: 'r-you', added_at: added, added_by: TEST_UID },
       { crew_id: 'c1', raver_id: 'r-sam', added_at: added, added_by: TEST_UID },
+      { crew_id: 'c1', raver_id: 'r-kai', added_at: added, added_by: TEST_UID },
     ],
     raver_festivals: [
       { raver_id: 'r-you', festival_id: 'f1' },

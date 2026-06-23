@@ -2174,11 +2174,35 @@
   .notif-item {
     display: flex;
     align-items: flex-start;
+    flex-wrap: wrap;
     gap: 12px;
     padding: 12px 20px;
     border-bottom: 1px solid rgba(255,255,255,0.05);
     transition: background 0.15s;
     position: relative;
+  }
+  .notif-action-btn {
+    flex-basis: 100%;
+    margin-left: 20px;
+    margin-top: 2px;
+    align-self: flex-start;
+    width: fit-content;
+    padding: 6px 14px;
+    border: 1px solid var(--neon-pink);
+    border-radius: 999px;
+    background: rgba(255,45,120,0.12);
+    color: var(--neon-pink);
+    font-size: 0.74rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, opacity 0.15s;
+  }
+  .notif-action-btn:hover { background: rgba(255,45,120,0.22); }
+  .notif-action-btn:disabled {
+    border-color: var(--muted);
+    color: var(--muted);
+    background: transparent;
+    cursor: default;
   }
   .notif-item:last-child { border-bottom: none; }
   /* Unread — bright, prominent */
@@ -7581,12 +7605,14 @@ async function doProfilePasswordChange() {
 
   // ===== NOTIFICATION DB HELPERS =====
 
-  async function dbAddNotification(userId, crewId, message) {
+  async function dbAddNotification(userId, crewId, message, type = null, data = null) {
     if (!userId) return;
     const { error } = await sb.from('notifications').insert({
       user_id: userId,
       crew_id: crewId || null,
-      message
+      message,
+      type: type || null,
+      data: data || null
     });
     if (error) console.error('notification insert error', error);
   }
@@ -7605,7 +7631,9 @@ async function doProfilePasswordChange() {
       id: n.id,
       message: n.message,
       timestamp: new Date(n.created_at).getTime(),
-      read: n.read
+      read: n.read,
+      type: n.type || null,
+      data: n.data || null
     }));
     updateNotifBadge();
   }
@@ -13485,6 +13513,19 @@ async function doProfilePasswordChange() {
     }
   }
 
+  // Opt out of a festival you were added to, straight from the notification.
+  function notifOptOutFestival(raverId, festId, btnEl) {
+    const you = squad.find(r => r.isYou);
+    // Safety: only the recipient can act on their own RSVP.
+    if (!you || String(you.id) !== String(raverId)) { showToast("That's not your RSVP"); return; }
+    if (you.festIds) you.festIds = you.festIds.filter(fid => String(fid) !== String(festId));
+    if (currentUser) dbRemoveRaverFestival(you.id, festId);
+    if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Removed ✓'; }
+    renderEvents(); renderSquad(); renderCrews();
+    const fest = getFestival(festId);
+    showToast(`Took your RSVP off ${fest?.name || 'that rave'} — no stress, the dancefloor moves on.`);
+  }
+
   function toggleInterestedInFest(festId) {
     if (String(festId).startsWith('temp_')) { showToast('Still saving — try again in a moment'); return; }
     const you = squad.find(r => r.isYou);
@@ -13564,7 +13605,26 @@ async function doProfilePasswordChange() {
       showToast('Already linked'); return;
     }
     r.festIds = [...(r.festIds || []), editingFestivalId];
-    if (currentUser) dbAddRaverFestival(raverId, editingFestivalId);
+    if (currentUser) {
+      dbAddRaverFestival(raverId, editingFestivalId);
+      // Notify the added person so they know they were linked, and give them a
+      // one-tap way to take their RSVP off. Only claimed users have an inbox, and
+      // never notify the actor about their own action.
+      const recipientUid = r.claimedBy || null;
+      if (recipientUid && recipientUid !== currentUser.id) {
+        const me = squad.find(x => x.isYou);
+        const meFirstName = (me?.name || 'Someone').split(' ')[0];
+        const fest = getFestival(editingFestivalId);
+        const festName = fest?.name || 'a rave';
+        dbAddNotification(
+          recipientUid,
+          null,
+          `🎪 ${meFirstName} added you to ${festName}! You're on the lineup — pack your kit and charge the glowsticks. Not feeling it? Tap to take your RSVP off.`,
+          'festival_add',
+          { festival_id: editingFestivalId, raver_id: raverId, festival_name: festName }
+        );
+      }
+    }
     renderSquad(); renderEvents(); renderCrews();
     const goers = festivalGoers(editingFestivalId);
     const note = document.getElementById('re-goers-note');
@@ -14176,12 +14236,18 @@ async function doProfilePasswordChange() {
       el.innerHTML = `<div class="notif-empty es-block"><div class="es-icon">\ud83d\udd14</div><div class="es-headline">All quiet on the dancefloor</div><div class="es-sub">Crew moves, RSVPs, and drops will light this up when things get going.</div></div>`;
       return;
     }
-    el.innerHTML = list.map(n => `
+    el.innerHTML = list.map(n => {
+      const action = (n.type === 'festival_add' && n.data && n.data.festival_id && n.data.raver_id)
+        ? `<button class="notif-action-btn" onclick="notifOptOutFestival('${escHtml(String(n.data.raver_id))}','${escHtml(String(n.data.festival_id))}',this)">Nah, take me off the lineup</button>`
+        : '';
+      return `
       <div class="notif-item ${n.read ? 'notif-read' : 'unread'}">
         <span class="notif-dot"></span>
         <span class="notif-text">${escHtml(n.message)}</span>
         <span class="notif-time">${relativeTime(n.timestamp)}</span>
-      </div>`).join('');
+        ${action}
+      </div>`;
+    }).join('');
   }
 
   function relativeTime(ts) {
