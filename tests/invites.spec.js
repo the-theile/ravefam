@@ -70,6 +70,42 @@ test.describe('invite prompt after adding a raver', () => {
     await expect(page.locator('#page-profile')).toHaveClass(/active/);
     expect(errors).toEqual([]);
   });
+
+  test('Skip-for-now keeps page-members active with the new raver visible', async ({ page }) => {
+    const errors = await bootAuthedApp(page);
+    await page.evaluate(() => switchTab('members'));
+    await page.evaluate(() => openProfileEditor());
+    await page.locator('#pf-name').fill('Connor Lanser');
+    await page.evaluate(() => saveProfile());
+
+    await expect(page.locator('#crew-pick-overlay')).toHaveClass(/open/);
+    await page.getByRole('button', { name: 'Skip for now' }).click();
+
+    await expect(page.locator('#page-members')).toHaveClass(/active/);
+    await expect(page.locator('#page-profile')).not.toHaveClass(/active/);
+    await expect(page.locator('#members-grid')).toContainText('Connor Lanser');
+    await expect(page.locator('#invite-prompt-overlay')).toHaveClass(/open/);
+    expect(errors).toEqual([]);
+  });
+
+  test('invite prompt uses the real raver id after DB save resolves before skip', async ({ page }) => {
+    const errors = await bootAuthedApp(page);
+    await page.evaluate(() => openProfileEditor());
+    await page.locator('#pf-name').fill('QR Test Raver');
+    await page.evaluate(() => saveProfile());
+
+    await page.waitForTimeout(100);
+
+    await page.evaluate(() => closeCrewPickAndProfile());
+    await expect(page.locator('#invite-prompt-overlay')).toHaveClass(/open/);
+
+    const found = await page.evaluate(() => !!getRaver(_invitePromptRaverId));
+    expect(found).toBe(true);
+
+    await page.evaluate(() => showInviteQR());
+    await expect(page.locator('#qr-overlay')).toHaveClass(/open/);
+    expect(errors).toEqual([]);
+  });
 });
 
 test.describe('crew invite link', () => {
