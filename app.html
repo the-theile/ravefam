@@ -11011,10 +11011,12 @@ async function doProfilePasswordChange() {
   // ===== Crew Pick Dialog (shown after adding a new raver) =====
 
   let _crewPickRaverId = null;
+  let _crewPickRaverRef = null;
   let _crewPickSelected = new Set();
 
   function openCrewPickDialog(raverId) {
     _crewPickRaverId = raverId;
+    _crewPickRaverRef = getRaver(raverId);
     _crewPickSelected = new Set();
     renderCrewPickDialog();
     document.getElementById('crew-pick-overlay').classList.add('open');
@@ -11106,14 +11108,22 @@ async function doProfilePasswordChange() {
   }
 
   function closeCrewPickAndProfile() {
-    const raverId = _crewPickRaverId;
+    const raver = _crewPickRaverRef;
     closeCrewPick();
-    if (raverId) maybeOfferInvite(raverId);
+    if (!raver) return;
+    const membersPage = document.getElementById('page-members');
+    const profilePage = document.getElementById('page-profile');
+    if (!membersPage.classList.contains('active') && !profilePage.classList.contains('active')) {
+      switchTab('members');
+    }
+    renderSquad();
+    if (currentUser) openInvitePrompt(raver.id);
   }
 
   function closeCrewPick() {
     document.getElementById('crew-pick-overlay').classList.remove('open');
     _crewPickRaverId = null;
+    _crewPickRaverRef = null;
     _crewPickSelected = new Set();
   }
 
@@ -11126,7 +11136,7 @@ async function doProfilePasswordChange() {
   function maybeOfferInvite(raverId) {
     const r = getRaver(raverId);
     if (r) openProfile(r.id, false, 'members');
-    if (currentUser && raverId) openInvitePrompt(raverId);
+    if (currentUser && r) openInvitePrompt(r.id);
   }
 
   function openInvitePrompt(raverId) {
