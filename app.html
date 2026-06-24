@@ -3877,6 +3877,27 @@
   }
   .claim-review-row:last-child { margin-bottom: 0; }
   .claim-review-key { color: var(--muted); flex-shrink: 0; min-width: 56px; }
+  .claim-conflict-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 0;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    cursor: pointer;
+  }
+  .claim-conflict-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .claim-conflict-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.72rem;
+    color: var(--muted);
+    user-select: none;
+  }
+  .claim-conflict-toggle input { width: 15px; height: 15px; accent-color: var(--neon-pink); cursor: pointer; }
+  .claim-conflict-vals { display: flex; flex-direction: column; gap: 2px; font-size: 0.8rem; line-height: 1.5; }
+  .claim-conflict-mine { color: var(--text); }
+  .claim-conflict-leader { color: var(--muted); }
   .claim-review-edit-form { margin-top: 10px; display: none; flex-direction: column; gap: 8px; }
   .claim-review-edit-form.open { display: flex; }
   .claim-edit-btn {
@@ -6438,24 +6459,53 @@ async function doProfilePasswordChange() {
       const newFestNames = newFestIds
         .map(id => festivals.find(f => String(f.id) === String(id))?.name)
         .filter(Boolean);
-      const newBase      = raver.base      && !existingRaver.base      ? raver.base      : null;
-      const newHandle    = raver.handle    && !existingRaver.handle    ? raver.handle    : null;
-      const newInstagram = raver.instagram && !existingRaver.instagram ? raver.instagram : null;
-      const newRadiate   = raver.radiate   && !existingRaver.radiate   ? raver.radiate   : null;
+
+      // Single-value fields the leader pre-set. Each is either a gap-fill
+      // "addition" (your field is blank → auto-applied by the merge backend) or
+      // a "conflict" (you already have a different value → keep yours by
+      // default, but offer to switch to the leader's). Nothing is dropped
+      // silently. `radiate` is included once get_claim_preview returns it.
+      const singleFields = [
+        { key: 'base',      icon: '📍', label: 'Base',      prefix: '',  stub: raver.base,      mine: existingRaver.base },
+        { key: 'handle',    icon: '🏷️', label: 'Handle',    prefix: '',  stub: raver.handle,    mine: existingRaver.handle },
+        { key: 'instagram', icon: '📸', label: 'Instagram', prefix: '@', stub: raver.instagram, mine: existingRaver.instagram },
+        { key: 'radiate',   icon: '📡', label: 'Radiate',   prefix: '@', stub: raver.radiate,   mine: existingRaver.radiate },
+      ];
+      const additions = singleFields.filter(f => f.stub && !f.mine);
+      const conflicts = singleFields.filter(f => f.stub && f.mine && f.stub !== f.mine);
 
       const chipItems = [...newGenres, ...newArtists, ...newVibes, ...newFestNames];
-      const hasAdds   = chipItems.length > 0 || newBase || newHandle || newInstagram || newRadiate;
+      const hasAdds   = chipItems.length > 0 || additions.length > 0 || conflicts.length > 0;
 
       if (hasAdds) {
         const chipHtml = chipItems.map(t => `<span class="claim-tag">${escHtml(t)}</span>`).join('');
+        const additionRows = additions.map(f =>
+          `<div class="claim-review-row"><span class="claim-review-key">${f.icon} ${f.label}</span><span>${f.prefix}${escHtml(f.stub)}</span></div>`
+        ).join('');
+        const conflictRows = conflicts.map(f => `
+          <label class="claim-conflict-row" for="claim-keep-${f.key}">
+            <div class="claim-conflict-head">
+              <span class="claim-review-key">${f.icon} ${f.label}</span>
+              <span class="claim-conflict-toggle">
+                <input type="checkbox" id="claim-keep-${f.key}">
+                Use leader's instead
+              </span>
+            </div>
+            <div class="claim-conflict-vals">
+              <span class="claim-conflict-mine">Yours: ${f.prefix}${escHtml(f.mine)}</span>
+              <span class="claim-conflict-leader">Leader set: ${f.prefix}${escHtml(f.stub)}</span>
+            </div>
+          </label>`
+        ).join('');
         bottomSection = `
           <div class="claim-review-block">
-            <div class="claim-review-label">✨ Your crew leader added these to your profile</div>
+            <div class="claim-review-label">✨ What your crew leader set up for you</div>
             ${chipHtml ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">${chipHtml}</div>` : ''}
-            ${newBase      ? `<div class="claim-review-row"><span class="claim-review-key">📍 Base</span><span>${escHtml(newBase)}</span></div>` : ''}
-            ${newHandle    ? `<div class="claim-review-row"><span class="claim-review-key">🏷️ Handle</span><span>${escHtml(newHandle)}</span></div>` : ''}
-            ${newInstagram ? `<div class="claim-review-row"><span class="claim-review-key">📸 Instagram</span><span>@${escHtml(newInstagram)}</span></div>` : ''}
-            <div style="margin-top:10px;font-size:0.75rem;color:rgba(255,255,255,0.4);">These will be added to your profile when you claim. Nothing on your existing profile will be removed or overwritten.</div>
+            ${additionRows}
+            ${conflictRows}
+            <div style="margin-top:10px;font-size:0.75rem;color:rgba(255,255,255,0.4);">${conflicts.length
+              ? "Your own details are kept by default — tick a field above to use your leader's version instead. Nothing is removed without your say."
+              : "These will be added to your profile when you claim. Nothing on your existing profile will be removed or overwritten."}</div>
           </div>
           <div class="claim-spot-label">This profile was saved for you by your crew leader.</div>`;
       } else {
@@ -6463,12 +6513,13 @@ async function doProfilePasswordChange() {
       }
     } else {
       // Direct claim: stub becomes their profile
-      const hasPreFill = raver.notes || raver.handle;
+      const hasPreFill = raver.notes || raver.handle || raver.base;
       if (hasPreFill) {
         bottomSection = `
           <div class="claim-review-block">
             <div class="claim-review-label">Your leader added these details for you</div>
             ${raver.handle ? `<div class="claim-review-row"><span class="claim-review-key">Handle</span><span>${escHtml(raver.handle)}</span></div>` : ''}
+            ${raver.base   ? `<div class="claim-review-row"><span class="claim-review-key">📍 Base</span><span>${escHtml(raver.base)}</span></div>`   : ''}
             ${raver.notes  ? `<div class="claim-review-row"><span class="claim-review-key">Note</span><span>${escHtml(raver.notes)}</span></div>`   : ''}
             <button class="claim-edit-btn" onclick="toggleClaimEditForm(this)">✏️ Edit before claiming</button>
             <div class="claim-review-edit-form" id="claim-edit-form">
@@ -6606,13 +6657,22 @@ async function doProfilePasswordChange() {
     sessionStorage.removeItem('pendingClaim');
     localStorage.removeItem('pendingClaimToken');
 
-    // Persist any edits the user made in the review form
+    // Persist any edits the user made in the review form, plus any pre-set
+    // fields the claimer chose to adopt over their own via the merge-review
+    // "Use leader's instead" toggles. The backend already gap-fills blank
+    // fields; here we only override the claimer's own values they opted to swap.
     const claimedId = result?.claimed_id || result?.merged_into;
-    if (claimedId && (editName || editHandle || editMet)) {
-      const updates = {};
-      if (editName)   updates.name       = editName;
-      if (editHandle) updates.handle     = editHandle;
-      if (editMet)    updates.met_story  = editMet;
+    const updates = {};
+    if (editName)   updates.name      = editName;
+    if (editHandle) updates.handle    = editHandle;
+    if (editMet)    updates.met_story = editMet;
+    const stubData = previewSnap?.raver || {};
+    ['base', 'handle', 'instagram', 'radiate'].forEach(key => {
+      if (document.getElementById(`claim-keep-${key}`)?.checked && stubData[key]) {
+        updates[key] = stubData[key];
+      }
+    });
+    if (claimedId && Object.keys(updates).length) {
       await sb.from('ravers').update(updates).eq('id', claimedId);
     }
 
@@ -8059,16 +8119,26 @@ async function doProfilePasswordChange() {
     const colMap = { name: 'name', base: 'base', instagram: 'instagram', radiate: 'radiate', phone: 'phone' };
     const col = colMap[fieldKey];
     if (!col) return;
+    const prev = r[fieldKey];
     r[fieldKey] = value;
-    showToast('✅ Saved');
-    // Re-render the inline field display
+    // Optimistically reflect the change in the inline display…
     const wrap = document.getElementById(`ief-wrap-${raverId}-${fieldKey}`);
     if (wrap) wrap.innerHTML = inlineEditDisplay(raverId, fieldKey, value);
     renderSquad();
-    if (currentUser) {
+    // …but only confirm "Saved" once the DB write actually lands. If it fails
+    // (e.g. RLS), roll the value back so the UI never claims a save that didn't.
+    if (currentUser && !String(raverId).startsWith('temp_')) {
       const { error } = await sb.from('ravers').update({ [col]: value }).eq('id', String(raverId));
-      if (error) { console.error('saveFieldForRaver error', error); showToast('⚠️ Save failed'); }
+      if (error) {
+        console.error('saveFieldForRaver error', error);
+        r[fieldKey] = prev;
+        if (wrap) wrap.innerHTML = inlineEditDisplay(raverId, fieldKey, prev);
+        renderSquad();
+        showToast('⚠️ Save failed — please try again');
+        return;
+      }
     }
+    showToast('✅ Saved');
   }
 
   function startPrivatePhoneEdit(raverId, currentValue) {
@@ -12305,6 +12375,7 @@ async function doProfilePasswordChange() {
         <div class="modal-title">➕ Add Raver</div>
         <p style="font-size:0.82rem;color:var(--muted);margin-bottom:18px;line-height:1.5;">Just the basics — you can fill in more details by tapping their name in the crew later.</p>
         ${fieldRow('Name','pf-name', '', 'e.g. Sam P.')}
+        ${fieldRow('Home Base','pf-base', '', 'e.g. Berlin, DE')}
         ${fieldRow('Phone Number','pf-phone', '', 'e.g. +44 7700 900000')}
         ${fieldRow('Instagram','pf-instagram', '', 'e.g. @samraves')}
         ${fieldRow('Radiate','pf-radiate', '', 'e.g. @samraves')}
