@@ -5333,6 +5333,12 @@
     <p style="font-size:0.82rem;color:var(--muted);margin-bottom:18px;line-height:1.5;">Choose a new password for your account.</p>
     <input class="form-input" id="pf-new-password" type="password" placeholder="New password (min 6 chars)" autocomplete="new-password" style="margin-bottom:8px;">
     <input class="form-input" id="pf-confirm-password" type="password" placeholder="Confirm new password" autocomplete="new-password" style="margin-bottom:16px;">
+    <div id="eruda-toggle-row" style="display:none;border-top:1px solid var(--border);padding-top:14px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:0.82rem;color:var(--muted);">🛠️ Dev console</span>
+        <button id="eruda-toggle-btn" onclick="toggleErudaVisibility()" class="btn btn-ghost" style="font-size:0.78rem;padding:4px 12px;min-width:56px;">Show</button>
+      </div>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeChangePwModal()">Cancel</button>
       <button class="btn btn-primary" id="pf-pw-btn" onclick="doProfilePasswordChange()">Update Password</button>
@@ -5903,9 +5909,33 @@ async function doProfilePasswordChange() {
   function maybeInitEruda() {
     if (_erudaInited || !window.eruda) return;
     const email = (currentUser?.email || '').toLowerCase();
+    const inFamTesters = crews.some(c =>
+      c.name.toLowerCase() === 'fam testers' &&
+      crewSquad(c).some(p => p.isYou)
+    );
     const allowed = ERUDA_ALLOWED_EMAILS.includes(email)
-      || localStorage.getItem('rf_eruda') === '1';
-    if (allowed) { try { eruda.init(); _erudaInited = true; } catch (e) {} }
+      || localStorage.getItem('rf_eruda') === '1'
+      || inFamTesters;
+    if (allowed) {
+      try {
+        eruda.init();
+        _erudaInited = true;
+        // Default OFF: hide unless user has explicitly enabled it
+        if (localStorage.getItem('rf_eruda_visible') !== '1') {
+          const el = document.getElementById('eruda');
+          if (el) el.style.display = 'none';
+        }
+      } catch (e) {}
+    }
+  }
+
+  function toggleErudaVisibility() {
+    const el = document.getElementById('eruda');
+    if (!el) return;
+    const nowVisible = el.style.display === 'none';
+    el.style.display = nowVisible ? '' : 'none';
+    localStorage.setItem('rf_eruda_visible', nowVisible ? '1' : '0');
+    document.getElementById('eruda-toggle-btn').textContent = nowVisible ? 'Hide' : 'Show';
   }
 
   function showApp(user) {
@@ -6821,6 +6851,7 @@ async function doProfilePasswordChange() {
   async function bootApp() {
     try {
       await loadAllData();
+      maybeInitEruda(); // second call: crew data now available for FAM Testers check
     } catch(err) {
       console.warn('DB load failed, starting fresh:', err);
     }
@@ -14296,6 +14327,13 @@ async function doProfilePasswordChange() {
   function openChangePwModal() {
     document.getElementById('pf-new-password').value = '';
     document.getElementById('pf-confirm-password').value = '';
+    const row = document.getElementById('eruda-toggle-row');
+    if (row && _erudaInited) {
+      const erudaEl = document.getElementById('eruda');
+      const isVisible = erudaEl && erudaEl.style.display !== 'none';
+      document.getElementById('eruda-toggle-btn').textContent = isVisible ? 'Hide' : 'Show';
+      row.style.display = '';
+    }
     document.getElementById('change-pw-overlay').classList.add('open');
   }
 
