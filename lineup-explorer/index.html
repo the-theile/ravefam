@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lineup Explorer — Interactive Event Lineups | RaveFAM</title>
+
+<meta name="description" content="RaveFAM's free interactive lineup explorers — filter by genre, search artists, and preview sounds on Spotify. Built for rave crews." />
+<link rel="canonical" href="https://myravefam.com/lineup-explorer/" />
+<meta name="robots" content="index, follow" />
+<link rel="icon" type="image/x-icon" href="/favicon.ico" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://myravefam.com/lineup-explorer/" />
+<meta property="og:title" content="Lineup Explorer — Interactive Event Lineups | RaveFAM" />
+<meta property="og:description" content="Free interactive lineup explorers — filter by genre, search artists, preview on Spotify. Built for rave crews." />
+<meta property="og:image" content="https://myravefam.com/og-image.png" />
+<meta property="og:site_name" content="RaveFAM" />
+
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Lineup Explorer — Interactive Event Lineups | RaveFAM" />
+<meta name="twitter:description" content="Free interactive lineup explorers — filter by genre, search artists, preview on Spotify." />
+<meta name="twitter:image" content="https://myravefam.com/og-image.png" />
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    { "@type": "ListItem", "position": 1, "name": "RaveFAM", "item": "https://myravefam.com/" },
+    { "@type": "ListItem", "position": 2, "name": "Lineup Explorer", "item": "https://myravefam.com/lineup-explorer/" }
+  ]
+}
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Space+Grotesk:wght@400;500;700&family=Urbanist:wght@800;900&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #07050f; --ink: #f3eefb; --muted: #9b91bd;
+    --line: rgba(160,140,220,0.16); --card: rgba(22,16,42,0.6);
+    --pink: #ff2d95; --teal: #2ee6c8;
+    --grad: linear-gradient(100deg, #ff2d95 0%, #b15cff 45%, #2ee6c8 100%);
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; font-family: "Space Grotesk", system-ui, sans-serif; color: var(--ink);
+    background: var(--bg); min-height: 100vh; overflow-x: hidden; position: relative; }
+
+  .field { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+    background: radial-gradient(120% 80% at 50% -10%, rgba(177,92,255,0.18), transparent 60%),
+      radial-gradient(90% 60% at 110% 110%, rgba(46,230,200,0.12), transparent 55%),
+      radial-gradient(70% 50% at -10% 90%, rgba(255,45,149,0.14), transparent 55%), var(--bg); }
+  .blob { position: absolute; border-radius: 50%; filter: blur(70px); opacity: 0.5; animation: drift 22s ease-in-out infinite alternate; }
+  .blob.a { width: 46vw; height: 46vw; top: -8vw; left: -6vw; background: #ff2d95; }
+  .blob.b { width: 40vw; height: 40vw; bottom: -10vw; right: -8vw; background: #2ee6c8; animation-delay: -7s; }
+  .blob.c { width: 34vw; height: 34vw; top: 30%; left: 55%; background: #b15cff; animation-delay: -13s; opacity: 0.35; }
+  @keyframes drift { from { transform: translate(0,0) scale(1); } to { transform: translate(4vw,-3vw) scale(1.12); } }
+  .grid-overlay { position: absolute; inset: 0;
+    background-image: linear-gradient(rgba(160,140,220,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(160,140,220,0.05) 1px, transparent 1px);
+    background-size: 44px 44px; mask-image: radial-gradient(110% 90% at 50% 0%, #000 35%, transparent 75%); }
+
+  .wrap { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; padding: 20px 18px 70px; }
+
+  .breadcrumb { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; font-size: 0.75rem; color: var(--muted); }
+  .breadcrumb a { color: var(--muted); text-decoration: none; transition: color .15s; }
+  .breadcrumb a:hover { color: var(--ink); }
+  .breadcrumb .sep { opacity: 0.4; }
+  .breadcrumb .cur { color: var(--ink); }
+
+  .brandbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 32px; }
+  .brand { display: inline-flex; align-items: center; gap: 10px; padding: 7px 13px 7px 9px;
+    border: 1px solid var(--line); border-radius: 999px; background: rgba(12,8,30,0.7); text-decoration: none; }
+  .brand .mark { width: 30px; height: 30px; display: grid; place-items: center; }
+  .brand .mark svg { width: 30px; height: 30px; display: block; }
+  .freq-nav-bar { animation: freqNavBeat 1.4s ease-in-out infinite; }
+  @keyframes freqNavBeat { 0%,100%{ opacity:.4 } 50%{ opacity:1 } }
+  .freq-nav-core { animation: freqNavCore 2s ease-in-out infinite; }
+  @keyframes freqNavCore {
+    0%,100%{ filter: drop-shadow(0 0 3px #39FF14) drop-shadow(0 0 8px rgba(57,255,20,.4)); }
+    50%    { filter: drop-shadow(0 0 8px #39FF14) drop-shadow(0 0 20px rgba(57,255,20,.7)); }
+  }
+  .brand .wm { font-family: "Urbanist", sans-serif; font-weight: 800; font-size: 1rem; letter-spacing: -0.3px; }
+  .brand .wm .r { color: #fff; }
+  .brand .wm .g { color: #39FF14; }
+  .brand .tag { font-size: 0.6rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); padding-left: 8px; border-left: 1px solid var(--line); }
+
+  .eyebrow { font-family: "Orbitron", sans-serif; font-weight: 700; letter-spacing: 0.42em;
+    font-size: 0.62rem; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; padding-left: 0.42em; }
+  h1 { font-family: "Orbitron", sans-serif; font-weight: 900; font-size: clamp(1.8rem, 7vw, 3.2rem);
+    line-height: 1.05; margin: 0 0 12px; letter-spacing: 0.02em;
+    background: var(--grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
+  .sub { color: var(--muted); font-size: 0.95rem; max-width: 52ch; line-height: 1.55; margin: 0 0 36px; }
+  .sub b { color: var(--ink); font-weight: 500; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+
+  .event-card { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 20px 20px 18px;
+    border: 1px solid var(--line); border-radius: 18px; background: var(--card); text-decoration: none;
+    color: var(--ink); overflow: hidden; isolation: isolate;
+    transition: transform .16s ease, border-color .18s, box-shadow .2s; }
+  .event-card::before { content: ""; position: absolute; inset: 0; z-index: -1; opacity: 0;
+    background: radial-gradient(120% 90% at 0% 0%, rgba(177,92,255,0.18), transparent 60%); transition: opacity .2s; }
+  .event-card:hover, .event-card:focus-visible { transform: translateY(-4px);
+    border-color: rgba(177,92,255,0.55);
+    box-shadow: 0 14px 34px -16px rgba(177,92,255,0.5), 0 0 0 1px rgba(177,92,255,0.28) inset; outline: none; }
+  .event-card:hover::before, .event-card:focus-visible::before { opacity: 1; }
+
+  .event-tag { display: inline-flex; align-items: center; gap: 6px; font-family: "Orbitron", sans-serif;
+    font-size: 0.55rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+    color: #0a0512; background: var(--grad); border-radius: 999px; padding: 3px 10px; width: fit-content; }
+  .event-name { font-family: "Orbitron", sans-serif; font-weight: 900; font-size: 1.35rem; line-height: 1.1; letter-spacing: 0.01em; }
+  .event-meta { font-size: 0.8rem; color: var(--muted); line-height: 1.5; }
+  .event-meta b { color: var(--ink); font-weight: 500; }
+  .event-acts { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+  .event-acts span { color: var(--ink); font-weight: 500; }
+
+  .event-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; }
+  .explore-link { display: inline-flex; align-items: center; gap: 6px; font-family: "Orbitron", sans-serif;
+    font-size: 0.65rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--teal); transition: color .15s; }
+  .event-card:hover .explore-link { color: #fff; }
+  .explore-link svg { width: 14px; height: 14px; transition: transform .15s; }
+  .event-card:hover .explore-link svg { transform: translateX(3px); }
+  .artist-count { font-family: "Orbitron", sans-serif; font-size: 0.6rem; color: var(--muted); }
+
+  footer { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.78rem; line-height: 1.6; }
+  footer .fam { font-family: "Orbitron", sans-serif; background: var(--grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; font-weight: 700; }
+
+  @media (max-width: 480px) {
+    .brand .tag { display: none; }
+    .grid { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .blob { animation: none; }
+    .freq-nav-bar, .freq-nav-core { animation: none; }
+    .event-card { transition: border-color .18s, box-shadow .2s; }
+    .event-card:hover, .event-card:focus-visible { transform: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="field" aria-hidden="true">
+    <div class="blob a"></div><div class="blob b"></div><div class="blob c"></div>
+    <div class="grid-overlay"></div>
+  </div>
+
+  <main class="wrap">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <a href="https://myravefam.com/">RaveFAM</a>
+      <span class="sep" aria-hidden="true">›</span>
+      <span class="cur" aria-current="page">Lineup Explorer</span>
+    </nav>
+
+    <div class="brandbar">
+      <a class="brand" href="https://myravefam.com/" aria-label="RaveFAM home">
+        <span class="mark"><svg viewBox="0 0 72 72" fill="none" aria-hidden="true">
+          <defs><filter id="fnc" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+          <line class="freq-nav-bar" x1="36" y1="22" x2="36" y2="9" stroke="#FF2D78" stroke-width="2.2" stroke-linecap="round"/>
+          <line class="freq-nav-bar" x1="39.62" y1="22.48" x2="41.95" y2="13.78" stroke="#39FF14" stroke-width="2.2" stroke-linecap="round" style="animation-delay:.06s"/>
+          <line class="freq-nav-bar" x1="43" y1="23.88" x2="51" y2="10.02" stroke="#00F5FF" stroke-width="2.2" stroke-linecap="round" style="animation-delay:.11s"/>
+          <line class="freq-nav-bar" x1="45.9" y1="26.1" x2="52.97" y2="19.03" stroke="#39FF14" stroke-width="2.2" stroke-linecap="round" style="animation-delay:.17s"/>
+          <line class="freq-nav-bar" x1="48.12" y1="29" x2="64.58" y2="19.5" stroke="#39FF14" stroke-width="2.2" stroke-linecap="round" style="animation-delay:.22s"/>
+          <line class="freq-nav-bar" x1="49.52" y1="32.38" x2="60.15" y2="29.53" stroke="#39FF14" stroke-width="2.2" stroke-linecap="round" style="animation-delay:.28s"/>
+          <line class="freq-nav-bar" x1="50" y1="36" x2="65" y2="36" stroke="#FF2D78" stroke-width="2.2" stroke-linecap="round" style="animation-delay:.33s"/>
+          <line class="freq-nav-bar" x1="49.52" y1="39.62" x2="57.25" y2="41.69" stroke="#39FF14" stroke-width="2.2" stroke-linecap="round" style="animation-delay:.39s"/>
+          <line class="freq-nav-bar" x1="48.12" y1="43" x2="63.71" y2="52" stroke="#39FF14" stroke-width="2.2" stroke-linecap="round" style="animation-delay:.44s"/>
+          <line class="freq-nav-bar" x1="45.9" y1="45.9" x2="52.97" y2="52.97" stroke="#39FF14" stroke-width="2.2" stroke-linecap="round" style="animation-delay:.50s"/>
+          <line class="freq-nav-bar" x1="43" y1="48.12" x2="50" y2="60.25" stroke="#00F5FF" stroke-width="2.2" stroke-linecap="round" style="animation-delay:.55s"/>
+          <line class="freq-nav-bar" x1="39.62" y1="49.52" x2="42.99" y2="62.08" stroke="#39FF14" stroke-width="2.2" stroke-linecap="round" style="animation-delay:.61s"/>
+          <line class="freq-nav-bar" x1="36" y1="50" x2="36" y2="61" stroke="#FF2D78" stroke-width="2.2" stroke-linecap="round" style="animation-delay:.66s"/>
+          <line class="freq-nav-bar" x1="32.38" y1="49.52" x2="28.24" y2="64.98" stroke="#39FF14" stroke-width="2.2" stroke-linecap="round" style="animation-delay:.72s"/>
+          <line class="freq-nav-bar" x1="29" y1="48.12" x2="24.5" y2="55.92" stroke="#00F5FF" stroke-width="2.2" stroke-linecap="round" style="animation-delay:.77s"/>
+          <line class="freq-nav-bar" x1="26.1" y1="45.9" x2="12.67" y2="59.33" stroke="#39FF14" stroke-width="2.2" stroke-linecap="round" style="animation-delay:.83s"/>
+          <line class="freq-nav-bar" x1="23.88" y1="43" x2="12.62" y2="49.5" stroke="#39FF14" stroke-width="2.2" stroke-linecap="round" style="animation-delay:.88s"/>
+          <line class="freq-nav-bar" x1="22.48" y1="39.62" x2="7.99" y2="43.51" stroke="#39FF14" stroke-width="2.2" stroke-linecap="round" style="animation-delay:.94s"/>
+          <line class="freq-nav-bar" x1="22" y1="36" x2="12" y2="36" stroke="#FF2D78" stroke-width="2.2" stroke-linecap="round" style="animation-delay:.99s"/>
+          <line class="freq-nav-bar" x1="22.48" y1="32.38" x2="5.09" y2="27.72" stroke="#39FF14" stroke-width="2.2" stroke-linecap="round" style="animation-delay:1.05s"/>
+          <line class="freq-nav-bar" x1="23.88" y1="29" x2="11.75" y2="22" stroke="#39FF14" stroke-width="2.2" stroke-linecap="round" style="animation-delay:1.10s"/>
+          <line class="freq-nav-bar" x1="26.1" y1="26.1" x2="18.32" y2="18.32" stroke="#39FF14" stroke-width="2.2" stroke-linecap="round" style="animation-delay:1.16s"/>
+          <line class="freq-nav-bar" x1="29" y1="23.88" x2="25" y2="16.95" stroke="#00F5FF" stroke-width="2.2" stroke-linecap="round" style="animation-delay:1.21s"/>
+          <line class="freq-nav-bar" x1="32.38" y1="22.48" x2="28.75" y2="8.95" stroke="#39FF14" stroke-width="2.2" stroke-linecap="round" style="animation-delay:1.27s"/>
+          <circle cx="36" cy="36" r="8" fill="#39FF14" filter="url(#fnc)" opacity="0.12"/>
+          <circle class="freq-nav-core" cx="36" cy="36" r="5" fill="#39FF14" opacity="0.9"/>
+          <circle cx="36" cy="36" r="2.5" fill="#fff"/>
+          <circle cx="36" cy="36" r="34" stroke="rgba(57,255,20,0.2)" stroke-width="0.8"/>
+        </svg></span>
+        <span class="wm"><span class="r">Rave</span><span class="g">FAM</span></span>
+        <span class="tag">Crew Tools</span>
+      </a>
+    </div>
+
+    <p class="eyebrow">Free for the fam</p>
+    <h1>Lineup<br>Explorer</h1>
+    <p class="sub">Interactive lineup tools for bass music events — filter by genre, search artists, and tap to preview on <b>Spotify</b>. No account needed.</p>
+
+    <div class="grid" role="list">
+
+      <a class="event-card" href="/lineup-explorer/eternal-nye-2026" role="listitem" aria-label="Eternal NYE 2026 lineup explorer">
+        <span class="event-tag">Active</span>
+        <div class="event-name">ETERNAL NYE<br>2026</div>
+        <div class="event-meta">
+          <b>Dec 30–31, 2026</b> · Orlando Amphitheater<br>
+          Sacred Hive × Primal
+        </div>
+        <div class="event-acts">
+          <span>Knock2 · Zeds Dead · LSDREAM · RL Grime</span> + 35 more
+        </div>
+        <div class="event-footer">
+          <span class="explore-link">
+            Explore lineup
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </span>
+          <span class="artist-count">39 artists</span>
+        </div>
+      </a>
+
+    </div>
+
+    <footer>
+      Lineup explorers are built by the <span class="fam">RaveFAM</span> crew tools team. Want your event featured? Reach out at <a href="https://myravefam.com/" style="color:var(--teal);text-decoration:none;">myravefam.com</a>.
+    </footer>
+  </main>
+</body>
+</html>
