@@ -520,6 +520,16 @@
     text-overflow: ellipsis;
   }
   .event-meta { font-size: 0.76rem; color: var(--muted); margin-bottom: 12px; }
+  .lineup-explorer-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    margin: 2px 0 8px; padding: 4px 11px;
+    font-family: 'Outfit', sans-serif; font-size: 0.68rem; font-weight: 700;
+    letter-spacing: 0.02em; color: var(--neon-pink);
+    background: rgba(255,45,120,0.08); border: 1px solid rgba(255,45,120,0.3);
+    border-radius: 999px; text-decoration: none; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .lineup-explorer-btn:hover { background: rgba(255,45,120,0.16); border-color: rgba(255,45,120,0.5); }
 
   .attendee-section { margin-bottom: 8px; }
   .attendee-section:last-child { margin-bottom: 0; }
@@ -8416,6 +8426,16 @@ async function doProfilePasswordChange() {
 
   function getCrew(id) { return crews.find(c => String(c.id) === String(id)); }
 
+  // ===== Lineup Explorer links =====
+  // Maps a rave name to its public Lineup Explorer page, if one exists.
+  const LINEUP_EXPLORERS = [
+    { match: /eternal\s*nye/i, url: '/lineup-explorer/eternal-nye-2026' },
+  ];
+  function getLineupExplorerUrl(name) {
+    const hit = LINEUP_EXPLORERS.find(e => e.match.test(name || ''));
+    return hit ? hit.url : null;
+  }
+
   // ===== Festival date parsing & "next up" computation =====
   // App's current date — live, not pinned
   const TODAY = new Date(); TODAY.setHours(0,0,0,0);
@@ -13283,6 +13303,10 @@ async function doProfilePasswordChange() {
     const past = filtered.filter(f => !f._d || f._d < TODAY).sort((a,b) => (b._d||0) - (a._d||0));
 
     const card = (f) => {
+      const lineupUrl = getLineupExplorerUrl(f.name);
+      const lineupBtn = lineupUrl
+        ? `<a class="lineup-explorer-btn" href="${lineupUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation()">🔭 Lineup Explorer</a>`
+        : '';
       const color = festColor(f);
       const day = f._d ? f._d.getDate() : '—';
       const mon = f._d ? MON_SHORT[f._d.getMonth()].toUpperCase() : '';
@@ -13355,6 +13379,7 @@ async function doProfilePasswordChange() {
             </div>
             <div class="event-info">
               <div class="event-name">${escHtml(f.name)} <span class="fest-edit-hint">✏️</span></div>
+              ${lineupBtn}
               <div class="event-meta">${metaLine}</div>
               ${goingSection}
               ${interestedSection}
