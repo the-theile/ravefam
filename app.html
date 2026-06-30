@@ -8427,12 +8427,17 @@ async function doProfilePasswordChange() {
   function getCrew(id) { return crews.find(c => String(c.id) === String(id)); }
 
   // ===== Lineup Explorer links =====
-  // Maps a rave name to its public Lineup Explorer page, if one exists.
+  // Maps a rave to its public Lineup Explorer page, if one exists.
+  // Year is required so annual events (e.g. "Eternal NYE 2027") don't pick up
+  // a prior year's explorer page by name match alone.
   const LINEUP_EXPLORERS = [
-    { match: /eternal\s*nye/i, url: '/lineup-explorer/eternal-nye-2026' },
+    { match: /eternal\s*nye/i, year: 2026, url: '/lineup-explorer/eternal-nye-2026' },
+    { match: /metamorphosis/i, year: 2026, url: '/lineup-explorer/metamorphosis-2026' },
   ];
-  function getLineupExplorerUrl(name) {
-    const hit = LINEUP_EXPLORERS.find(e => e.match.test(name || ''));
+  function getLineupExplorerUrl(f) {
+    const d = festDate(f);
+    const year = d ? d.getFullYear() : null;
+    const hit = LINEUP_EXPLORERS.find(e => e.match.test((f && f.name) || '') && e.year === year);
     return hit ? hit.url : null;
   }
 
@@ -13303,7 +13308,7 @@ async function doProfilePasswordChange() {
     const past = filtered.filter(f => !f._d || f._d < TODAY).sort((a,b) => (b._d||0) - (a._d||0));
 
     const card = (f) => {
-      const lineupUrl = getLineupExplorerUrl(f.name);
+      const lineupUrl = getLineupExplorerUrl(f);
       const lineupBtn = lineupUrl
         ? `<a class="lineup-explorer-btn" href="${lineupUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation()">🔭 Lineup Explorer</a>`
         : '';
