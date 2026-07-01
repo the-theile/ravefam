@@ -28,9 +28,9 @@ test.describe('raves together (profile relational stats)', () => {
     const profile = page.locator('#page-profile');
     await expect(profile).toContainText('You & Sam P.');
 
-    const heroNumbers = profile.locator('.stats-hero-number');
-    await expect(heroNumbers.nth(0)).toHaveText('1'); // Raves Together
-    await expect(heroNumbers.nth(1)).toHaveText('1'); // Upcoming Together
+    await expect(profile.locator('.raves-together-hero-number')).toHaveText('1'); // Raves Together
+    await expect(profile.locator('.raves-together-hero-label')).toContainText('First Spark');
+    await expect(profile).toContainText('1 upcoming together');
     await expect(profile).toContainText('First rave together');
     await expect(profile).toContainText('Past Fest (2020)');
   });
@@ -40,7 +40,7 @@ test.describe('raves together (profile relational stats)', () => {
     await page.evaluate(() => openProfile('r-nomatch'));
     const profile = page.locator('#page-profile');
     await expect(profile).toContainText('No raves together yet');
-    await expect(profile.locator('.stats-hero-number')).toHaveCount(0);
+    await expect(profile.locator('.raves-together-hero-number')).toHaveCount(0);
   });
 
   test('does not show the section on your own profile', async ({ page }) => {
