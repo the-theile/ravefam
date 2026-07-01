@@ -13,7 +13,7 @@ function overlapData() {
     id: 'r-nomatch', name: 'Nomatch R.', handle: 'nomatchraves',
     is_you: false, created_by: d.ravers[0].created_by, claimed_by: null, status: 'unclaimed',
     base: 'Tokyo, JP', gradient: 'linear-gradient(135deg,#FFE600,#FF6B35)',
-    avatar_url: null, blocked_tags: [], genres: ['Trance'], fav_artists: [],
+    avatar_url: null, blocked_tags: [], genres: ['Trance'],
     instagram: '', radiate: '', phone: '', phone_visible: false,
     met_story: '', notes: '', qr_token: 'qr-nomatch',
     vibe_tags: [], custom_vibe_tags: [],

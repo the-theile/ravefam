@@ -42,7 +42,7 @@ function seedData() {
         id: 'r-you', name: 'Theile', handle: 'theile',
         is_you: true, created_by: TEST_UID, claimed_by: TEST_UID, status: 'claimed',
         base: 'Berlin, DE', gradient: 'linear-gradient(135deg,#FF2D78,#BF00FF)',
-        avatar_url: null, blocked_tags: [], genres: ['Techno', 'House'], fav_artists: ['Charlotte de Witte'],
+        avatar_url: null, blocked_tags: [], genres: ['Techno', 'House'],
         instagram: '@theile', radiate: '', phone: '', phone_visible: false,
         met_story: '', notes: '', qr_token: 'qr-you',
         vibe_tags: ['warehouse'], custom_vibe_tags: [],
@@ -51,7 +51,7 @@ function seedData() {
         id: 'r-sam', name: 'Sam P.', handle: 'samraves',
         is_you: false, created_by: TEST_UID, claimed_by: null, status: 'unclaimed',
         base: 'London, UK', gradient: 'linear-gradient(135deg,#00F5FF,#39FF14)',
-        avatar_url: null, blocked_tags: [], genres: ['DnB'], fav_artists: [],
+        avatar_url: null, blocked_tags: [], genres: ['DnB'],
         instagram: '', radiate: '', phone: '', phone_visible: false,
         met_story: '', notes: '', qr_token: 'qr-sam',
         vibe_tags: [], custom_vibe_tags: [],
@@ -62,7 +62,7 @@ function seedData() {
         id: 'r-kai', name: 'Kai M.', handle: 'kaibeats',
         is_you: false, created_by: TEST_UID, claimed_by: 'kai-uid', status: 'claimed',
         base: 'Lisbon, PT', gradient: 'linear-gradient(135deg,#BF00FF,#FF2D78)',
-        avatar_url: null, blocked_tags: [], genres: ['Techno'], fav_artists: [],
+        avatar_url: null, blocked_tags: [], genres: ['Techno'],
         instagram: '', radiate: '', phone: '', phone_visible: false,
         met_story: '', notes: '', qr_token: 'qr-kai',
         vibe_tags: [], custom_vibe_tags: [],
@@ -86,6 +86,12 @@ function seedData() {
     ],
     raver_festival_interest: [
       { raver_id: 'r-you', festival_id: 'f2' },
+    ],
+    artists: [
+      { id: 'a1', name: 'Charlotte de Witte', genres: ['techno'] },
+    ],
+    raver_favorite_artists: [
+      { raver_id: 'r-you', artist_id: 'a1' },
     ],
   };
 }
@@ -112,7 +118,7 @@ async function installSupabaseStub(page, opts = {}) {
         const store = JSON.parse(JSON.stringify(SEED));
         let idc = 0;
         // parent table id (always 'id') → child rows matched on this FK column.
-        const JOIN_FK = { crew_members: 'crew_id', raver_festivals: 'raver_id', raver_festival_interest: 'raver_id' };
+        const JOIN_FK = { crew_members: 'crew_id', raver_festivals: 'raver_id', raver_festival_interest: 'raver_id', raver_favorite_artists: 'raver_id' };
         const clone = x => JSON.parse(JSON.stringify(x));
 
         // Parse a PostgREST select string into embedded relations.
