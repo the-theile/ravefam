@@ -7431,6 +7431,40 @@ async function doProfilePasswordChange() {
     return `<div class="met-pair">${myBubble}${theirBubble}</div>`;
   }
 
+  function ravesTogetherSectionHTML(you, r) {
+    if (!you) return '';
+    const { sharedPast, sharedUpcoming, firstTogether, sharedCities, sharedGenres } = ravesTogetherData(you, r);
+
+    if (!sharedPast.length && !sharedUpcoming.length && !sharedCities.length && !sharedGenres.length) {
+      return `<div class="fest-empty">No raves together yet — find one to hit together? 🎪</div>`;
+    }
+
+    const firstTogetherHtml = firstTogether
+      ? `<div style="font-size:0.8rem;color:var(--muted);margin-bottom:12px;">🕰️ First rave together: <span style="color:var(--text);font-weight:600;">${escHtml(firstTogether.name)} (${firstTogether._d.getFullYear()})</span></div>`
+      : '';
+
+    const pillsHtml = (sharedCities.length || sharedGenres.length)
+      ? `<div style="margin-top:4px;">
+          ${sharedCities.map(c => `<span class="stats-pill cyan">📍 ${escHtml(c)}</span>`).join('')}
+          ${sharedGenres.map(g => `<span class="stats-pill">${escHtml(g)}</span>`).join('')}
+        </div>`
+      : '';
+
+    return `
+      <div class="stats-hero-grid">
+        <div class="stats-hero-card">
+          <div class="stats-hero-number">${sharedPast.length}</div>
+          <div class="stats-hero-label">Raves Together</div>
+        </div>
+        <div class="stats-hero-card">
+          <div class="stats-hero-number">${sharedUpcoming.length}</div>
+          <div class="stats-hero-label">Upcoming Together</div>
+        </div>
+      </div>
+      ${firstTogetherHtml}
+      ${pillsHtml}`;
+  }
+
   function startEditMetStory(raverId) {
     const cloud = document.getElementById(`met-cloud-mine-${raverId}`);
     if (!cloud) return;
@@ -11700,6 +11734,25 @@ async function doProfilePasswordChange() {
     return raverFestivals(r).filter(f => f._d < TODAY).sort((a,b) => b._d - a._d);
   }
 
+  // Overlap between "you" and another raver's rave history — powers the "Raves Together" profile section.
+  function ravesTogetherData(you, r) {
+    const yourPast = raverPast(you), theirPast = raverPast(r);
+    const yourUpcoming = raverUpcoming(you), theirUpcoming = raverUpcoming(r);
+
+    const sharedPast = yourPast.filter(f => theirPast.some(tf => String(tf.id) === String(f.id)));
+    const sharedUpcoming = yourUpcoming.filter(f => theirUpcoming.some(tf => String(tf.id) === String(f.id)));
+    const firstTogether = sharedPast.length ? sharedPast[sharedPast.length - 1] : null; // sharedPast sorted desc
+
+    const cityOf = f => (f.location || '').split(',')[0].trim();
+    const yourCities = new Set(yourPast.map(cityOf).filter(Boolean));
+    const sharedCities = [...new Set(theirPast.map(cityOf).filter(c => c && yourCities.has(c)))];
+
+    const yourGenres = new Set((you.genres || []).map(g => g.toLowerCase()));
+    const sharedGenres = (r.genres || []).filter(g => yourGenres.has(g.toLowerCase()));
+
+    return { sharedPast, sharedUpcoming, firstTogether, sharedCities, sharedGenres };
+  }
+
   function ourPhotoCardHTML(viewingRaverId) {
     const cached = ourPhotosCache[String(viewingRaverId)];
     const myPhoto    = cached?.mine    ?? null;
@@ -12159,6 +12212,12 @@ async function doProfilePasswordChange() {
               <div class="profile-fam-pins-grid">${pinItems}</div>
             </div>`;
         })()}
+
+        ${!r.isYou && squad.find(x => x.isYou) ? `
+        <div class="profile-section" style="${sg(0)}">
+          <h3>🎉 You &amp; ${escHtml(displayName(r))}</h3>
+          ${ravesTogetherSectionHTML(squad.find(x => x.isYou), r)}
+        </div>` : ''}
 
         ${!r.isYou ? `
         <div class="profile-section" style="${sg(0)}">
