@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mockup 2 — Bottom-Sheet Modal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=Urbanist:wght@800;900&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --neon-pink: #FF2D78; --neon-cyan: #00F5FF; --neon-yellow: #FFE600; --neon-purple: #BF00FF; --neon-green: #39FF14;
+    --bg: #050509; --surface: #0E0E16; --surface2: #16161F; --text: #F0EEFF; --muted: #8585A5;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; padding: 32px 20px 80px; min-height: 100vh; }
+  .page-label { font-family: 'Urbanist', sans-serif; font-size: 0.65rem; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; color: var(--neon-purple); margin-bottom: 6px; }
+  .page-title { font-family: 'Urbanist', sans-serif; font-size: 1.5rem; font-weight: 900; margin-bottom: 4px; }
+  .page-desc { font-size: 0.82rem; color: var(--muted); margin-bottom: 26px; line-height: 1.5; max-width: 480px; }
+
+  .device { max-width: 420px; margin: 0 auto; background: var(--surface); border: 1px solid rgba(255,255,255,0.07); border-radius: 24px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.5); position: relative; height: 640px; display: flex; flex-direction: column; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .topbar-btn { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.78rem; background: none; border: none; color: var(--muted); cursor: pointer; }
+  .btn { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.78rem; letter-spacing: 0.3px; padding: 8px 16px; border-radius: 100px; border: none; cursor: pointer; transition: all 0.2s ease; }
+  .btn-primary { background: var(--neon-pink); color: #fff; box-shadow: 0 0 16px rgba(255,45,120,0.4); }
+  .btn-ghost { background: rgba(255,255,255,0.07); color: var(--text); border: 1px solid rgba(255,255,255,0.1); }
+
+  .page-body { padding: 16px; overflow-y: auto; flex: 1; }
+  .section { margin-bottom: 16px; }
+  .section h3 { font-family: 'Outfit', sans-serif; font-size: 0.95rem; font-weight: 800; margin-bottom: 10px; }
+
+  .summary-card { border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 12px; }
+  .summary-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .summary-chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 11px; border-radius: 100px; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.72rem; border: 1.5px solid currentColor; background: rgba(255,255,255,0.06); }
+  .summary-empty { font-size: 0.78rem; color: var(--muted); font-style: italic; margin-bottom: 10px; }
+  .edit-tags-btn { width: 100%; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.82rem; padding: 10px; border-radius: 100px; border: 1.5px solid var(--neon-purple); background: rgba(191,0,255,0.1); color: #d67fff; cursor: pointer; transition: all 0.15s; }
+  .edit-tags-btn:hover { background: rgba(191,0,255,0.2); box-shadow: 0 0 16px -4px var(--neon-purple); }
+
+  .other-section-placeholder { border: 1px dashed rgba(255,255,255,0.1); border-radius: 14px; padding: 14px; color: var(--muted); font-size: 0.78rem; }
+
+  /* ===== Bottom sheet ===== */
+  .backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.6); opacity: 0; pointer-events: none; transition: opacity 0.25s ease; z-index: 10; }
+  .backdrop.open { opacity: 1; pointer-events: auto; }
+
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; height: 88%; background: var(--surface2); border-radius: 22px 22px 0 0; box-shadow: 0 -10px 40px rgba(0,0,0,0.5); transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.32,0.72,0,1); z-index: 11; display: flex; flex-direction: column; }
+  .sheet.open { transform: translateY(0); }
+  .sheet-handle { width: 36px; height: 4px; background: rgba(255,255,255,0.2); border-radius: 4px; margin: 10px auto 6px; }
+  .sheet-header { display: flex; align-items: center; justify-content: space-between; padding: 6px 16px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .sheet-title { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1rem; }
+  .sheet-close { background: rgba(255,255,255,0.08); border: none; color: var(--text); width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 0.85rem; }
+  .sheet-body { flex: 1; overflow-y: auto; padding: 12px 16px; }
+
+  .pinned-row { margin-bottom: 12px; }
+  .pinned-label { font-size: 0.65rem; color: var(--muted); font-weight: 700; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .pinned-chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; }
+  .pinned-chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 6px 4px 10px; border-radius: 100px; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.72rem; border: 1.5px solid currentColor; background: rgba(255,255,255,0.06); }
+  .pinned-chip .x { width: 16px; height: 16px; border-radius: 50%; background: rgba(255,255,255,0.12); display: inline-flex; align-items: center; justify-content: center; font-size: 0.65rem; cursor: pointer; }
+  .pinned-empty { font-size: 0.76rem; color: var(--muted); font-style: italic; }
+
+  .search-wrap { position: relative; margin-bottom: 12px; }
+  .search-input { width: 100%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 100px; padding: 10px 16px 10px 36px; color: var(--text); font-family: 'Outfit', sans-serif; font-size: 0.82rem; outline: none; }
+  .search-input:focus { border-color: var(--neon-cyan); }
+  .search-input::placeholder { color: var(--muted); }
+  .search-icon { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); font-size: 0.85rem; opacity: 0.6; }
+
+  .vibe-tag-cloud { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 16px; }
+  .vibe-preset { display: inline-flex; align-items: center; gap: 5px; padding: 5px 13px; border-radius: 100px; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.75rem; cursor: pointer; border: 1.5px solid transparent; background: rgba(255,255,255,0.04); color: var(--muted); transition: all 0.18s cubic-bezier(0.34,1.4,0.64,1); }
+  .vibe-preset:hover { transform: translateY(-2px) scale(1.04); }
+  .vibe-preset.picked { border-color: currentColor; background: rgba(255,255,255,0.08); transform: translateY(-1px) scale(1.03); box-shadow: 0 0 14px -4px currentColor; }
+
+  .custom-block { border-top: 1px solid rgba(255,255,255,0.06); padding-top: 12px; }
+  .custom-row { display: flex; gap: 8px; }
+  .emoji-btn { flex-shrink: 0; background: rgba(191,0,255,0.12); border: 1px solid rgba(191,0,255,0.35); color: #d67fff; border-radius: 100px; padding: 7px 11px; font-size: 1rem; cursor: pointer; }
+  .custom-input { flex: 1; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 100px; padding: 8px 14px; color: var(--text); font-family: 'Outfit', sans-serif; font-size: 0.8rem; outline: none; }
+  .add-btn { background: rgba(0,245,255,0.12); border: 1px solid rgba(0,245,255,0.3); color: var(--neon-cyan); border-radius: 100px; padding: 8px 15px; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.76rem; cursor: pointer; white-space: nowrap; }
+  .custom-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .custom-chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 6px 4px 10px; border-radius: 100px; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.72rem; border: 1.5px solid rgba(191,0,255,0.4); background: rgba(191,0,255,0.08); color: #d67fff; }
+  .custom-chip .x { width: 16px; height: 16px; border-radius: 50%; background: rgba(255,255,255,0.12); display: inline-flex; align-items: center; justify-content: center; font-size: 0.65rem; cursor: pointer; }
+  .cap-note { font-size: 0.68rem; color: var(--muted); margin-top: 8px; }
+
+  .sheet-footer { padding: 12px 16px 18px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; gap: 10px; }
+  .sheet-footer .btn { flex: 1; }
+</style>
+</head>
+<body>
+
+  <div class="page-label">Mockup 2 of 4</div>
+  <div class="page-title">Bottom-Sheet "Edit Vibe Tags" Modal</div>
+  <div class="page-desc">Pulls the picker out of the main edit flow entirely. The profile page just shows your current tags and an "Edit" button — tapping it opens a dedicated full-height sheet with room to search and browse. Keeps the main edit screen short; "Cancel" reverts, "Done" commits.</div>
+
+  <div class="device">
+    <div class="topbar">
+      <button class="topbar-btn">← Cancel</button>
+      <button class="btn btn-primary">Save Changes 🔥</button>
+    </div>
+
+    <div class="page-body">
+      <div class="section">
+        <h3>⚡ Vibe Tags</h3>
+        <div class="summary-card">
+          <div class="summary-chips" id="summaryChips"></div>
+          <button class="edit-tags-btn" id="editBtn" onclick="openSheet()">✏️ Edit Vibe Tags</button>
+        </div>
+      </div>
+      <div class="section">
+        <h3>🎶 Genres</h3>
+        <div class="other-section-placeholder">(rest of profile edit form continues below, unaffected — Genres, Favourite Artists, Festivals, Notes…)</div>
+      </div>
+    </div>
+
+    <div class="backdrop" id="backdrop" onclick="cancelSheet()"></div>
+    <div class="sheet" id="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-header">
+        <div class="sheet-title">Edit Vibe Tags</div>
+        <button class="sheet-close" onclick="cancelSheet()">✕</button>
+      </div>
+      <div class="sheet-body">
+        <div class="pinned-row">
+          <div class="pinned-label">Your vibes</div>
+          <div class="pinned-chips" id="pinnedChips"></div>
+        </div>
+
+        <div class="search-wrap">
+          <span class="search-icon">🔍</span>
+          <input class="search-input" id="searchInput" placeholder="Search vibes…" oninput="onSearch(this.value)">
+        </div>
+
+        <div class="vibe-tag-cloud" id="grid"></div>
+
+        <div class="custom-block">
+          <div class="pinned-label">✨ Your own</div>
+          <div class="custom-row">
+            <button type="button" class="emoji-btn" id="emojiBtn" onclick="toggleEmojiPicker()">✨</button>
+            <input class="custom-input" id="customInput" placeholder="Add your own vibe tag…" maxlength="30" onkeydown="if(event.key==='Enter'){event.preventDefault();addCustom();}">
+            <button type="button" class="add-btn" onclick="addCustom()">Add</button>
+          </div>
+          <div class="emoji-grid" id="emojiGrid" style="display:none; grid-template-columns: repeat(8, 1fr); gap:4px; margin-top:8px;"></div>
+          <div class="custom-chips" id="customChips"></div>
+          <div class="cap-note" id="capNote"></div>
+        </div>
+      </div>
+      <div class="sheet-footer">
+        <button class="btn btn-ghost" onclick="cancelSheet()">Cancel</button>
+        <button class="btn btn-primary" id="doneBtn" onclick="commitSheet()">Done</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const VIBE_PRESETS = [
+    { id:'vt-bassface', label:'Bass Face Champion', icon:'🔊', color:'#FF2D78' },
+    { id:'vt-glittergremlin', label:'Glitter Gremlin', icon:'✨', color:'#FFE600' },
+    { id:'vt-phonemartyr', label:'Phone Battery Martyr', icon:'🔋', color:'#00F5FF' },
+    { id:'vt-lostvibe', label:'Lost But Vibing', icon:'📍', color:'#39FF14' },
+    { id:'vt-afterspirate', label:'Afters Pirate', icon:'🏴‍☠️', color:'#BF00FF' },
+    { id:'vt-portaloo', label:'Portaloo Philosopher', icon:'🚽', color:'#FF6B35' },
+    { id:'vt-sunburnt', label:'Sunburnt Slay Queen', icon:'🦞', color:'#FF2D78' },
+    { id:'vt-nohydration', label:'Hydration? Never Heard Of Her', icon:'💊', color:'#00F5FF' },
+    { id:'vt-raincoat', label:'Raincoat Raver', icon:'🌧️', color:'#BF00FF' },
+    { id:'vt-kebab', label:'Midnight Kebab King', icon:'🍔', color:'#FFE600' },
+    { id:'vt-tent', label:'Tent Fortress Architect', icon:'⛺', color:'#FF6B35' },
+    { id:'vt-khole', label:'K-Hole Karaoke Star', icon:'😵‍💫', color:'#BF00FF' },
+    { id:'vt-microdose', label:'Microdosing Mystic', icon:'🍄', color:'#39FF14' },
+    { id:'vt-lineupguru', label:'Lineup Oracle', icon:'🎟️', color:'#FFE600' },
+    { id:'vt-silentdisco', label:'Silent Disco Stalker', icon:'🕺', color:'#00F5FF' },
+    { id:'vt-contentfarmer', label:'Festival Content Farmer', icon:'🤳', color:'#FF2D78' },
+    { id:'vt-sunglasses', label:'Sunglasses After Dark', icon:'🕶️', color:'#BF00FF' },
+    { id:'vt-sunscreen', label:'Sunscreen Sniper', icon:'🧴', color:'#39FF14' },
+    { id:'vt-kandi', label:'Kandi Kid Convert', icon:'🦋', color:'#FF2D78' },
+    { id:'vt-duststorm', label:'Dust Storm Devotee', icon:'🏜️', color:'#FFE600' },
+    { id:'vt-portawarrior', label:'Portapotty Warrior', icon:'🛡️', color:'#FF6B35' },
+    { id:'vt-raindance', label:'Rain Dance Refugee', icon:'🌧️', color:'#00F5FF' },
+    { id:'vt-blistered', label:'Blistered But Blessed', icon:'🥾', color:'#FF6B35' },
+    { id:'vt-sockless', label:'Sockless Legend', icon:'🧦', color:'#39FF14' },
+    { id:'vt-beergarden', label:'Beer Garden Bandit', icon:'🍺', color:'#FFE600' },
+    { id:'vt-mirrorball', label:'Mirrorball Magnet', icon:'🪩', color:'#FF2D78' },
+    { id:'vt-sweatequity', label:'Sweat Equity Investor', icon:'💦', color:'#00F5FF' },
+    { id:'vt-tacotruck', label:'Taco Truck Tracker', icon:'🌮', color:'#FF6B35' },
+    { id:'vt-vortex', label:'Vortex Victim', icon:'🌀', color:'#BF00FF' },
+    { id:'vt-moshpityogi', label:'Moshpit Yogi', icon:'🧘‍♀️', color:'#39FF14' },
+    { id:'vt-offlineonline', label:'Offline But Online', icon:'📵', color:'#FF6B35' },
+    { id:'vt-facepaint', label:'Face Paint Casualty', icon:'🤡', color:'#FF2D78' },
+    { id:'vt-mainstage', label:'Mainstage Monster', icon:'🎤', color:'#FF2D78' },
+    { id:'vt-bunker', label:'Bunker Dweller', icon:'🕳️', color:'#BF00FF' },
+    { id:'vt-sunrise', label:'Sunrise Chaser', icon:'🌅', color:'#FFE600' },
+    { id:'vt-certified', label:'Certified Raver', icon:'🧿', color:'#00F5FF' },
+    { id:'vt-vinyl', label:'Vinyl Purist', icon:'💿', color:'#39FF14' },
+    { id:'vt-lostphone', label:'Always Lost Phone', icon:'📵', color:'#FF6B35' },
+    { id:'vt-nap', label:'Nap Anywhere', icon:'😴', color:'#00F5FF' },
+    { id:'vt-firstqueue', label:'First in Queue', icon:'🏃', color:'#39FF14' },
+    { id:'vt-foodscout', label:'Food Scout', icon:'🌮', color:'#FFE600' },
+    { id:'vt-photographer', label:'Accidental Photographer', icon:'📸', color:'#FF2D78' },
+    { id:'vt-merch', label:'Merch Addict', icon:'👕', color:'#BF00FF' },
+    { id:'vt-earplugs', label:'Earplug Evangelist', icon:'🦺', color:'#00F5FF' },
+    { id:'vt-localmenu', label:'Local Menu Explorer', icon:'🗺️', color:'#FF6B35' },
+    { id:'vt-setlist', label:'Memorises Set Lists', icon:'🧠', color:'#39FF14' },
+    { id:'vt-latenight', label:'3AM Is Early', icon:'🌙', color:'#BF00FF' },
+    { id:'vt-afterparty', label:'Afterparty Legend', icon:'🔑', color:'#FF2D78' },
+  ];
+  const CUSTOM_VIBE_EMOJIS = ['🔥','💃','🎧','🪩','✨','🫶','🕺','⚡','🌊','👾','🌀','🎶','🦋','🍄','🥂','🫠'];
+
+  let selected = new Set(['vt-bassface','vt-nap','vt-certified','vt-mainstage','vt-latenight']);
+  let customTags = [{emoji:'🦋', text:'Berlin Local'}];
+  let searchTerm = '';
+  let customEmoji = '✨';
+  let snapshot = null; // taken on open, restored on cancel
+
+  function renderSummary() {
+    const el = document.getElementById('summaryChips');
+    const items = [...selected].map(id => VIBE_PRESETS.find(v => v.id === id)).concat(customTags.map(t => ({ label: t.text, icon: t.emoji, color: '#BF00FF' })));
+    if (items.length === 0) { el.innerHTML = ''; return; }
+    el.innerHTML = items.map(p => `<span class="summary-chip" style="color:${p.color};"><span>${p.icon}</span>${p.label}</span>`).join('');
+    document.getElementById('editBtn').textContent = `✏️ Edit Vibe Tags (${items.length})`;
+  }
+
+  function openSheet() {
+    snapshot = { selected: new Set(selected), customTags: JSON.parse(JSON.stringify(customTags)) };
+    document.getElementById('backdrop').classList.add('open');
+    document.getElementById('sheet').classList.add('open');
+    renderPinned(); renderGrid(); renderCustom();
+  }
+
+  function closeSheetEl() {
+    document.getElementById('backdrop').classList.remove('open');
+    document.getElementById('sheet').classList.remove('open');
+  }
+
+  function cancelSheet() {
+    selected = snapshot.selected;
+    customTags = snapshot.customTags;
+    closeSheetEl();
+    renderSummary();
+  }
+
+  function commitSheet() {
+    closeSheetEl();
+    renderSummary();
+  }
+
+  function onSearch(v) { searchTerm = v.trim().toLowerCase(); renderGrid(); }
+
+  function renderGrid() {
+    const filtered = VIBE_PRESETS.filter(p => !searchTerm || p.label.toLowerCase().includes(searchTerm));
+    document.getElementById('grid').innerHTML = filtered.map(p => {
+      const picked = selected.has(p.id) ? ' picked' : '';
+      const style = selected.has(p.id)
+        ? `border-color:${p.color};background:rgba(255,255,255,0.08);color:${p.color};box-shadow:0 0 14px -4px ${p.color};`
+        : `color:${p.color};`;
+      return `<span class="vibe-preset${picked}" style="${style}" onclick="toggle('${p.id}')"><span class="vt-icon">${p.icon}</span>${p.label}</span>`;
+    }).join('') || '<div style="font-size:0.8rem;color:var(--muted);padding:8px 0;">No matches.</div>';
+  }
+
+  function toggle(id) {
+    if (selected.has(id)) selected.delete(id); else selected.add(id);
+    renderPinned(); renderGrid();
+  }
+
+  function renderPinned() {
+    const el = document.getElementById('pinnedChips');
+    if (selected.size === 0) { el.innerHTML = '<span class="pinned-empty">No vibes picked yet</span>'; return; }
+    el.innerHTML = [...selected].map(id => {
+      const p = VIBE_PRESETS.find(v => v.id === id);
+      return `<span class="pinned-chip" style="color:${p.color};"><span>${p.icon}</span>${p.label}<span class="x" onclick="toggle('${p.id}')">✕</span></span>`;
+    }).join('');
+  }
+
+  function toggleEmojiPicker() {
+    const grid = document.getElementById('emojiGrid');
+    if (grid.style.display === 'grid') { grid.style.display = 'none'; return; }
+    grid.innerHTML = CUSTOM_VIBE_EMOJIS.map(e => `<span class="emoji-opt${e===customEmoji?' sel':''}" style="cursor:pointer;font-size:1.1rem;padding:4px;border-radius:8px;text-align:center;background:rgba(255,255,255,0.03);" onclick="pickEmoji('${e}')">${e}</span>`).join('');
+    grid.style.display = 'grid';
+  }
+
+  function pickEmoji(e) {
+    customEmoji = e;
+    document.getElementById('emojiBtn').textContent = e;
+    toggleEmojiPicker();
+  }
+
+  function addCustom() {
+    const input = document.getElementById('customInput');
+    const text = input.value.trim();
+    if (!text) return;
+    if (customTags.length >= 10) { alert('Max 10 custom tags'); return; }
+    customTags.push({ emoji: customEmoji, text });
+    input.value = '';
+    renderCustom();
+  }
+
+  function removeCustom(i) { customTags.splice(i, 1); renderCustom(); }
+
+  function renderCustom() {
+    document.getElementById('customChips').innerHTML = customTags.map((t, i) =>
+      `<span class="custom-chip">${t.emoji} ${t.text}<span class="x" onclick="removeCustom(${i})">✕</span></span>`
+    ).join('');
+    document.getElementById('capNote').textContent = `${customTags.length} / 10 custom tags used`;
+  }
+
+  renderSummary();
+</script>
+</body>
+</html>

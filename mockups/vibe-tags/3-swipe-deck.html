@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mockup 3 — Swipeable Discovery Deck</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=Urbanist:wght@800;900&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --neon-pink: #FF2D78; --neon-cyan: #00F5FF; --neon-yellow: #FFE600; --neon-purple: #BF00FF; --neon-green: #39FF14;
+    --bg: #050509; --surface: #0E0E16; --surface2: #16161F; --text: #F0EEFF; --muted: #8585A5;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; padding: 32px 20px 80px; min-height: 100vh; }
+  .page-label { font-family: 'Urbanist', sans-serif; font-size: 0.65rem; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; color: var(--neon-green); margin-bottom: 6px; }
+  .page-title { font-family: 'Urbanist', sans-serif; font-size: 1.5rem; font-weight: 900; margin-bottom: 4px; }
+  .page-desc { font-size: 0.82rem; color: var(--muted); margin-bottom: 26px; line-height: 1.5; max-width: 480px; }
+
+  .device { max-width: 420px; margin: 0 auto; background: var(--surface); border: 1px solid rgba(255,255,255,0.07); border-radius: 24px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.5); height: 660px; display: flex; flex-direction: column; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.06); flex-shrink: 0; }
+  .topbar-btn { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.78rem; background: none; border: none; color: var(--muted); cursor: pointer; }
+  .btn { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.78rem; letter-spacing: 0.3px; padding: 8px 16px; border-radius: 100px; border: none; cursor: pointer; transition: all 0.2s ease; }
+  .btn-primary { background: var(--neon-pink); color: #fff; box-shadow: 0 0 16px rgba(255,45,120,0.4); }
+  .btn-ghost { background: rgba(255,255,255,0.07); color: var(--text); border: 1px solid rgba(255,255,255,0.1); }
+
+  .view { flex: 1; overflow-y: auto; display: none; flex-direction: column; }
+  .view.active { display: flex; }
+
+  /* ===== LIST VIEW (default, for editing existing profile) ===== */
+  #listView { padding: 16px; }
+  #listView h3 { font-family: 'Outfit', sans-serif; font-size: 0.95rem; font-weight: 800; margin-bottom: 10px; }
+  .search-wrap { position: relative; margin-bottom: 12px; }
+  .search-input { width: 100%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 100px; padding: 10px 16px 10px 36px; color: var(--text); font-family: 'Outfit', sans-serif; font-size: 0.82rem; outline: none; }
+  .search-input:focus { border-color: var(--neon-cyan); }
+  .search-input::placeholder { color: var(--muted); }
+  .search-icon { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); font-size: 0.85rem; opacity: 0.6; }
+  .vibe-tag-cloud { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
+  .vibe-preset { display: inline-flex; align-items: center; gap: 5px; padding: 5px 13px; border-radius: 100px; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.75rem; cursor: pointer; border: 1.5px solid transparent; background: rgba(255,255,255,0.04); color: var(--muted); transition: all 0.18s cubic-bezier(0.34,1.4,0.64,1); }
+  .vibe-preset:hover { transform: translateY(-2px) scale(1.04); }
+  .vibe-preset.picked { border-color: currentColor; background: rgba(255,255,255,0.08); transform: translateY(-1px) scale(1.03); box-shadow: 0 0 14px -4px currentColor; }
+  .discover-cta { border: 1.5px dashed var(--neon-green); border-radius: 14px; padding: 14px; text-align: center; cursor: pointer; transition: all 0.15s; }
+  .discover-cta:hover { background: rgba(57,255,20,0.06); }
+  .discover-cta-title { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.85rem; color: var(--neon-green); margin-bottom: 3px; }
+  .discover-cta-sub { font-size: 0.72rem; color: var(--muted); }
+
+  /* ===== DECK VIEW ===== */
+  #deckView { align-items: center; justify-content: flex-start; padding: 18px 16px; }
+  .deck-progress { font-family: 'Outfit', sans-serif; font-size: 0.74rem; color: var(--muted); margin-bottom: 4px; text-align: center; }
+  .deck-stage { position: relative; width: 100%; max-width: 300px; height: 300px; margin: 10px 0 18px; }
+  .deck-card { position: absolute; inset: 0; border-radius: 22px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; cursor: grab; user-select: none; transition: transform 0.25s ease, opacity 0.25s ease; touch-action: none; }
+  .deck-card:active { cursor: grabbing; }
+  .deck-card .icon { font-size: 3.4rem; }
+  .deck-card .label { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.15rem; text-align: center; padding: 0 20px; }
+  .deck-card .hint { font-size: 0.68rem; color: var(--muted); }
+  .deck-btns { display: flex; gap: 22px; margin-bottom: 14px; }
+  .deck-btn { width: 54px; height: 54px; border-radius: 50%; border: none; font-size: 1.4rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.15s; }
+  .deck-btn:active { transform: scale(0.9); }
+  .deck-btn.skip { background: rgba(255,45,120,0.14); border: 1.5px solid rgba(255,45,120,0.4); color: var(--neon-pink); }
+  .deck-btn.add { background: rgba(57,255,20,0.14); border: 1.5px solid rgba(57,255,20,0.4); color: var(--neon-green); }
+  .deck-utility { display: flex; gap: 10px; margin-bottom: 14px; }
+  .deck-utility button { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.72rem; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: var(--muted); border-radius: 100px; padding: 6px 14px; cursor: pointer; }
+
+  .tally-label { font-size: 0.65rem; color: var(--muted); font-weight: 700; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; align-self: flex-start; }
+  .tally-chips { display: flex; flex-wrap: wrap; gap: 6px; align-self: stretch; }
+  .tally-chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 6px 4px 10px; border-radius: 100px; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.7rem; border: 1.5px solid currentColor; background: rgba(255,255,255,0.06); }
+  .tally-chip .x { width: 15px; height: 15px; border-radius: 50%; background: rgba(255,255,255,0.12); display: inline-flex; align-items: center; justify-content: center; font-size: 0.6rem; cursor: pointer; }
+  .tally-empty { font-size: 0.75rem; color: var(--muted); font-style: italic; }
+
+  .footer-actions { display: flex; gap: 10px; padding: 14px 16px 18px; border-top: 1px solid rgba(255,255,255,0.06); flex-shrink: 0; }
+  .footer-actions .btn { flex: 1; text-align: center; }
+</style>
+</head>
+<body>
+
+  <div class="page-label">Mockup 3 of 4</div>
+  <div class="page-title">Swipeable Discovery Deck</div>
+  <div class="page-desc">Playful, Tinder-style browsing for finding new tags — swipe or tap ✓/✕ through one big card at a time. Since re-swiping 48 cards on every edit would be tedious, editing an existing profile opens in a compact list view by default; the deck is an opt-in "Discover more vibes" detour.</div>
+
+  <div class="device">
+    <div class="topbar">
+      <button class="topbar-btn">← Cancel</button>
+      <button class="btn btn-primary">Save Changes 🔥</button>
+    </div>
+
+    <!-- LIST VIEW -->
+    <div class="view active" id="listView">
+      <h3>⚡ Vibe Tags <span style="font-size:0.7rem;color:var(--muted);font-weight:600;" id="listTally"></span></h3>
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input class="search-input" id="searchInput" placeholder="Search vibes…" oninput="onSearch(this.value)">
+      </div>
+      <div class="vibe-tag-cloud" id="listGrid"></div>
+      <div class="discover-cta" onclick="openDeck()">
+        <div class="discover-cta-title">🔀 Discover more vibes</div>
+        <div class="discover-cta-sub" id="discoverSub"></div>
+      </div>
+    </div>
+
+    <!-- DECK VIEW -->
+    <div class="view" id="deckView">
+      <div class="deck-progress" id="deckProgress"></div>
+      <div class="deck-stage" id="deckStage"></div>
+      <div class="deck-btns">
+        <button class="deck-btn skip" onclick="decide(false)">✕</button>
+        <button class="deck-btn add" onclick="decide(true)">✓</button>
+      </div>
+      <div class="deck-utility">
+        <button onclick="shuffleDeck()">🔀 Shuffle</button>
+        <button onclick="closeDeck()">← Back to list</button>
+      </div>
+      <div class="tally-label">Picked this session</div>
+      <div class="tally-chips" id="deckTally"></div>
+    </div>
+
+    <div class="footer-actions">
+      <button class="btn btn-ghost">Cancel</button>
+      <button class="btn btn-primary">Save Changes 🔥</button>
+    </div>
+  </div>
+
+<script>
+  const ALL_PRESETS = [
+    { id:'vt-bassface', label:'Bass Face Champion', icon:'🔊', color:'#FF2D78' },
+    { id:'vt-glittergremlin', label:'Glitter Gremlin', icon:'✨', color:'#FFE600' },
+    { id:'vt-phonemartyr', label:'Phone Battery Martyr', icon:'🔋', color:'#00F5FF' },
+    { id:'vt-lostvibe', label:'Lost But Vibing', icon:'📍', color:'#39FF14' },
+    { id:'vt-afterspirate', label:'Afters Pirate', icon:'🏴‍☠️', color:'#BF00FF' },
+    { id:'vt-portaloo', label:'Portaloo Philosopher', icon:'🚽', color:'#FF6B35' },
+    { id:'vt-sunburnt', label:'Sunburnt Slay Queen', icon:'🦞', color:'#FF2D78' },
+    { id:'vt-nohydration', label:'Hydration? Never Heard Of Her', icon:'💊', color:'#00F5FF' },
+    { id:'vt-raincoat', label:'Raincoat Raver', icon:'🌧️', color:'#BF00FF' },
+    { id:'vt-kebab', label:'Midnight Kebab King', icon:'🍔', color:'#FFE600' },
+    { id:'vt-tent', label:'Tent Fortress Architect', icon:'⛺', color:'#FF6B35' },
+    { id:'vt-khole', label:'K-Hole Karaoke Star', icon:'😵‍💫', color:'#BF00FF' },
+    { id:'vt-microdose', label:'Microdosing Mystic', icon:'🍄', color:'#39FF14' },
+    { id:'vt-lineupguru', label:'Lineup Oracle', icon:'🎟️', color:'#FFE600' },
+    { id:'vt-silentdisco', label:'Silent Disco Stalker', icon:'🕺', color:'#00F5FF' },
+    { id:'vt-contentfarmer', label:'Festival Content Farmer', icon:'🤳', color:'#FF2D78' },
+    { id:'vt-sunglasses', label:'Sunglasses After Dark', icon:'🕶️', color:'#BF00FF' },
+    { id:'vt-sunscreen', label:'Sunscreen Sniper', icon:'🧴', color:'#39FF14' },
+    { id:'vt-kandi', label:'Kandi Kid Convert', icon:'🦋', color:'#FF2D78' },
+    { id:'vt-duststorm', label:'Dust Storm Devotee', icon:'🏜️', color:'#FFE600' },
+    { id:'vt-portawarrior', label:'Portapotty Warrior', icon:'🛡️', color:'#FF6B35' },
+    { id:'vt-raindance', label:'Rain Dance Refugee', icon:'🌧️', color:'#00F5FF' },
+    { id:'vt-blistered', label:'Blistered But Blessed', icon:'🥾', color:'#FF6B35' },
+    { id:'vt-sockless', label:'Sockless Legend', icon:'🧦', color:'#39FF14' },
+    { id:'vt-beergarden', label:'Beer Garden Bandit', icon:'🍺', color:'#FFE600' },
+    { id:'vt-mirrorball', label:'Mirrorball Magnet', icon:'🪩', color:'#FF2D78' },
+    { id:'vt-sweatequity', label:'Sweat Equity Investor', icon:'💦', color:'#00F5FF' },
+    { id:'vt-tacotruck', label:'Taco Truck Tracker', icon:'🌮', color:'#FF6B35' },
+    { id:'vt-vortex', label:'Vortex Victim', icon:'🌀', color:'#BF00FF' },
+    { id:'vt-moshpityogi', label:'Moshpit Yogi', icon:'🧘‍♀️', color:'#39FF14' },
+    { id:'vt-offlineonline', label:'Offline But Online', icon:'📵', color:'#FF6B35' },
+    { id:'vt-facepaint', label:'Face Paint Casualty', icon:'🤡', color:'#FF2D78' },
+    { id:'vt-mainstage', label:'Mainstage Monster', icon:'🎤', color:'#FF2D78' },
+    { id:'vt-bunker', label:'Bunker Dweller', icon:'🕳️', color:'#BF00FF' },
+    { id:'vt-sunrise', label:'Sunrise Chaser', icon:'🌅', color:'#FFE600' },
+    { id:'vt-certified', label:'Certified Raver', icon:'🧿', color:'#00F5FF' },
+    { id:'vt-vinyl', label:'Vinyl Purist', icon:'💿', color:'#39FF14' },
+    { id:'vt-lostphone', label:'Always Lost Phone', icon:'📵', color:'#FF6B35' },
+    { id:'vt-nap', label:'Nap Anywhere', icon:'😴', color:'#00F5FF' },
+    { id:'vt-firstqueue', label:'First in Queue', icon:'🏃', color:'#39FF14' },
+    { id:'vt-foodscout', label:'Food Scout', icon:'🌮', color:'#FFE600' },
+    { id:'vt-photographer', label:'Accidental Photographer', icon:'📸', color:'#FF2D78' },
+    { id:'vt-merch', label:'Merch Addict', icon:'👕', color:'#BF00FF' },
+    { id:'vt-earplugs', label:'Earplug Evangelist', icon:'🦺', color:'#00F5FF' },
+    { id:'vt-localmenu', label:'Local Menu Explorer', icon:'🗺️', color:'#FF6B35' },
+    { id:'vt-setlist', label:'Memorises Set Lists', icon:'🧠', color:'#39FF14' },
+    { id:'vt-latenight', label:'3AM Is Early', icon:'🌙', color:'#BF00FF' },
+    { id:'vt-afterparty', label:'Afterparty Legend', icon:'🔑', color:'#FF2D78' },
+  ];
+
+  let selected = new Set(['vt-bassface','vt-nap','vt-certified','vt-mainstage','vt-latenight']);
+  let searchTerm = '';
+  let deckOrder = [];
+  let deckIndex = 0;
+  let dragStartX = 0, dragging = false, dragCurrentX = 0;
+
+  function unselected() { return ALL_PRESETS.filter(p => !selected.has(p.id)); }
+
+  // ---- LIST VIEW ----
+  function onSearch(v) { searchTerm = v.trim().toLowerCase(); renderList(); }
+
+  function renderList() {
+    document.getElementById('listTally').textContent = `${selected.size} selected`;
+    const filtered = ALL_PRESETS.filter(p => !searchTerm || p.label.toLowerCase().includes(searchTerm));
+    document.getElementById('listGrid').innerHTML = filtered.map(p => {
+      const picked = selected.has(p.id) ? ' picked' : '';
+      const style = selected.has(p.id)
+        ? `border-color:${p.color};background:rgba(255,255,255,0.08);color:${p.color};box-shadow:0 0 14px -4px ${p.color};`
+        : `color:${p.color};`;
+      return `<span class="vibe-preset${picked}" style="${style}" onclick="toggleFromList('${p.id}')"><span>${p.icon}</span>${p.label}</span>`;
+    }).join('');
+    document.getElementById('discoverSub').textContent = `${unselected().length} more vibes not yet picked`;
+  }
+
+  function toggleFromList(id) {
+    if (selected.has(id)) selected.delete(id); else selected.add(id);
+    renderList();
+  }
+
+  // ---- DECK VIEW ----
+  function openDeck() {
+    document.getElementById('listView').classList.remove('active');
+    document.getElementById('deckView').classList.add('active');
+    shuffleDeck();
+  }
+
+  function closeDeck() {
+    document.getElementById('deckView').classList.remove('active');
+    document.getElementById('listView').classList.add('active');
+    renderList();
+  }
+
+  function shuffleDeck() {
+    deckOrder = unselected().sort(() => Math.random() - 0.5);
+    deckIndex = 0;
+    renderDeck();
+  }
+
+  function renderDeck() {
+    const stage = document.getElementById('deckStage');
+    if (deckIndex >= deckOrder.length) {
+      stage.innerHTML = `<div class="deck-card" style="border:1.5px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.03);"><span class="icon">🎉</span><span class="label">You've seen every vibe!</span><span class="hint">Tap Shuffle to go again</span></div>`;
+      document.getElementById('deckProgress').textContent = `${deckOrder.length} of ${deckOrder.length} — all caught up`;
+      renderTally();
+      return;
+    }
+    const p = deckOrder[deckIndex];
+    stage.innerHTML = `<div class="deck-card" id="activeCard" style="border:1.5px solid ${p.color}; background:rgba(255,255,255,0.04); box-shadow:0 0 30px -8px ${p.color};">
+      <span class="icon">${p.icon}</span>
+      <span class="label" style="color:${p.color};">${p.label}</span>
+      <span class="hint">swipe or tap ✓ / ✕</span>
+    </div>`;
+    document.getElementById('deckProgress').textContent = `${deckIndex + 1} of ${deckOrder.length} remaining`;
+    attachDrag(document.getElementById('activeCard'));
+    renderTally();
+  }
+
+  function decide(add) {
+    const p = deckOrder[deckIndex];
+    if (!p) return;
+    if (add) selected.add(p.id);
+    deckIndex++;
+    renderDeck();
+  }
+
+  function renderTally() {
+    const el = document.getElementById('deckTally');
+    if (selected.size === 0) { el.innerHTML = '<span class="tally-empty">Nothing picked yet — swipe right to add one</span>'; return; }
+    el.innerHTML = [...selected].map(id => {
+      const p = ALL_PRESETS.find(v => v.id === id);
+      return `<span class="tally-chip" style="color:${p.color};">${p.icon} ${p.label}<span class="x" onclick="untally('${p.id}')">✕</span></span>`;
+    }).join('');
+  }
+
+  function untally(id) { selected.delete(id); renderTally(); }
+
+  // ---- Drag/swipe gesture ----
+  function attachDrag(card) {
+    if (!card) return;
+    card.addEventListener('pointerdown', e => {
+      dragging = true; dragStartX = e.clientX; card.setPointerCapture(e.pointerId);
+    });
+    card.addEventListener('pointermove', e => {
+      if (!dragging) return;
+      dragCurrentX = e.clientX - dragStartX;
+      card.style.transform = `translateX(${dragCurrentX}px) rotate(${dragCurrentX / 18}deg)`;
+      card.style.opacity = String(1 - Math.min(Math.abs(dragCurrentX) / 400, 0.4));
+    });
+    const release = () => {
+      if (!dragging) return;
+      dragging = false;
+      if (dragCurrentX > 90) { decide(true); }
+      else if (dragCurrentX < -90) { decide(false); }
+      else if (card) { card.style.transform = ''; card.style.opacity = '1'; }
+      dragCurrentX = 0;
+    };
+    card.addEventListener('pointerup', release);
+    card.addEventListener('pointercancel', release);
+  }
+
+  renderList();
+</script>
+</body>
+</html>
