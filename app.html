@@ -2665,10 +2665,10 @@
     max-width: 85vw;
   }
   .photo-lightbox-remove {
-    position: absolute; top: 20px; right: 20px;
+    position: absolute; bottom: 10px; right: 12px;
     background: rgba(0,0,0,0.65); border: none; border-radius: 20px;
-    color: #fff; font-size: 0.7rem; font-family: 'Outfit', sans-serif; font-weight: 700;
-    padding: 6px 12px; cursor: pointer;
+    color: #fff; font-size: 0.62rem; font-family: 'Outfit', sans-serif; font-weight: 700;
+    padding: 5px 10px; cursor: pointer;
     display: flex; align-items: center; gap: 4px;
     transition: background 0.15s;
   }
@@ -2691,6 +2691,55 @@
     color: rgba(0,0,0,0.4);
     margin-top: 12px;
   }
+
+  /* Photo crop modal */
+  .photo-crop-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.88);
+    z-index: 10000;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.2s;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  .photo-crop-overlay.open { opacity: 1; pointer-events: all; }
+  .photo-crop-box {
+    background: #f0ece4;
+    border-radius: 8px;
+    padding: 18px;
+    width: min(92vw, 380px);
+    display: flex; flex-direction: column; align-items: center; gap: 12px;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.8);
+  }
+  .photo-crop-title {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 800;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: rgba(0,0,0,0.55);
+  }
+  .photo-crop-viewport {
+    width: min(80vw, 300px); height: min(80vw, 300px);
+    border-radius: 4px; overflow: hidden; position: relative;
+    background: #000; cursor: grab; touch-action: none;
+  }
+  .photo-crop-viewport:active { cursor: grabbing; }
+  .photo-crop-img {
+    position: absolute; top: 0; left: 0;
+    transform-origin: 0 0;
+    user-select: none; -webkit-user-drag: none;
+    will-change: transform;
+  }
+  .photo-crop-zoom { width: min(80vw, 300px); }
+  .photo-crop-actions { display: flex; gap: 10px; width: 100%; }
+  .photo-crop-cancel, .photo-crop-save {
+    flex: 1; padding: 10px; border: none; border-radius: 20px;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.8rem; cursor: pointer;
+  }
+  .photo-crop-cancel { background: rgba(0,0,0,0.08); color: rgba(0,0,0,0.6); }
+  .photo-crop-save { background: #FF2D78; color: #fff; }
 
   /* standalone (no countdown) */
   .our-photos-standalone {
@@ -5468,6 +5517,21 @@
     <img id="photo-lightbox-img" src="" alt="Memory photo" class="photo-lightbox-img">
     <div class="photo-lightbox-label">✦ our memory ✦</div>
     <button id="photo-lightbox-remove" class="photo-lightbox-remove" onclick="removeOurPhotoFromLightbox()" title="Remove photo">🗑️ Remove</button>
+  </div>
+</div>
+
+<!-- Photo Crop Modal -->
+<div id="photo-crop-overlay" class="photo-crop-overlay">
+  <div class="photo-crop-box">
+    <div class="photo-crop-title">Frame your photo</div>
+    <div id="photo-crop-viewport" class="photo-crop-viewport">
+      <img id="photo-crop-img" class="photo-crop-img" draggable="false" alt="">
+    </div>
+    <input id="photo-crop-zoom" class="photo-crop-zoom" type="range" min="100" max="300" value="100">
+    <div class="photo-crop-actions">
+      <button type="button" class="photo-crop-cancel" onclick="cancelPhotoCrop()">Cancel</button>
+      <button type="button" class="photo-crop-save" onclick="confirmPhotoCrop()">Use Photo</button>
+    </div>
   </div>
 </div>
 
@@ -8370,9 +8434,13 @@ async function doProfilePasswordChange() {
       showToast('⚠️ Save your profile to the cloud first');
       return;
     }
+    openPhotoCropModal(file, croppedBlob => saveOurPhoto(croppedBlob, viewingRaverId, storagePath, pair));
+  }
+
+  async function saveOurPhoto(blob, viewingRaverId, storagePath, pair) {
     showToast('📸 Uploading…');
     try {
-      const url = await uploadPhotoToStorage(file, storagePath);
+      const url = await uploadPhotoToStorage(blob, storagePath);
       await sb.from('our_photos').upsert({
         uploader_user_id: currentUser.id,
         raver_a_id: pair.a,
@@ -8389,6 +8457,98 @@ async function doProfilePasswordChange() {
       console.error('Our photo upload error', e);
       showToast('⚠️ Upload failed — try again');
     }
+  }
+
+  // ── Photo Crop (drag to reposition, slider to zoom, exports a square blob) ──
+  let cropState = null;
+  let cropDrag = null;
+
+  function openPhotoCropModal(file, onDone) {
+    const overlay = document.getElementById('photo-crop-overlay');
+    const viewport = document.getElementById('photo-crop-viewport');
+    const imgEl = document.getElementById('photo-crop-img');
+    const zoomEl = document.getElementById('photo-crop-zoom');
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const vp = viewport.getBoundingClientRect().width || 300;
+        const baseScale = Math.max(vp / img.naturalWidth, vp / img.naturalHeight);
+        cropState = { onDone, naturalW: img.naturalWidth, naturalH: img.naturalHeight, vp, baseScale, scale: baseScale, x: 0, y: 0 };
+        cropState.x = (vp - img.naturalWidth * baseScale) / 2;
+        cropState.y = (vp - img.naturalHeight * baseScale) / 2;
+        imgEl.src = e.target.result;
+        zoomEl.value = 100;
+        applyCropTransform();
+        overlay.classList.add('open');
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function applyCropTransform() {
+    if (!cropState) return;
+    const img = document.getElementById('photo-crop-img');
+    img.style.width = (cropState.naturalW * cropState.scale) + 'px';
+    img.style.height = (cropState.naturalH * cropState.scale) + 'px';
+    img.style.transform = `translate(${cropState.x}px, ${cropState.y}px)`;
+  }
+
+  function clampCropOffset() {
+    if (!cropState) return;
+    const w = cropState.naturalW * cropState.scale, h = cropState.naturalH * cropState.scale;
+    cropState.x = Math.max(Math.min(0, cropState.vp - w), Math.min(0, cropState.x));
+    cropState.y = Math.max(Math.min(0, cropState.vp - h), Math.min(0, cropState.y));
+  }
+
+  document.addEventListener('pointerdown', e => {
+    if (!cropState) return;
+    const vp = e.target.closest('#photo-crop-viewport');
+    if (!vp) return;
+    e.preventDefault();
+    cropDrag = { startX: e.clientX, startY: e.clientY, origX: cropState.x, origY: cropState.y };
+    vp.setPointerCapture(e.pointerId);
+  });
+  document.addEventListener('pointermove', e => {
+    if (!cropDrag || !cropState) return;
+    cropState.x = cropDrag.origX + (e.clientX - cropDrag.startX);
+    cropState.y = cropDrag.origY + (e.clientY - cropDrag.startY);
+    clampCropOffset();
+    applyCropTransform();
+  });
+  document.addEventListener('pointerup', () => { cropDrag = null; });
+  document.addEventListener('pointercancel', () => { cropDrag = null; });
+  document.addEventListener('input', e => {
+    if (e.target.id !== 'photo-crop-zoom' || !cropState) return;
+    const factor = Number(e.target.value) / 100;
+    const cx = cropState.vp / 2, cy = cropState.vp / 2;
+    const relX = (cx - cropState.x) / cropState.scale, relY = (cy - cropState.y) / cropState.scale;
+    cropState.scale = cropState.baseScale * factor;
+    cropState.x = cx - relX * cropState.scale;
+    cropState.y = cy - relY * cropState.scale;
+    clampCropOffset();
+    applyCropTransform();
+  });
+
+  function cancelPhotoCrop() {
+    document.getElementById('photo-crop-overlay').classList.remove('open');
+    cropState = null;
+  }
+  function confirmPhotoCrop() {
+    if (!cropState) return;
+    const OUT = 720;
+    const sx = -cropState.x / cropState.scale, sy = -cropState.y / cropState.scale;
+    const sSize = cropState.vp / cropState.scale;
+    const canvas = document.createElement('canvas');
+    canvas.width = OUT; canvas.height = OUT;
+    canvas.getContext('2d').drawImage(document.getElementById('photo-crop-img'), sx, sy, sSize, sSize, 0, 0, OUT, OUT);
+    const onDone = cropState.onDone;
+    canvas.toBlob(blob => {
+      document.getElementById('photo-crop-overlay').classList.remove('open');
+      cropState = null;
+      if (blob && onDone) onDone(blob);
+    }, 'image/jpeg', 0.9);
   }
 
   let lightboxCtx = null;
