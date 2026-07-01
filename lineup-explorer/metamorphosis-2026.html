@@ -90,6 +90,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Space+Grotesk:wght@400;500;700&family=Urbanist:wght@800;900&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/lineup-explorer/lineup-common.css" />
+<script src="/lineup-explorer/lineup-common.js"></script>
 <style>
   :root {
     --bg: #07050f; --ink: #f3eefb; --muted: #9b91bd;
@@ -336,6 +338,8 @@
       <button class="roll" id="roll">🎲 Roll the bass</button>
     </div>
 
+    <div class="platform-toggle" id="platformToggle" role="group" aria-label="Choose music service"></div>
+
     <p class="filterlabel">Days</p>
     <div class="nights" id="nights" role="group" aria-label="Filter by day">
       <button class="night" data-key="all" aria-pressed="true">Both days</button>
@@ -419,7 +423,7 @@
   ];
 
   const NIGHT_LABEL = { fri: "FRI", sat: "SAT" };
-  const spotify = a => "https://open.spotify.com/search/" + encodeURIComponent(a.q || a.name);
+  const serviceUrl = a => window.LineupPlatforms.buildUrl(a.q || a.name);
 
   const deck = document.getElementById("deck");
   const empty = document.getElementById("empty");
@@ -441,6 +445,7 @@
   }
   chipsEl.appendChild(chip("all", "All", null));
   Object.entries(GENRES).forEach(([k, v]) => chipsEl.appendChild(chip(k, v.label, v.c)));
+  window.LineupPlatforms.renderToggle(document.getElementById("platformToggle"), () => render());
 
   nightsEl.querySelectorAll(".night").forEach(b =>
     b.addEventListener("click", () => { activeNight = b.dataset.key; render(); }));
@@ -457,17 +462,18 @@
 
   function card(a) {
     const g = GENRES[a.g];
+    const platform = window.LineupPlatforms.getPlatform();
     const el = document.createElement("a");
-    el.className = "act"; el.href = spotify(a); el.target = "_blank"; el.rel = "noopener noreferrer";
+    el.className = "act"; el.href = serviceUrl(a); el.target = "_blank"; el.rel = "noopener noreferrer";
     el.style.setProperty("--c", g.c);
-    el.setAttribute("aria-label", a.name + " — " + g.label + (a.night ? " — " + NIGHT_LABEL[a.night] : "") + " — open on Spotify");
+    el.setAttribute("aria-label", a.name + " — " + g.label + (a.night ? " — " + NIGHT_LABEL[a.night] : "") + " — open on " + platform.label);
     el.innerHTML =
       (a.night ? '<span class="nb ' + a.night + '">' + NIGHT_LABEL[a.night] + '</span>' : '') +
       '<div><span class="name">' + (a.hl ? '<span class="star">★</span>' : '') + a.name + '</span>' +
         (a.note ? '<span class="note">' + a.note + '</span>' : '') + '</div>' +
       '<div class="eq"><span></span><span></span><span></span><span></span></div>' +
       '<div class="foot"><span class="genre">' + g.label + '</span>' +
-        '<span class="play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Spotify</span></div>';
+        '<span class="play">' + platform.icon + '</span></div>';
     return el;
   }
 
@@ -497,7 +503,7 @@
   document.getElementById("roll").addEventListener("click", () => {
     const list = visible();
     if (!list.length) return;
-    window.open(spotify(list[Math.floor(Math.random() * list.length)]), "_blank", "noopener");
+    window.open(serviceUrl(list[Math.floor(Math.random() * list.length)]), "_blank", "noopener");
   });
 
   document.getElementById("ctaClose").addEventListener("click", () => {
