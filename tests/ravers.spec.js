@@ -53,6 +53,59 @@ test.describe('ravers / profile', () => {
     expect(genres).toContain(added);
   });
 
+  test('opening the vibe tag sheet, toggling a chip, and hitting Done persists after Save', async ({ page }) => {
+    await bootAuthedApp(page);
+    await page.evaluate(() => enterProfileEditMode('r-you'));
+    await page.click('#vibe-edit-btn');
+    await expect(page.locator('#tag-sheet')).toHaveClass(/open/);
+    const addedId = await page.evaluate(() => VIBE_PRESETS.find(p => p.cat === 'chaos' && !editingVibeTags.has(p.id)).id);
+    await page.click(`#tag-sheet-accordions .vibe-preset[onclick*="${addedId}"]`);
+    await page.click('.tag-sheet-footer button:has-text("Done")');
+    await expect(page.locator('#tag-sheet')).not.toHaveClass(/open/);
+    await page.evaluate(() => saveProfile());
+    const tags = await refetch(page, "squad.find(r=>r.isYou).vibeTags");
+    expect(tags).toContain(addedId);
+  });
+
+  test('cancelling the vibe tag sheet does not persist an in-sheet toggle', async ({ page }) => {
+    await bootAuthedApp(page);
+    await page.evaluate(() => enterProfileEditMode('r-you'));
+    await page.click('#vibe-edit-btn');
+    const skippedId = await page.evaluate(() => VIBE_PRESETS.find(p => p.cat === 'chaos' && !editingVibeTags.has(p.id)).id);
+    await page.click(`#tag-sheet-accordions .vibe-preset[onclick*="${skippedId}"]`);
+    await page.click('.tag-sheet-footer button:has-text("Cancel")');
+    const stillUnpicked = await page.evaluate((id) => !editingVibeTags.has(id), skippedId);
+    expect(stillUnpicked).toBe(true);
+    await page.evaluate(() => saveProfile());
+    const tags = await refetch(page, "squad.find(r=>r.isYou).vibeTags");
+    expect(tags).not.toContain(skippedId);
+  });
+
+  test('opening the genre sheet, toggling a chip, and hitting Done persists after Save', async ({ page }) => {
+    await bootAuthedApp(page);
+    await page.evaluate(() => enterProfileEditMode('r-you'));
+    await page.click('#genre-edit-btn');
+    await expect(page.locator('#tag-sheet')).toHaveClass(/open/);
+    const added = await page.evaluate(() => allGenrePresets().find(g => genreCategory(g) === 'house' && !editingGenres.has(g)));
+    await page.click(`#tag-sheet-accordions .genre-preset[onclick*="${added.replace(/'/g, "\\'")}"]`);
+    await page.click('.tag-sheet-footer button:has-text("Done")');
+    await page.evaluate(() => saveProfile());
+    const genres = await refetch(page, "squad.find(r=>r.isYou).genres");
+    expect(genres).toContain(added);
+  });
+
+  test('cancelling the genre sheet does not persist an in-sheet toggle', async ({ page }) => {
+    await bootAuthedApp(page);
+    await page.evaluate(() => enterProfileEditMode('r-you'));
+    await page.click('#genre-edit-btn');
+    const skipped = await page.evaluate(() => allGenrePresets().find(g => genreCategory(g) === 'house' && !editingGenres.has(g)));
+    await page.click(`#tag-sheet-accordions .genre-preset[onclick*="${skipped.replace(/'/g, "\\'")}"]`);
+    await page.click('.tag-sheet-footer button:has-text("Cancel")');
+    await page.evaluate(() => saveProfile());
+    const genres = await refetch(page, "squad.find(r=>r.isYou).genres");
+    expect(genres).not.toContain(skipped);
+  });
+
   test('raver search filters the grid', async ({ page }) => {
     await bootAuthedApp(page);
     await page.evaluate(() => switchTab('members'));
