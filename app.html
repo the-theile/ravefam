@@ -1037,6 +1037,20 @@
     margin-bottom: 10px;
   }
   .raves-together-meta span { color: var(--text); font-weight: 600; }
+  .raves-together-match {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255,45,120,0.12);
+    border: 1px solid rgba(255,45,120,0.25);
+    color: var(--neon-pink);
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.78rem;
+    padding: 5px 12px;
+    border-radius: 100px;
+    margin-bottom: 10px;
+  }
   .raves-together-pills { margin-top: 2px; }
   .raves-together-empty {
     text-align: center;
@@ -7493,7 +7507,7 @@ async function doProfilePasswordChange() {
 
   function ravesTogetherSectionHTML(you, r) {
     if (!you) return '';
-    const { sharedPast, sharedUpcoming, firstTogether, sharedCities, sharedGenres } = ravesTogetherData(you, r);
+    const { sharedPast, sharedUpcoming, firstTogether, sharedCities, sharedGenres, genreMatchPct } = ravesTogetherData(you, r);
     const count = sharedPast.length;
     const hasUpcoming = sharedUpcoming.length > 0;
 
@@ -7513,6 +7527,10 @@ async function doProfilePasswordChange() {
       ? `<div class="raves-together-meta">${metaRows.map(row => `<div>${row}</div>`).join('')}</div>`
       : '';
 
+    const matchHtml = genreMatchPct !== null
+      ? `<div class="raves-together-match">🎯 ${genreMatchPct}% Taste Match</div>`
+      : '';
+
     const pillsHtml = (sharedCities.length || sharedGenres.length)
       ? `<div class="raves-together-pills">
           ${sharedCities.map(c => `<span class="stats-pill cyan">📍 ${escHtml(c)}</span>`).join('')}
@@ -7526,6 +7544,7 @@ async function doProfilePasswordChange() {
         <div class="raves-together-hero-label">${vibe.emoji} ${vibe.label}</div>
       </div>
       ${metaHtml}
+      ${matchHtml}
       ${pillsHtml}`;
   }
 
@@ -11813,8 +11832,10 @@ async function doProfilePasswordChange() {
 
     const yourGenres = new Set((you.genres || []).map(g => g.toLowerCase()));
     const sharedGenres = (r.genres || []).filter(g => yourGenres.has(g.toLowerCase()));
+    const genreUnionSize = new Set([...(you.genres || []), ...(r.genres || [])].map(g => g.toLowerCase())).size;
+    const genreMatchPct = genreUnionSize ? Math.round((sharedGenres.length / genreUnionSize) * 100) : null;
 
-    return { sharedPast, sharedUpcoming, firstTogether, sharedCities, sharedGenres };
+    return { sharedPast, sharedUpcoming, firstTogether, sharedCities, sharedGenres, genreMatchPct };
   }
 
   function ourPhotoCardHTML(viewingRaverId) {

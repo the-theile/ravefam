@@ -50,4 +50,12 @@ test.describe('raves together (profile relational stats)', () => {
     await expect(profile).not.toContainText('No raves together yet');
     await expect(profile.locator('h3', { hasText: 'You &' })).toHaveCount(0);
   });
+
+  test('shows a genre-match percentage based on combined genres', async ({ page }) => {
+    // Seed default: "you" = ['Techno', 'House'], r-kai = ['Techno'] → 1 shared / 2 combined = 50%.
+    await bootAuthedApp(page);
+    await page.evaluate(() => openProfile('r-kai'));
+    const profile = page.locator('#page-profile');
+    await expect(profile.locator('.raves-together-match')).toContainText('50% Taste Match');
+  });
 });
