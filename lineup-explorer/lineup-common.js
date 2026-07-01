@@ -39,6 +39,13 @@
       // iOS app intercepts soundcloud.com/search but doesn't run the query.
       searchUrl: function (q) { return "https://www.google.com/search?q=" + encodeURIComponent("site:soundcloud.com " + q); },
       icon: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7.3 17a3.6 3.6 0 0 1-.42-7.18 4.6 4.6 0 0 1 8.8-1.94A3.85 3.85 0 0 1 17.6 17H7.3z"/></svg>'
+    },
+    {
+      id: "beatport",
+      label: "Beatport",
+      color: "#01FF95",
+      searchUrl: function (q) { return "https://www.beatport.com/search?q=" + encodeURIComponent(q); },
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 5h7a3.5 3.5 0 0 1 0 7H6"/><path d="M6 12h8a3.5 3.5 0 0 1 0 7H6"/></svg>'
     }
   ];
 
