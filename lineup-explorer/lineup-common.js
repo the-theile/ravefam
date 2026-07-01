@@ -22,16 +22,22 @@
       id: "apple",
       label: "Apple Music",
       color: "#FC3C44",
-      // Storefront is hardcoded to "us" — there's no reliable client-side way to
-      // detect the visitor's Apple Music storefront without a MusicKit/API call.
-      searchUrl: function (q) { return "https://music.apple.com/us/search?term=" + encodeURIComponent(q); },
+      // The Apple Music iOS app registers music.apple.com/search as a Universal
+      // Link but doesn't parse the query and show results — it just opens to a
+      // blank search tab. Routing through a Google site-search sidesteps that
+      // app hijack (google.com isn't a Universal Link domain for the app), and
+      // the actual result the user taps is a real artist page, which the app
+      // *does* deep-link correctly.
+      searchUrl: function (q) { return "https://www.google.com/search?q=" + encodeURIComponent("site:music.apple.com " + q); },
       icon: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.2 4.2v10.3a3.35 3.35 0 1 1-1.6-2.85V8.2L9.7 9.5v7.15a3.35 3.35 0 1 1-1.6-2.86V6.4l8.1-2.2z"/></svg>'
     },
     {
       id: "soundcloud",
       label: "SoundCloud",
       color: "#FF7700",
-      searchUrl: function (q) { return "https://soundcloud.com/search?q=" + encodeURIComponent(q); },
+      // Same Universal Link hijack issue as Apple Music above — the SoundCloud
+      // iOS app intercepts soundcloud.com/search but doesn't run the query.
+      searchUrl: function (q) { return "https://www.google.com/search?q=" + encodeURIComponent("site:soundcloud.com " + q); },
       icon: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7.3 17a3.6 3.6 0 0 1-.42-7.18 4.6 4.6 0 0 1 8.8-1.94A3.85 3.85 0 0 1 17.6 17H7.3z"/></svg>'
     }
   ];
