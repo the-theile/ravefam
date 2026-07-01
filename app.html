@@ -2655,6 +2655,7 @@
   }
   .photo-lightbox.open { opacity: 1; pointer-events: all; }
   .photo-lightbox-card {
+    position: relative;
     background: #f0ece4;
     padding: 12px 12px 44px;
     border-radius: 2px;
@@ -2663,6 +2664,15 @@
     transition: transform 0.3s cubic-bezier(0.34, 1.4, 0.64, 1);
     max-width: 85vw;
   }
+  .photo-lightbox-remove {
+    position: absolute; top: 20px; right: 20px;
+    background: rgba(0,0,0,0.65); border: none; border-radius: 20px;
+    color: #fff; font-size: 0.7rem; font-family: 'Outfit', sans-serif; font-weight: 700;
+    padding: 6px 12px; cursor: pointer;
+    display: flex; align-items: center; gap: 4px;
+    transition: background 0.15s;
+  }
+  .photo-lightbox-remove:hover { background: rgba(220,38,38,0.85); }
   .photo-lightbox.open .photo-lightbox-card { transform: rotate(-1.5deg) scale(1); }
   .photo-lightbox-img {
     display: block;
@@ -5457,6 +5467,7 @@
   <div class="photo-lightbox-card" onclick="event.stopPropagation()">
     <img id="photo-lightbox-img" src="" alt="Memory photo" class="photo-lightbox-img">
     <div class="photo-lightbox-label">✦ our memory ✦</div>
+    <button id="photo-lightbox-remove" class="photo-lightbox-remove" onclick="removeOurPhotoFromLightbox()" title="Remove photo">🗑️ Remove</button>
   </div>
 </div>
 
@@ -8314,7 +8325,7 @@ async function doProfilePasswordChange() {
 
     const mySlot = myPhoto
       ? `<div class="our-photo-slot">
-           <img src="${escHtml(myPhoto)}" alt="Your photo" style="cursor:zoom-in;" onclick="openPhotoLightbox(this.src)">
+           <img src="${escHtml(myPhoto)}" alt="Your photo" style="cursor:zoom-in;" onclick="openPhotoLightbox(this.src,'${viewingRaverId}','mine')">
            <button class="our-photo-remove" data-viewing="${viewingRaverId}" data-slot="mine"
              onclick="removeOurPhoto(this.dataset.viewing,'mine')" title="Remove">✕</button>
          </div>`
@@ -8330,7 +8341,7 @@ async function doProfilePasswordChange() {
 
     const theirSlot = theirPhoto
       ? `<div class="our-photo-slot" style="transform:rotate(2deg);">
-           <img src="${escHtml(theirPhoto)}" alt="Their photo" style="cursor:zoom-in;" onclick="openPhotoLightbox(this.src)">
+           <img src="${escHtml(theirPhoto)}" alt="Their photo" style="cursor:zoom-in;" onclick="openPhotoLightbox(this.src,'${viewingRaverId}','theirs')">
          </div>`
       : `<div class="our-photo-slot" style="transform:rotate(2deg);">
            <div class="our-photo-slot-empty"></div>
@@ -8380,18 +8391,26 @@ async function doProfilePasswordChange() {
     }
   }
 
-  function openPhotoLightbox(src) {
+  let lightboxCtx = null;
+  function openPhotoLightbox(src, viewingRaverId, slot) {
     document.getElementById('photo-lightbox-img').src = src;
+    lightboxCtx = (viewingRaverId && slot === 'mine') ? { viewingRaverId, slot } : null;
+    document.getElementById('photo-lightbox-remove').style.display = lightboxCtx ? '' : 'none';
     document.getElementById('photo-lightbox').classList.add('open');
   }
   function closePhotoLightbox() {
     document.getElementById('photo-lightbox').classList.remove('open');
+  }
+  function removeOurPhotoFromLightbox() {
+    if (!lightboxCtx) return;
+    removeOurPhoto(lightboxCtx.viewingRaverId, lightboxCtx.slot);
   }
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') closePhotoLightbox();
   });
 
   async function removeOurPhoto(viewingRaverId, slot) {
+    closePhotoLightbox();
     showPhotoConfirm({
       icon: '💫',
       title: 'Delete this memory?',
@@ -8401,9 +8420,15 @@ async function doProfilePasswordChange() {
           if (currentUser) {
             const storagePath = ourPhotoStoragePath(viewingRaverId);
             const pair = ourPhotoPair(viewingRaverId);
-            if (storagePath) await sb.storage.from('photos').remove([storagePath]).catch(() => {});
-            if (pair) await sb.from('our_photos').delete()
-              .eq('uploader_user_id', currentUser.id).eq('raver_a_id', pair.a).eq('raver_b_id', pair.b).catch(() => {});
+            if (storagePath) {
+              const { error: storageError } = await sb.storage.from('photos').remove([storagePath]);
+              if (storageError) console.warn('our photo storage remove error', storageError);
+            }
+            if (pair) {
+              const { error } = await sb.from('our_photos').delete()
+                .eq('uploader_user_id', currentUser.id).eq('raver_a_id', pair.a).eq('raver_b_id', pair.b);
+              if (error) throw error;
+            }
           }
           if (ourPhotosCache[String(viewingRaverId)]) ourPhotosCache[String(viewingRaverId)].mine = null;
           renderSquad();
@@ -8411,6 +8436,7 @@ async function doProfilePasswordChange() {
           if (r) openProfile(r.id);
           showToast('Photo removed');
         } catch(e) {
+          console.error('removeOurPhoto error', e);
           showToast('⚠️ Could not remove photo');
         }
       }
