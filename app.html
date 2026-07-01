@@ -997,6 +997,70 @@
   .countdown-banner .cd-days { font-family: 'Fraunces', sans-serif; font-weight: 800; font-size: 1.8rem; line-height: 1.1; }
   .countdown-banner .cd-date { font-size: 0.82rem; opacity: 0.9; margin-top: 2px; }
 
+  /* "You & {name}" raves-together hero on the profile page */
+  .raves-together-hero {
+    position: relative;
+    border-radius: 18px;
+    padding: 22px 18px;
+    margin-bottom: 12px;
+    text-align: center;
+    color: #fff;
+    text-shadow: 0 1px 6px rgba(0,0,0,0.35);
+    overflow: hidden;
+    animation: ravesTogetherGlow 3s ease-in-out infinite;
+  }
+  .raves-together-hero-number {
+    font-family: 'Fraunces', sans-serif;
+    font-weight: 800;
+    font-size: 3rem;
+    line-height: 1;
+  }
+  .raves-together-hero-label {
+    margin-top: 6px;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    opacity: 0.95;
+  }
+  @keyframes ravesTogetherGlow {
+    0%, 100% { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12), 0 0 18px -8px rgba(255,255,255,0.5); }
+    50%       { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.22), 0 0 28px -4px rgba(255,255,255,0.7); }
+  }
+  .raves-together-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  .raves-together-meta span { color: var(--text); font-weight: 600; }
+  .raves-together-match {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255,45,120,0.12);
+    border: 1px solid rgba(255,45,120,0.25);
+    color: var(--neon-pink);
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.78rem;
+    padding: 5px 12px;
+    border-radius: 100px;
+    margin-bottom: 10px;
+  }
+  .raves-together-pills { margin-top: 2px; }
+  .raves-together-empty {
+    text-align: center;
+    padding: 26px 12px;
+    border: 1px dashed rgba(255,255,255,0.14);
+    border-radius: 16px;
+  }
+  .raves-together-empty-icon { font-size: 2rem; margin-bottom: 8px; }
+  .raves-together-empty-text { color: var(--muted); font-size: 0.85rem; font-style: italic; }
+
   .fest-cd {
     color: var(--neon-green);
     font-weight: 600;
@@ -7431,37 +7495,56 @@ async function doProfilePasswordChange() {
     return `<div class="met-pair">${myBubble}${theirBubble}</div>`;
   }
 
+  // Copy scales with the shared-rave count so a "1" doesn't read as a letdown
+  // and a big number gets to feel like a big number.
+  function ravesTogetherVibe(count, hasUpcoming) {
+    if (count === 0) return hasUpcoming ? { emoji: '🎟️', label: 'One To Go' } : { emoji: '🎪', label: 'Kindred Spirits' };
+    if (count === 1) return { emoji: '✨', label: 'First Spark' };
+    if (count <= 3) return { emoji: '🔁', label: 'Regulars' };
+    if (count <= 6) return { emoji: '🤝', label: 'Rave Crew' };
+    return { emoji: '🔥', label: 'Rave Soulmates' };
+  }
+
   function ravesTogetherSectionHTML(you, r) {
     if (!you) return '';
-    const { sharedPast, sharedUpcoming, firstTogether, sharedCities, sharedGenres } = ravesTogetherData(you, r);
+    const { sharedPast, sharedUpcoming, firstTogether, sharedCities, sharedGenres, genreMatchPct } = ravesTogetherData(you, r);
+    const count = sharedPast.length;
+    const hasUpcoming = sharedUpcoming.length > 0;
 
-    if (!sharedPast.length && !sharedUpcoming.length && !sharedCities.length && !sharedGenres.length) {
-      return `<div class="fest-empty">No raves together yet — find one to hit together? 🎪</div>`;
+    if (!count && !hasUpcoming && !sharedCities.length && !sharedGenres.length) {
+      return `<div class="raves-together-empty">
+        <div class="raves-together-empty-icon">🎪</div>
+        <div class="raves-together-empty-text">No raves together yet — find one to hit together?</div>
+      </div>`;
     }
 
-    const firstTogetherHtml = firstTogether
-      ? `<div style="font-size:0.8rem;color:var(--muted);margin-bottom:12px;">🕰️ First rave together: <span style="color:var(--text);font-weight:600;">${escHtml(firstTogether.name)} (${firstTogether._d.getFullYear()})</span></div>`
+    const vibe = ravesTogetherVibe(count, hasUpcoming);
+
+    const metaRows = [];
+    if (hasUpcoming) metaRows.push(`🎟️ <span>${sharedUpcoming.length}</span> upcoming together`);
+    if (firstTogether) metaRows.push(`🕰️ First rave together: <span>${escHtml(firstTogether.name)} (${firstTogether._d.getFullYear()})</span>`);
+    const metaHtml = metaRows.length
+      ? `<div class="raves-together-meta">${metaRows.map(row => `<div>${row}</div>`).join('')}</div>`
+      : '';
+
+    const matchHtml = genreMatchPct !== null
+      ? `<div class="raves-together-match">🎯 ${genreMatchPct}% Taste Match</div>`
       : '';
 
     const pillsHtml = (sharedCities.length || sharedGenres.length)
-      ? `<div style="margin-top:4px;">
+      ? `<div class="raves-together-pills">
           ${sharedCities.map(c => `<span class="stats-pill cyan">📍 ${escHtml(c)}</span>`).join('')}
           ${sharedGenres.map(g => `<span class="stats-pill">${escHtml(g)}</span>`).join('')}
         </div>`
       : '';
 
     return `
-      <div class="stats-hero-grid">
-        <div class="stats-hero-card">
-          <div class="stats-hero-number">${sharedPast.length}</div>
-          <div class="stats-hero-label">Raves Together</div>
-        </div>
-        <div class="stats-hero-card">
-          <div class="stats-hero-number">${sharedUpcoming.length}</div>
-          <div class="stats-hero-label">Upcoming Together</div>
-        </div>
+      <div class="raves-together-hero" style="background:${r.gradient}">
+        <div class="raves-together-hero-number">${count}</div>
+        <div class="raves-together-hero-label">${vibe.emoji} ${vibe.label}</div>
       </div>
-      ${firstTogetherHtml}
+      ${metaHtml}
+      ${matchHtml}
       ${pillsHtml}`;
   }
 
@@ -11749,8 +11832,10 @@ async function doProfilePasswordChange() {
 
     const yourGenres = new Set((you.genres || []).map(g => g.toLowerCase()));
     const sharedGenres = (r.genres || []).filter(g => yourGenres.has(g.toLowerCase()));
+    const genreUnionSize = new Set([...(you.genres || []), ...(r.genres || [])].map(g => g.toLowerCase())).size;
+    const genreMatchPct = genreUnionSize ? Math.round((sharedGenres.length / genreUnionSize) * 100) : null;
 
-    return { sharedPast, sharedUpcoming, firstTogether, sharedCities, sharedGenres };
+    return { sharedPast, sharedUpcoming, firstTogether, sharedCities, sharedGenres, genreMatchPct };
   }
 
   function ourPhotoCardHTML(viewingRaverId) {
