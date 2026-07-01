@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mockup 1 — Search + Filter + Sticky Tray</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=Urbanist:wght@800;900&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --neon-pink: #FF2D78;
+    --neon-cyan: #00F5FF;
+    --neon-yellow: #FFE600;
+    --neon-purple: #BF00FF;
+    --neon-green: #39FF14;
+    --bg: #050509;
+    --surface: #0E0E16;
+    --surface2: #16161F;
+    --text: #F0EEFF;
+    --muted: #8585A5;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; padding: 32px 20px 80px; min-height: 100vh; }
+  .page-label { font-family: 'Urbanist', sans-serif; font-size: 0.65rem; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; color: var(--neon-cyan); margin-bottom: 6px; }
+  .page-title { font-family: 'Urbanist', sans-serif; font-size: 1.5rem; font-weight: 900; margin-bottom: 4px; }
+  .page-desc { font-size: 0.82rem; color: var(--muted); margin-bottom: 26px; line-height: 1.5; max-width: 480px; }
+
+  .device { max-width: 420px; margin: 0 auto; background: var(--surface); border: 1px solid rgba(255,255,255,0.07); border-radius: 24px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .topbar-btn { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.78rem; background: none; border: none; color: var(--muted); cursor: pointer; }
+  .btn { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.78rem; letter-spacing: 0.3px; padding: 8px 16px; border-radius: 100px; border: none; cursor: pointer; transition: all 0.2s ease; }
+  .btn-primary { background: var(--neon-pink); color: #fff; box-shadow: 0 0 16px rgba(255,45,120,0.4); }
+
+  .section { padding: 16px; }
+  .section h3 { font-family: 'Outfit', sans-serif; font-size: 0.95rem; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; justify-content: space-between; }
+  .section h3 .count { font-size: 0.7rem; color: var(--muted); font-weight: 600; }
+
+  /* sticky selected tray */
+  .tray { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; padding: 10px; margin-bottom: 12px; min-height: 40px; }
+  .tray-label { font-size: 0.65rem; color: var(--muted); font-weight: 700; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .tray-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tray-empty { font-size: 0.78rem; color: var(--muted); font-style: italic; }
+  .tray-chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 6px 4px 10px; border-radius: 100px; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.72rem; border: 1.5px solid currentColor; background: rgba(255,255,255,0.06); }
+  .tray-chip .x { width: 16px; height: 16px; border-radius: 50%; background: rgba(255,255,255,0.12); display: inline-flex; align-items: center; justify-content: center; font-size: 0.65rem; cursor: pointer; }
+  .tray-chip .x:hover { background: rgba(255,255,255,0.25); }
+
+  .search-wrap { position: relative; margin-bottom: 10px; }
+  .search-input { width: 100%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 100px; padding: 10px 16px 10px 36px; color: var(--text); font-family: 'Outfit', sans-serif; font-size: 0.82rem; outline: none; transition: border-color 0.2s; }
+  .search-input:focus { border-color: var(--neon-cyan); }
+  .search-input::placeholder { color: var(--muted); }
+  .search-icon { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); font-size: 0.85rem; opacity: 0.6; }
+
+  .cat-row { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 12px; scrollbar-width: none; }
+  .cat-row::-webkit-scrollbar { display: none; }
+  .cat-pill { flex-shrink: 0; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.72rem; padding: 6px 13px; border-radius: 100px; border: 1.5px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03); color: var(--muted); cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .cat-pill.active { border-color: var(--neon-cyan); color: var(--neon-cyan); background: rgba(0,245,255,0.1); box-shadow: 0 0 12px -4px var(--neon-cyan); }
+
+  .vibe-tag-cloud { display: flex; flex-wrap: wrap; gap: 7px; }
+  .vibe-preset { display: inline-flex; align-items: center; gap: 5px; padding: 5px 13px; border-radius: 100px; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.75rem; cursor: pointer; border: 1.5px solid transparent; background: rgba(255,255,255,0.04); color: var(--muted); transition: all 0.18s cubic-bezier(0.34,1.4,0.64,1); user-select: none; position: relative; overflow: hidden; }
+  .vibe-preset:hover { transform: translateY(-2px) scale(1.04); }
+  .vibe-preset.picked { border-color: currentColor; background: rgba(255,255,255,0.08); transform: translateY(-1px) scale(1.03); box-shadow: 0 0 14px -4px currentColor; }
+  .vibe-preset .vt-icon { font-size: 0.9rem; line-height: 1; }
+  .no-results { font-size: 0.8rem; color: var(--muted); padding: 10px 2px; }
+
+  .create-own-card { margin-top: 10px; border: 1.5px dashed rgba(255,255,255,0.18); border-radius: 14px; padding: 12px; cursor: pointer; transition: all 0.15s; }
+  .create-own-card:hover { border-color: var(--neon-purple); background: rgba(191,0,255,0.05); }
+  .create-own-label { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.8rem; color: #d67fff; display: flex; align-items: center; gap: 6px; }
+  .create-own-body { margin-top: 10px; display: none; }
+  .create-own-body.open { display: block; }
+  .custom-row { display: flex; gap: 8px; }
+  .emoji-btn { flex-shrink: 0; background: rgba(191,0,255,0.12); border: 1px solid rgba(191,0,255,0.35); color: #d67fff; border-radius: 100px; padding: 7px 11px; font-size: 1rem; cursor: pointer; }
+  .custom-input { flex: 1; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 100px; padding: 8px 14px; color: var(--text); font-family: 'Outfit', sans-serif; font-size: 0.8rem; outline: none; }
+  .custom-input:focus { border-color: var(--neon-cyan); }
+  .add-btn { background: rgba(0,245,255,0.12); border: 1px solid rgba(0,245,255,0.3); color: var(--neon-cyan); border-radius: 100px; padding: 8px 15px; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.76rem; cursor: pointer; white-space: nowrap; }
+  .emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; margin-bottom: 8px; }
+  .emoji-opt { font-size: 1.1rem; padding: 4px; border-radius: 8px; cursor: pointer; text-align: center; background: rgba(255,255,255,0.03); }
+  .emoji-opt.sel { background: rgba(191,0,255,0.25); }
+  .custom-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .custom-chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 6px 4px 10px; border-radius: 100px; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.72rem; border: 1.5px solid rgba(191,0,255,0.4); background: rgba(191,0,255,0.08); color: #d67fff; }
+  .custom-chip .x { width: 16px; height: 16px; border-radius: 50%; background: rgba(255,255,255,0.12); display: inline-flex; align-items: center; justify-content: center; font-size: 0.65rem; cursor: pointer; }
+  .cap-note { font-size: 0.68rem; color: var(--muted); margin-top: 8px; }
+
+  .footer-actions { display: flex; gap: 10px; padding: 14px 16px 18px; border-top: 1px solid rgba(255,255,255,0.06); }
+  .footer-actions .btn { flex: 1; text-align: center; }
+  .btn-ghost { background: rgba(255,255,255,0.07); color: var(--text); border: 1px solid rgba(255,255,255,0.1); }
+</style>
+</head>
+<body>
+
+  <div class="page-label">Mockup 1 of 4</div>
+  <div class="page-title">Search + Filter Chips + Sticky Selection Tray</div>
+  <div class="page-desc">Evolves the existing pill cloud instead of replacing it: a search box and category filters cut down what's on screen, and a pinned "Your vibes" tray keeps your picks visible while you keep browsing. Smallest change from what exists today.</div>
+
+  <div class="device">
+    <div class="topbar">
+      <button class="topbar-btn">← Cancel</button>
+      <button class="btn btn-primary">Save Changes 🔥</button>
+    </div>
+
+    <div class="section">
+      <h3>⚡ Vibe Tags <span class="count" id="tally">12 selected</span></h3>
+
+      <div class="tray">
+        <div class="tray-label">Your vibes</div>
+        <div class="tray-chips" id="trayChips"></div>
+      </div>
+
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input class="search-input" id="searchInput" placeholder="Search vibes…" oninput="onSearch(this.value)">
+      </div>
+
+      <div class="cat-row" id="catRow"></div>
+
+      <div class="vibe-tag-cloud" id="grid"></div>
+      <div class="no-results" id="noResults" style="display:none;">No vibes match "<span id="noResultsTerm"></span>" — try Create Your Own below.</div>
+
+      <div class="create-own-card" id="createOwnCard" onclick="toggleCreateOwn()">
+        <div class="create-own-label">✨ Create your own vibe tag</div>
+        <div class="create-own-body" id="createOwnBody">
+          <div class="emoji-btn-wrap" style="position:relative;">
+            <div class="custom-row">
+              <button type="button" class="emoji-btn" id="emojiBtn" onclick="event.stopPropagation(); toggleEmojiPicker()">✨</button>
+              <input class="custom-input" id="customInput" placeholder="Add your own vibe tag…" maxlength="30" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter'){event.preventDefault();addCustom();}">
+              <button type="button" class="add-btn" onclick="event.stopPropagation(); addCustom()">Add</button>
+            </div>
+            <div class="emoji-grid" id="emojiGrid" style="display:none; margin-top:8px;"></div>
+          </div>
+          <div class="custom-chips" id="customChips"></div>
+          <div class="cap-note" id="capNote">3 / 10 custom tags used</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-actions">
+      <button class="btn btn-ghost">Cancel</button>
+      <button class="btn btn-primary">Save Changes 🔥</button>
+    </div>
+  </div>
+
+<script>
+  const VIBE_PRESETS = [
+    { id:'vt-bassface', label:'Bass Face Champion', icon:'🔊', color:'#FF2D78', cat:'music' },
+    { id:'vt-glittergremlin', label:'Glitter Gremlin', icon:'✨', color:'#FFE600', cat:'chaos' },
+    { id:'vt-phonemartyr', label:'Phone Battery Martyr', icon:'🔋', color:'#00F5FF', cat:'gear' },
+    { id:'vt-lostvibe', label:'Lost But Vibing', icon:'📍', color:'#39FF14', cat:'chaos' },
+    { id:'vt-afterspirate', label:'Afters Pirate', icon:'🏴‍☠️', color:'#BF00FF', cat:'time' },
+    { id:'vt-portaloo', label:'Portaloo Philosopher', icon:'🚽', color:'#FF6B35', cat:'gear' },
+    { id:'vt-sunburnt', label:'Sunburnt Slay Queen', icon:'🦞', color:'#FF2D78', cat:'gear' },
+    { id:'vt-nohydration', label:'Hydration? Never Heard Of Her', icon:'💊', color:'#00F5FF', cat:'chaos' },
+    { id:'vt-raincoat', label:'Raincoat Raver', icon:'🌧️', color:'#BF00FF', cat:'gear' },
+    { id:'vt-kebab', label:'Midnight Kebab King', icon:'🍔', color:'#FFE600', cat:'time' },
+    { id:'vt-tent', label:'Tent Fortress Architect', icon:'⛺', color:'#FF6B35', cat:'gear' },
+    { id:'vt-khole', label:'K-Hole Karaoke Star', icon:'😵‍💫', color:'#BF00FF', cat:'chaos' },
+    { id:'vt-microdose', label:'Microdosing Mystic', icon:'🍄', color:'#39FF14', cat:'chill' },
+    { id:'vt-lineupguru', label:'Lineup Oracle', icon:'🎟️', color:'#FFE600', cat:'music' },
+    { id:'vt-silentdisco', label:'Silent Disco Stalker', icon:'🕺', color:'#00F5FF', cat:'music' },
+    { id:'vt-contentfarmer', label:'Festival Content Farmer', icon:'🤳', color:'#FF2D78', cat:'social' },
+    { id:'vt-sunglasses', label:'Sunglasses After Dark', icon:'🕶️', color:'#BF00FF', cat:'social' },
+    { id:'vt-sunscreen', label:'Sunscreen Sniper', icon:'🧴', color:'#39FF14', cat:'gear' },
+    { id:'vt-kandi', label:'Kandi Kid Convert', icon:'🦋', color:'#FF2D78', cat:'social' },
+    { id:'vt-duststorm', label:'Dust Storm Devotee', icon:'🏜️', color:'#FFE600', cat:'gear' },
+    { id:'vt-portawarrior', label:'Portapotty Warrior', icon:'🛡️', color:'#FF6B35', cat:'gear' },
+    { id:'vt-raindance', label:'Rain Dance Refugee', icon:'🌧️', color:'#00F5FF', cat:'gear' },
+    { id:'vt-blistered', label:'Blistered But Blessed', icon:'🥾', color:'#FF6B35', cat:'gear' },
+    { id:'vt-sockless', label:'Sockless Legend', icon:'🧦', color:'#39FF14', cat:'chaos' },
+    { id:'vt-beergarden', label:'Beer Garden Bandit', icon:'🍺', color:'#FFE600', cat:'social' },
+    { id:'vt-mirrorball', label:'Mirrorball Magnet', icon:'🪩', color:'#FF2D78', cat:'music' },
+    { id:'vt-sweatequity', label:'Sweat Equity Investor', icon:'💦', color:'#00F5FF', cat:'chaos' },
+    { id:'vt-tacotruck', label:'Taco Truck Tracker', icon:'🌮', color:'#FF6B35', cat:'gear' },
+    { id:'vt-vortex', label:'Vortex Victim', icon:'🌀', color:'#BF00FF', cat:'chaos' },
+    { id:'vt-moshpityogi', label:'Moshpit Yogi', icon:'🧘‍♀️', color:'#39FF14', cat:'chill' },
+    { id:'vt-offlineonline', label:'Offline But Online', icon:'📵', color:'#FF6B35', cat:'chill' },
+    { id:'vt-facepaint', label:'Face Paint Casualty', icon:'🤡', color:'#FF2D78', cat:'social' },
+    { id:'vt-mainstage', label:'Mainstage Monster', icon:'🎤', color:'#FF2D78', cat:'music' },
+    { id:'vt-bunker', label:'Bunker Dweller', icon:'🕳️', color:'#BF00FF', cat:'time' },
+    { id:'vt-sunrise', label:'Sunrise Chaser', icon:'🌅', color:'#FFE600', cat:'time' },
+    { id:'vt-certified', label:'Certified Raver', icon:'🧿', color:'#00F5FF', cat:'music' },
+    { id:'vt-vinyl', label:'Vinyl Purist', icon:'💿', color:'#39FF14', cat:'music' },
+    { id:'vt-lostphone', label:'Always Lost Phone', icon:'📵', color:'#FF6B35', cat:'gear' },
+    { id:'vt-nap', label:'Nap Anywhere', icon:'😴', color:'#00F5FF', cat:'chill' },
+    { id:'vt-firstqueue', label:'First in Queue', icon:'🏃', color:'#39FF14', cat:'chaos' },
+    { id:'vt-foodscout', label:'Food Scout', icon:'🌮', color:'#FFE600', cat:'gear' },
+    { id:'vt-photographer', label:'Accidental Photographer', icon:'📸', color:'#FF2D78', cat:'social' },
+    { id:'vt-merch', label:'Merch Addict', icon:'👕', color:'#BF00FF', cat:'social' },
+    { id:'vt-earplugs', label:'Earplug Evangelist', icon:'🦺', color:'#00F5FF', cat:'gear' },
+    { id:'vt-localmenu', label:'Local Menu Explorer', icon:'🗺️', color:'#FF6B35', cat:'gear' },
+    { id:'vt-setlist', label:'Memorises Set Lists', icon:'🧠', color:'#39FF14', cat:'music' },
+    { id:'vt-latenight', label:'3AM Is Early', icon:'🌙', color:'#BF00FF', cat:'time' },
+    { id:'vt-afterparty', label:'Afterparty Legend', icon:'🔑', color:'#FF2D78', cat:'time' },
+  ];
+  const CUSTOM_VIBE_EMOJIS = ['🔥','💃','🎧','🪩','✨','🫶','🕺','⚡','🌊','👾','🌀','🎶','🦋','🍄','🥂','🫠'];
+  const CATEGORIES = [
+    { id:'all', label:'All' },
+    { id:'chaos', label:'🎉 Chaos & Mayhem' },
+    { id:'chill', label:'😴 Chill & Recovery' },
+    { id:'gear', label:'🎒 Gear & Practical' },
+    { id:'time', label:'🌙 Time & Body Clock' },
+    { id:'social', label:'📸 Social & Content' },
+    { id:'music', label:'🎧 Music Nerd' },
+  ];
+
+  let selected = new Set(['vt-bassface','vt-nap','vt-certified','vt-mainstage','vt-latenight','vt-sunrise','vt-earplugs','vt-photographer','vt-merch','vt-vinyl','vt-lostphone','vt-firstqueue']);
+  let customTags = [{emoji:'🦋', text:'Berlin Local'}, {emoji:'🌈', text:'Queer Rave Family'}, {emoji:'🔥', text:'Third Weekend Warrior'}];
+  let activeCat = 'all';
+  let searchTerm = '';
+  let customEmoji = '✨';
+
+  function renderCatRow() {
+    document.getElementById('catRow').innerHTML = CATEGORIES.map(c =>
+      `<div class="cat-pill${c.id===activeCat?' active':''}" onclick="setCat('${c.id}')">${c.label}</div>`
+    ).join('');
+  }
+
+  function setCat(id) { activeCat = id; renderCatRow(); renderGrid(); }
+
+  function onSearch(v) { searchTerm = v.trim().toLowerCase(); renderGrid(); }
+
+  function renderGrid() {
+    const filtered = VIBE_PRESETS.filter(p =>
+      (activeCat === 'all' || p.cat === activeCat) &&
+      (!searchTerm || p.label.toLowerCase().includes(searchTerm))
+    );
+    const grid = document.getElementById('grid');
+    const noResults = document.getElementById('noResults');
+    if (filtered.length === 0) {
+      grid.innerHTML = '';
+      noResults.style.display = 'block';
+      document.getElementById('noResultsTerm').textContent = searchTerm;
+    } else {
+      noResults.style.display = 'none';
+      grid.innerHTML = filtered.map(p => {
+        const picked = selected.has(p.id) ? ' picked' : '';
+        const style = selected.has(p.id)
+          ? `border-color:${p.color};background:rgba(255,255,255,0.08);color:${p.color};box-shadow:0 0 14px -4px ${p.color};`
+          : `color:${p.color};`;
+        return `<span class="vibe-preset${picked}" style="${style}" onclick="toggle('${p.id}')"><span class="vt-icon">${p.icon}</span>${p.label}</span>`;
+      }).join('');
+    }
+  }
+
+  function toggle(id) {
+    if (selected.has(id)) selected.delete(id); else selected.add(id);
+    renderAll();
+  }
+
+  function renderTray() {
+    const tally = document.getElementById('tally');
+    tally.textContent = `${selected.size} selected`;
+    const trayChips = document.getElementById('trayChips');
+    if (selected.size === 0) {
+      trayChips.innerHTML = '<span class="tray-empty">Tap tags below to add your vibe ✨</span>';
+      return;
+    }
+    trayChips.innerHTML = [...selected].map(id => {
+      const p = VIBE_PRESETS.find(v => v.id === id);
+      return `<span class="tray-chip" style="color:${p.color};"><span class="vt-icon">${p.icon}</span>${p.label}<span class="x" onclick="toggle('${p.id}')">✕</span></span>`;
+    }).join('');
+  }
+
+  function toggleCreateOwn() {
+    document.getElementById('createOwnBody').classList.toggle('open');
+  }
+
+  function toggleEmojiPicker() {
+    const grid = document.getElementById('emojiGrid');
+    if (grid.style.display === 'grid') { grid.style.display = 'none'; return; }
+    grid.innerHTML = CUSTOM_VIBE_EMOJIS.map(e => `<span class="emoji-opt${e===customEmoji?' sel':''}" onclick="event.stopPropagation(); pickEmoji('${e}')">${e}</span>`).join('');
+    grid.style.display = 'grid';
+  }
+
+  function pickEmoji(e) {
+    customEmoji = e;
+    document.getElementById('emojiBtn').textContent = e;
+    toggleEmojiPicker();
+  }
+
+  function addCustom() {
+    const input = document.getElementById('customInput');
+    const text = input.value.trim();
+    if (!text) return;
+    if (customTags.length >= 10) { alert('Max 10 custom tags'); return; }
+    customTags.push({ emoji: customEmoji, text });
+    input.value = '';
+    renderCustom();
+  }
+
+  function removeCustom(i) {
+    customTags.splice(i, 1);
+    renderCustom();
+  }
+
+  function renderCustom() {
+    document.getElementById('customChips').innerHTML = customTags.map((t, i) =>
+      `<span class="custom-chip">${t.emoji} ${t.text}<span class="x" onclick="removeCustom(${i})">✕</span></span>`
+    ).join('');
+    document.getElementById('capNote').textContent = `${customTags.length} / 10 custom tags used`;
+  }
+
+  function renderAll() { renderTray(); renderGrid(); }
+
+  renderCatRow();
+  renderAll();
+  renderCustom();
+</script>
+</body>
+</html>
