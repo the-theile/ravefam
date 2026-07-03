@@ -35,6 +35,7 @@ const FESTIVAL_IDS = {
   'night-trip-arizona-2026.html': '4c3bcb15-fff2-45bf-97e8-b861c925d553',
   'hard-summer-2026.html': '99085234-30bf-4210-a688-3acc013a9152',
   'day-trip-block-party-denver-2026.html': 'a6d2f284-a63c-44ae-837b-c6379331e9be',
+  'wasteland-2026.html': '1487a613-6380-4b5d-b4e7-b532b36da60e',
 };
 
 // Hand-curated canonicalization for names that appear with inconsistent
