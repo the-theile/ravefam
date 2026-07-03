@@ -108,12 +108,18 @@
     box-shadow: 0 14px 34px -16px rgba(177,92,255,0.5), 0 0 0 1px rgba(177,92,255,0.28) inset; outline: none; }
   .event-card:hover::before, .event-card:focus-visible::before { opacity: 1; }
 
+  .event-card.is-past { opacity: 0.6; border-color: var(--line); }
+  .event-card.is-past:hover, .event-card.is-past:focus-visible { transform: none;
+    border-color: rgba(160,140,220,0.3); box-shadow: none; }
+  .event-card.is-past:hover::before, .event-card.is-past:focus-visible::before { opacity: 0; }
+
   .event-tags { display: flex; flex-wrap: wrap; gap: 6px; }
   .event-tag { display: inline-flex; align-items: center; gap: 6px; font-family: "Orbitron", sans-serif;
     font-size: 0.55rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
     color: #0a0512; background: var(--grad); border-radius: 999px; padding: 3px 10px; width: fit-content; }
   .event-tag.tag-growing { background: linear-gradient(100deg, #ffd23c 0%, #ff8a3c 100%); }
   .event-tag.tag-tba { background: transparent; border: 1px solid var(--line); color: var(--muted); }
+  .event-tag.tag-archived { background: transparent; border: 1px solid var(--line); color: var(--muted); }
   .event-name { font-family: "Orbitron", sans-serif; font-weight: 900; font-size: 1.35rem; line-height: 1.1; letter-spacing: 0.01em; }
   .event-meta { font-size: 0.8rem; color: var(--muted); line-height: 1.5; }
   .event-meta b { color: var(--ink); font-weight: 500; }
@@ -121,6 +127,12 @@
   .event-acts span { color: var(--ink); font-weight: 500; }
 
   .controls { display: flex; gap: 10px; margin: 26px 0 16px; flex-wrap: wrap; }
+  .time-pills { display: flex; gap: 8px; }
+  .time-pill { display: inline-flex; align-items: center; gap: 6px; padding: 0 16px; border-radius: 999px;
+    border: 1px solid var(--line); background: rgba(12,8,30,0.85); color: var(--muted);
+    font-family: "Space Grotesk", sans-serif; font-size: 0.85rem; font-weight: 500; cursor: pointer;
+    transition: border-color .15s, color .15s, background .15s; }
+  .time-pill.active { color: #0a0512; background: var(--grad); border-color: transparent; }
   .search { flex: 1 1 260px; position: relative; display: flex; align-items: center; }
   .search svg { position: absolute; left: 14px; width: 17px; height: 17px; color: var(--muted); pointer-events: none; }
   .search input { width: 100%; padding: 13px 14px 13px 40px; background: rgba(12,8,30,0.85); color: var(--ink);
@@ -261,6 +273,10 @@
     <p class="sub">Interactive lineup tools for bass music events — filter by genre, search artists, and tap to preview on <b>Spotify, Apple Music, YouTube Music, SoundCloud, or Beatport</b>. No account needed.</p>
 
     <div class="controls">
+      <div class="time-pills" role="tablist" aria-label="Filter by time">
+        <button type="button" class="time-pill active" id="pillUpcoming" role="tab" aria-selected="true">⏳ Upcoming</button>
+        <button type="button" class="time-pill" id="pillPast" role="tab" aria-selected="false">📼 Past</button>
+      </div>
       <label class="search">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>
         <input id="globalQ" type="search" placeholder="Search events, cities, promoters, or an artist…" autocomplete="off" aria-label="Search lineup explorer" />
@@ -271,7 +287,7 @@
 
     <div class="grid" role="list">
 
-      <a class="event-card" href="/lineup-explorer/lost-in-dreams-los-angeles-2026" role="listitem" aria-label="Lost In Dreams Los Angeles 2026 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/lost-in-dreams-los-angeles-2026" data-date="2026-07-12" role="listitem" aria-label="Lost In Dreams Los Angeles 2026 lineup explorer">
         <span class="event-tag">Active</span>
         <div class="event-name">LOST IN DREAMS<br>LOS ANGELES 2026</div>
         <div class="event-meta">
@@ -290,7 +306,7 @@
         </div>
       </a>
 
-      <a class="event-card" href="/lineup-explorer/breakaway-nyc-2026" role="listitem" aria-label="Breakaway New York City 2026 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/breakaway-nyc-2026" data-date="2026-07-17" role="listitem" aria-label="Breakaway New York City 2026 lineup explorer">
         <div class="event-tags">
           <span class="event-tag">Active</span>
           <span class="event-tag tag-growing">Lineup growing</span>
@@ -312,7 +328,7 @@
         </div>
       </a>
 
-      <a class="event-card" href="/lineup-explorer/day-trip-seattle-2026" role="listitem" aria-label="Day Trip Festival Seattle 2026 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/day-trip-seattle-2026" data-date="2026-07-25" role="listitem" aria-label="Day Trip Festival Seattle 2026 lineup explorer">
         <span class="event-tag">Active</span>
         <div class="event-name">DAY TRIP<br>SEATTLE 2026</div>
         <div class="event-meta">
@@ -331,7 +347,7 @@
         </div>
       </a>
 
-      <a class="event-card" href="/lineup-explorer/hard-summer-2026" role="listitem" aria-label="Hard Summer 2026 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/hard-summer-2026" data-date="2026-08-02" role="listitem" aria-label="Hard Summer 2026 lineup explorer">
         <span class="event-tag">Active</span>
         <div class="event-name">HARD SUMMER<br>2026</div>
         <div class="event-meta">
@@ -350,7 +366,7 @@
         </div>
       </a>
 
-      <a class="event-card" href="/lineup-explorer/breakaway-michigan-2026" role="listitem" aria-label="Breakaway Michigan 2026 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/breakaway-michigan-2026" data-date="2026-08-15" role="listitem" aria-label="Breakaway Michigan 2026 lineup explorer">
         <div class="event-tags">
           <span class="event-tag">Active</span>
           <span class="event-tag tag-growing">Lineup growing</span>
@@ -373,7 +389,7 @@
         </div>
       </a>
 
-      <a class="event-card" href="/lineup-explorer/breakaway-massachusetts-2026" role="listitem" aria-label="Breakaway Massachusetts 2026 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/breakaway-massachusetts-2026" data-date="2026-08-22" role="listitem" aria-label="Breakaway Massachusetts 2026 lineup explorer">
         <div class="event-tags">
           <span class="event-tag">Active</span>
           <span class="event-tag tag-growing">Lineup growing</span>
@@ -396,7 +412,7 @@
         </div>
       </a>
 
-      <a class="event-card" href="/lineup-explorer/metamorphosis-2026" role="listitem" aria-label="Metamorphosis 2026 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/metamorphosis-2026" data-date="2026-08-29" role="listitem" aria-label="Metamorphosis 2026 lineup explorer">
         <span class="event-tag">Active</span>
         <div class="event-name">METAMORPHOSIS<br>2026</div>
         <div class="event-meta">
@@ -415,7 +431,7 @@
         </div>
       </a>
 
-      <a class="event-card" href="/lineup-explorer/night-trip-arizona-2026" role="listitem" aria-label="Night Trip Arizona 2026 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/night-trip-arizona-2026" data-date="2026-08-29" role="listitem" aria-label="Night Trip Arizona 2026 lineup explorer">
         <span class="event-tag">Active</span>
         <div class="event-name">NIGHT TRIP<br>ARIZONA 2026</div>
         <div class="event-meta">
@@ -434,7 +450,7 @@
         </div>
       </a>
 
-      <a class="event-card" href="/lineup-explorer/wasteland-2026" role="listitem" aria-label="Wasteland 2026 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/wasteland-2026" data-date="2026-09-05" role="listitem" aria-label="Wasteland 2026 lineup explorer">
         <div class="event-tags">
           <span class="event-tag">Active</span>
           <span class="event-tag tag-tba">Days TBA</span>
@@ -456,7 +472,7 @@
         </div>
       </a>
 
-      <a class="event-card" href="/lineup-explorer/dancefestopia-2026" role="listitem" aria-label="Dancefestopia 2026 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/dancefestopia-2026" data-date="2026-09-13" role="listitem" aria-label="Dancefestopia 2026 lineup explorer">
         <div class="event-tags">
           <span class="event-tag">Active</span>
           <span class="event-tag tag-growing">Lineup growing</span>
@@ -479,7 +495,7 @@
         </div>
       </a>
 
-      <a class="event-card" href="/lineup-explorer/breakaway-philadelphia-2026" role="listitem" aria-label="Breakaway Philadelphia 2026 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/breakaway-philadelphia-2026" data-date="2026-09-12" role="listitem" aria-label="Breakaway Philadelphia 2026 lineup explorer">
         <div class="event-tags">
           <span class="event-tag">Active</span>
           <span class="event-tag tag-growing">Lineup growing</span>
@@ -502,7 +518,7 @@
         </div>
       </a>
 
-      <a class="event-card" href="/lineup-explorer/lost-lands-2026" role="listitem" aria-label="Lost Lands 2026 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/lost-lands-2026" data-date="2026-09-20" role="listitem" aria-label="Lost Lands 2026 lineup explorer">
         <div class="event-tags">
           <span class="event-tag">Active</span>
           <span class="event-tag tag-growing">Lineup growing</span>
@@ -525,7 +541,7 @@
         </div>
       </a>
 
-      <a class="event-card" href="/lineup-explorer/nocturnal-wonderland-2026" role="listitem" aria-label="Nocturnal Wonderland 2026 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/nocturnal-wonderland-2026" data-date="2026-09-20" role="listitem" aria-label="Nocturnal Wonderland 2026 lineup explorer">
         <div class="event-tags">
           <span class="event-tag">Active</span>
           <span class="event-tag tag-growing">Lineup growing</span>
@@ -547,7 +563,7 @@
         </div>
       </a>
 
-      <a class="event-card" href="/lineup-explorer/breakaway-carolina-2026" role="listitem" aria-label="Breakaway Carolina 2026 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/breakaway-carolina-2026" data-date="2026-09-26" role="listitem" aria-label="Breakaway Carolina 2026 lineup explorer">
         <div class="event-tags">
           <span class="event-tag">Active</span>
           <span class="event-tag tag-growing">Lineup growing</span>
@@ -570,7 +586,7 @@
         </div>
       </a>
 
-      <a class="event-card" href="/lineup-explorer/day-trip-block-party-denver-2026" role="listitem" aria-label="Day Trip Block Party Denver 2026 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/day-trip-block-party-denver-2026" data-date="2026-09-26" role="listitem" aria-label="Day Trip Block Party Denver 2026 lineup explorer">
         <span class="event-tag">Active</span>
         <div class="event-name">DAY TRIP<br>DENVER 2026</div>
         <div class="event-meta">
@@ -589,7 +605,7 @@
         </div>
       </a>
 
-      <a class="event-card" href="/lineup-explorer/breakaway-utah-2026" role="listitem" aria-label="Breakaway Utah 2026 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/breakaway-utah-2026" data-date="2026-10-03" role="listitem" aria-label="Breakaway Utah 2026 lineup explorer">
         <div class="event-tags">
           <span class="event-tag">Active</span>
           <span class="event-tag tag-growing">Lineup growing</span>
@@ -612,7 +628,7 @@
         </div>
       </a>
 
-      <a class="event-card" href="/lineup-explorer/seven-stars-2026" role="listitem" aria-label="Valley of the Seven Stars 2026 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/seven-stars-2026" data-date="2026-10-11" role="listitem" aria-label="Valley of the Seven Stars 2026 lineup explorer">
         <div class="event-tags">
           <span class="event-tag">Active</span>
           <span class="event-tag tag-growing">Lineup growing</span>
@@ -635,7 +651,7 @@
         </div>
       </a>
 
-      <a class="event-card" href="/lineup-explorer/edc-colombia-2026" role="listitem" aria-label="EDC Colombia 2026 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/edc-colombia-2026" data-date="2026-10-11" role="listitem" aria-label="EDC Colombia 2026 lineup explorer">
         <div class="event-tags">
           <span class="event-tag">Active</span>
           <span class="event-tag tag-tba">Days TBA</span>
@@ -657,7 +673,7 @@
         </div>
       </a>
 
-      <a class="event-card" href="/lineup-explorer/iii-points-2026" role="listitem" aria-label="III Points 2026 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/iii-points-2026" data-date="2026-10-17" role="listitem" aria-label="III Points 2026 lineup explorer">
         <div class="event-tags">
           <span class="event-tag">Active</span>
           <span class="event-tag tag-growing">Lineup growing</span>
@@ -680,7 +696,7 @@
         </div>
       </a>
 
-      <a class="event-card" href="/lineup-explorer/day-trip-norcal-2026" role="listitem" aria-label="Day Trip Festival NorCal 2026 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/day-trip-norcal-2026" data-date="2026-10-18" role="listitem" aria-label="Day Trip Festival NorCal 2026 lineup explorer">
         <span class="event-tag">Active</span>
         <div class="event-name">DAY TRIP<br>NORCAL 2026</div>
         <div class="event-meta">
@@ -699,7 +715,7 @@
         </div>
       </a>
 
-      <a class="event-card" href="/lineup-explorer/hulaween-2026" role="listitem" aria-label="Hulaween 2026 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/hulaween-2026" data-date="2026-10-25" role="listitem" aria-label="Hulaween 2026 lineup explorer">
         <div class="event-tags">
           <span class="event-tag">Active</span>
           <span class="event-tag tag-tba">Days TBA</span>
@@ -721,7 +737,7 @@
         </div>
       </a>
 
-      <a class="event-card" href="/lineup-explorer/boo-arizona-2026" role="listitem" aria-label="BOO Arizona 2026 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/boo-arizona-2026" data-date="2026-10-31" role="listitem" aria-label="BOO Arizona 2026 lineup explorer">
         <span class="event-tag">Active</span>
         <div class="event-name">BOO<br>ARIZONA 2026</div>
         <div class="event-meta">
@@ -740,7 +756,7 @@
         </div>
       </a>
 
-      <a class="event-card" href="/lineup-explorer/edc-orlando-2026" role="listitem" aria-label="EDC Orlando 2026 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/edc-orlando-2026" data-date="2026-11-08" role="listitem" aria-label="EDC Orlando 2026 lineup explorer">
         <div class="event-tags">
           <span class="event-tag">Active</span>
           <span class="event-tag tag-tba">Days TBA</span>
@@ -762,7 +778,7 @@
         </div>
       </a>
 
-      <a class="event-card" href="/lineup-explorer/breakaway-houston-2026" role="listitem" aria-label="Breakaway Houston 2026 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/breakaway-houston-2026" data-date="2026-11-14" role="listitem" aria-label="Breakaway Houston 2026 lineup explorer">
         <div class="event-tags">
           <span class="event-tag">Active</span>
           <span class="event-tag tag-growing">Lineup growing</span>
@@ -785,7 +801,7 @@
         </div>
       </a>
 
-      <a class="event-card" href="/lineup-explorer/tapesgiving-2026" role="listitem" aria-label="Tapesgiving 2026 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/tapesgiving-2026" data-date="2026-11-28" role="listitem" aria-label="Tapesgiving 2026 lineup explorer">
         <span class="event-tag">Active</span>
         <div class="event-name">TAPESGIVING<br>2026</div>
         <div class="event-meta">
@@ -804,7 +820,7 @@
         </div>
       </a>
 
-      <a class="event-card" href="/lineup-explorer/cyclops-cove-4-2026" role="listitem" aria-label="Cyclops Cove 4 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/cyclops-cove-4-2026" data-date="2026-12-06" role="listitem" aria-label="Cyclops Cove 4 lineup explorer">
         <div class="event-tags">
           <span class="event-tag">Active</span>
           <span class="event-tag tag-growing">Lineup growing</span>
@@ -827,7 +843,7 @@
         </div>
       </a>
 
-      <a class="event-card" href="/lineup-explorer/eternal-nye-2026" role="listitem" aria-label="Eternal NYE 2026 lineup explorer">
+      <a class="event-card" href="/lineup-explorer/eternal-nye-2026" data-date="2026-12-31" role="listitem" aria-label="Eternal NYE 2026 lineup explorer">
         <div class="event-tags">
           <span class="event-tag">Active</span>
           <span class="event-tag tag-tba">Days TBA</span>
@@ -895,7 +911,6 @@
   <script src="/lineup-explorer/artist-index.js"></script>
   <script>
     const cards = Array.from(document.querySelectorAll('.event-card'));
-    const totalCount = cards.length;
     const qInput = document.getElementById('globalQ');
     const countEl = document.getElementById('count');
     const artistMatchesEl = document.getElementById('artistMatches');
@@ -909,6 +924,37 @@
     });
     const slugOf = c => c.getAttribute('href').replace('/lineup-explorer/', '');
 
+    // Mark past festivals from their data-date (last day of the event) and
+    // swap the "Active" badge for an "Archived" one — no per-card upkeep needed.
+    const todayISO = new Date().toISOString().slice(0, 10);
+    cards.forEach(c => {
+      const isPast = c.dataset.date ? c.dataset.date < todayISO : false;
+      c.dataset.isPast = isPast ? '1' : '0';
+      if (!isPast) return;
+      c.classList.add('is-past');
+      const activeTag = c.querySelector('.event-tag:not(.tag-growing):not(.tag-tba)');
+      if (activeTag) {
+        activeTag.textContent = 'Archived';
+        activeTag.className = 'event-tag tag-archived';
+      }
+      const growingTag = c.querySelector('.event-tag.tag-growing');
+      if (growingTag) growingTag.remove();
+    });
+
+    let timeFilter = 'upcoming';
+    const pillUpcoming = document.getElementById('pillUpcoming');
+    const pillPast = document.getElementById('pillPast');
+    function setTimeFilter(f) {
+      timeFilter = f;
+      pillUpcoming.classList.toggle('active', f === 'upcoming');
+      pillUpcoming.setAttribute('aria-selected', String(f === 'upcoming'));
+      pillPast.classList.toggle('active', f === 'past');
+      pillPast.setAttribute('aria-selected', String(f === 'past'));
+      render();
+    }
+    pillUpcoming.addEventListener('click', () => setTimeFilter('upcoming'));
+    pillPast.addEventListener('click', () => setTimeFilter('past'));
+
     function render() {
       const query = qInput.value.trim().toLowerCase();
       let artistHits = [];
@@ -919,17 +965,23 @@
       artistHits.forEach(a => a.festivals.forEach(f => hitSlugs.add(f.slug)));
 
       let visibleCount = 0;
+      let bucketTotal = 0;
       cards.forEach(c => {
         const slug = slugOf(c);
+        const timeMatch = timeFilter === 'past' ? c.dataset.isPast === '1' : c.dataset.isPast !== '1';
+        if (timeMatch) bucketTotal++;
         const textMatch = !query || cardBlob.get(c).includes(query);
         const artistMatch = hitSlugs.has(slug);
-        const show = !query || textMatch || artistMatch;
+        const show = timeMatch && (!query || textMatch || artistMatch);
         c.style.display = show ? '' : 'none';
         c.classList.toggle('artist-hit', !!query && artistMatch && !textMatch);
         if (show) visibleCount++;
       });
 
-      countEl.innerHTML = query ? '<b>' + visibleCount + '</b> of ' + totalCount + ' events' : '';
+      const bucketLabel = timeFilter === 'past' ? 'past' : 'upcoming';
+      countEl.innerHTML = query
+        ? '<b>' + visibleCount + '</b> of ' + bucketTotal + ' ' + bucketLabel + ' events'
+        : '<b>' + bucketTotal + '</b> ' + bucketLabel + ' events';
 
       if (artistHits.length) {
         artistMatchesEl.innerHTML = artistHits.map(a => {
