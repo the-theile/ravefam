@@ -184,6 +184,10 @@
     color: #0a0512; background: var(--grad); background-size: 180% 180%; box-shadow: 0 6px 22px rgba(255,45,149,0.3);
     transition: transform .12s, box-shadow .2s, background-position .5s; }
   .submit-send:hover { transform: translateY(-1px); background-position: 100% 0; }
+  .submit-send:disabled { opacity: 0.6; cursor: default; transform: none; }
+  .submit-success { display: none; text-align: center; padding: 10px 4px 4px; color: var(--ink); font-size: 0.9rem; line-height: 1.6; }
+  .submit-success.show { display: block; }
+  .submit-success strong { font-size: 1rem; }
   .submit-fallback { margin: 14px 0 0; font-size: 0.72rem; color: var(--muted); text-align: center; }
   .submit-fallback a { color: var(--teal); text-decoration: none; }
   .submit-fallback a:hover { text-decoration: underline; }
@@ -623,8 +627,10 @@
     <div class="submit-modal">
       <button type="button" class="submit-close" id="submitClose" aria-label="Close">✕</button>
       <h3 id="submitModalTitle">Feature your event</h3>
-      <p class="submit-sub">Drop the details below — this opens your email app with everything filled in, addressed straight to our team. Just hit send.</p>
-      <form id="submitEventForm">
+      <p class="submit-sub" id="submitModalSub">Drop the details below — it goes straight to our team.</p>
+      <form id="submitEventForm" action="https://formspree.io/f/xaqzodvv" method="POST">
+        <input type="hidden" name="_subject" id="submitSubjectField" value="Lineup Explorer: feature this event" />
+        <input type="hidden" name="form_source" value="Lineup Explorer — Feature Event" />
         <div class="submit-field">
           <label for="submitEventName">Event name</label>
           <input type="text" id="submitEventName" name="eventName" placeholder="e.g. EDC Colombia 2026" required autocomplete="off" />
@@ -637,8 +643,12 @@
           <label for="submitEventLink">Lineup link</label>
           <input type="url" id="submitEventLink" name="eventLink" placeholder="https://…" required autocomplete="off" />
         </div>
-        <button type="submit" class="submit-send">Open email to send →</button>
+        <button type="submit" class="submit-send">Send it →</button>
       </form>
+      <div class="submit-success" id="submitSuccess">
+        <strong>🎉 Got it — thank you!</strong><br>
+        We'll take a look and get your event added.
+      </div>
       <p class="submit-fallback">Prefer to write it yourself? Email <a href="mailto:bump@myravefam.com">bump@myravefam.com</a> directly.</p>
     </div>
   </div>
@@ -705,22 +715,57 @@
     const submitClose = document.getElementById('submitClose');
     const submitForm = document.getElementById('submitEventForm');
 
-    function openSubmitModal() { submitOverlay.classList.add('show'); document.getElementById('submitEventName').focus(); }
-    function closeSubmitModal() { submitOverlay.classList.remove('show'); }
+    const submitSub = document.getElementById('submitModalSub');
+    const submitSuccess = document.getElementById('submitSuccess');
+    const submitSendBtn = submitForm.querySelector('.submit-send');
+
+    function openSubmitModal() {
+      submitOverlay.classList.add('show');
+      document.getElementById('submitEventName').focus();
+    }
+    function closeSubmitModal() {
+      submitOverlay.classList.remove('show');
+      setTimeout(() => {
+        submitForm.reset();
+        submitForm.style.display = '';
+        submitSub.style.display = '';
+        submitSuccess.classList.remove('show');
+        submitSendBtn.disabled = false;
+        submitSendBtn.textContent = 'Send it →';
+      }, 200);
+    }
 
     submitBtn.addEventListener('click', openSubmitModal);
     submitClose.addEventListener('click', closeSubmitModal);
     submitOverlay.addEventListener('click', e => { if (e.target === submitOverlay) closeSubmitModal(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && submitOverlay.classList.contains('show')) closeSubmitModal(); });
 
-    submitForm.addEventListener('submit', e => {
+    submitForm.addEventListener('submit', async e => {
       e.preventDefault();
       const name = document.getElementById('submitEventName').value.trim();
-      const date = document.getElementById('submitEventDate').value.trim();
-      const link = document.getElementById('submitEventLink').value.trim();
-      const subject = 'Feature this event: ' + name;
-      const body = 'Event name: ' + name + '\nDate(s): ' + date + '\nLineup link: ' + link;
-      window.location.href = 'mailto:bump@myravefam.com?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+      document.getElementById('submitSubjectField').value = 'Lineup Explorer: feature "' + name + '"';
+      submitSendBtn.disabled = true;
+      submitSendBtn.textContent = 'Sending…';
+      try {
+        const res = await fetch(submitForm.action, {
+          method: 'POST',
+          body: new FormData(submitForm),
+          headers: { 'Accept': 'application/json' }
+        });
+        if (res.ok) {
+          submitForm.style.display = 'none';
+          submitSub.style.display = 'none';
+          submitSuccess.classList.add('show');
+        } else {
+          submitSendBtn.disabled = false;
+          submitSendBtn.textContent = 'Send it →';
+          alert('Something went wrong. Please try again or email us directly at bump@myravefam.com.');
+        }
+      } catch {
+        submitSendBtn.disabled = false;
+        submitSendBtn.textContent = 'Send it →';
+        alert('Something went wrong. Please try again or email us directly at bump@myravefam.com.');
+      }
     });
   </script>
 </body>
