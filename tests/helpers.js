@@ -34,8 +34,8 @@ function seedData() {
   const added = '2024-01-01T00:00:00Z';
   return {
     festivals: [
-      { id: 'f1', name: 'Tomorrowland', date: '2099-07-18', location: 'Boom, BE', color: '#FF2D78', days: null },
-      { id: 'f2', name: 'Awakenings', date: '2099-10-12', location: 'Amsterdam, NL', color: '#00F5FF', days: null },
+      { id: 'f1', name: 'Tomorrowland', date: '2099-07-18', location: 'Boom, BE', color: '#FF2D78', days: null, deleted_at: null },
+      { id: 'f2', name: 'Awakenings', date: '2099-10-12', location: 'Amsterdam, NL', color: '#00F5FF', days: null, deleted_at: null },
     ],
     ravers: [
       {
@@ -45,7 +45,7 @@ function seedData() {
         avatar_url: null, blocked_tags: [], genres: ['Techno', 'House'],
         instagram: '@theile', radiate: '', phone: '', phone_visible: false,
         met_story: '', notes: '', qr_token: 'qr-you',
-        vibe_tags: ['warehouse'], custom_vibe_tags: [],
+        vibe_tags: ['warehouse'], custom_vibe_tags: [], deleted_at: null,
       },
       {
         id: 'r-sam', name: 'Sam P.', handle: 'samraves',
@@ -54,7 +54,7 @@ function seedData() {
         avatar_url: null, blocked_tags: [], genres: ['DnB'],
         instagram: '', radiate: '', phone: '', phone_visible: false,
         met_story: '', notes: '', qr_token: 'qr-sam',
-        vibe_tags: [], custom_vibe_tags: [],
+        vibe_tags: [], custom_vibe_tags: [], deleted_at: null,
       },
       {
         // A CLAIMED crew member with their own account — has an inbox, so adding
@@ -65,7 +65,7 @@ function seedData() {
         avatar_url: null, blocked_tags: [], genres: ['Techno'],
         instagram: '', radiate: '', phone: '', phone_visible: false,
         met_story: '', notes: '', qr_token: 'qr-kai',
-        vibe_tags: [], custom_vibe_tags: [],
+        vibe_tags: [], custom_vibe_tags: [], deleted_at: null,
       },
     ],
     crews: [
@@ -76,9 +76,9 @@ function seedData() {
       },
     ],
     crew_members: [
-      { crew_id: 'c1', raver_id: 'r-you', added_at: added, added_by: TEST_UID },
-      { crew_id: 'c1', raver_id: 'r-sam', added_at: added, added_by: TEST_UID },
-      { crew_id: 'c1', raver_id: 'r-kai', added_at: added, added_by: TEST_UID },
+      { crew_id: 'c1', raver_id: 'r-you', added_at: added, added_by: TEST_UID, deleted_at: null },
+      { crew_id: 'c1', raver_id: 'r-sam', added_at: added, added_by: TEST_UID, deleted_at: null },
+      { crew_id: 'c1', raver_id: 'r-kai', added_at: added, added_by: TEST_UID, deleted_at: null },
     ],
     raver_festivals: [
       { raver_id: 'r-you', festival_id: 'f1' },

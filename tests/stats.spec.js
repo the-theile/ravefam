@@ -5,7 +5,7 @@ const { bootAuthedApp, seedData, TEST_UID } = require('./helpers');
 // non-zero (stats only count raves that have already happened).
 function statsData() {
   const d = seedData();
-  d.festivals.push({ id: 'f-past', name: 'Past Fest', date: '2020-06-01', location: 'Detroit, US', color: '#39FF14', days: 2 });
+  d.festivals.push({ id: 'f-past', name: 'Past Fest', date: '2020-06-01', location: 'Detroit, US', color: '#39FF14', days: 2, deleted_at: null });
   d.raver_festivals.push({ raver_id: 'r-you', festival_id: 'f-past' });
   return d;
 }

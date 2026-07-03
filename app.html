@@ -7147,6 +7147,7 @@ async function doProfilePasswordChange() {
     const { data: dbFests, error: fErr } = await sb
       .from('festivals')
       .select('*')
+      .is('deleted_at', null)
       .order('date', { ascending: true });
     if (!fErr && dbFests) {
       dbFests.forEach(f => {
@@ -7165,7 +7166,8 @@ async function doProfilePasswordChange() {
       .from('ravers')
       .select('*, raver_festivals(festival_id), raver_festival_interest(festival_id), raver_favorite_artists(artist_id)')
       .or(`created_by.eq.${uid},claimed_by.eq.${uid}`)
-      .neq('status', 'merged');
+      .neq('status', 'merged')
+      .is('deleted_at', null);
     if (!rErr && dbRavers) {
       const seen = new Set();
       dbRavers.forEach(r => {
@@ -7205,14 +7207,16 @@ async function doProfilePasswordChange() {
     // A single query returns every crew the current user is allowed to see.
     const { data: allCrewsRaw, error: cErr1 } = await sb
       .from('crews')
-      .select('*, crew_members(raver_id, added_at)')
+      .select('*, crew_members(raver_id, added_at, deleted_at)')
       .order('created_at', { ascending: true });
 
     const allCrews = allCrewsRaw || [];
     if (!cErr1 && allCrews.length) {
       allCrews.forEach(c => {
-        // Sort members by date added ascending (oldest first)
-        const sortedMembers = [...(c.crew_members || [])].sort((a, b) =>
+        // Sort members by date added ascending (oldest first). Filtered
+        // client-side (rather than via a PostgREST embedded-resource filter)
+        // to exclude soft-removed members.
+        const sortedMembers = [...(c.crew_members || [])].filter(cm => !cm.deleted_at).sort((a, b) =>
           new Date(a.added_at || 0) - new Date(b.added_at || 0));
         const squadIds = sortedMembers.map(cm => cm.raver_id);
         const members = squadIds
@@ -7252,7 +7256,7 @@ async function doProfilePasswordChange() {
     const knownIds = new Set(squad.map(r => String(r.id)));
     const missingIds = [];
     allCrews.forEach(c => {
-      (c.crew_members || []).forEach(cm => {
+      (c.crew_members || []).filter(cm => !cm.deleted_at).forEach(cm => {
         const sid = String(cm.raver_id);
         if (!knownIds.has(sid)) { missingIds.push(cm.raver_id); knownIds.add(sid); }
       });
@@ -7262,7 +7266,8 @@ async function doProfilePasswordChange() {
         .from('ravers')
         .select('*, raver_festivals(festival_id), raver_festival_interest(festival_id), raver_favorite_artists(artist_id)')
         .in('id', missingIds)
-        .neq('status', 'merged');
+        .neq('status', 'merged')
+        .is('deleted_at', null);
       if (crewRavers) {
         crewRavers.forEach(r => {
           squad.push({
@@ -7904,10 +7909,11 @@ async function doProfilePasswordChange() {
     }
   }
 
-  async function dbDeleteFestival(id) {
+  async function dbDeleteFestival(id, reason = null) {
     await sb.from('raver_festivals').delete().eq('festival_id', id);
-    const { error } = await sb.from('festivals').delete().eq('id', id);
-    if (error) { console.error('festival delete error', error); showToast('⚠️ Could not delete rave — try again'); }
+    const ok = await softDeleteRow('festivals', { id }, reason);
+    if (!ok) { showToast('⚠️ Could not delete rave — try again'); return; }
+    await logAudit({ action: 'festival.soft_delete', entityType: 'festival', entityId: id, reason });
   }
 
   async function dbSaveCrew(data, id) {
@@ -7938,23 +7944,70 @@ async function doProfilePasswordChange() {
     }
   }
 
-  // Targeted single-row insert — preserves added_at for all existing members
+  // Targeted single-row insert — preserves added_at for all existing members.
+  // Clears any prior soft-delete so re-adding a previously removed member
+  // resurrects their row instead of the upsert no-op'ing against it.
   async function dbAddCrewMember(crewId, raverId) {
     const uid = currentUser?.id;
     if (!uid) return;
     const { error } = await sb.from('crew_members')
-      .upsert({ crew_id: crewId, raver_id: raverId, added_by: uid },
-               { onConflict: 'crew_id,raver_id', ignoreDuplicates: true });
+      .upsert({ crew_id: crewId, raver_id: raverId, added_by: uid, deleted_at: null, deleted_by: null, delete_reason: null },
+               { onConflict: 'crew_id,raver_id', ignoreDuplicates: false });
     if (error) { console.error('crew member add error', error); showToast('⚠️ Could not add member — try again'); }
   }
 
-  // Targeted single-row delete — only touches the removed member
-  async function dbRemoveCrewMember(crewId, raverId) {
-    const { error } = await sb.from('crew_members')
-      .delete()
-      .eq('crew_id', crewId)
-      .eq('raver_id', raverId);
-    if (error) { console.error('crew member remove error', error); showToast('⚠️ Could not remove member — try again'); }
+  // Targeted single-row soft delete — only touches the removed member
+  async function dbRemoveCrewMember(crewId, raverId, reason = null) {
+    const ok = await softDeleteRow('crew_members', { crew_id: crewId, raver_id: raverId }, reason);
+    if (!ok) { showToast('⚠️ Could not remove member — try again'); return; }
+    await logAudit({
+      action: 'crew_member.remove', entityType: 'crew_member',
+      entityId: raverId, reason, metadata: { crew_id: crewId }
+    });
+  }
+
+  // ===== SOFT DELETE & AUDIT HELPERS =====
+  // Centralizes "soft delete" (set deleted_at/deleted_by/delete_reason instead
+  // of hard DELETE) and audit-log writes so destructive actions leave a trail.
+  // Used by dbDeleteFestival, dbRemoveCrewMember, and deleteUnclaimedProfile.
+  //
+  // TODO(restore): add a dbRestoreRow(table, match) counterpart once a
+  // "Trash / Restore" UI exists — null out deleted_at/deleted_by/delete_reason
+  // via the same match-object approach used here.
+  // TODO(ui): loadAllData()'s queries filter out soft-deleted rows for the
+  // main app. An admin "view deleted items" screen would need its own
+  // unfiltered query path — don't just strip the .is('deleted_at', null)
+  // filters from the main app's queries to build that.
+
+  // `match` is a Supabase .match()-style column:value object rather than a
+  // bare id, because crew_members has no single `id` column (its PK is
+  // crew_id+raver_id) — this one signature covers all three touched tables.
+  async function softDeleteRow(table, match, reason) {
+    const uid = currentUser?.id;
+    if (!uid) return false;
+    const { error } = await sb.from(table)
+      .update({ deleted_at: new Date().toISOString(), deleted_by: uid, delete_reason: reason || null })
+      .match(match);
+    if (error) { console.error(`${table} soft delete error`, error); return false; }
+    return true;
+  }
+
+  async function logAudit({ action, entityType, entityId, reason, metadata }) {
+    const uid = currentUser?.id;
+    try {
+      const { error } = await sb.from('audit_logs').insert({
+        actor_id: uid || null,
+        action,
+        entity_type: entityType,
+        entity_id: entityId ?? null,
+        reason: reason || null,
+        metadata: metadata || {}
+      });
+      if (error) console.error('audit log insert error', error);
+    } catch (err) {
+      // Audit logging must never break the delete flow it's describing.
+      console.error('audit log insert threw', err);
+    }
   }
 
 
@@ -11374,22 +11427,29 @@ async function doProfilePasswordChange() {
     }
   }
 
-  function deleteUnclaimedProfile(raverId) {
+  function deleteUnclaimedProfile(raverId, reason = null) {
     const r = getRaver(raverId);
     if (!r) return;
     const firstName = r.name.split(' ')[0];
     showConfirm(
       `Delete ${firstName}'s profile?`,
-      `This will permanently remove the unclaimed profile and their invite code. This can't be undone.`,
+      `This will remove the unclaimed profile and their invite code.`,
       `🗑️ Delete Profile`,
       () => {
+        // Snapshot crew memberships before the optimistic mutation below
+        // clears them, so the audit log can record which crews this touched.
+        const affectedCrewIds = crews
+          .filter(c => (c.squadIds || []).some(id => String(id) === String(raverId)))
+          .map(c => c.id);
+
         // Remove from all crews in-memory
         crews.forEach(c => {
           c.squadIds = (c.squadIds || []).filter(id => String(id) !== String(raverId));
           c.members = c.squadIds.map(sid => squad.find(r2 => String(r2.id) === String(sid))).filter(Boolean)
             .map(r2 => ({ i: initials(r2.name), c: c.color, t: '#fff', url: r2.avatarUrl || null }));
         });
-        squad = squad.filter(r2 => String(r2.id) !== String(raverId));
+        const keptIdx = squad.findIndex(r2 => String(r2.id) === String(raverId));
+        if (keptIdx !== -1) squad.splice(keptIdx, 1);
         closeEditUnclaimedModal();
         renderCrews();
         renderDetail(activeDetailId);
@@ -11397,11 +11457,29 @@ async function doProfilePasswordChange() {
         if (currentUser && !String(raverId).startsWith('temp_')) {
           (async () => {
             try {
+              // Pure junction/relationship rows — hard delete, same as the
+              // raver_festivals cleanup in dbDeleteFestival.
               await sb.from('raver_festival_interest').delete().eq('raver_id', raverId);
               await sb.from('raver_festivals').delete().eq('raver_id', raverId);
-              await sb.from('crew_members').delete().eq('raver_id', raverId);
-              const { error } = await sb.from('ravers').delete().eq('id', raverId);
-              if (error) showToast('⚠️ Could not fully delete — refresh and try again');
+
+              // Crew memberships: soft delete (bulk) + one audit entry, for
+              // consistency with dbRemoveCrewMember's audit trail.
+              const { error: cmErr } = await sb.from('crew_members')
+                .update({ deleted_at: new Date().toISOString(), deleted_by: currentUser.id, delete_reason: reason || null })
+                .eq('raver_id', raverId)
+                .is('deleted_at', null);
+              if (cmErr) console.error('crew_members bulk soft delete error', cmErr);
+              else if (affectedCrewIds.length) {
+                await logAudit({
+                  action: 'crew_member.remove', entityType: 'crew_member',
+                  entityId: raverId, reason, metadata: { crew_ids: affectedCrewIds, via: 'raver_delete' }
+                });
+              }
+
+              // The raver row itself.
+              const ok = await softDeleteRow('ravers', { id: raverId }, reason);
+              if (!ok) { showToast('⚠️ Could not fully delete — refresh and try again'); return; }
+              await logAudit({ action: 'raver.delete', entityType: 'raver', entityId: raverId, reason });
             } catch(err) {
               console.error('Delete cascade error:', err);
               showToast('⚠️ Deletion failed — please refresh and try again');

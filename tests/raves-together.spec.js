@@ -5,7 +5,7 @@ const { bootAuthedApp, seedData } = require('./helpers');
 // festival (f1) with r-sam, so both counters are non-zero.
 function overlapData() {
   const d = seedData();
-  d.festivals.push({ id: 'f-past', name: 'Past Fest', date: '2020-06-01', location: 'Detroit, US', color: '#39FF14', days: 1 });
+  d.festivals.push({ id: 'f-past', name: 'Past Fest', date: '2020-06-01', location: 'Detroit, US', color: '#39FF14', days: 1, deleted_at: null });
   d.raver_festivals.push({ raver_id: 'r-you', festival_id: 'f-past' });
   d.raver_festivals.push({ raver_id: 'r-sam', festival_id: 'f-past' });
   // A raver with no shared festivals and no genre overlap with "you".
@@ -16,7 +16,7 @@ function overlapData() {
     avatar_url: null, blocked_tags: [], genres: ['Trance'],
     instagram: '', radiate: '', phone: '', phone_visible: false,
     met_story: '', notes: '', qr_token: 'qr-nomatch',
-    vibe_tags: [], custom_vibe_tags: [],
+    vibe_tags: [], custom_vibe_tags: [], deleted_at: null,
   });
   return d;
 }
