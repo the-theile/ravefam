@@ -48,6 +48,8 @@ test.describe('soft delete + audit log', () => {
     await bootAuthedApp(page);
 
     await page.evaluate(() => { deleteUnclaimedProfile('r-sam'); });
+    // Reason is now mandatory — the confirm button stays disabled until filled.
+    await page.fill('#confirm-reason-input', 'test cleanup');
     await page.click('#confirm-ok-btn');
 
     await expect

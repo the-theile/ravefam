@@ -73,6 +73,7 @@ function seedData() {
         id: 'c1', name: 'Bass Syndicate', color: '#FF2D78',
         gradient: 'linear-gradient(90deg,#FF2D78,#BF00FF)', status: 'recruiting',
         leader_id: TEST_UID, totem_photo_url: null, invite_token: 'inv-c1', created_at: added,
+        deleted_at: null,
       },
     ],
     crew_members: [
@@ -203,7 +204,7 @@ async function installSupabaseStub(page, opts = {}) {
             eq(c, v) { st.filters.push(r => String(r[c]) === String(v)); return b; },
             neq(c, v) { st.filters.push(r => String(r[c]) !== String(v)); return b; },
             in(c, a) { const s = (a || []).map(String); st.filters.push(r => s.includes(String(r[c]))); return b; },
-            is(c, v) { st.filters.push(r => r[c] === v); return b; },
+            is(c, v) { st.filters.push(r => v === null ? (r[c] === null || r[c] === undefined) : r[c] === v); return b; },
             match(o) { Object.entries(o || {}).forEach(([c, v]) => st.filters.push(r => String(r[c]) === String(v))); return b; },
             contains(c, v) { const need = Array.isArray(v) ? v : [v]; st.filters.push(r => Array.isArray(r[c]) && need.every(x => r[c].includes(x))); return b; },
             or(str) {
