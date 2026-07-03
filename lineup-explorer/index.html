@@ -153,6 +153,40 @@
 
   footer { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.78rem; line-height: 1.6; }
   footer .fam { font-family: "Orbitron", sans-serif; background: var(--grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; font-weight: 700; }
+  .footer-link-btn { background: none; border: 0; padding: 0; margin: 0; font: inherit; cursor: pointer;
+    color: var(--teal); text-decoration: underline dotted; text-underline-offset: 3px; }
+  .footer-link-btn:hover { color: var(--ink); }
+
+  /* Submit-your-event modal */
+  .submit-overlay { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center;
+    padding: 20px; background: rgba(5,3,12,0.72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    opacity: 0; pointer-events: none; transition: opacity .18s ease; }
+  .submit-overlay.show { opacity: 1; pointer-events: auto; }
+  .submit-modal { position: relative; width: 100%; max-width: 420px; background: #120c22; border: 1px solid var(--line);
+    border-radius: 20px; padding: 26px 24px 24px; box-shadow: 0 24px 60px -20px rgba(0,0,0,0.6);
+    transform: translateY(10px) scale(0.98); transition: transform .18s ease; max-height: calc(100vh - 40px); overflow-y: auto; }
+  .submit-overlay.show .submit-modal { transform: translateY(0) scale(1); }
+  .submit-modal h3 { font-family: "Orbitron", sans-serif; font-weight: 900; font-size: 1.2rem; margin: 0 0 6px;
+    background: var(--grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
+  .submit-modal .submit-sub { color: var(--muted); font-size: 0.85rem; line-height: 1.5; margin: 0 0 18px; }
+  .submit-close { position: absolute; top: 16px; right: 16px; background: transparent; border: 0; color: var(--muted);
+    cursor: pointer; font-size: 1.15rem; line-height: 1; padding: 4px; transition: color .15s; }
+  .submit-close:hover { color: var(--ink); }
+  .submit-field { margin-bottom: 14px; }
+  .submit-field label { display: block; font-size: 0.75rem; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+  .submit-field input { width: 100%; padding: 11px 13px; background: rgba(12,8,30,0.85); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 11px; font-family: inherit; font-size: 0.92rem; outline: none;
+    transition: border-color .18s, box-shadow .18s; }
+  .submit-field input::placeholder { color: var(--muted); opacity: 0.7; }
+  .submit-field input:focus { border-color: rgba(46,230,200,0.6); box-shadow: 0 0 0 3px rgba(46,230,200,0.14); }
+  .submit-send { width: 100%; cursor: pointer; border: 0; border-radius: 12px; padding: 13px 18px; margin-top: 4px;
+    font-family: "Orbitron", sans-serif; font-weight: 700; font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase;
+    color: #0a0512; background: var(--grad); background-size: 180% 180%; box-shadow: 0 6px 22px rgba(255,45,149,0.3);
+    transition: transform .12s, box-shadow .2s, background-position .5s; }
+  .submit-send:hover { transform: translateY(-1px); background-position: 100% 0; }
+  .submit-fallback { margin: 14px 0 0; font-size: 0.72rem; color: var(--muted); text-align: center; }
+  .submit-fallback a { color: var(--teal); text-decoration: none; }
+  .submit-fallback a:hover { text-decoration: underline; }
 
   @media (max-width: 480px) {
     .brand .tag { display: none; }
@@ -163,6 +197,7 @@
     .freq-nav-bar, .freq-nav-core { animation: none; }
     .event-card { transition: border-color .18s, box-shadow .2s; }
     .event-card:hover, .event-card:focus-visible { transform: none; }
+    .submit-overlay, .submit-modal { transition: none; }
   }
 </style>
 </head>
@@ -579,9 +614,34 @@
     </div>
 
     <footer>
-      Lineup explorers are built by the <span class="fam">RaveFAM</span> crew tools team. Want your event featured? Reach out at <a href="https://myravefam.com/" style="color:var(--teal);text-decoration:none;">myravefam.com</a>.
+      Lineup explorers are built by the <span class="fam">RaveFAM</span> crew tools team. Want your event featured? <button type="button" class="footer-link-btn" id="submitEventBtn">Submit it here</button> — takes 30 seconds.
     </footer>
   </main>
+
+  <!-- Submit-your-event modal -->
+  <div class="submit-overlay" id="submitOverlay" role="dialog" aria-modal="true" aria-labelledby="submitModalTitle">
+    <div class="submit-modal">
+      <button type="button" class="submit-close" id="submitClose" aria-label="Close">✕</button>
+      <h3 id="submitModalTitle">Feature your event</h3>
+      <p class="submit-sub">Drop the details below — this opens your email app with everything filled in, addressed straight to our team. Just hit send.</p>
+      <form id="submitEventForm">
+        <div class="submit-field">
+          <label for="submitEventName">Event name</label>
+          <input type="text" id="submitEventName" name="eventName" placeholder="e.g. EDC Colombia 2026" required autocomplete="off" />
+        </div>
+        <div class="submit-field">
+          <label for="submitEventDate">Date(s)</label>
+          <input type="text" id="submitEventDate" name="eventDate" placeholder="e.g. Oct 10–11, 2026" required autocomplete="off" />
+        </div>
+        <div class="submit-field">
+          <label for="submitEventLink">Lineup link</label>
+          <input type="url" id="submitEventLink" name="eventLink" placeholder="https://…" required autocomplete="off" />
+        </div>
+        <button type="submit" class="submit-send">Open email to send →</button>
+      </form>
+      <p class="submit-fallback">Prefer to write it yourself? Email <a href="mailto:bump@myravefam.com">bump@myravefam.com</a> directly.</p>
+    </div>
+  </div>
 
   <script src="/lineup-explorer/artist-index.js"></script>
   <script>
@@ -638,6 +698,30 @@
     }
     qInput.addEventListener('input', render);
     render();
+
+    // Submit-your-event modal
+    const submitOverlay = document.getElementById('submitOverlay');
+    const submitBtn = document.getElementById('submitEventBtn');
+    const submitClose = document.getElementById('submitClose');
+    const submitForm = document.getElementById('submitEventForm');
+
+    function openSubmitModal() { submitOverlay.classList.add('show'); document.getElementById('submitEventName').focus(); }
+    function closeSubmitModal() { submitOverlay.classList.remove('show'); }
+
+    submitBtn.addEventListener('click', openSubmitModal);
+    submitClose.addEventListener('click', closeSubmitModal);
+    submitOverlay.addEventListener('click', e => { if (e.target === submitOverlay) closeSubmitModal(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && submitOverlay.classList.contains('show')) closeSubmitModal(); });
+
+    submitForm.addEventListener('submit', e => {
+      e.preventDefault();
+      const name = document.getElementById('submitEventName').value.trim();
+      const date = document.getElementById('submitEventDate').value.trim();
+      const link = document.getElementById('submitEventLink').value.trim();
+      const subject = 'Feature this event: ' + name;
+      const body = 'Event name: ' + name + '\nDate(s): ' + date + '\nLineup link: ' + link;
+      window.location.href = 'mailto:bump@myravefam.com?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+    });
   </script>
 </body>
 </html>
