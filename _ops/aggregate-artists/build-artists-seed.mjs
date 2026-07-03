@@ -33,6 +33,8 @@ const FESTIVAL_IDS = {
   'iii-points-2026.html': null,
   'lost-in-dreams-los-angeles-2026.html': '031633a9-887d-41df-a762-57c331288523',
   'night-trip-arizona-2026.html': '4c3bcb15-fff2-45bf-97e8-b861c925d553',
+  'hard-summer-2026.html': '99085234-30bf-4210-a688-3acc013a9152',
+  'day-trip-block-party-denver-2026.html': 'a6d2f284-a63c-44ae-837b-c6379331e9be',
 };
 
 // Hand-curated canonicalization for names that appear with inconsistent
