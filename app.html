@@ -5916,8 +5916,13 @@
   sb.rpc('log_pageview', { p_path: location.pathname, p_referrer: document.referrer });
 
   let currentUser = null;  // holds the logged-in Supabase user object
-  const ADMIN_EMAIL = 'theile.secure@proton.me';
-  function isAdminUser() { return currentUser?.email?.toLowerCase() === ADMIN_EMAIL; }
+  let moderatorIds = new Set();  // auth user ids present in the moderators table
+  async function dbLoadModerators() {
+    if (!currentUser) return;
+    const { data } = await sb.from('moderators').select('user_id');
+    moderatorIds = new Set((data || []).map(m => String(m.user_id)));
+  }
+  function isModerator() { return !!currentUser && moderatorIds.has(String(currentUser.id)); }
 
   // Per-viewer private caches (keyed by target raver ID)
   const privatePhoneCache = {};  // { [raverId]: string }
@@ -5930,6 +5935,8 @@
     if (r.isYou) return r.name;
     return nicknameCache[String(r.id)] || r.name;
   }
+
+  // ===== PERMISSION HELPERS =====
 
   // Permission flags for the current viewer on a given raver object.
   function raverPerms(r) {
@@ -5969,6 +5976,115 @@
       isClaimed,
     };
   }
+
+  // Permission flags for the current viewer on a given festival object.
+  function festivalPerms(festival, user = currentUser) {
+    if (!user) return { canAddFestival:false, canEdit:false, canDelete:false, canAddVibe:false };
+    if (!festival) return { canAddFestival:true, canEdit:false, canDelete:false, canAddVibe:true };
+    const isCreator = !!(festival.createdBy && String(festival.createdBy) === String(user.id));
+    const mod = isModerator();
+    const hasOtherGoers = festivalGoers(festival.id).some(r => {
+      const owner = r.claimedBy || r.createdBy;
+      return String(owner) !== String(festival.createdBy);
+    });
+    return {
+      canAddFestival: true,                    // any logged-in user
+      canEdit:        isCreator || mod,
+      canDelete:      (isCreator || mod) && !hasOtherGoers,
+      canAddVibe:     true,                     // any logged-in user (their own raver's vibe)
+    };
+  }
+
+  // Permission flags for the current viewer on a given crew object.
+  function crewPerms(crew, user = currentUser) {
+    const none = () => ({
+      isLead:false, canEdit:false, canDelete:false, canChangeStatus:false,
+      canManageMembers:false, canInvite:false, canLeave:false
+    });
+    if (!user || !crew) return none();
+    const isLead = !!crew.isLead;
+    const mod = isModerator();
+    const me = squad.find(r => r.isYou);
+    const isClaimedMember = !isLead && !!me
+      && (crew.squadIds||[]).some(id => String(id) === String(me.id))
+      && !!(me.claimedBy || me.isYou || me.status === 'claimed');
+    return {
+      isLead,
+      canEdit:         isLead || mod,
+      canDelete:       isLead || mod,
+      canChangeStatus: isLead,
+      canManageMembers: isLead || mod,
+      canInvite:       isLead,
+      canLeave:        isClaimedMember,
+    };
+  }
+
+  /* ===== RLS RECOMMENDATIONS (Supabase Postgres) =====
+   These mirror the flags above at the DB layer so a bypassed client can't act beyond
+   what festivalPerms()/crewPerms() allow. Already applied live; kept here for reference.
+   Full migrations: supabase/migrations/20260703000000_moderators_and_perms_rls.sql
+                    supabase/migrations/20260703000001_fix_is_moderator_search_path.sql
+
+  -- Real moderator system (replaces a single hardcoded admin email)
+  create table public.moderators (
+    user_id  uuid primary key references auth.users(id) on delete cascade,
+    added_at timestamptz not null default now(),
+    added_by uuid references auth.users(id)
+  );
+  alter table public.moderators enable row level security;
+
+  create or replace function public.is_moderator(uid uuid)
+  returns boolean language sql stable
+  set search_path = public, pg_temp
+  as $$
+    select exists (select 1 from public.moderators m where m.user_id = uid);
+  $$;
+
+  create policy moderators_read   on public.moderators for select to authenticated using (true);
+  create policy moderators_insert on public.moderators for insert to authenticated
+    with check (is_moderator(auth.uid()));
+  create policy moderators_delete on public.moderators for delete to authenticated
+    using (is_moderator(auth.uid()));
+
+  -- festivals: any logged-in user can insert their own; creator or moderator can edit;
+  -- creator or moderator can delete, but ONLY while no other raver has RSVPed "Going"
+  create policy festivals_insert on public.festivals for insert
+    with check (auth.uid() = created_by);
+  create policy festivals_read   on public.festivals for select to authenticated using (true);
+  create policy festivals_update on public.festivals for update
+    using ((auth.uid() = created_by) OR is_moderator(auth.uid()));
+  create policy festivals_delete on public.festivals for delete
+    using (
+      ((auth.uid() = created_by) OR is_moderator(auth.uid()))
+      and not exists (
+        select 1 from public.raver_festivals rf
+        join public.ravers r on r.id = rf.raver_id
+        where rf.festival_id = festivals.id
+          and coalesce(r.claimed_by, r.created_by) <> festivals.created_by
+      )
+    );
+
+  -- crews: leader or moderator can edit/delete; leader-only for status changes (client-enforced)
+  create policy crews_update on public.crews for update
+    using ((auth.uid() = leader_id) OR is_moderator(auth.uid()));
+  create policy crews_delete on public.crews for delete
+    using ((auth.uid() = leader_id) OR is_moderator(auth.uid()));
+
+  -- crew_members: leader or moderator can add/remove/update membership
+  create policy crew_members_insert on public.crew_members for insert
+    with check (exists (select 1 from crews where crews.id = crew_members.crew_id and crews.leader_id = auth.uid()));
+  create policy crew_members_update on public.crew_members for update
+    using ((exists (select 1 from crews where crews.id = crew_members.crew_id and crews.leader_id = auth.uid())) OR is_moderator(auth.uid()));
+  create policy crew_members_delete on public.crew_members for delete
+    using ((exists (select 1 from crews where crews.id = crew_members.crew_id and crews.leader_id = auth.uid())) OR is_moderator(auth.uid()));
+
+  -- ravers: creator/claimant can update their own; creator or moderator can delete
+  create policy ravers_update on public.ravers for update
+    using ((auth.uid() = created_by) OR (auth.uid() = claimed_by) OR is_moderator(auth.uid()));
+  create policy ravers_delete on public.ravers for delete
+    using ((auth.uid() = created_by) OR is_moderator(auth.uid()));
+  */
+
   let _bootedUserId = null; // guard: prevents bootApp() running more than once per session
 
   // ===== AUTH UI helpers =====
@@ -7143,6 +7259,8 @@ async function doProfilePasswordChange() {
     squad.length = 0;     squadSeq = 0;
     crews.length = 0;     crewSeq = 0;
 
+    await dbLoadModerators().catch(() => {});
+
     // --- Festivals ---
     const { data: dbFests, error: fErr } = await sb
       .from('festivals')
@@ -7151,7 +7269,7 @@ async function doProfilePasswordChange() {
       .order('date', { ascending: true });
     if (!fErr && dbFests) {
       dbFests.forEach(f => {
-        festivals.push({ id: f.id, name: f.name, date: f.date, location: f.location || '', color: f.color || null, days: f.days || null });
+        festivals.push({ id: f.id, name: f.name, date: f.date, location: f.location || '', color: f.color || null, days: f.days || null, createdBy: f.created_by || null });
       });
     }
 
@@ -9355,7 +9473,7 @@ async function doProfilePasswordChange() {
       }
     }
 
-    const isAdmin = isAdminUser();
+    const isAdmin = isModerator();
     const isLockedIn = crew.status === 'locked-in';
     const memberList = people.length
       ? [...people].sort((a, b) => {
@@ -9516,14 +9634,12 @@ async function doProfilePasswordChange() {
         <div class="status-meaning-compact">${meaning}</div>
         ${statusControl}
       </div>
-      ${(crew.isLead || isAdmin) ? `
+      ${crewPerms(crew).canDelete ? `
         <div class="danger-zone">
           <button class="btn btn-ghost" style="width:100%;padding:10px;font-size:0.8rem;color:var(--neon-pink);border-color:rgba(255,45,120,0.25);"
             onclick="showDeleteCrewConfirm(activeDetailId)">🗑️ Delete Crew</button>
         </div>` : (() => {
-          const meInCrew = people.find(p => p.isYou);
-          const iAmClaimed = meInCrew && (meInCrew.claimedBy || meInCrew.isYou || meInCrew.status === 'claimed');
-          return iAmClaimed ? `
+          return crewPerms(crew).canLeave ? `
         <div class="danger-zone">
           <button class="btn btn-ghost" style="width:100%;padding:10px;font-size:0.8rem;color:var(--neon-pink);border-color:rgba(255,45,120,0.25);"
             data-crew-id="${crew.id}" onclick="confirmLeaveCrew(this.dataset.crewId)">✌️ Leave Crew</button>
@@ -9617,7 +9733,7 @@ async function doProfilePasswordChange() {
     const pinCards = dreamPins.map(pin => {
       const hyped = (pin.hyped_by || []).includes(uid);
       const hypeCount = (pin.hyped_by || []).length;
-      const canDelete = pin.added_by === uid || isLead || isAdminUser();
+      const canDelete = pin.added_by === uid || isLead || isModerator();
       let addedByLabel = '';
       if (pin.added_by) {
         if (pin.added_by === uid) {
@@ -9743,7 +9859,7 @@ async function doProfilePasswordChange() {
     ).join('');
 
     const cards = archiveLinks.map(link => {
-      const canDelete = link.added_by === uid || isLead || isAdminUser();
+      const canDelete = link.added_by === uid || isLead || isModerator();
       let addedByLabel = '';
       if (link.added_by) {
         if (link.added_by === uid) {
@@ -9976,7 +10092,7 @@ async function doProfilePasswordChange() {
     const showResults = hasVoted || expired || poll.is_locked;
     const isLead = getCrew(poll.crew_id)?.isLead;
     const isCreator = poll.created_by === uid;
-    const isAdmin = isAdminUser();
+    const isAdmin = isModerator();
     const timeLeft = pollTimeLeft(poll.expires_at);
     const escId = escHtml(poll.id);
     const escCrewId = escHtml(poll.crew_id);
@@ -10608,7 +10724,7 @@ async function doProfilePasswordChange() {
   function renderJamCard(jam, uid, isLead, crewId) {
     const escId   = escHtml(jam.id);
     const escCrew = escHtml(crewId);
-    const canDelete = jam.added_by === uid || isLead || isAdminUser();
+    const canDelete = jam.added_by === uid || isLead || isModerator();
     const plat = PLATFORM_STYLES[jam.platform] || PLATFORM_STYLES.other;
     const reactions = jam.reactions || {};
     const vibesForJam = crewJamVibes.filter(v => v.jam_id === jam.id);
@@ -11352,7 +11468,7 @@ async function doProfilePasswordChange() {
     // dataset values are strings; use String() coercion for safe comparison
     const crew  = crews.find(c => String(c.id) === String(crewId));
     const raver = squad.find(r => String(r.id) === String(raverId));
-    const isAdmin = isAdminUser();
+    const isAdmin = isModerator();
     if (!crew || (!crew.isLead && !isAdmin)) return;
     if (String(raverId) === String(crew.leader_id)) { showToast('⚠️ The crew leader cannot be removed.'); return; }
     crew.squadIds = crew.squadIds.filter(id => String(id) !== String(raverId));
@@ -12635,7 +12751,7 @@ async function doProfilePasswordChange() {
         <div class="profile-actions" data-raver-id="${r.id}">
           ${ currentUser && (r.isYou || (perms.isLeaderOfRaver && !perms.isClaimed)) ? `<button class="btn btn-primary" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="enterProfileEditMode(this.dataset.raverId)">✏️ Edit Profile</button>` : ''}
           ${perms.canDisconnect ? `<button class="btn btn-ghost btn-disconnect" data-raver-id="${r.id}" onclick="showDisconnectConfirm(this.dataset.raverId)" title="Disconnect account">🔗</button>` : ''}
-          ${(perms.canDelete || (!r.isYou && isAdminUser())) ? `<button class="btn btn-ghost" style="padding:11px;color:var(--neon-pink);border-color:rgba(255,45,120,0.3);" data-raver-id="${r.id}" onclick="showDeleteRaverConfirm(this.dataset.raverId)">🗑️</button>` : ''}
+          ${(perms.canDelete || (!r.isYou && isModerator())) ? `<button class="btn btn-ghost" style="padding:11px;color:var(--neon-pink);border-color:rgba(255,45,120,0.3);" data-raver-id="${r.id}" onclick="showDeleteRaverConfirm(this.dataset.raverId)">🗑️</button>` : ''}
         </div>
 
         ${connectBlock}
@@ -14394,9 +14510,13 @@ async function doProfilePasswordChange() {
   }
 
   function openRaveEditor(id) {
+    const f = id ? getFestival(id) : null;
+    if (f && !festivalPerms(f).canEdit) {
+      showToast('🔒 Only the creator or a moderator can edit this rave');
+      return;
+    }
     editingFestivalId = id || null;
     activeFestId = id || null;
-    const f = id ? getFestival(id) : null;
     const goers = id ? festivalGoers(id) : [];
     editRaveColor = f?.color || festColor(f || { id: 'new' });
     const swatchHtml = CARD_PALETTE.map(c =>
@@ -14436,7 +14556,7 @@ async function doProfilePasswordChange() {
         <div id="re-raver-results" class="fest-search-dropdown" style="display:none;"></div>
       </div>` : ''}
       <div class="modal-actions">
-        ${f ? `<button class="btn btn-ghost" style="color:var(--neon-pink);" onclick="showDeleteRaveConfirm()">Delete</button>` : ''}
+        ${f && festivalPerms(f).canDelete ? `<button class="btn btn-ghost" style="color:var(--neon-pink);" onclick="showDeleteRaveConfirm()">Delete</button>` : ''}
         <button class="btn btn-ghost" onclick="closeRaveEditor()">Cancel</button>
         <button class="btn btn-primary" onclick="saveRave()">${f ? 'Save' : 'Add 🔥'}</button>
       </div>
@@ -14634,7 +14754,7 @@ async function doProfilePasswordChange() {
       const dupe = findFestivalByName(name, date);
       if (dupe) { showToast(`"${dupe.name}" already exists`); return; }
       const tempId = 'temp_' + Date.now();
-      const newFest = { id: tempId, name, date, location, color, days };
+      const newFest = { id: tempId, name, date, location, color, days, createdBy: currentUser?.id || null };
       festivals.push(newFest);
       showToast(`🎉 Added ${name}`);
       const _isPastRave = date && new Date(date + 'T23:59:59') < new Date();
@@ -14682,6 +14802,11 @@ async function doProfilePasswordChange() {
   function showDeleteRaveConfirm() {
     const f = getFestival(activeFestId);
     if (!f) return;
+    if (!festivalPerms(f).canDelete) {
+      const isCreatorOrMod = !!currentUser && (String(f.createdBy) === String(currentUser.id) || isModerator());
+      showToast(isCreatorOrMod ? "⚠️ Can't delete — others are already going" : '🔒 Only the creator or a moderator can delete this rave');
+      return;
+    }
     const goers = festivalGoers(activeFestId);
     if (goers.length) {
       // Tribe members linked — use bottom sheet for the destructive confirmation
