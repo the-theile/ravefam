@@ -31,6 +31,8 @@ const FESTIVAL_IDS = {
   'cyclops-cove-4-2026.html': '7f3cb19a-8918-4d38-9252-142e36d3da9f',
   'dancefestopia-2026.html': null,
   'iii-points-2026.html': null,
+  'lost-in-dreams-los-angeles-2026.html': '031633a9-887d-41df-a762-57c331288523',
+  'night-trip-arizona-2026.html': '4c3bcb15-fff2-45bf-97e8-b861c925d553',
 };
 
 // Hand-curated canonicalization for names that appear with inconsistent
@@ -84,7 +86,7 @@ function parseActs(actsBody) {
 
 function splitB2B(name) {
   const parts = name.split(/\s+b2b\s+/i);
-  return parts.length === 2 ? parts.map(s => s.trim()) : [name];
+  return parts.length >= 2 ? parts.map(s => s.trim()) : [name];
 }
 
 function canonicalize(name) {
