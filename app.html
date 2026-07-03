@@ -14511,23 +14511,24 @@ async function doProfilePasswordChange() {
 
   function openRaveEditor(id) {
     const f = id ? getFestival(id) : null;
-    if (f && !festivalPerms(f).canEdit) {
-      showToast('🔒 Only the creator or a moderator can edit this rave');
-      return;
-    }
+    // Editing details (name/date/location/etc.) is gated to the creator or a moderator,
+    // but the modal still opens for everyone — adding tribe members' RSVPs below is a
+    // separate permission and shouldn't be blocked by festivalPerms().canEdit.
+    const canEditFest = !f || festivalPerms(f).canEdit;
     editingFestivalId = id || null;
     activeFestId = id || null;
     const goers = id ? festivalGoers(id) : [];
     editRaveColor = f?.color || festColor(f || { id: 'new' });
     const swatchHtml = CARD_PALETTE.map(c =>
-      `<div class="color-swatch${c === editRaveColor ? ' selected' : ''}" data-color="${c}" style="background:${c};" onclick="pickRaveColor('${c}')"></div>`
+      `<div class="color-swatch${c === editRaveColor ? ' selected' : ''}" data-color="${c}" style="background:${c};" ${canEditFest ? `onclick="pickRaveColor('${c}')"` : 'style="pointer-events:none;opacity:0.6;"'}></div>`
     ).join('');
     document.getElementById('rave-edit-modal').innerHTML = `
       <div class="modal-title">${f ? '✏️ Edit Rave' : '🎉 Add Rave'}</div>
+      ${!canEditFest ? `<p style="font-size:0.78rem;color:var(--muted);margin:-4px 0 12px;">🔒 Only the creator or a moderator can edit these details.</p>` : ''}
       ${fieldRow('Rave Name','fe-name', f?.name, 'e.g. Awakenings or Basement at Fabric this Friday', false, 100)}
       <div class="form-group">
         <label class="form-label">Date</label>
-        <input class="form-input" id="fe-date" type="date" value="${(() => { if (!f) return ''; if (f.date) return f.date; const d = festDate(f); if (!d || isNaN(d)) return ''; return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })()}" style="color-scheme:dark;">
+        <input class="form-input" id="fe-date" type="date" value="${(() => { if (!f) return ''; if (f.date) return f.date; const d = festDate(f); if (!d || isNaN(d)) return ''; return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })()}" style="color-scheme:dark;" ${canEditFest ? '' : 'disabled'}>
       </div>
       <div class="form-group">
         <label class="form-label">Location</label>
@@ -14536,13 +14537,13 @@ async function doProfilePasswordChange() {
             placeholder="e.g. Amsterdam, NL" autocomplete="off" maxlength="100"
             oninput="locSearchDebounce(this.value)"
             onkeydown="locKeydown(event)"
-            onblur="setTimeout(closeLoc,200)">
+            onblur="setTimeout(closeLoc,200)" ${canEditFest ? '' : 'disabled'}>
           <div class="loc-dropdown" id="loc-dropdown"></div>
         </div>
       </div>
       <div class="form-group">
         <label class="form-label">How Many Days? <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
-        <input class="form-input" id="fe-days" type="number" min="1" max="14" value="${f?.days || ''}" placeholder="e.g. 3" style="max-width:120px;">
+        <input class="form-input" id="fe-days" type="number" min="1" max="14" value="${f?.days || ''}" placeholder="e.g. 3" style="max-width:120px;" ${canEditFest ? '' : 'disabled'}>
       </div>
       <div class="form-group">
         <label class="form-label">Card Colour</label>
@@ -14558,7 +14559,7 @@ async function doProfilePasswordChange() {
       <div class="modal-actions">
         ${f && festivalPerms(f).canDelete ? `<button class="btn btn-ghost" style="color:var(--neon-pink);" onclick="showDeleteRaveConfirm()">Delete</button>` : ''}
         <button class="btn btn-ghost" onclick="closeRaveEditor()">Cancel</button>
-        <button class="btn btn-primary" onclick="saveRave()">${f ? 'Save' : 'Add 🔥'}</button>
+        ${canEditFest ? `<button class="btn btn-primary" onclick="saveRave()">${f ? 'Save' : 'Add 🔥'}</button>` : ''}
       </div>
     `;
     document.getElementById('rave-edit-overlay').classList.add('open');
@@ -14736,6 +14737,13 @@ async function doProfilePasswordChange() {
   }
 
   function saveRave() {
+    if (editingFestivalId) {
+      const existing = getFestival(editingFestivalId);
+      if (existing && !festivalPerms(existing).canEdit) {
+        showToast('🔒 Only the creator or a moderator can edit this rave');
+        return;
+      }
+    }
     const name = val('fe-name')?.slice(0, 100);
     const date = document.getElementById('fe-date').value;
     const location = (val('fe-loc') || '').slice(0, 100);
