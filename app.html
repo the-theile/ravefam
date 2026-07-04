@@ -3124,6 +3124,11 @@
   .tag-chip-hidden { display: none; }
   .tag-sheet mark { background: rgba(255,230,0,0.35); color: inherit; border-radius: 3px; padding: 0 1px; }
 
+  /* Mod Guide accordion — same look as .tag-accordion, but stacked text content
+     instead of wrapping chips, and enough room to not clip longer sections. */
+  .mod-guide-acc .tag-acc-body-inner { display: block; }
+  .mod-guide-acc.tag-accordion.open .tag-acc-body { max-height: 3000px; }
+
   .tag-custom-section { border: 1.5px dashed rgba(255,255,255,0.18); border-radius: 14px; padding: 14px; margin-top: 4px; }
   .tag-custom-section-title { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.82rem; color: #d67fff; margin-bottom: 10px; }
   .tag-custom-cap-note { font-size: 0.68rem; color: var(--muted); margin-top: 8px; }
@@ -9838,7 +9843,7 @@ async function doProfilePasswordChange() {
   }
 
   // ===== MOD DASHBOARD =====
-  let modDashTab = 'reports';  // 'reports' | 'recent'
+  let modDashTab = 'reports';  // 'reports' | 'recent' | 'guide'
   let modDashRecentRows = [];  // last-loaded audit_logs rows, keyed by id for Restore lookups
 
   async function openModDashboard() {
@@ -9868,6 +9873,7 @@ async function doProfilePasswordChange() {
       <div class="status-toggle" style="margin-bottom:18px;">
         <button class="status-opt ${modDashTab==='reports'?'active':''}" onclick="switchModDashTab('reports')">🚩 Reports${openCount ? ` (${openCount})` : ''}</button>
         <button class="status-opt ${modDashTab==='recent'?'active':''}" onclick="switchModDashTab('recent')">🗑️ Recent Deletes${recent.length ? ` (${recent.length})` : ''}</button>
+        <button class="status-opt ${modDashTab==='guide'?'active':''}" onclick="switchModDashTab('guide')">📖 Guide</button>
       </div>
       <div id="mod-dash-body"></div>
     `;
@@ -9884,10 +9890,12 @@ async function doProfilePasswordChange() {
       body.innerHTML = open.length
         ? `<div class="events-list">${open.map(flagCardHTML).join('')}</div>`
         : `<div class="es-block" style="padding:40px 24px;"><div class="es-icon">✨</div><div class="es-headline">Nothing to review</div><div class="es-sub">All clear — the tribe's behaving.</div></div>`;
-    } else {
+    } else if (modDashTab === 'recent') {
       body.innerHTML = recent.length
         ? `<div class="events-list">${recent.map(recentDeleteCardHTML).join('')}</div>`
         : `<div class="es-block" style="padding:40px 24px;"><div class="es-icon">🗑️</div><div class="es-headline">No deletes yet</div><div class="es-sub">Destructive actions will show up here.</div></div>`;
+    } else if (modDashTab === 'guide') {
+      body.innerHTML = renderModGuideHTML();
     }
   }
 
@@ -9939,6 +9947,122 @@ async function doProfilePasswordChange() {
           </div>
         </div>
       </div>`;
+  }
+
+  // ===== MOD GUIDE (quick reference tab) =====
+  let modGuideOpenSections = new Set(['overview']);
+
+  function toggleModGuideSection(id) {
+    if (modGuideOpenSections.has(id)) modGuideOpenSections.delete(id); else modGuideOpenSections.add(id);
+    const body = document.getElementById('mod-dash-body');
+    if (body) body.innerHTML = renderModGuideHTML();
+  }
+
+  function modGuideBullet(html) {
+    return `<div style="display:flex;gap:8px;font-size:0.83rem;line-height:1.6;color:var(--text);"><span style="opacity:0.45;flex-shrink:0;">•</span><span>${html}</span></div>`;
+  }
+  function modGuideCallout(icon, label, html) {
+    return `<div class="tag-custom-section" style="margin-top:10px;"><div class="tag-custom-section-title">${icon} ${label}</div><div style="font-size:0.82rem;line-height:1.6;color:var(--text);">${html}</div></div>`;
+  }
+
+  const MOD_GUIDE_SECTIONS = [
+    { id: 'overview', icon: '🧭', title: 'Overview', body: `
+      <div style="display:flex;flex-direction:column;gap:9px;">
+        ${modGuideBullet(`Ravefam runs on trust by default — any logged-in raver can spin up a festival, join crews, add themselves to things, and edit their own stuff. No approval queue, no gatekeeping.`)}
+        ${modGuideBullet(`What keeps that from turning into chaos: moderator override on edits/deletes, RSVPs blocking festival deletion, <b>nothing is ever hard-deleted</b> (soft-delete + restore, everywhere), full audit logging, and owner-controlled privacy toggles.`)}
+        ${modGuideBullet(`You're not a separate all-powerful role — your powers are an override on the same permission checks everyone else uses, with a couple of deliberate exceptions called out below.`)}
+      </div>
+      ${modGuideCallout('💡', 'Tip', `If you only remember one thing: nothing you do here is truly destructive. Every delete can be restored, and every action logs your note.`)}
+    ` },
+    { id: 'festivals', icon: '🎟️', title: 'Festival Permissions', body: `
+      <div style="display:flex;flex-direction:column;gap:9px;">
+        ${modGuideBullet(`<b>Create:</b> any logged-in user, always.`)}
+        ${modGuideBullet(`<b>Edit:</b> the creator, or a moderator.`)}
+        ${modGuideBullet(`<b>Delete:</b> creator or moderator — but only if nobody else has RSVPed. It's a soft-delete (sets deleted_at/deleted_by/delete_reason), never hard-deleted.`)}
+        ${modGuideBullet(`<b>Archive:</b> creator or moderator, no RSVP restriction. This is a separate, non-destructive system from delete/restore (its own archived_at/archived_by fields) and the creator can self-service unarchive later — don't treat it as "delete-lite."`)}
+      </div>
+      ${modGuideCallout('⚠️', 'Gotcha', `Even the creator or a mod can't delete a festival once someone else has RSVPed. The generic block message ("🔒 Only the creator or a moderator can delete this rave") is really guarding two different things — ownership AND the RSVP rule — so a creator/mod can still get blocked. Point people to Archive instead; it has no RSVP restriction.`)}
+      ${modGuideCallout('📌', 'No lineup permission exists', `There's no per-festival artist lineup feature to gate. The "🔭 Lineup Explorer" is a static external link, not editable in-app. The attendee/RSVP list is governed by each raver's own privacy toggles, not a lineup permission. A raver's favorite artists are a personal profile field, editable by crew members with edit rights — unrelated to any festival lineup.`)}
+    ` },
+    { id: 'crews', icon: '🎪', title: 'Crew Permissions', body: `
+      <div style="display:flex;flex-direction:column;gap:9px;">
+        ${modGuideBullet(`Each crew has exactly one <b>Crew Leader</b> — not a list of leaders.`)}
+        ${modGuideBullet(`Leader (or a moderator) can: edit the crew's name/color/status content, delete/dissolve the crew, manage members (remove members, edit unclaimed members' profiles), and invite (generate invite QR/link).`)}
+        ${modGuideBullet(`Plain claimed members can only leave the crew — nothing else.`)}
+        ${modGuideBullet(`Removing a member is a soft-delete (logged as <code>crew_member.remove</code>). Leaders can't be removed from the member-list UI at all — a leader leaves instead of being "removed."`)}
+        ${modGuideBullet(`Crew content — dream pins, archive links, polls, jams — can be edited/deleted by whoever owns it, the crew leader, or a moderator.`)}
+      </div>
+      ${modGuideCallout('⚠️', 'Gotcha', `Crew status (secret / recruiting / locked-in) can <b>only</b> be changed by the Crew Leader. Moderators deliberately do NOT have this power — you'll see "🔒 Only the Crew Lead can change the status" if you try.`)}
+      ${modGuideCallout('⚠️', 'Gotcha', `Restoring deleted crew content (pins/links/polls/jams) is <b>moderator-only</b> — even for the crew leader who deleted it in the first place. It's enforced server-side; a leader physically can't self-restore.`)}
+    ` },
+    { id: 'profiles', icon: '👤', title: 'Profile & Privacy', body: `
+      <div style="display:flex;flex-direction:column;gap:9px;">
+        ${modGuideBullet(`Profiles can be <b>unclaimed</b> (a stub someone else created, e.g. a crew leader adding a friend who hasn't signed up) or <b>claimed</b> (the real person linked their account via a QR-based claim flow). A claimed profile can also be disconnected back to unclaimed.`)}
+        ${modGuideBullet(`<b>While unclaimed:</b> the crew leader (or, for some fields, any crew member) can edit name, location, Instagram, phone, etc. — there's no owner yet, so someone has to be able to manage it.`)}
+        ${modGuideBullet(`<b>Once claimed:</b> the crew leader loses edit rights on location, Instagram, phone, and radiate — those become the owner's own privacy call. Leaders keep some editing (name/tags/genres/artists/fests-adjacent fields) based on crew membership, separate from claim status.`)}
+        ${modGuideBullet(`<b>Deleting a profile:</b> only possible for unclaimed profiles, by the leader or a moderator. Once claimed, that delete path is closed entirely — there's no leader/mod way to delete a claimed person's profile.`)}
+      </div>
+      <div style="font-size:0.78rem;font-weight:700;color:var(--muted);margin:12px 0 4px;letter-spacing:0.02em;">PRIVACY TOGGLES (owner-only, in Privacy Settings)</div>
+      <div style="display:flex;flex-direction:column;gap:9px;">
+        ${modGuideBullet(`<b>allowFestivalAdds</b> (default ON) — lets others add this person to a festival RSVP.`)}
+        ${modGuideBullet(`<b>allowVibeTags</b> (default ON) — lets others suggest/add vibe tags on this person.`)}
+        ${modGuideBullet(`<b>phoneVisible</b> (default OFF) — shows phone number to others.`)}
+        ${modGuideBullet(`<b>privacyBaseVisible</b> (default ON) — shows home base/location to others.`)}
+        ${modGuideBullet(`<b>privacyShowRsvps</b> (default ON) — shows "Going To"/"Been To" lists to others.`)}
+      </div>
+      ${modGuideCallout('⚠️', 'Gotcha', `Privacy toggles work two different ways. Festival-adds and vibe-tags don't block the action — it still goes through, but pops a friendly explanation ("🔒 Not right now — this person has chosen not to be added to festivals by others…"). Base-location and RSVP visibility are different: there's no popup, the field is just quietly not rendered for other viewers.`)}
+    ` },
+    { id: 'moderation', icon: '🚩', title: 'Moderation Tools', body: `
+      <div style="display:flex;flex-direction:column;gap:9px;">
+        ${modGuideBullet(`<b>Flagging:</b> any logged-in user can flag anything with a 🚩 button — ravers, festivals, crews, crew members, vibe tags, photos, dream pins, archive links, polls, jams. Reason is optional free text. Someone can't stack a second open report on a target that already has one open (dismissed/resolved ones don't block a new report).`)}
+        ${modGuideBullet(`<b>🚩 Reports tab:</b> open flags only. Each has 👀 View (jumps you to the actual content so you act through its own owner/mod controls — Reports itself has no direct "remove" button), ✅ Dismiss, and ✅ Resolve — both prompt for an optional note that gets logged.`)}
+        ${modGuideBullet(`<b>🗑️ Recent Deletes tab:</b> the latest soft-deletes/removals app-wide, each with a one-tap ↩️ Restore.`)}
+        ${modGuideBullet(`<b>Rate limits:</b> destructive actions are capped server-side — new accounts: 1/day, everyone else: 5/hour. You'll see a toast if it's hit.`)}
+      </div>
+      ${modGuideCallout('⚠️', 'Gotcha', `There's no ban or suspend feature anywhere in the app. Moderation power is limited to flag triage plus soft-delete/restore, using the exact same permission gates content owners already have.`)}
+    ` },
+    { id: 'history', icon: '📜', title: 'History & Audit', body: `
+      <div style="display:flex;flex-direction:column;gap:9px;">
+        ${modGuideBullet(`Every mutating action writes an audit log entry — actor, action, entity, reason, metadata.`)}
+        ${modGuideBullet(`Festivals, crews, and ravers each have a History view built from these logs — who did what, when.`)}
+        ${modGuideBullet(`<b>The one real mod-vs-regular difference:</b> mods see the free-text reason behind a change/deletion ("🔒 Mod note: …"); regular users see the same event feed (who/what/when) but never that reason.`)}
+        ${modGuideBullet(`No IP-address logging anywhere in the app.`)}
+      </div>
+    ` },
+    { id: 'edge-cases', icon: '⚠️', title: 'Common Edge Cases & Gotchas', body: `
+      <div style="display:flex;flex-direction:column;gap:9px;">
+        ${modGuideBullet(`Can't delete a festival with other people's RSVPs on it — even as creator/mod. Archive instead.`)}
+        ${modGuideBullet(`Crew status can only be changed by the Crew Leader — mods deliberately can't override it.`)}
+        ${modGuideBullet(`Restoring deleted crew content is moderator-only, even for the leader who deleted it.`)}
+        ${modGuideBullet(`Claiming a profile locks out crew-leader editing of location/Instagram/phone/radiate — that's the person's own privacy call now.`)}
+        ${modGuideBullet(`Can't delete a claimed raver's profile via the leader/mod path at all — only unclaimed stub profiles are deletable that way.`)}
+        ${modGuideBullet(`Privacy toggles usually let the action proceed with a friendly "opted out" message — except base-location/RSVP visibility, which just silently hide the field.`)}
+        ${modGuideBullet(`No lineup-editing feature and no ban/suspend feature exist in the app — don't go looking for permissions that aren't there.`)}
+      </div>
+    ` },
+  ];
+
+  function modGuideSectionHTML(s) {
+    const isOpen = modGuideOpenSections.has(s.id);
+    return `
+      <div class="tag-accordion mod-guide-acc${isOpen ? ' open' : ''}">
+        <div class="tag-acc-header" onclick="toggleModGuideSection('${s.id}')">
+          <span class="tag-acc-title">${s.icon} ${s.title}</span>
+          <span class="tag-acc-chevron">▾</span>
+        </div>
+        <div class="tag-acc-body"><div class="tag-acc-body-inner">${s.body}</div></div>
+      </div>`;
+  }
+
+  function renderModGuideHTML() {
+    return `
+      <div class="es-block" style="padding:18px 10px 22px;">
+        <div class="es-icon">📖</div>
+        <div class="es-headline">Moderator Reference</div>
+        <div class="es-sub">How permissions actually work in the app — internal notes for mods, not shown anywhere else.</div>
+      </div>
+      ${MOD_GUIDE_SECTIONS.map(modGuideSectionHTML).join('')}
+    `;
   }
 
   // Jump to the actual content so a mod acts through the app's existing
