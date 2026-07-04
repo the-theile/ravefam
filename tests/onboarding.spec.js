@@ -22,4 +22,29 @@ test.describe('onboarding', () => {
     await page.waitForTimeout(800);
     await expect(page.locator('#onboarding-screen')).not.toHaveClass(/show/);
   });
+
+  test('step 1 shows a low-pressure skip link and reassurance copy', async ({ page }) => {
+    await installSupabaseStub(page, {
+      session: makeSession({ user_metadata: { onboarded: false } }),
+      data: EMPTY,
+    });
+    await page.goto('/app.html');
+    await page.locator('#main-app').waitFor({ state: 'visible' });
+    await expect(page.locator('#ob-step1')).toBeVisible({ timeout: 4000 });
+    await expect(page.locator('.ob-genre-reassurance')).toContainText('nothing here is permanent');
+    await expect(page.locator('.ob-skip-link')).toBeVisible();
+  });
+
+  test('skipping step 1 advances to the identity step without a genre picked', async ({ page }) => {
+    await installSupabaseStub(page, {
+      session: makeSession({ user_metadata: { onboarded: false } }),
+      data: EMPTY,
+    });
+    await page.goto('/app.html');
+    await page.locator('#main-app').waitFor({ state: 'visible' });
+    await expect(page.locator('#ob-step1')).toBeVisible({ timeout: 4000 });
+    await page.click('.ob-skip-link');
+    await expect(page.locator('#ob-step2')).toBeVisible();
+    await expect(page.locator('#ob-step1')).toBeHidden();
+  });
 });
