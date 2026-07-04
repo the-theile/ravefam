@@ -6051,11 +6051,12 @@
       canBeAddedToFestivals:true, canReceiveVibeTags:true, baseVisible:true, rsvpsVisible:true
     };
     if (!currentUser) return none();
+    const mod = isModerator();
     const isClaimed  = !!(r.claimedBy || r.status === 'claimed');
     // Creator of an unclaimed raver gets full leader-level permissions (matches DB RLS)
     const isCreator  = !isClaimed && !!(r.createdBy && String(r.createdBy) === String(currentUser.id));
     const shared = crews.filter(c => (c.squadIds||[]).some(id => String(id) === String(r.id)));
-    if (!shared.length && !isCreator) return none();
+    if (!shared.length && !isCreator && !mod) return none();
     const isLeader   = isCreator || shared.some(c => c.isLead);
     const isMember   = isCreator || shared.length > 0;
     return {
@@ -6070,7 +6071,7 @@
       editArtists:    isMember,
       editFests:      isMember,
       canDisconnect:  isLeader && isClaimed,
-      canDelete:      isLeader && !isClaimed,
+      canDelete:      (isLeader || mod) && !isClaimed,
       isLeaderOfRaver: isLeader,
       isClaimed,
       // === PROFILE PRIVACY & PERMISSIONS ===
@@ -6125,6 +6126,12 @@
       canInvite:       isLead,
       canLeave:        isClaimedMember,
     };
+  }
+
+  // Shared "owner of this piece of crew content, or has crewPerms().canEdit" check —
+  // used by dream pins/archive links/jams/polls instead of each hand-rolling it.
+  function ownerOrManager(ownerId, uid, canManage) {
+    return ownerId === uid || canManage;
   }
 
   /* ===== RLS RECOMMENDATIONS (Supabase Postgres) =====
@@ -7943,6 +7950,12 @@ async function doProfilePasswordChange() {
 
   function ravesTogetherSectionHTML(you, r) {
     if (!you) return '';
+    if (!raverPerms(r).rsvpsVisible) {
+      return `<div class="raves-together-empty">
+        <div class="raves-together-empty-icon">🔒</div>
+        <div class="raves-together-empty-text">${escHtml(displayName(r).split(' ')[0])} keeps their RSVPs private.</div>
+      </div>`;
+    }
     const { sharedPast, sharedUpcoming, firstTogether, sharedCities, sharedGenres, genreMatchPct } = ravesTogetherData(you, r);
     const count = sharedPast.length;
     const hasUpcoming = sharedUpcoming.length > 0;
@@ -8351,7 +8364,7 @@ async function doProfilePasswordChange() {
     const targets = auditRowToRestoreTargets(row);
     if (!targets.length) { showToast('⚠️ Nothing to restore for this entry'); return; }
     const ok = (await Promise.all(targets.map(t =>
-      dbRestoreRow(t.table, t.match, row.entity_type, row.entity_id, { via: 'mod_dashboard', original_action: row.action })
+      dbRestoreRow(t.table, t.match, row.entity_type, row.entity_id, { via: 'mod_dashboard', original_action: row.action, original_reason: row.reason })
     ))).every(Boolean);
     if (ok) {
       showToast('↩️ Restored');
@@ -9115,11 +9128,11 @@ async function doProfilePasswordChange() {
 
   async function removeOurPhoto(viewingRaverId, slot) {
     closePhotoLightbox();
-    showPhotoConfirm({
-      icon: '💫',
-      title: 'Delete this memory?',
-      body: "Once it's gone, it's gone. The photo will be removed from the cloud.",
-      onConfirm: async () => {
+    showConfirmWithReason(
+      'Delete this memory?',
+      "Once it's gone, it's gone. The photo will be removed from the cloud.",
+      '💫 Delete Photo',
+      async (reason) => {
         try {
           if (currentUser) {
             const pair = ourPhotoPair(viewingRaverId);
@@ -9127,9 +9140,9 @@ async function doProfilePasswordChange() {
             // object in place so a Mod Dashboard restore has something to point back to.
             if (pair) {
               const match = { uploader_user_id: currentUser.id, raver_a_id: pair.a, raver_b_id: pair.b };
-              const { ok, rateLimited } = await softDeleteRow('our_photos', match);
+              const { ok, rateLimited } = await softDeleteRow('our_photos', match, reason);
               if (!ok) { if (!rateLimited) showToast('⚠️ Could not remove photo'); return; }
-              await logAudit({ action: 'photo.remove', entityType: 'photo', entityId: currentUser.id, metadata: { raver_a_id: pair.a, raver_b_id: pair.b } });
+              await logAudit({ action: 'photo.remove', entityType: 'photo', entityId: currentUser.id, reason, metadata: { raver_a_id: pair.a, raver_b_id: pair.b } });
             }
           }
           if (ourPhotosCache[String(viewingRaverId)]) ourPhotosCache[String(viewingRaverId)].mine = null;
@@ -9141,8 +9154,9 @@ async function doProfilePasswordChange() {
           console.error('removeOurPhoto error', e);
           showToast('⚠️ Could not remove photo');
         }
-      }
-    });
+      },
+      { label: 'Why are you removing this photo?', placeholder: 'e.g. bad photo, wrong crew…' }
+    );
   }
 
   const RAVE_PLACEHOLDERS = [
@@ -10052,10 +10066,10 @@ async function doProfilePasswordChange() {
     return data;
   }
 
-  async function dbDeleteDreamPin(pinId, crewId) {
-    const { ok, rateLimited } = await softDeleteRow('dream_board_pins', { id: pinId });
+  async function dbDeleteDreamPin(pinId, crewId, reason = null) {
+    const { ok, rateLimited } = await softDeleteRow('dream_board_pins', { id: pinId }, reason);
     if (!ok) { if (!rateLimited) showToast('⚠️ Could not remove pin — try again'); return false; }
-    await logAudit({ action: 'dream_pin.remove', entityType: 'dream_pin', entityId: pinId, metadata: { crew_id: crewId } });
+    await logAudit({ action: 'dream_pin.remove', entityType: 'dream_pin', entityId: pinId, reason, metadata: { crew_id: crewId } });
     dreamPins = dreamPins.filter(p => p.id !== pinId);
     return true;
   }
@@ -10092,9 +10106,17 @@ async function doProfilePasswordChange() {
     }
   }
 
-  async function deleteDreamPin(pinId, crewId) {
-    const ok = await dbDeleteDreamPin(pinId, crewId);
-    if (ok) rerenderDreamBoard(crewId);
+  function deleteDreamPin(pinId, crewId) {
+    showConfirmWithReason(
+      'Remove this pin?',
+      'This removes it from the dream board for everyone.',
+      '🗑️ Remove Pin',
+      async (reason) => {
+        const ok = await dbDeleteDreamPin(pinId, crewId, reason);
+        if (ok) rerenderDreamBoard(crewId);
+      },
+      { label: 'Why are you removing this pin?', placeholder: 'e.g. duplicate, no longer relevant…' }
+    );
   }
 
   async function toggleHype(pinId, crewId) {
@@ -10116,7 +10138,7 @@ async function doProfilePasswordChange() {
     const pinCards = dreamPins.map(pin => {
       const hyped = (pin.hyped_by || []).includes(uid);
       const hypeCount = (pin.hyped_by || []).length;
-      const canDelete = pin.added_by === uid || canManage;
+      const canDelete = ownerOrManager(pin.added_by, uid, canManage);
       let addedByLabel = '';
       if (pin.added_by) {
         if (pin.added_by === uid) {
@@ -10196,10 +10218,10 @@ async function doProfilePasswordChange() {
     return data;
   }
 
-  async function dbDeleteArchiveLink(linkId, crewId) {
-    const { ok, rateLimited } = await softDeleteRow('crew_archive_links', { id: linkId });
+  async function dbDeleteArchiveLink(linkId, crewId, reason = null) {
+    const { ok, rateLimited } = await softDeleteRow('crew_archive_links', { id: linkId }, reason);
     if (!ok) { if (!rateLimited) showToast('⚠️ Could not remove link — try again'); return false; }
-    await logAudit({ action: 'archive_link.remove', entityType: 'archive_link', entityId: linkId, metadata: { crew_id: crewId } });
+    await logAudit({ action: 'archive_link.remove', entityType: 'archive_link', entityId: linkId, reason, metadata: { crew_id: crewId } });
     archiveLinks = archiveLinks.filter(l => l.id !== linkId);
     return true;
   }
@@ -10223,9 +10245,17 @@ async function doProfilePasswordChange() {
     }
   }
 
-  async function deleteArchiveLink(linkId, crewId) {
-    const ok = await dbDeleteArchiveLink(linkId, crewId);
-    if (ok) rerenderArchive(crewId);
+  function deleteArchiveLink(linkId, crewId) {
+    showConfirmWithReason(
+      'Remove this link?',
+      'This removes it from the crew archive for everyone.',
+      '🗑️ Remove Link',
+      async (reason) => {
+        const ok = await dbDeleteArchiveLink(linkId, crewId, reason);
+        if (ok) rerenderArchive(crewId);
+      },
+      { label: 'Why are you removing this link?', placeholder: 'e.g. broken link, wrong crew…' }
+    );
   }
 
   function rerenderArchive(crewId) {
@@ -10244,7 +10274,7 @@ async function doProfilePasswordChange() {
     ).join('');
 
     const cards = archiveLinks.map(link => {
-      const canDelete = link.added_by === uid || canManage;
+      const canDelete = ownerOrManager(link.added_by, uid, canManage);
       let addedByLabel = '';
       if (link.added_by) {
         if (link.added_by === uid) {
@@ -10401,10 +10431,10 @@ async function doProfilePasswordChange() {
     return data;
   }
 
-  async function dbDeletePoll(pollId, crewId) {
-    const { ok, rateLimited } = await softDeleteRow('crew_polls', { id: pollId });
+  async function dbDeletePoll(pollId, crewId, reason = null) {
+    const { ok, rateLimited } = await softDeleteRow('crew_polls', { id: pollId }, reason);
     if (!ok) { if (!rateLimited) showToast('⚠️ Could not delete poll'); return false; }
-    await logAudit({ action: 'poll.remove', entityType: 'poll', entityId: pollId, metadata: { crew_id: crewId } });
+    await logAudit({ action: 'poll.remove', entityType: 'poll', entityId: pollId, reason, metadata: { crew_id: crewId } });
     crewPolls = crewPolls.filter(p => p.id !== pollId);
     delete crewPollVotes[pollId];
     return true;
@@ -10477,7 +10507,6 @@ async function doProfilePasswordChange() {
     const open = pollIsOpen(poll);
     const canVote = open && uid && !hasVoted;
     const showResults = hasVoted || expired || poll.is_locked;
-    const isCreator = poll.created_by === uid;
     const canManage = crewPerms(getCrew(poll.crew_id)).canEdit;
     const timeLeft = pollTimeLeft(poll.expires_at);
     const escId = escHtml(poll.id);
@@ -10497,7 +10526,7 @@ async function doProfilePasswordChange() {
 
     // Lead-only actions
     let actions = '';
-    if (isCreator || canManage) {
+    if (ownerOrManager(poll.created_by, uid, canManage)) {
       actions += `<button class="poll-action-btn" title="Delete poll" aria-label="Delete poll"
         data-poll-id="${escId}" data-crew-id="${escCrewId}"
         onclick="deletePoll(this.dataset.pollId, this.dataset.crewId)">×</button>`;
@@ -10697,9 +10726,17 @@ async function doProfilePasswordChange() {
     checkAndAwardBadges(crewId);
   }
 
-  async function deletePoll(pollId, crewId) {
-    const ok = await dbDeletePoll(pollId, crewId);
-    if (ok) rerenderPolls(crewId);
+  function deletePoll(pollId, crewId) {
+    showConfirmWithReason(
+      'Delete this poll?',
+      'This removes the poll and its votes for everyone.',
+      '🗑️ Delete Poll',
+      async (reason) => {
+        const ok = await dbDeletePoll(pollId, crewId, reason);
+        if (ok) rerenderPolls(crewId);
+      },
+      { label: 'Why are you deleting this poll?', placeholder: 'e.g. wrong info, duplicate poll…' }
+    );
   }
 
   async function lockPoll(pollId, crewId, isCurrentlyLocked) {
@@ -10980,10 +11017,10 @@ async function doProfilePasswordChange() {
     return data;
   }
 
-  async function dbDeleteJam(jamId, crewId) {
-    const { ok, rateLimited } = await softDeleteRow('crew_jams', { id: jamId });
+  async function dbDeleteJam(jamId, crewId, reason = null) {
+    const { ok, rateLimited } = await softDeleteRow('crew_jams', { id: jamId }, reason);
     if (!ok) { if (!rateLimited) showToast('⚠️ Could not remove playlist — try again'); return false; }
-    await logAudit({ action: 'jam.remove', entityType: 'jam', entityId: jamId, metadata: { crew_id: crewId } });
+    await logAudit({ action: 'jam.remove', entityType: 'jam', entityId: jamId, reason, metadata: { crew_id: crewId } });
     crewJams = crewJams.filter(j => j.id !== jamId);
     crewJamVibes = crewJamVibes.filter(v => v.jam_id !== jamId);
     return true;
@@ -11114,7 +11151,7 @@ async function doProfilePasswordChange() {
   function renderJamCard(jam, uid, canManage, crewId) {
     const escId   = escHtml(jam.id);
     const escCrew = escHtml(crewId);
-    const canDelete = jam.added_by === uid || canManage;
+    const canDelete = ownerOrManager(jam.added_by, uid, canManage);
     const plat = PLATFORM_STYLES[jam.platform] || PLATFORM_STYLES.other;
     const reactions = jam.reactions || {};
     const vibesForJam = crewJamVibes.filter(v => v.jam_id === jam.id);
@@ -11218,9 +11255,17 @@ async function doProfilePasswordChange() {
   }
 
   // Jam action handlers
-  async function deleteJam(jamId, crewId) {
-    const ok = await dbDeleteJam(jamId, crewId);
-    if (ok) rerenderJams(crewId);
+  function deleteJam(jamId, crewId) {
+    showConfirmWithReason(
+      'Remove this playlist?',
+      'This removes it from the crew jams for everyone.',
+      '🗑️ Remove Playlist',
+      async (reason) => {
+        const ok = await dbDeleteJam(jamId, crewId, reason);
+        if (ok) rerenderJams(crewId);
+      },
+      { label: 'Why are you removing this playlist?', placeholder: 'e.g. broken link, wrong vibe…' }
+    );
   }
 
   async function pinJam(jamId, crewId, isCurrentlyPinned) {
@@ -11916,6 +11961,7 @@ async function doProfilePasswordChange() {
   function saveEditUnclaimed() {
     const r = getRaver(_editUnclaimedRaverId);
     if (!r) return;
+    if (!raverPerms(r).editName) { showToast('🔒 Only the crew lead or a moderator can edit this profile'); return; }
     const name = document.getElementById('edit-unclaimed-name')?.value.trim();
     if (!name) { showToast('⚠️ Name can\'t be empty'); return; }
     r.name = name;
@@ -11936,6 +11982,7 @@ async function doProfilePasswordChange() {
   function deleteUnclaimedProfile(raverId) {
     const r = getRaver(raverId);
     if (!r) return;
+    if (!raverPerms(r).canDelete) { showToast('🔒 Only the crew lead or a moderator can delete this profile'); return; }
     const firstName = r.name.split(' ')[0];
     const crewNames = crews.filter(c => (c.squadIds || []).some(id => String(id) === String(raverId))).map(c => c.name);
     const crewNote = crewNames.length
@@ -12884,7 +12931,7 @@ async function doProfilePasswordChange() {
           <div class="member-name">${escHtml(displayName(r))}${r.isYou ? ' <span style="font-size:0.75rem;margin-right:2px;">👑</span><span style="font-size:0.7rem;color:var(--neon-pink);font-family:\'Outfit\',sans-serif;font-weight:700;">YOU</span>' : ''}</div>
           <div class="member-handle">${escHtml(r.handle)}</div>
           ${nextFestLine}
-          <div class="member-base">📍 ${escHtml(r.base)}</div>
+          ${raverPerms(r).baseVisible ? `<div class="member-base">📍 ${escHtml(r.base)}</div>` : ''}
           ${miniVibes ? `<div class="member-vibes">${miniVibes}</div>` : ''}
         </div>
         ${photosHTML}
@@ -13172,7 +13219,7 @@ async function doProfilePasswordChange() {
           ${r.isYou ? `<button class="btn btn-ghost" style="padding:11px;" data-raver-id="${r.id}" onclick="openPrivacySettingsModal(this.dataset.raverId)" title="Privacy & Permissions">🔒</button>` : ''}
           ${perms.canDisconnect ? `<button class="btn btn-ghost btn-disconnect" data-raver-id="${r.id}" onclick="showDisconnectConfirm(this.dataset.raverId)" title="Disconnect account">🔗</button>` : ''}
           ${!r.isYou && currentUser ? `<button class="btn btn-ghost" style="padding:11px;" data-raver-id="${r.id}" onclick="showReportModal('raver', this.dataset.raverId)" title="Report">🚩</button>` : ''}
-          ${(perms.canDelete || (!r.isYou && isModerator())) ? `<button class="btn btn-ghost" style="padding:11px;color:var(--neon-pink);border-color:rgba(255,45,120,0.3);" data-raver-id="${r.id}" onclick="deleteUnclaimedProfile(this.dataset.raverId)">🗑️</button>` : ''}
+          ${perms.canDelete ? `<button class="btn btn-ghost" style="padding:11px;color:var(--neon-pink);border-color:rgba(255,45,120,0.3);" data-raver-id="${r.id}" onclick="deleteUnclaimedProfile(this.dataset.raverId)">🗑️</button>` : ''}
         </div>
 
         ${connectBlock}
@@ -15047,7 +15094,7 @@ async function doProfilePasswordChange() {
       .slice(0, 8);
     if (matches.length) {
       results.innerHTML = matches.map(r => {
-        const meta = [r.handle ? '@' + r.handle : '', r.base].filter(Boolean).join(' · ');
+        const meta = [r.handle ? '@' + r.handle : '', raverPerms(r).baseVisible ? r.base : null].filter(Boolean).join(' · ');
         return `<div class="fest-search-item" onmousedown="reAdd('${r.id}')">
           <span class="fest-search-name">${escHtml(r.name)}</span>
           ${meta ? `<span class="fest-search-meta">${escHtml(meta)}</span>` : ''}
