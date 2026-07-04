@@ -35,11 +35,22 @@ test.describe('crews', () => {
 
   test('deleting a crew removes it and its memberships', async ({ page }) => {
     await bootAuthedApp(page);
-    await page.evaluate(async () => { await deleteCrew('c1'); });
+    await page.evaluate(async () => { await deleteCrew('c1', 'test cleanup'); });
+    // Soft delete: gone from live app state and future re-fetches, but the
+    // underlying rows persist with deleted_at set (see soft_delete.spec.js).
     const gone = await refetch(page, "crews.some(c=>String(c.id)==='c1')");
     expect(gone).toBe(false);
-    const members = await page.evaluate(() => window.__store.crew_members.filter(m => m.crew_id === 'c1').length);
-    expect(members).toBe(0);
+    const crewRow = await page.evaluate(() => window.__store.crews.find(c => c.id === 'c1'));
+    expect(crewRow.deleted_at).toBeTruthy();
+    expect(crewRow.delete_reason).toBe('test cleanup');
+    const members = await page.evaluate(() => window.__store.crew_members.filter(m => m.crew_id === 'c1'));
+    expect(members.length).toBeGreaterThan(0);
+    expect(members.every(m => m.deleted_at)).toBe(true);
+
+    const audit = await page.evaluate(() =>
+      window.__store.audit_logs.filter(a => a.action === 'crew.delete' && a.entity_id === 'c1'));
+    expect(audit.length).toBe(1);
+    expect(audit[0].reason).toBe('test cleanup');
   });
 
   test('crew search shows no card for an unknown query, restores on clear', async ({ page }) => {

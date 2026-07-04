@@ -5411,6 +5411,11 @@
   <div class="modal" style="max-width:380px;">
     <div class="modal-title" id="confirm-title"></div>
     <p id="confirm-body" style="font-size:0.88rem;color:var(--muted);margin-bottom:24px;line-height:1.6;"></p>
+    <div class="form-group" id="confirm-reason-wrap" style="display:none;text-align:left;">
+      <label class="form-label" id="confirm-reason-label">Why?</label>
+      <textarea id="confirm-reason-input" class="form-input" rows="2" maxlength="200" oninput="document.getElementById('confirm-ok-btn').disabled = !this.value.trim()"></textarea>
+      <p style="font-size:0.72rem;color:var(--muted);margin-top:4px;">This helps moderators understand what happened, later.</p>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeConfirm()">Cancel</button>
       <button class="btn btn-primary" id="confirm-ok-btn">Confirm</button>
@@ -5979,8 +5984,8 @@
 
   // Permission flags for the current viewer on a given festival object.
   function festivalPerms(festival, user = currentUser) {
-    if (!user) return { canAddFestival:false, canEdit:false, canDelete:false, canAddVibe:false };
-    if (!festival) return { canAddFestival:true, canEdit:false, canDelete:false, canAddVibe:true };
+    if (!user) return { canAddFestival:false, canEdit:false, canDelete:false, canArchive:false, canAddVibe:false };
+    if (!festival) return { canAddFestival:true, canEdit:false, canDelete:false, canArchive:false, canAddVibe:true };
     const isCreator = !!(festival.createdBy && String(festival.createdBy) === String(user.id));
     const mod = isModerator();
     const hasOtherGoers = festivalGoers(festival.id).some(r => {
@@ -5991,6 +5996,7 @@
       canAddFestival: true,                    // any logged-in user
       canEdit:        isCreator || mod,
       canDelete:      (isCreator || mod) && !hasOtherGoers,
+      canArchive:     isCreator || mod,         // non-destructive, so no RSVP block
       canAddVibe:     true,                     // any logged-in user (their own raver's vibe)
     };
   }
@@ -7269,7 +7275,7 @@ async function doProfilePasswordChange() {
       .order('date', { ascending: true });
     if (!fErr && dbFests) {
       dbFests.forEach(f => {
-        festivals.push({ id: f.id, name: f.name, date: f.date, location: f.location || '', color: f.color || null, days: f.days || null, createdBy: f.created_by || null });
+        festivals.push({ id: f.id, name: f.name, date: f.date, location: f.location || '', color: f.color || null, days: f.days || null, createdBy: f.created_by || null, archived: !!f.archived_at });
       });
     }
 
@@ -7326,6 +7332,7 @@ async function doProfilePasswordChange() {
     const { data: allCrewsRaw, error: cErr1 } = await sb
       .from('crews')
       .select('*, crew_members(raver_id, added_at, deleted_at)')
+      .is('deleted_at', null)
       .order('created_at', { ascending: true });
 
     const allCrews = allCrewsRaw || [];
@@ -11543,15 +11550,19 @@ async function doProfilePasswordChange() {
     }
   }
 
-  function deleteUnclaimedProfile(raverId, reason = null) {
+  function deleteUnclaimedProfile(raverId) {
     const r = getRaver(raverId);
     if (!r) return;
     const firstName = r.name.split(' ')[0];
-    showConfirm(
+    const crewNames = crews.filter(c => (c.squadIds || []).some(id => String(id) === String(raverId))).map(c => c.name);
+    const crewNote = crewNames.length
+      ? `They're in ${crewNames.length} crew${crewNames.length !== 1 ? 's' : ''} (${crewNames.map(n => escHtml(n)).join(', ')}). `
+      : '';
+    showConfirmWithReason(
       `Delete ${firstName}'s profile?`,
-      `This will remove the unclaimed profile and their invite code.`,
+      `${crewNote}This removes the unclaimed profile, their invite code, and their crew/rave links for good.`,
       `🗑️ Delete Profile`,
-      () => {
+      (reason) => {
         // Snapshot crew memberships before the optimistic mutation below
         // clears them, so the audit log can record which crews this touched.
         const affectedCrewIds = crews
@@ -11566,9 +11577,17 @@ async function doProfilePasswordChange() {
         });
         const keptIdx = squad.findIndex(r2 => String(r2.id) === String(raverId));
         if (keptIdx !== -1) squad.splice(keptIdx, 1);
-        closeEditUnclaimedModal();
+        // Deletable from either the "Edit Unclaimed Profile" modal (inside a
+        // crew's detail page) or the full profile page's 🗑️ button — return
+        // to wherever makes sense for the surface it was triggered from.
+        const onProfilePage = document.getElementById('page-profile')?.classList.contains('active');
+        if (onProfilePage) {
+          backFromProfile();
+        } else {
+          closeEditUnclaimedModal();
+          renderDetail(activeDetailId);
+        }
         renderCrews();
-        renderDetail(activeDetailId);
         showToast(`🗑️ ${firstName}'s profile deleted`);
         if (currentUser && !String(raverId).startsWith('temp_')) {
           (async () => {
@@ -11602,13 +11621,15 @@ async function doProfilePasswordChange() {
             }
           })();
         }
-      }
+      },
+      { label: 'Why are you deleting this profile?', placeholder: 'e.g. duplicate profile, they asked to be removed…' }
     );
   }
 
   function showDeleteCrewConfirm(id) {
     const crew = getCrew(id);
     if (!crew) return;
+    if (!crewPerms(crew).canDelete) { showToast('🔒 Only the crew lead or a moderator can delete this crew'); return; }
     const otherCount = (crew.squadIds || []).length;
     const note = otherCount > 0
       ? `This crew has ${otherCount} member${otherCount !== 1 ? 's' : ''}. Any who have RaveFAM accounts will keep access and can claim the lead spot.`
@@ -11622,19 +11643,25 @@ async function doProfilePasswordChange() {
         <div style="font-size:2.8rem;margin-bottom:14px;">🗑️</div>
         <div class="modal-title" style="margin-bottom:12px;">Delete "${escHtml(crew.name)}"?</div>
         <p style="font-size:0.86rem;color:var(--muted);line-height:1.65;margin-bottom:8px;">${note}</p>
-        <p style="font-size:0.86rem;color:var(--neon-pink);font-weight:700;">This cannot be undone.</p>
       </div>
+      <div class="form-group" style="text-align:left;padding:0 16px;">
+        <label class="form-label">Why are you dissolving this crew?</label>
+        <textarea id="crew-delete-reason" class="form-input" rows="2" maxlength="200" placeholder="e.g. crew merged with another, no longer active…" oninput="document.getElementById('crew-delete-confirm-btn').disabled = !this.value.trim()"></textarea>
+        <p style="font-size:0.72rem;color:var(--muted);margin-top:4px;">This helps moderators understand what happened, later.</p>
+      </div>
+      <p style="font-size:0.86rem;color:var(--neon-pink);font-weight:700;text-align:center;margin-top:16px;">This cannot be undone.</p>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="renderDetail(activeDetailId)" style="flex:1;padding:12px;">Cancel</button>
-        <button class="btn btn-primary" onclick="deleteCrew(activeDetailId)" style="flex:1;padding:12px;background:var(--neon-pink);box-shadow:0 0 20px rgba(255,45,120,0.4);">Yes, delete it</button>
+        <button class="btn btn-primary" id="crew-delete-confirm-btn" disabled onclick="deleteCrew(activeDetailId, document.getElementById('crew-delete-reason').value.trim())" style="flex:1;padding:12px;background:var(--neon-pink);box-shadow:0 0 20px rgba(255,45,120,0.4);">Yes, delete it</button>
       </div>
       </div>`;
   }
 
-  async function deleteCrew(id) {
+  async function deleteCrew(id, reason = null) {
     const crew = crews.find(c => String(c.id) === String(id));
     if (!crew) return;
     const name = crew.name;
+    const memberCount = (crew.squadIds || []).length;
     const idx = crews.findIndex(c => String(c.id) === String(id));
     if (idx >= 0) crews.splice(idx, 1);
     closeDetail();
@@ -11642,9 +11669,11 @@ async function doProfilePasswordChange() {
     showToast(`🗑️ ${name} deleted`);
     addNotification(`🗑️ ${name} has been dissolved. The memories live on in the frequencies — the energy never dies.`);
     if (currentUser) {
-      await sb.from('crew_members').delete().eq('crew_id', id);
-      const { error } = await sb.from('crews').delete().eq('id', id);
-      if (error) { console.error('crew delete error', error); showToast('⚠️ Could not fully delete crew — refresh and try again'); }
+      const okMembers = await softDeleteRow('crew_members', { crew_id: id }, reason);
+      if (!okMembers) console.error('crew_members bulk soft delete error during crew delete');
+      const ok = await softDeleteRow('crews', { id }, reason);
+      if (!ok) { showToast('⚠️ Could not fully delete crew — refresh and try again'); return; }
+      await logAudit({ action: 'crew.delete', entityType: 'crew', entityId: id, reason, metadata: { member_count: memberCount } });
     }
   }
 
@@ -12751,7 +12780,7 @@ async function doProfilePasswordChange() {
         <div class="profile-actions" data-raver-id="${r.id}">
           ${ currentUser && (r.isYou || (perms.isLeaderOfRaver && !perms.isClaimed)) ? `<button class="btn btn-primary" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="enterProfileEditMode(this.dataset.raverId)">✏️ Edit Profile</button>` : ''}
           ${perms.canDisconnect ? `<button class="btn btn-ghost btn-disconnect" data-raver-id="${r.id}" onclick="showDisconnectConfirm(this.dataset.raverId)" title="Disconnect account">🔗</button>` : ''}
-          ${(perms.canDelete || (!r.isYou && isModerator())) ? `<button class="btn btn-ghost" style="padding:11px;color:var(--neon-pink);border-color:rgba(255,45,120,0.3);" data-raver-id="${r.id}" onclick="showDeleteRaverConfirm(this.dataset.raverId)">🗑️</button>` : ''}
+          ${(perms.canDelete || (!r.isYou && isModerator())) ? `<button class="btn btn-ghost" style="padding:11px;color:var(--neon-pink);border-color:rgba(255,45,120,0.3);" data-raver-id="${r.id}" onclick="deleteUnclaimedProfile(this.dataset.raverId)">🗑️</button>` : ''}
         </div>
 
         ${connectBlock}
@@ -12960,57 +12989,6 @@ async function doProfilePasswordChange() {
     } else {
       document.getElementById('page-members').classList.add('active');
       document.querySelector('.nav-tab[onclick*="\'members\'"]')?.classList.add('active');
-    }
-  }
-
-  // ===== Admin: delete raver =====
-  function showDeleteRaverConfirm(raverId) {
-    const r = getRaver(raverId);
-    if (!r) return;
-    const crewNames = crews.filter(c => (c.squadIds || []).some(id => String(id) === String(raverId))).map(c => c.name);
-    const crewNote = crewNames.length
-      ? `They're in ${crewNames.length} crew${crewNames.length !== 1 ? 's' : ''}: ${crewNames.map(n => escHtml(n)).join(', ')}.`
-      : 'They have no crew memberships.';
-    document.getElementById('page-profile').innerHTML = `
-      <button class="profile-back" data-raver-id="${raverId}" onclick="openProfile(this.dataset.raverId)">← Back</button>
-      <div style="text-align:center;padding:40px 24px 24px;">
-        <div style="font-size:3rem;margin-bottom:16px;">🗑️</div>
-        <h2 style="margin-bottom:8px;">Remove ${escHtml(r.name)}?</h2>
-        <p style="font-size:0.86rem;color:var(--muted);line-height:1.65;margin-bottom:6px;">${crewNote}</p>
-        <p style="font-size:0.86rem;color:var(--muted);line-height:1.65;margin-bottom:18px;">They will be removed from all crews and rave links.</p>
-        <p style="font-size:0.86rem;color:var(--neon-pink);font-weight:700;">This cannot be undone.</p>
-      </div>
-      <div class="modal-actions" style="padding:0 16px;">
-        <button class="btn btn-ghost" style="flex:1;padding:13px;" data-raver-id="${raverId}" onclick="openProfile(this.dataset.raverId)">Cancel</button>
-        <button class="btn btn-primary" style="flex:1;padding:13px;background:var(--neon-pink);" data-raver-id="${raverId}" onclick="deleteRaver(this.dataset.raverId)">Yes, remove</button>
-      </div>`;
-  }
-
-  function deleteRaver(raverId) {
-    const r = getRaver(raverId);
-    if (!r) return;
-    // Remove from all crews
-    crews.forEach(c => {
-      if ((c.squadIds || []).some(id => String(id) === String(raverId))) {
-        c.squadIds = c.squadIds.filter(id => String(id) !== String(raverId));
-        c.members = c.squadIds
-          .map(sid => squad.find(x => String(x.id) === String(sid)))
-          .filter(Boolean)
-          .map(x => ({ i: initials(x.name), c: c.color, t: '#fff' }));
-        if (currentUser) dbRemoveCrewMember(c.id, raverId);
-      }
-    });
-    // Remove from squad
-    const idx = squad.findIndex(x => String(x.id) === String(raverId));
-    if (idx >= 0) squad.splice(idx, 1);
-    backFromProfile();
-    renderSquad(); renderCrews(); renderEvents();
-    showToast(`🗑️ ${r.name} removed from the tribe`);
-    addNotification(`🗑️ ${r.name} has been removed from the tribe. The circle tightens — may the bass always find them.`);
-    if (currentUser) {
-      sb.from('ravers').delete().eq('id', raverId).then(({ error }) => {
-        if (error) { console.error('delete raver error', error); showToast('⚠️ Could not fully delete — refresh and try again'); }
-      });
     }
   }
 
@@ -14312,6 +14290,8 @@ async function doProfilePasswordChange() {
     } else if (_raveFilters.status === 'interested') {
       filtered = filtered.filter(f => you && (you.interestedFestIds || []).some(fid => String(fid) === String(f.id)));
     }
+    // Archived raves stay in the DB (RSVPs and links intact) but come off the active list.
+    filtered = filtered.filter(f => !f.archived);
     const up = filtered.filter(f => f._d && f._d >= TODAY).sort((a,b) => a._d - b._d);
     const past = filtered.filter(f => !f._d || f._d < TODAY).sort((a,b) => (b._d||0) - (a._d||0));
 
@@ -14810,14 +14790,35 @@ async function doProfilePasswordChange() {
   function showDeleteRaveConfirm() {
     const f = getFestival(activeFestId);
     if (!f) return;
-    if (!festivalPerms(f).canDelete) {
-      const isCreatorOrMod = !!currentUser && (String(f.createdBy) === String(currentUser.id) || isModerator());
-      showToast(isCreatorOrMod ? "⚠️ Can't delete — others are already going" : '🔒 Only the creator or a moderator can delete this rave');
+    const perms = festivalPerms(f);
+    if (!perms.canEdit) {
+      showToast('🔒 Only the creator or a moderator can delete this rave');
       return;
     }
     const goers = festivalGoers(activeFestId);
+    const otherGoers = goers.filter(g => {
+      const owner = g.claimedBy || g.createdBy;
+      return String(owner) !== String(f.createdBy);
+    });
+    if (otherGoers.length) {
+      // Blocked — explain who's affected and offer the non-destructive alternative
+      pendingDeleteFestId = activeFestId;
+      const names = otherGoers.map(g => escHtml(g.name.split(' ')[0])).join(', ');
+      document.getElementById('delete-rave-sheet-content').innerHTML = `
+        <div style="text-align:center;padding:8px 0 20px;">
+          <div style="font-size:2.8rem;margin-bottom:12px;">🎪</div>
+          <div class="modal-title" style="margin-bottom:10px;">${otherGoers.length} ${otherGoers.length !== 1 ? 'people are' : 'person is'} going to "${escHtml(f.name)}"</div>
+          <p style="font-size:0.86rem;color:var(--muted);line-height:1.65;">${names} would lose it off their calendar if it's deleted — that doesn't feel right. Want to Archive it instead? It comes off the active list, but everyone keeps their RSVPs and memories.</p>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" style="flex:1;padding:12px;" onclick="closeDeleteRaveSheet()">Never mind</button>
+          <button class="btn btn-primary" style="flex:1;padding:12px;" onclick="archiveFestival(pendingDeleteFestId, 'auto: blocked by active RSVPs')">🗄️ Archive instead</button>
+        </div>`;
+      document.getElementById('delete-rave-sheet-overlay').classList.add('open');
+      return;
+    }
     if (goers.length) {
-      // Tribe members linked — use bottom sheet for the destructive confirmation
+      // Only your own network is linked — still destructive, still needs a reason
       pendingDeleteFestId = activeFestId;
       const goerNames = goers.map(g => escHtml(g.name.split(' ')[0])).join(', ');
       document.getElementById('delete-rave-sheet-content').innerHTML = `
@@ -14825,11 +14826,16 @@ async function doProfilePasswordChange() {
           <div style="font-size:2.8rem;margin-bottom:12px;">🗑️</div>
           <div class="modal-title" style="margin-bottom:10px;">Delete "${escHtml(f.name)}"?</div>
           <p style="font-size:0.86rem;color:var(--muted);line-height:1.65;margin-bottom:8px;">${goers.length} tribe member${goers.length !== 1 ? 's' : ''} (${goerNames}) will have it removed from their profiles.</p>
-          <p style="font-size:0.86rem;color:var(--neon-pink);font-weight:700;">This cannot be undone.</p>
         </div>
+        <div class="form-group" style="text-align:left;">
+          <label class="form-label">Why are you deleting this?</label>
+          <textarea id="fest-delete-reason" class="form-input" rows="2" maxlength="200" placeholder="e.g. duplicate entry, event got cancelled…" oninput="document.getElementById('fest-delete-confirm-btn').disabled = !this.value.trim()"></textarea>
+          <p style="font-size:0.72rem;color:var(--muted);margin-top:4px;">This helps moderators understand what happened, later.</p>
+        </div>
+        <p style="font-size:0.86rem;color:var(--neon-pink);font-weight:700;text-align:center;">This cannot be undone.</p>
         <div class="modal-actions">
           <button class="btn btn-ghost" style="flex:1;padding:12px;" onclick="closeDeleteRaveSheet()">Cancel</button>
-          <button class="btn btn-primary" style="flex:1;padding:12px;background:var(--neon-pink);" onclick="confirmDeleteRave()">Delete</button>
+          <button class="btn btn-primary" id="fest-delete-confirm-btn" disabled style="flex:1;padding:12px;background:var(--neon-pink);" onclick="confirmDeleteRave()">Delete</button>
         </div>`;
       document.getElementById('delete-rave-sheet-overlay').classList.add('open');
     } else {
@@ -14839,11 +14845,16 @@ async function doProfilePasswordChange() {
           <div style="font-size:2.8rem;margin-bottom:14px;">🗑️</div>
           <div class="modal-title" style="margin-bottom:12px;">Delete "${escHtml(f.name)}"?</div>
           <p style="font-size:0.86rem;color:var(--muted);line-height:1.65;margin-bottom:8px;">No tribe members are linked to this rave.</p>
-          <p style="font-size:0.86rem;color:var(--neon-pink);font-weight:700;">This cannot be undone.</p>
         </div>
+        <div class="form-group" style="text-align:left;">
+          <label class="form-label">Why are you deleting this?</label>
+          <textarea id="fest-delete-reason" class="form-input" rows="2" maxlength="200" placeholder="e.g. duplicate entry, event got cancelled…" oninput="document.getElementById('fest-delete-confirm-btn').disabled = !this.value.trim()"></textarea>
+          <p style="font-size:0.72rem;color:var(--muted);margin-top:4px;">This helps moderators understand what happened, later.</p>
+        </div>
+        <p style="font-size:0.86rem;color:var(--neon-pink);font-weight:700;text-align:center;">This cannot be undone.</p>
         <div class="modal-actions">
           <button class="btn btn-ghost" onclick="openRaveEditor(activeFestId)" style="flex:1;padding:12px;">Cancel</button>
-          <button class="btn btn-primary" onclick="deleteRave(activeFestId)" style="flex:1;padding:12px;background:var(--neon-pink);">Yes, delete it</button>
+          <button class="btn btn-primary" id="fest-delete-confirm-btn" disabled onclick="deleteRave(activeFestId, document.getElementById('fest-delete-reason').value.trim())" style="flex:1;padding:12px;background:var(--neon-pink);">Yes, delete it</button>
         </div>`;
     }
   }
@@ -14855,11 +14866,12 @@ async function doProfilePasswordChange() {
 
   function confirmDeleteRave() {
     const id = pendingDeleteFestId;
+    const reason = document.getElementById('fest-delete-reason')?.value.trim();
     closeDeleteRaveSheet();
-    deleteRave(id);
+    deleteRave(id, reason);
   }
 
-  function deleteRave(id) {
+  function deleteRave(id, reason = null) {
     const f = getFestival(id);
     if (!f) return;
     const i = festivals.findIndex(x => String(x.id) === String(id));
@@ -14869,7 +14881,27 @@ async function doProfilePasswordChange() {
     renderEvents(); renderCrews(); renderSquad();
     showToast(`🗑️ Deleted ${f.name}`);
     addNotification(`🗑️ ${f.name} has been wiped from the calendar. Gone but not forgotten — the dancefloor was a state of mind anyway.`);
-    if (currentUser) dbDeleteFestival(id);
+    if (currentUser) dbDeleteFestival(id, reason);
+  }
+
+  // Non-destructive alternative to deleteRave — hides the rave from the active
+  // list without touching RSVPs, vibes, or any other linked data.
+  async function archiveFestival(id, reason = null) {
+    const f = getFestival(id);
+    if (!f) return;
+    if (!festivalPerms(f).canArchive) { showToast('🔒 Only the creator or a moderator can archive this rave'); return; }
+    f.archived = true;
+    closeDeleteRaveSheet();
+    closeRaveEditor();
+    renderEvents(); renderCrews();
+    showToast(`🗄️ ${f.name} archived — off the active list, nothing lost.`);
+    if (currentUser) {
+      const { error } = await sb.from('festivals')
+        .update({ archived_at: new Date().toISOString(), archived_by: currentUser.id })
+        .eq('id', id);
+      if (error) { console.error('festival archive error', error); showToast('⚠️ Could not archive — try again'); return; }
+      await logAudit({ action: 'festival.archive', entityType: 'festival', entityId: id, reason });
+    }
   }
 
   let checked = 0;
@@ -14940,9 +14972,34 @@ async function doProfilePasswordChange() {
   function showConfirm(title, body, okLabel, callback) {
     document.getElementById('confirm-title').textContent = title;
     document.getElementById('confirm-body').textContent = body;
+    document.getElementById('confirm-reason-wrap').style.display = 'none';
     const okBtn = document.getElementById('confirm-ok-btn');
+    okBtn.disabled = false;
     okBtn.textContent = okLabel;
     okBtn.onclick = () => { closeConfirm(); callback(); };
+    document.getElementById('confirm-overlay').classList.add('open');
+  }
+
+  // Same as showConfirm, but requires a short reason before the action fires —
+  // for destructive actions that get written to the audit trail (deletes, etc.).
+  function showConfirmWithReason(title, body, okLabel, callback, opts = {}) {
+    const { label = 'Why are you doing this?', placeholder = 'A few words is enough…' } = opts;
+    document.getElementById('confirm-title').textContent = title;
+    document.getElementById('confirm-body').textContent = body;
+    document.getElementById('confirm-reason-wrap').style.display = 'block';
+    document.getElementById('confirm-reason-label').textContent = label;
+    const input = document.getElementById('confirm-reason-input');
+    input.value = '';
+    input.placeholder = placeholder;
+    const okBtn = document.getElementById('confirm-ok-btn');
+    okBtn.disabled = true;
+    okBtn.textContent = okLabel;
+    okBtn.onclick = () => {
+      const reason = input.value.trim();
+      if (!reason) return;
+      closeConfirm();
+      callback(reason);
+    };
     document.getElementById('confirm-overlay').classList.add('open');
   }
   function closeConfirm() { document.getElementById('confirm-overlay').classList.remove('open'); }
