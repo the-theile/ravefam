@@ -5115,6 +5115,10 @@
       <span class="logo-text" onclick="location.reload()" title="Refresh app" style="cursor:pointer;"><span>Rave</span><span>FAM</span></span>
     </div>
     <div class="header-actions">
+      <button class="notif-bell-btn" id="mod-dash-btn" onclick="openModDashboard()" title="Moderator Dashboard" aria-label="Moderator Dashboard" style="display:none;">
+        🛡️
+        <span class="notif-badge" id="mod-dash-badge"></span>
+      </button>
       <button class="notif-bell-btn" id="notif-bell" onclick="openNotifDrawer()" title="Notifications" aria-label="Notifications">
         🔔
         <span class="notif-badge" id="notif-badge"></span>
@@ -5197,6 +5201,11 @@
 
     <!-- CREW DETAIL PAGE (dedicated, full-view) -->
     <div class="page" id="page-crew-detail">
+      <!-- rendered by JS -->
+    </div>
+
+    <!-- MOD DASHBOARD PAGE (dedicated, full-view, moderators only) -->
+    <div class="page" id="page-mod-dashboard">
       <!-- rendered by JS -->
     </div>
 
@@ -5956,6 +5965,58 @@
     moderatorIds = new Set((data || []).map(m => String(m.user_id)));
   }
   function isModerator() { return !!currentUser && moderatorIds.has(String(currentUser.id)); }
+
+  // ===== MODERATION: flags/reports data layer =====
+  let openFlagCount = 0;  // drives the header badge
+
+  async function dbSubmitFlag(targetType, targetId, reason, metadata = {}) {
+    const uid = currentUser?.id;
+    if (!uid) return false;
+    const { error } = await sb.from('flags').insert({
+      reporter_id: uid, target_type: targetType, target_id: String(targetId),
+      reason: reason || null, metadata: metadata || {}, status: 'open'
+    });
+    if (error) {
+      if (error.code === '23505') { showToast('🚩 You already reported this'); return false; }
+      console.error('flag insert error', error);
+      showToast('⚠️ Could not submit report — try again');
+      return false;
+    }
+    showToast('🚩 Reported — moderators will take a look');
+    return true;
+  }
+
+  async function dbLoadFlags() {
+    if (!isModerator()) return [];
+    const { data, error } = await sb.from('flags').select('*').order('created_at', { ascending: false });
+    if (error) { console.error('flags load error', error); return []; }
+    openFlagCount = (data || []).filter(f => f.status === 'open').length;
+    return data || [];
+  }
+
+  async function dbResolveFlag(flagId, note) {
+    const { error } = await sb.from('flags')
+      .update({ status: 'resolved', resolved_at: new Date().toISOString(), resolved_by: currentUser?.id, resolution_note: note || null })
+      .eq('id', flagId);
+    if (error) { console.error('flag resolve error', error); showToast('⚠️ Could not resolve — try again'); return false; }
+    return true;
+  }
+
+  async function dbDismissFlag(flagId, note) {
+    const { error } = await sb.from('flags')
+      .update({ status: 'dismissed', resolved_at: new Date().toISOString(), resolved_by: currentUser?.id, resolution_note: note || null })
+      .eq('id', flagId);
+    if (error) { console.error('flag dismiss error', error); showToast('⚠️ Could not dismiss — try again'); return false; }
+    return true;
+  }
+
+  function updateModBadge() {
+    const btn = document.getElementById('mod-dash-btn');
+    if (!btn) return;
+    btn.style.display = isModerator() ? '' : 'none';
+    const badge = document.getElementById('mod-dash-badge');
+    if (badge) badge.classList.toggle('has-unread', openFlagCount > 0);
+  }
 
   // Per-viewer private caches (keyed by target raver ID)
   const privatePhoneCache = {};  // { [raverId]: string }
@@ -7305,6 +7366,8 @@ async function doProfilePasswordChange() {
     crews.length = 0;     crewSeq = 0;
 
     await dbLoadModerators().catch(() => {});
+    if (isModerator()) await dbLoadFlags().catch(() => {});
+    updateModBadge();
 
     // --- Festivals ---
     const { data: dbFests, error: fErr } = await sb
@@ -8120,8 +8183,8 @@ async function doProfilePasswordChange() {
 
   async function dbDeleteFestival(id, reason = null) {
     await sb.from('raver_festivals').delete().eq('festival_id', id);
-    const ok = await softDeleteRow('festivals', { id }, reason);
-    if (!ok) { showToast('⚠️ Could not delete rave — try again'); return; }
+    const { ok, rateLimited } = await softDeleteRow('festivals', { id }, reason);
+    if (!ok) { if (!rateLimited) showToast('⚠️ Could not delete rave — try again'); return; }
     await logAudit({ action: 'festival.soft_delete', entityType: 'festival', entityId: id, reason });
   }
 
@@ -8167,8 +8230,8 @@ async function doProfilePasswordChange() {
 
   // Targeted single-row soft delete — only touches the removed member
   async function dbRemoveCrewMember(crewId, raverId, reason = null) {
-    const ok = await softDeleteRow('crew_members', { crew_id: crewId, raver_id: raverId }, reason);
-    if (!ok) { showToast('⚠️ Could not remove member — try again'); return; }
+    const { ok, rateLimited } = await softDeleteRow('crew_members', { crew_id: crewId, raver_id: raverId }, reason);
+    if (!ok) { if (!rateLimited) showToast('⚠️ Could not remove member — try again'); return; }
     await logAudit({
       action: 'crew_member.remove', entityType: 'crew_member',
       entityId: raverId, reason, metadata: { crew_id: crewId }
@@ -8179,26 +8242,94 @@ async function doProfilePasswordChange() {
   // Centralizes "soft delete" (set deleted_at/deleted_by/delete_reason instead
   // of hard DELETE) and audit-log writes so destructive actions leave a trail.
   // Used by dbDeleteFestival, dbRemoveCrewMember, and deleteUnclaimedProfile.
-  //
-  // TODO(restore): add a dbRestoreRow(table, match) counterpart once a
-  // "Trash / Restore" UI exists — null out deleted_at/deleted_by/delete_reason
-  // via the same match-object approach used here.
-  // TODO(ui): loadAllData()'s queries filter out soft-deleted rows for the
-  // main app. An admin "view deleted items" screen would need its own
-  // unfiltered query path — don't just strip the .is('deleted_at', null)
-  // filters from the main app's queries to build that.
 
   // `match` is a Supabase .match()-style column:value object rather than a
   // bare id, because crew_members has no single `id` column (its PK is
-  // crew_id+raver_id) — this one signature covers all three touched tables.
+  // crew_id+raver_id) — this one signature covers all soft-deletable tables.
+  //
+  // Returns {ok, rateLimited} rather than a bare boolean so callers can skip
+  // their own generic "could not delete" toast when the server-side rate
+  // limit trigger (enforce_destructive_action_rate_limit, see migrations)
+  // already showed a friendlier one here.
   async function softDeleteRow(table, match, reason) {
     const uid = currentUser?.id;
-    if (!uid) return false;
+    if (!uid) return { ok: false, rateLimited: false };
     const { error } = await sb.from(table)
       .update({ deleted_at: new Date().toISOString(), deleted_by: uid, delete_reason: reason || null })
       .match(match);
-    if (error) { console.error(`${table} soft delete error`, error); return false; }
+    if (error) {
+      console.error(`${table} soft delete error`, error);
+      const msg = error.message || '';
+      if (msg.includes('RATE_LIMIT_NEW_ACCOUNT')) {
+        showToast('🔒 New accounts can do 1 destructive action per day — try again tomorrow');
+        return { ok: false, rateLimited: true };
+      }
+      if (msg.includes('RATE_LIMIT_HOURLY')) {
+        showToast('🔒 Whoa, slow down — max 5 of these per hour');
+        return { ok: false, rateLimited: true };
+      }
+      return { ok: false, rateLimited: false };
+    }
+    return { ok: true, rateLimited: false };
+  }
+
+  // Undoes a soft delete (Mod Dashboard "Restore" action) and logs its own
+  // audit entry for symmetry/accountability.
+  async function dbRestoreRow(table, match, entityType, entityId, metadata) {
+    const { error } = await sb.from(table)
+      .update({ deleted_at: null, deleted_by: null, delete_reason: null })
+      .match(match);
+    if (error) { console.error(`${table} restore error`, error); showToast('⚠️ Could not restore — try again'); return false; }
+    await logAudit({ action: `${entityType}.restore`, entityType, entityId, metadata });
     return true;
+  }
+
+  // Mod Dashboard "Recent Deletes" tab — the one read path against audit_logs
+  // (previously write-only from logAudit). Moderator-only per RLS.
+  async function dbLoadRecentDestructiveActions(limit = 50) {
+    if (!isModerator()) return [];
+    const { data, error } = await sb.from('audit_logs')
+      .select('*').order('created_at', { ascending: false }).limit(limit);
+    if (error) { console.error('audit_logs load error', error); return []; }
+    return (data || []).filter(a => /\.(soft_delete|delete|remove)$/.test(a.action));
+  }
+
+  // Maps an audit_logs row back to the softDeleteRow/dbRestoreRow {table, match}
+  // targets — mirrors the exact entityId/metadata shape each delete path logs.
+  function auditRowToRestoreTargets(row) {
+    switch (row.entity_type) {
+      case 'festival': return [{ table: 'festivals', match: { id: row.entity_id } }];
+      case 'raver':    return [{ table: 'ravers', match: { id: row.entity_id } }];
+      case 'crew':     return [{ table: 'crews', match: { id: row.entity_id } }];
+      case 'crew_member':
+        // Two shapes exist: dbRemoveCrewMember logs metadata:{crew_id}; the
+        // bulk raver-delete cascade logs metadata:{crew_ids:[...], via:'raver_delete'}.
+        if (Array.isArray(row.metadata?.crew_ids)) {
+          return row.metadata.crew_ids.map(cid => ({ table: 'crew_members', match: { crew_id: cid, raver_id: row.entity_id } }));
+        }
+        return [{ table: 'crew_members', match: { crew_id: row.metadata?.crew_id, raver_id: row.entity_id } }];
+      default: return [];
+    }
+  }
+
+  function restoreFromAuditRowById(auditId) {
+    const row = modDashRecentRows.find(r => String(r.id) === String(auditId));
+    if (!row) { showToast('⚠️ Could not find that entry — refresh and try again'); return; }
+    restoreFromAuditRow(row);
+  }
+
+  async function restoreFromAuditRow(row) {
+    const targets = auditRowToRestoreTargets(row);
+    if (!targets.length) { showToast('⚠️ Nothing to restore for this entry'); return; }
+    const ok = (await Promise.all(targets.map(t =>
+      dbRestoreRow(t.table, t.match, row.entity_type, row.entity_id, { via: 'mod_dashboard', original_action: row.action })
+    ))).every(Boolean);
+    if (ok) {
+      showToast('↩️ Restored');
+      await loadAllData();
+      renderCrews(); renderEvents();
+      if (document.getElementById('page-mod-dashboard')?.classList.contains('active')) renderModDashboard();
+    }
   }
 
   async function logAudit({ action, entityType, entityId, reason, metadata }) {
@@ -9527,6 +9658,133 @@ async function doProfilePasswordChange() {
     if (e.target === document.getElementById('detail-overlay')) closeDetail();
   }
 
+  // ===== MOD DASHBOARD =====
+  let modDashTab = 'reports';  // 'reports' | 'recent'
+  let modDashRecentRows = [];  // last-loaded audit_logs rows, keyed by id for Restore lookups
+
+  async function openModDashboard() {
+    if (!isModerator()) { showToast('🔒 Moderators only'); return; }
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-mod-dashboard').classList.add('active');
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    window.scrollTo(0, 0);
+    await renderModDashboard();
+  }
+
+  function closeModDashboard() { closeDetail(); }
+
+  async function renderModDashboard() {
+    const [flags, recent] = await Promise.all([dbLoadFlags(), dbLoadRecentDestructiveActions()]);
+    modDashRecentRows = recent;
+    updateModBadge();
+    const openCount = flags.filter(f => f.status === 'open').length;
+    const page = document.getElementById('page-mod-dashboard');
+    if (!page) return;
+    page.innerHTML = `
+      <button class="profile-back" onclick="closeModDashboard()">← Back</button>
+      <div class="section-header" style="margin-top:8px;">
+        <div class="section-title">🛡️ Mod Dashboard</div>
+      </div>
+      <div style="font-size:0.86rem;color:var(--muted);margin-bottom:18px;">Keep the frequency clean — review reports and undo destructive actions.</div>
+      <div class="status-toggle" style="margin-bottom:18px;">
+        <button class="status-opt ${modDashTab==='reports'?'active':''}" onclick="switchModDashTab('reports')">🚩 Reports${openCount ? ` (${openCount})` : ''}</button>
+        <button class="status-opt ${modDashTab==='recent'?'active':''}" onclick="switchModDashTab('recent')">🗑️ Recent Deletes</button>
+      </div>
+      <div id="mod-dash-body"></div>
+    `;
+    renderModDashBody(flags, recent);
+  }
+
+  function switchModDashTab(tab) { modDashTab = tab; renderModDashboard(); }
+
+  function renderModDashBody(flags, recent) {
+    const body = document.getElementById('mod-dash-body');
+    if (!body) return;
+    if (modDashTab === 'reports') {
+      const open = flags.filter(f => f.status === 'open');
+      body.innerHTML = open.length
+        ? `<div class="events-list">${open.map(flagCardHTML).join('')}</div>`
+        : `<div class="es-block" style="padding:40px 24px;"><div class="es-icon">✨</div><div class="es-headline">Nothing to review</div><div class="es-sub">All clear — the tribe's behaving.</div></div>`;
+    } else {
+      body.innerHTML = recent.length
+        ? `<div class="events-list">${recent.map(recentDeleteCardHTML).join('')}</div>`
+        : `<div class="es-block" style="padding:40px 24px;"><div class="es-icon">🗑️</div><div class="es-headline">No deletes yet</div><div class="es-sub">Destructive actions will show up here.</div></div>`;
+    }
+  }
+
+  const FLAG_TARGET_LABELS = { raver: '👤 Raver', festival: '🎟️ Festival', crew: '🎪 Crew', crew_member: '👥 Crew Member', vibe_tag: '🏷️ Vibe Tag' };
+
+  function formatModDate(iso) {
+    if (!iso) return 'just now';
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? 'just now' : d.toLocaleString();
+  }
+
+  function flagCardHTML(f) {
+    const label = FLAG_TARGET_LABELS[f.target_type] || f.target_type;
+    const when = formatModDate(f.created_at);
+    return `
+      <div class="event-item">
+        <div class="event-item-body" style="align-items:flex-start;">
+          <div class="event-info">
+            <div class="event-name">${label}</div>
+            <div class="event-meta">${escHtml(f.reason || 'No reason given')}</div>
+            <div class="event-meta" style="opacity:0.7;">Reported ${escHtml(when)}</div>
+            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+              <button class="btn btn-ghost" style="padding:8px 14px;font-size:0.76rem;" onclick="viewFlagTarget('${f.target_type}','${escHtml(String(f.target_id))}')">👀 View</button>
+              <button class="btn btn-ghost" style="padding:8px 14px;font-size:0.76rem;" onclick="handleDismissFlag('${f.id}')">Dismiss</button>
+              <button class="btn btn-primary" style="padding:8px 14px;font-size:0.76rem;" onclick="handleResolveFlag('${f.id}')">Resolve</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function recentDeleteCardHTML(row) {
+    const label = FLAG_TARGET_LABELS[row.entity_type] || row.entity_type;
+    const when = formatModDate(row.created_at);
+    return `
+      <div class="event-item">
+        <div class="event-item-body" style="align-items:flex-start;">
+          <div class="event-info">
+            <div class="event-name">${label} — ${escHtml(row.action)}</div>
+            <div class="event-meta">"${escHtml(row.reason || 'No reason given')}"</div>
+            <div class="event-meta" style="opacity:0.7;">${escHtml(when)}</div>
+            <div style="display:flex;gap:8px;margin-top:10px;">
+              <button class="btn btn-ghost" style="padding:8px 14px;font-size:0.76rem;color:var(--neon-pink);" data-audit-id="${row.id}" onclick="restoreFromAuditRowById(this.dataset.auditId)">↩️ Restore</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // Jump to the actual content so a mod acts through the app's existing
+  // moderator-gated buttons — the Reports tab itself is triage-only.
+  function viewFlagTarget(targetType, targetId) {
+    // crew_member reports use the raver_id as target_id (crew_id lives in
+    // metadata) — same navigable target as a plain raver report.
+    if (targetType === 'raver' || targetType === 'crew_member' || targetType === 'vibe_tag') { openProfile(targetId); return; }
+    if (targetType === 'festival') { openRaveEditor(targetId); return; }
+    if (targetType === 'crew') {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.getElementById('page-crew-detail').classList.add('active');
+      activeDetailId = targetId;
+      renderDetail(targetId);
+      return;
+    }
+    showToast('Nothing to preview for this report');
+  }
+
+  async function handleDismissFlag(flagId) {
+    showConfirm('Dismiss this report?', "It'll be marked as reviewed and cleared from the queue.", 'Dismiss',
+      async () => { if (await dbDismissFlag(flagId, null)) { showToast('Dismissed'); renderModDashboard(); } });
+  }
+
+  async function handleResolveFlag(flagId) {
+    showConfirm('Mark this report resolved?', "It'll be marked as handled and cleared from the queue.", 'Resolve',
+      async () => { if (await dbResolveFlag(flagId, null)) { showToast('✅ Resolved'); renderModDashboard(); } });
+  }
+
   function goToProfileFromDetail(raverId) {
     openProfile(raverId, false, 'crews');
   }
@@ -9730,11 +9988,12 @@ async function doProfilePasswordChange() {
           <button class="btn btn-ghost" style="width:100%;padding:10px;font-size:0.8rem;color:var(--neon-pink);border-color:rgba(255,45,120,0.25);"
             onclick="showDeleteCrewConfirm(activeDetailId)">🗑️ Delete Crew</button>
         </div>` : (() => {
-          return crewPerms(crew).canLeave ? `
-        <div class="danger-zone">
-          <button class="btn btn-ghost" style="width:100%;padding:10px;font-size:0.8rem;color:var(--neon-pink);border-color:rgba(255,45,120,0.25);"
-            data-crew-id="${crew.id}" onclick="confirmLeaveCrew(this.dataset.crewId)">✌️ Leave Crew</button>
-        </div>` : '';
+          const leaveBtn = crewPerms(crew).canLeave
+            ? `<button class="btn btn-ghost" style="width:100%;padding:10px;font-size:0.8rem;color:var(--neon-pink);border-color:rgba(255,45,120,0.25);"
+                 data-crew-id="${crew.id}" onclick="confirmLeaveCrew(this.dataset.crewId)">✌️ Leave Crew</button>` : '';
+          const reportBtn = currentUser
+            ? `<button class="btn btn-ghost" style="width:100%;padding:10px;font-size:0.8rem;margin-top:${leaveBtn ? '8px' : '0'};" onclick="showReportModal('crew', '${crew.id}')">🚩 Report Crew</button>` : '';
+          return (leaveBtn || reportBtn) ? `<div class="danger-zone">${leaveBtn}${reportBtn}</div>` : '';
         })()}
       <div style="margin-top:24px;">
         <button class="btn btn-ghost" style="width:100%;padding:12px;font-size:0.88rem;" onclick="closeDetail()">← Back to My Crews</button>
@@ -11696,8 +11955,8 @@ async function doProfilePasswordChange() {
               }
 
               // The raver row itself.
-              const ok = await softDeleteRow('ravers', { id: raverId }, reason);
-              if (!ok) { showToast('⚠️ Could not fully delete — refresh and try again'); return; }
+              const { ok, rateLimited } = await softDeleteRow('ravers', { id: raverId }, reason);
+              if (!ok) { if (!rateLimited) showToast('⚠️ Could not fully delete — refresh and try again'); return; }
               await logAudit({ action: 'raver.delete', entityType: 'raver', entityId: raverId, reason });
             } catch(err) {
               console.error('Delete cascade error:', err);
@@ -11753,10 +12012,10 @@ async function doProfilePasswordChange() {
     showToast(`🗑️ ${name} deleted`);
     addNotification(`🗑️ ${name} has been dissolved. The memories live on in the frequencies — the energy never dies.`);
     if (currentUser) {
-      const okMembers = await softDeleteRow('crew_members', { crew_id: id }, reason);
-      if (!okMembers) console.error('crew_members bulk soft delete error during crew delete');
-      const ok = await softDeleteRow('crews', { id }, reason);
-      if (!ok) { showToast('⚠️ Could not fully delete crew — refresh and try again'); return; }
+      const membersResult = await softDeleteRow('crew_members', { crew_id: id }, reason);
+      if (!membersResult.ok) console.error('crew_members bulk soft delete error during crew delete');
+      const { ok, rateLimited } = await softDeleteRow('crews', { id }, reason);
+      if (!ok) { if (!rateLimited) showToast('⚠️ Could not fully delete crew — refresh and try again'); return; }
       await logAudit({ action: 'crew.delete', entityType: 'crew', entityId: id, reason, metadata: { member_count: memberCount } });
     }
   }
@@ -12338,16 +12597,21 @@ async function doProfilePasswordChange() {
 
   function getPreset(id) { return VIBE_PRESETS.find(v => v.id === id); }
 
-  function vibeTagHTML(vtId, isCustom, mini, removableRaverId) {
+  // ownerRaverId: when set (and the chip isn't the viewer's own, i.e. no
+  // removeBtn), renders a small 🚩 to report this specific tag contribution.
+  function vibeTagHTML(vtId, isCustom, mini, removableRaverId, ownerRaverId) {
     const cls = `vibe-display-tag ${isCustom ? 'is-custom' : 'is-preset'}${mini ? ' vibe-mini' : ''}`;
     const field = isCustom ? 'customVibeTags' : 'vibeTags';
     const removeBtn = removableRaverId
       ? ` <span class="vibe-chip-remove" onclick="removeTag('${removableRaverId}','${field}','${vtId.replace(/'/g,"\\'")}')">✕</span>`
       : '';
-    if (isCustom) return `<span class="${cls}">${escHtml(vtId)}${removeBtn}</span>`;
+    const reportBtn = (!removeBtn && ownerRaverId)
+      ? ` <span class="vibe-chip-remove" title="Report this tag" onclick="showReportModal('vibe_tag','${ownerRaverId}',{metadata:{tag:'${vtId.replace(/'/g,"\\'")}', is_custom:${!!isCustom}}})">🚩</span>`
+      : '';
+    if (isCustom) return `<span class="${cls}">${escHtml(vtId)}${removeBtn}${reportBtn}</span>`;
     const p = getPreset(vtId);
     if (!p) return '';
-    return `<span class="${cls}" style="background:${p.bg};border-color:${p.color}40;color:${p.color};">${p.icon} ${p.label}${removeBtn}</span>`;
+    return `<span class="${cls}" style="background:${p.bg};border-color:${p.color}40;color:${p.color};">${p.icon} ${p.label}${removeBtn}${reportBtn}</span>`;
   }
 
   // ===== Squad / Raver profiles =====
@@ -12870,6 +13134,7 @@ async function doProfilePasswordChange() {
           ${ currentUser && (r.isYou || (perms.isLeaderOfRaver && !perms.isClaimed)) ? `<button class="btn btn-primary" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="enterProfileEditMode(this.dataset.raverId)">✏️ Edit Profile</button>` : ''}
           ${r.isYou ? `<button class="btn btn-ghost" style="padding:11px;" data-raver-id="${r.id}" onclick="openPrivacySettingsModal(this.dataset.raverId)" title="Privacy & Permissions">🔒</button>` : ''}
           ${perms.canDisconnect ? `<button class="btn btn-ghost btn-disconnect" data-raver-id="${r.id}" onclick="showDisconnectConfirm(this.dataset.raverId)" title="Disconnect account">🔗</button>` : ''}
+          ${!r.isYou && currentUser ? `<button class="btn btn-ghost" style="padding:11px;" data-raver-id="${r.id}" onclick="showReportModal('raver', this.dataset.raverId)" title="Report">🚩</button>` : ''}
           ${(perms.canDelete || (!r.isYou && isModerator())) ? `<button class="btn btn-ghost" style="padding:11px;color:var(--neon-pink);border-color:rgba(255,45,120,0.3);" data-raver-id="${r.id}" onclick="deleteUnclaimedProfile(this.dataset.raverId)">🗑️</button>` : ''}
         </div>
 
@@ -12912,8 +13177,9 @@ async function doProfilePasswordChange() {
         <div class="profile-section" style="${sg(2)}">
           <h3>⚡ Vibe Tags</h3>
           ${(() => {
-            const presetVibes = (r.vibeTags||[]).map(v => vibeTagHTML(v, false, false, null)).join('');
-            const customVibes = (r.customVibeTags||[]).map(v => vibeTagHTML(v, true, false, null)).join('');
+            const canReportTags = !r.isYou && currentUser;
+            const presetVibes = (r.vibeTags||[]).map(v => vibeTagHTML(v, false, false, null, canReportTags ? r.id : null)).join('');
+            const customVibes = (r.customVibeTags||[]).map(v => vibeTagHTML(v, true, false, null, canReportTags ? r.id : null)).join('');
             return (presetVibes || customVibes)
               ? `<div class="profile-vibes">${presetVibes}${customVibes}</div>`
               : `<div class="fest-empty">No vibes tagged yet${r.isYou || perms.isLeaderOfRaver ? ' — what\'s your flavor? Edit profile to add some' : ' — what\'s their flavor?'}</div>`;
@@ -14634,6 +14900,7 @@ async function doProfilePasswordChange() {
       </div>` : ''}
       <div class="modal-actions">
         ${f && festivalPerms(f).canDelete ? `<button class="btn btn-ghost" style="color:var(--neon-pink);" onclick="showDeleteRaveConfirm()">Delete</button>` : ''}
+        ${f && currentUser && !festivalPerms(f).canDelete ? `<button class="btn btn-ghost" onclick="showReportModal('festival', '${f.id}')">🚩 Report</button>` : ''}
         <button class="btn btn-ghost" onclick="closeRaveEditor()">Cancel</button>
         ${canEditFest ? `<button class="btn btn-primary" onclick="saveRave()">${f ? 'Save' : 'Add 🔥'}</button>` : ''}
       </div>
@@ -15192,6 +15459,20 @@ async function doProfilePasswordChange() {
   }
   function closeConfirm() { document.getElementById('confirm-overlay').classList.remove('open'); }
   function closeConfirmOutside(e) { if (e.target === document.getElementById('confirm-overlay')) closeConfirm(); }
+
+  // ===== MODERATION: Report flow =====
+  // Thin wrapper around the existing reason-required confirm modal — no new
+  // modal chrome, just a flags-table-shaped callback.
+  function showReportModal(targetType, targetId, opts = {}) {
+    const { metadata = {} } = opts;
+    showConfirmWithReason(
+      '🚩 Report this?',
+      "This flags it for a moderator to review — they'll take it from here.",
+      '🚩 Report',
+      (reason) => dbSubmitFlag(targetType, targetId, reason, metadata),
+      { label: "What's wrong?", placeholder: 'e.g. fake profile, spam, inappropriate…' }
+    );
+  }
 
   // === PROFILE PRIVACY & PERMISSIONS ===
   // Single-button informational variant of the confirm modal — for
