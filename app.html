@@ -8179,11 +8179,13 @@ async function doProfilePasswordChange() {
     const { error } = await sb.from('raver_festivals')
       .upsert([{ raver_id: raverId, festival_id: festId }], { onConflict: 'raver_id,festival_id', ignoreDuplicates: true });
     if (error) { console.error('raver_festivals add error', error); showToast('⚠️ Could not save festival attendance'); }
+    else logAudit({ action: 'festival.rsvp_add', entityType: 'festival', entityId: festId, metadata: { raver_id: raverId } });
   }
 
   async function dbRemoveRaverFestival(raverId, festId) {
     const { error } = await sb.from('raver_festivals').delete().eq('raver_id', raverId).eq('festival_id', festId);
     if (error) { console.error('raver_festivals remove error', error); showToast('⚠️ Could not update festival attendance'); }
+    else logAudit({ action: 'festival.rsvp_remove', entityType: 'festival', entityId: festId, metadata: { raver_id: raverId } });
   }
 
   async function dbAddRaverFestivalInterest(raverId, festId) {
@@ -8258,6 +8260,7 @@ async function doProfilePasswordChange() {
       .upsert({ crew_id: crewId, raver_id: raverId, added_by: uid, deleted_at: null, deleted_by: null, delete_reason: null },
                { onConflict: 'crew_id,raver_id', ignoreDuplicates: false });
     if (error) { console.error('crew member add error', error); showToast('⚠️ Could not add member — try again'); }
+    else logAudit({ action: 'crew_member.add', entityType: 'crew_member', entityId: raverId, metadata: { crew_id: crewId } });
   }
 
   // Targeted single-row soft delete — only touches the removed member
@@ -8376,9 +8379,14 @@ async function doProfilePasswordChange() {
 
   async function logAudit({ action, entityType, entityId, reason, metadata }) {
     const uid = currentUser?.id;
+    // Snapshot the actor's display name at write time — the client only ever
+    // loads its own squad locally, so there's no directory to resolve an
+    // arbitrary actor_id back to a name later for the History views.
+    const actorName = (uid && squad.find(r => String(r.claimedBy) === String(uid))?.name) || null;
     try {
       const { error } = await sb.from('audit_logs').insert({
         actor_id: uid || null,
+        actor_name: actorName,
         action,
         entity_type: entityType,
         entity_id: entityId ?? null,
@@ -8392,6 +8400,83 @@ async function doProfilePasswordChange() {
     }
   }
 
+  // ===== HISTORY / ACTIVITY VIEWS =====
+  // Friendly, on-brand rendering over the get_{festival,crew,raver}_history()
+  // RPCs (see supabase/migrations/20260708000000_history_views.sql). Those
+  // RPCs already mask `reason` to moderators only, so `showReason` here is
+  // just about whether to render the line — the data itself is safe either way.
+
+  const HISTORY_ACTION_META = {
+    'festival.update':      { emoji: '✏️', label: 'Rave details updated' },
+    'festival.soft_delete': { emoji: '🗑️', label: 'Rave deleted' },
+    'festival.restore':     { emoji: '↩️', label: 'Rave restored' },
+    'festival.archive':     { emoji: '🗄️', label: 'Rave archived' },
+    'festival.rsvp_add':    { emoji: '🎪', label: "RSVP'd in" },
+    'festival.rsvp_remove': { emoji: '👋', label: 'RSVP removed' },
+    'crew.update':          { emoji: '✏️', label: 'Crew details updated' },
+    'crew.delete':          { emoji: '🗑️', label: 'Crew deleted' },
+    'crew.restore':         { emoji: '↩️', label: 'Crew restored' },
+    'crew_member.add':      { emoji: '🙌', label: 'Added to the crew' },
+    'crew_member.remove':   { emoji: '👋', label: 'Removed from the crew' },
+    'raver.update':         { emoji: '✏️', label: 'Profile updated' },
+    'raver.delete':         { emoji: '🗑️', label: 'Profile deleted' },
+    'raver.restore':        { emoji: '↩️', label: 'Profile restored' },
+    'dream_pin.remove':     { emoji: '🗑️', label: 'Dream board pin removed' },
+    'archive_link.remove':  { emoji: '🗑️', label: 'Archive link removed' },
+    'poll.remove':          { emoji: '🗑️', label: 'Poll removed' },
+    'jam.remove':           { emoji: '🗑️', label: 'Jam removed' },
+    'photo.remove':         { emoji: '🗑️', label: 'Photo removed' },
+  };
+  function historyActionMeta(action) {
+    return HISTORY_ACTION_META[action] || { emoji: '📌', label: action };
+  }
+
+  function historyRowHTML(row, { showReason = false } = {}) {
+    const { emoji, label } = historyActionMeta(row.action);
+    const who = escHtml(row.actor_name || 'Someone');
+    const when = relativeTime(new Date(row.created_at).getTime());
+    const fields = row.metadata?.fields;
+    const fieldsLine = (Array.isArray(fields) && fields.length)
+      ? `<div class="event-meta" style="opacity:0.7;">Changed: ${escHtml(fields.join(', '))}</div>` : '';
+    const reasonLine = (showReason && row.reason)
+      ? `<div class="event-meta" style="color:var(--neon-pink);">🔒 Mod note: ${escHtml(row.reason)}</div>` : '';
+    return `
+      <div class="event-item">
+        <div class="event-item-body" style="align-items:flex-start;">
+          <div class="event-info">
+            <div class="event-name">${emoji} ${escHtml(label)}</div>
+            <div class="event-meta">${who} · ${when}</div>
+            ${fieldsLine}
+            ${reasonLine}
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function buildHistoryListHTML(rows, { showReason = false, emptyMessage = 'No history yet — check back after the next edit 👀' } = {}) {
+    if (!rows || !rows.length) {
+      return `<p style="font-size:0.82rem;color:var(--muted);text-align:center;padding:14px 0;">${escHtml(emptyMessage)}</p>`;
+    }
+    return `<div class="events-list">${rows.map(r => historyRowHTML(r, { showReason })).join('')}</div>`;
+  }
+
+  async function dbLoadFestivalHistory(festId, limit = 50) {
+    const { data, error } = await sb.rpc('get_festival_history', { p_festival_id: festId, p_limit: limit });
+    if (error) { console.error('festival history load error', error); return []; }
+    return data || [];
+  }
+
+  async function dbLoadCrewHistory(crewId, limit = 50) {
+    const { data, error } = await sb.rpc('get_crew_history', { p_crew_id: crewId, p_limit: limit });
+    if (error) { console.error('crew history load error', error); return []; }
+    return data || [];
+  }
+
+  async function dbLoadRaverHistory(raverId, limit = 50) {
+    const { data, error } = await sb.rpc('get_raver_history', { p_raver_id: raverId, p_limit: limit });
+    if (error) { console.error('raver history load error', error); return []; }
+    return data || [];
+  }
 
   // ===== NOTIFICATION DB HELPERS =====
 
@@ -9641,6 +9726,8 @@ async function doProfilePasswordChange() {
   let crewAchievements = [];
   let raverAchievements = [];
   let crewFeedEvents = [];
+  let crewHistoryRows = [];
+  let crewHistoryExpanded = false;
 
   const BADGE_DEFINITIONS = [
     { id:'first_festival_together', name:'First Rave Together', emoji:'🎪',
@@ -9677,6 +9764,8 @@ async function doProfilePasswordChange() {
     crewAchievements = [];
     raverAchievements = [];
     crewFeedEvents = [];
+    crewHistoryRows = [];
+    crewHistoryExpanded = false;
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById('page-crew-detail').classList.add('active');
     window.scrollTo(0, 0);
@@ -9687,6 +9776,7 @@ async function doProfilePasswordChange() {
     dbLoadPolls(id).then(() => rerenderPolls(id)).catch(console.warn);
     dbLoadJams(id).then(() => rerenderJams(id)).catch(console.warn);
     dbLoadAchievements(id).then(() => { rerenderFamPins(id); checkAndAwardBadges(id); }).catch(console.warn);
+    dbLoadCrewHistory(id).then(rows => { crewHistoryRows = rows; rerenderCrewHistory(id); }).catch(console.warn);
   }
   function closeDetail() {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -10021,6 +10111,7 @@ async function doProfilePasswordChange() {
       ${!isSecret ? buildPollsHTML(crew.id) : ''}
       ${!isSecret ? buildJamsHTML(crew.id) : ''}
       ${buildArchiveHTML(crew.id)}
+      ${buildCrewHistoryHTML(crew.id)}
       <div class="crew-status-zone">
         <div class="crew-status-zone-header">
           <span class="crew-status-zone-label">Status</span>
@@ -10340,6 +10431,39 @@ async function doProfilePasswordChange() {
           ${emptyState}
           ${cards}
         </div>
+      </div>`;
+  }
+
+  // ===== Crew History =====
+  // Read-only activity feed sourced from get_crew_history() (see logAudit()
+  // call sites for what gets written). Capped to the latest 6 rows by
+  // default so the page doesn't feel cluttered; "Show more" reveals the rest
+  // of what the RPC already fetched (no extra query).
+  function rerenderCrewHistory(crewId) {
+    const el = document.getElementById('crew-history-section');
+    if (el) el.outerHTML = buildCrewHistoryHTML(crewId);
+  }
+
+  function toggleCrewHistoryExpanded(crewId) {
+    crewHistoryExpanded = !crewHistoryExpanded;
+    rerenderCrewHistory(crewId);
+  }
+
+  function buildCrewHistoryHTML(crewId) {
+    const COLLAPSED_COUNT = 6;
+    const mod = isModerator();
+    const rows = crewHistoryExpanded ? crewHistoryRows : crewHistoryRows.slice(0, COLLAPSED_COUNT);
+    const showMoreBtn = crewHistoryRows.length > COLLAPSED_COUNT
+      ? `<button class="btn btn-ghost" style="width:100%;margin-top:8px;padding:8px;font-size:0.78rem;"
+           data-crew-id="${escHtml(crewId)}" onclick="toggleCrewHistoryExpanded(this.dataset.crewId)">
+           ${crewHistoryExpanded ? 'Show less' : `Show ${crewHistoryRows.length - COLLAPSED_COUNT} more`}
+         </button>`
+      : '';
+    return `
+      <div class="form-group crew-history-section" id="crew-history-section">
+        <div class="section-banner"><span class="banner-inner">📜 Crew History <span class="banner-subtitle">· who did what, when</span></span></div>
+        ${buildHistoryListHTML(rows, { showReason: mod, emptyMessage: 'No crew activity logged yet.' })}
+        ${showMoreBtn}
       </div>`;
   }
 
@@ -12414,6 +12538,10 @@ async function doProfilePasswordChange() {
     const newColor = sel ? rgbToHex(sel.style.background) : crew.color;
     const colorKey = Object.keys(CREW_GRADIENTS).find(k => k.toLowerCase() === newColor.toLowerCase()) || newColor;
     const newGradient = CREW_GRADIENTS[colorKey] || `linear-gradient(135deg,${newColor},${newColor})`;
+    // Snapshot before mutating so we can log exactly what changed.
+    const before = { name: crew.name, color: crew.color, description: crew.description || '' };
+    const after = { name: newName, color: newColor, description: newDesc };
+    const changedFields = Object.keys(after).filter(k => String(before[k] ?? '') !== String(after[k] ?? ''));
     crew.name = newName;
     crew.color = newColor;
     crew.gradient = newGradient;
@@ -12423,7 +12551,12 @@ async function doProfilePasswordChange() {
     renderCrews();
     renderDetail(id);
     showToast('✅ Crew updated');
-    if (currentUser) dbSaveCrew({ name: newName, color: newColor, gradient: newGradient, status: crew.status, totemPhotoUrl: crew.totemPhotoUrl, description: newDesc }, id);
+    if (currentUser) {
+      dbSaveCrew({ name: newName, color: newColor, gradient: newGradient, status: crew.status, totemPhotoUrl: crew.totemPhotoUrl, description: newDesc }, id);
+      if (changedFields.length) {
+        logAudit({ action: 'crew.update', entityType: 'crew', entityId: id, metadata: { fields: changedFields } });
+      }
+    }
   }
 
   // ===== Crew invite link =====
@@ -12958,10 +13091,31 @@ async function doProfilePasswordChange() {
   }
 
   // ===== Dedicated profile page =====
+  let raverHistoryRows = [];
+  let raverHistoryExpanded = false;
+  let _raverHistoryLoadedFor = null;
+
+  function rerenderRaverHistory(rows) {
+    const body = document.getElementById('raver-history-body');
+    if (body) body.innerHTML = buildHistoryListHTML(rows, { showReason: isModerator(), emptyMessage: 'No history yet — check back after the next edit 👀' });
+  }
+
+  function toggleRaverHistorySection() {
+    raverHistoryExpanded = !raverHistoryExpanded;
+    const body = document.getElementById('raver-history-body');
+    const arrow = document.getElementById('raver-history-toggle-label');
+    if (body) body.style.display = raverHistoryExpanded ? '' : 'none';
+    if (arrow) arrow.textContent = raverHistoryExpanded ? '▲ Hide' : '▼ Show';
+  }
+
   function openProfile(id, editMode = false, origin = null) {
     const r = getRaver(id);
     if (!r) return;
     if (origin !== null) profileOrigin = origin;
+    if (_raverHistoryLoadedFor !== String(id)) {
+      raverHistoryRows = [];
+      _raverHistoryLoadedFor = String(id);
+    }
 
     // Upcoming: sorted soonest-first, with date + countdown
     const upcomingFests = raverUpcoming(r);
@@ -13401,6 +13555,16 @@ async function doProfilePasswordChange() {
               <div id="notes-saved-${r.id}" class="inline-notes-saved">Saved ✓</div>`;
           })()}
         </div>
+
+        <div class="profile-section" style="${sg(2)}">
+          <h3 style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;" onclick="toggleRaverHistorySection()">
+            <span>📜 History</span>
+            <span id="raver-history-toggle-label" style="font-size:0.72rem;color:var(--muted);">${raverHistoryExpanded ? '▲ Hide' : '▼ Show'}</span>
+          </h3>
+          <div id="raver-history-body" style="${raverHistoryExpanded ? '' : 'display:none;'}">
+            ${buildHistoryListHTML(raverHistoryRows, { showReason: isModerator(), emptyMessage: 'No history yet — check back after the next edit 👀' })}
+          </div>
+        </div>
       `;
       if (r.isYou || perms.editFests) renderInlineFestPicker(r.id);
     }
@@ -13422,6 +13586,17 @@ async function doProfilePasswordChange() {
         const photoSection = document.getElementById('our-photos-async-wrap');
         const raver = getRaver(_profileId);
         if (photoSection && raver) photoSection.innerHTML = ourPhotoSectionHTML(_profileId);
+      }).catch(console.warn);
+    }
+
+    // History loads regardless of whose profile this is (own or unclaimed) —
+    // it's the whole point for unclaimed profiles.
+    if (!editMode && currentUser) {
+      const _historyProfileId = r.id;
+      dbLoadRaverHistory(_historyProfileId).then(rows => {
+        if (String(_raverHistoryLoadedFor) !== String(_historyProfileId)) return; // profile changed since
+        raverHistoryRows = rows;
+        rerenderRaverHistory(rows);
       }).catch(console.warn);
     }
   }
@@ -14569,6 +14744,12 @@ async function doProfilePasswordChange() {
       try {
         const r = getRaver(editingId);
         if (!r) { showToast('⚠️ Profile not found — try again'); return; }
+        // Snapshot meaningful fields before mutating so we can log what changed
+        // (skip noisy/structural fields like festIds/vibeTags — those aren't
+        // "edits" in the history sense).
+        const beforeFields = { name: r.name, handle: r.handle, base: r.base, notes: r.notes, instagram: r.instagram };
+        const afterFields = { name: data.name, handle: data.handle, base: data.base, notes: data.notes, instagram: data.instagram };
+        const changedFields = Object.keys(afterFields).filter(k => String(beforeFields[k] ?? '') !== String(afterFields[k] ?? ''));
         Object.assign(r, data);
         closeProfileEditor();
         const _fab = document.getElementById('qr-fab');
@@ -14584,6 +14765,9 @@ async function doProfilePasswordChange() {
             console.warn('[saveProfile] DB sync failed:', e);
             showToast('⚠️ Profile saved locally — sync failed, try again');
           });
+          if (changedFields.length) {
+            logAudit({ action: 'raver.update', entityType: 'raver', entityId: r.id, metadata: { fields: changedFields } });
+          }
         }
       } catch(err) {
         console.error('[saveProfile]', err);
@@ -14983,6 +15167,7 @@ async function doProfilePasswordChange() {
         <div id="re-raver-results" class="fest-search-dropdown" style="display:none;"></div>
       </div>` : ''}
       <div class="modal-actions">
+        ${f && currentUser ? `<button class="btn btn-ghost" onclick="showFestivalHistoryInModal('${f.id}')">📜 History</button>` : ''}
         ${f && festivalPerms(f).canEdit ? `<button class="btn btn-ghost" style="color:var(--neon-pink);" onclick="showDeleteRaveConfirm()">Delete</button>` : ''}
         ${f && currentUser && !festivalPerms(f).canEdit ? `<button class="btn btn-ghost" onclick="showReportModal('festival', '${f.id}')">🚩 Report</button>` : ''}
         <button class="btn btn-ghost" onclick="closeRaveEditor()">Cancel</button>
@@ -14990,6 +15175,25 @@ async function doProfilePasswordChange() {
       </div>
     `;
     document.getElementById('rave-edit-overlay').classList.add('open');
+  }
+
+  // Swaps the existing rave-edit modal body to a read-only History view for
+  // this festival — reuses the already-open modal instead of adding a new
+  // overlay to the HTML skeleton. "← Back" returns to the edit form.
+  async function showFestivalHistoryInModal(festId) {
+    const f = getFestival(festId);
+    const modal = document.getElementById('rave-edit-modal');
+    if (!modal) return;
+    modal.innerHTML = `
+      <div class="modal-title">📜 History${f ? ' — ' + escHtml(f.name) : ''}</div>
+      <div id="festival-history-list">${buildHistoryListHTML([], { emptyMessage: 'Loading…' })}</div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" data-fest-id="${escHtml(String(festId))}" onclick="openRaveEditor(this.dataset.festId)">← Back</button>
+      </div>
+    `;
+    const rows = await dbLoadFestivalHistory(festId);
+    const listEl = document.getElementById('festival-history-list');
+    if (listEl) listEl.innerHTML = buildHistoryListHTML(rows, { showReason: isModerator() });
   }
   function toggleGoingToFest(festId) {
     if (String(festId).startsWith('temp_')) { showToast('Still saving — try again in a moment'); return; }
@@ -15187,9 +15391,18 @@ async function doProfilePasswordChange() {
     const color = editRaveColor || null;
     if (editingFestivalId) {
       const f = getFestival(editingFestivalId);
+      // Snapshot before mutating so we can log exactly what changed.
+      const before = { name: f.name, date: f.date, location: f.location, color: f.color, days: f.days };
+      const after = { name, date, location, color, days };
+      const changedFields = Object.keys(after).filter(k => String(before[k] ?? '') !== String(after[k] ?? ''));
       Object.assign(f, { name, date, location, color, days });
       showToast(`✅ Updated ${name}`);
-      if (currentUser) dbSaveFestival({ name, date, location, color, days }, editingFestivalId);
+      if (currentUser) {
+        dbSaveFestival({ name, date, location, color, days }, editingFestivalId);
+        if (changedFields.length) {
+          logAudit({ action: 'festival.update', entityType: 'festival', entityId: editingFestivalId, metadata: { fields: changedFields } });
+        }
+      }
     } else {
       const dupe = findFestivalByName(name, date);
       if (dupe) { showToast(`"${dupe.name}" already exists`); return; }
