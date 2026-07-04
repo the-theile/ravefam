@@ -3435,6 +3435,24 @@
     margin-bottom: 28px;
     text-align: center;
   }
+  .ob-genre-reassurance {
+    text-align: center;
+    font-size: 0.72rem;
+    color: var(--muted);
+    font-style: italic;
+    margin: -6px 0 14px;
+  }
+  .ob-skip-link {
+    display: block;
+    text-align: center;
+    font-size: 0.76rem;
+    color: var(--muted);
+    cursor: pointer;
+    font-family: 'Outfit', sans-serif;
+    margin-top: 10px;
+    transition: color 0.2s;
+  }
+  .ob-skip-link:hover { color: var(--text); }
   .onboard-features {
     display: flex;
     flex-direction: column;
@@ -4114,6 +4132,49 @@
   }
   .claim-edit-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.3); }
 
+  /* ── Claim review: grouped sections + per-item opt-out ── */
+  .claim-review-explainer {
+    font-size: 0.74rem;
+    line-height: 1.55;
+    color: rgba(255,255,255,0.45);
+    margin-bottom: 12px;
+  }
+  .claim-review-section { margin-bottom: 12px; }
+  .claim-review-section:last-child { margin-bottom: 0; }
+  .claim-review-subhead {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .claim-chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .claim-chip-toggle {
+    background: rgba(0,245,255,0.12);
+    border: 1px solid rgba(0,245,255,0.35);
+    border-radius: 100px;
+    padding: 3px 10px;
+    font-size: 0.7rem;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    color: var(--text);
+    cursor: pointer;
+    transition: opacity 0.15s, background 0.15s, border-color 0.15s;
+  }
+  .claim-chip-toggle::before { content: '✓ '; }
+  .claim-chip-toggle.declined {
+    background: rgba(255,255,255,0.04);
+    border-color: rgba(255,255,255,0.1);
+    color: var(--muted);
+    text-decoration: line-through;
+    opacity: 0.55;
+  }
+  .claim-chip-toggle.declined::before { content: ''; }
+  .claim-field-value { flex: 1; }
+  .claim-field-toggle { margin-left: auto; }
+
   /* ── Error view ── */
   .claim-error-body { width: calc(100% - 48px); max-width: 432px; text-align: center; padding: 24px 0 28px; }
   .claim-error-icon { font-size: 3.5rem; margin-bottom: 16px; }
@@ -4141,6 +4202,14 @@
   }
   #claim-success-screen.open { display: flex; }
   #confetti-canvas { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+
+  /* ── Post-merge privacy nudge ── */
+  #claim-privacy-nudge {
+    position: fixed; inset: 0; z-index: 300; background: var(--bg);
+    display: none; align-items: center; justify-content: center; padding: 24px;
+  }
+  #claim-privacy-nudge.open { display: flex; }
+  .claim-privacy-card { max-width: 380px; }
 
   .success-content {
     position: relative; z-index: 1;
@@ -5764,6 +5833,19 @@
 </div>
 
 <!-- ══════════════════════════════════════════════
+     POST-MERGE PRIVACY NUDGE (merge claims only)
+══════════════════════════════════════════════ -->
+<div id="claim-privacy-nudge" role="dialog" aria-modal="true">
+  <div class="onboard-card claim-privacy-card">
+    <div class="onboard-title" style="margin-bottom:6px;">🔒 Quick privacy check</div>
+    <div class="onboard-sub" style="margin-bottom:18px;">Your crew leader may have filled in a few details. Want your crew to see these?</div>
+    <div id="claim-privacy-rows"></div>
+    <button class="auth-btn" onclick="commitClaimPrivacyNudge()" style="margin-top:18px;">Save &amp; Continue →</button>
+    <button class="btn btn-ghost" onclick="skipClaimPrivacyNudge()" style="width:100%;margin-top:10px;padding:12px;font-size:0.85rem;">Skip for now</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
      PRE-AUTH CLAIM INTERCEPT
 ══════════════════════════════════════════════ -->
 <div id="claim-intercept" role="dialog" aria-modal="true">
@@ -5819,9 +5901,11 @@
       <div class="ob-eq-bar"></div>
     </div>
     <div class="onboard-title">What's your sound? 🎛️</div>
-    <div class="onboard-sub">Tap the genres that move you. This is your sonic identity — no wrong answers.</div>
+    <div class="onboard-sub" id="ob-step1-sub">Tap the genres that move you. This is your sonic identity — no wrong answers.</div>
     <div class="ob-genre-grid" id="ob-genre-grid"></div>
+    <div class="ob-genre-reassurance">Pick a few, or skip — nothing here is permanent.</div>
     <button class="auth-btn" id="ob-step1-btn" disabled onclick="obStep1Next()">Lock In My Sound →</button>
+    <span class="ob-skip-link" role="button" tabindex="0" onclick="obSkipStep1()" onkeydown="if(event.key==='Enter')obSkipStep1()">Skip for now — I'll pick later</span>
   </div>
 
   <!-- Step 2: Minimal Identity -->
@@ -5884,31 +5968,31 @@
   <div id="ob-whatnow" class="onboard-card" style="display:none;text-align:center;">
     <div style="font-size:2.8rem;margin-bottom:10px;">🎉</div>
     <div class="onboard-title" style="margin-bottom:6px;">You're in the fam!</div>
-    <div class="onboard-sub" style="margin-bottom:14px;">The floor is yours. What do you want to do first?</div>
+    <div class="onboard-sub" style="margin-bottom:14px;">The floor is yours — what's first?</div>
     <div style="font-size:0.78rem;color:var(--muted);margin-bottom:18px;">
-      🔒 Your profile's open to your crew by default —
-      <a href="#" onclick="completeOnboarding();openPrivacySettingsModal(squad.find(r=>r.isYou)?.id);return false;" style="color:var(--neon-pink);text-decoration:none;font-weight:600;">adjust anytime</a>.
+      🔒 Open to your crew by default —
+      <a href="#" onclick="completeOnboarding();openPrivacySettingsModal(squad.find(r=>r.isYou)?.id);return false;" style="color:var(--neon-pink);text-decoration:none;font-weight:600;">tweak anytime</a>.
     </div>
     <div class="ob-whatnow-chips">
       <button class="ob-whatnow-chip" onclick="completeOnboarding();switchTab('events')">
         <span class="ob-whatnow-chip-icon">🗓️</span>
         <div>
           <div class="ob-whatnow-chip-label">Find my next rave</div>
-          <div class="ob-whatnow-chip-sub">Browse events and mark yourself going</div>
+          <div class="ob-whatnow-chip-sub">Browse raves and lock in your next one</div>
         </div>
       </button>
       <button class="ob-whatnow-chip" onclick="completeOnboarding();openModal()">
         <span class="ob-whatnow-chip-icon">👑</span>
         <div>
-          <div class="ob-whatnow-chip-label">Create a crew</div>
-          <div class="ob-whatnow-chip-sub">Invite your tribe and plan the season</div>
+          <div class="ob-whatnow-chip-label">Rally your crew</div>
+          <div class="ob-whatnow-chip-sub">Invite your people, plan the season together</div>
         </div>
       </button>
       <button class="ob-whatnow-chip" onclick="completeOnboarding()">
         <span class="ob-whatnow-chip-icon">🔍</span>
         <div>
-          <div class="ob-whatnow-chip-label">Just explore</div>
-          <div class="ob-whatnow-chip-sub">Take a look around — you can set up later</div>
+          <div class="ob-whatnow-chip-label">Just look around</div>
+          <div class="ob-whatnow-chip-sub">No pressure — dive in whenever</div>
         </div>
       </button>
     </div>
@@ -6699,6 +6783,8 @@ async function doProfilePasswordChange() {
   let _scannerActive    = false;  // scanning loop running
   let _scanHandled      = false;  // prevents duplicate QR processing
   let _pendingClaimToken = null;  // token awaiting user confirmation
+  let _lastClaimWasMerge = false;       // true if the last commitClaim() merged into an existing profile
+  let _pendingPostClaimCrewName = null; // crew name to greet with on the next showOnboarding()
 
   // ── Open / Close ──────────────────────────────────────
   function openScanner() {
@@ -6963,6 +7049,35 @@ async function doProfilePasswordChange() {
   }
 
   // ── Claim preview screen ──────────────────────────────
+  // Computes what's new on the stub vs. the user's existing profile, grouped
+  // by category so the UI can label them and so commitClaim() can later
+  // reconstruct exactly what the user opted out of. `radiate` is deliberately
+  // excluded: claim_and_merge_raver never persists it, so showing it here
+  // would promise something the app doesn't do.
+  function computeClaimDiff(raver, existingRaver) {
+    const newGenres = (raver.genres || []).filter(g => !existingRaver.genres.includes(g));
+    const newArtists = (raver.favorite_artist_ids || [])
+      .filter(id => !existingRaver.favArtistIds.includes(id))
+      .map(id => ({ id, name: findArtistById(id)?.name }))
+      .filter(a => a.name);
+    const newVibes = (raver.vibe_tags || []).filter(t => !existingRaver.vibeTags.includes(t));
+    const newCustomVibes = (raver.custom_vibe_tags || []).filter(t => !existingRaver.customVibeTags.includes(t));
+    const newFestivals = (raver.festival_ids || [])
+      .filter(id => !existingRaver.festIds.includes(String(id)))
+      .map(id => ({ id, name: festivals.find(f => String(f.id) === String(id))?.name }))
+      .filter(f => f.name);
+    const fields = [];
+    if (raver.base      && !existingRaver.base)      fields.push({ key: 'base',      label: '📍 Base',      value: raver.base });
+    if (raver.handle    && !existingRaver.handle)    fields.push({ key: 'handle',    label: '🏷️ Handle',    value: raver.handle });
+    if (raver.instagram && !existingRaver.instagram) fields.push({ key: 'instagram', label: '📸 Instagram', value: '@' + raver.instagram });
+    return { newGenres, newArtists, newVibes, newCustomVibes, newFestivals, fields };
+  }
+
+  function claimToggleChip(el) {
+    el.classList.toggle('declined');
+    el.setAttribute('aria-pressed', el.classList.contains('declined') ? 'false' : 'true');
+  }
+
   function showClaimPreview(data, token) {
     const raver = data?.raver || {};
     const crew  = data?.crew  || null;
@@ -6991,36 +7106,41 @@ async function doProfilePasswordChange() {
     let bottomSection = '';
 
     if (existingRaver) {
-      // Compute what from the stub is genuinely new to the existing profile
-      const newGenres  = (raver.genres || []).filter(g => !existingRaver.genres.includes(g));
-      const newArtistIds = (raver.favorite_artist_ids || []).filter(id => !existingRaver.favArtistIds.includes(id));
-      const newArtists = newArtistIds.map(id => findArtistById(id)?.name).filter(Boolean);
-      const stubVibes  = [...(raver.vibe_tags || []), ...(raver.custom_vibe_tags || [])];
-      const newVibes   = stubVibes.filter(t =>
-        !existingRaver.vibeTags.includes(t) && !existingRaver.customVibeTags.includes(t)
-      );
-      const newFestIds   = (raver.festival_ids || []).filter(id => !existingRaver.festIds.includes(String(id)));
-      const newFestNames = newFestIds
-        .map(id => festivals.find(f => String(f.id) === String(id))?.name)
-        .filter(Boolean);
-      const newBase      = raver.base      && !existingRaver.base      ? raver.base      : null;
-      const newHandle    = raver.handle    && !existingRaver.handle    ? raver.handle    : null;
-      const newInstagram = raver.instagram && !existingRaver.instagram ? raver.instagram : null;
-      const newRadiate   = raver.radiate   && !existingRaver.radiate   ? raver.radiate   : null;
+      const diff = computeClaimDiff(raver, existingRaver);
+      const hasAdds = diff.newGenres.length || diff.newArtists.length || diff.newVibes.length
+        || diff.newCustomVibes.length || diff.newFestivals.length || diff.fields.length;
 
-      const chipItems = [...newGenres, ...newArtists, ...newVibes, ...newFestNames];
-      const hasAdds   = chipItems.length > 0 || newBase || newHandle || newInstagram || newRadiate;
+      const chip = (cat, value, id) =>
+        `<span class="claim-chip-toggle" data-cat="${cat}" data-value="${escHtml(value)}"${id != null ? ` data-id="${escHtml(String(id))}"` : ''}
+           tabindex="0" role="button" aria-pressed="true" onclick="claimToggleChip(this)"
+           onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();claimToggleChip(this);}">${escHtml(value)}</span>`;
+
+      const section = (label, chipsHtml) => chipsHtml
+        ? `<div class="claim-review-section"><div class="claim-review-subhead">${label}</div><div class="claim-chip-row">${chipsHtml}</div></div>`
+        : '';
+
+      const soundChips = [...diff.newGenres.map(g => chip('genre', g)),
+                           ...diff.newArtists.map(a => chip('artist', a.name, a.id))].join('');
+      const vibeChips   = [...diff.newVibes.map(v => chip('vibe', v)),
+                           ...diff.newCustomVibes.map(v => chip('customVibe', v))].join('');
+      const festChips   = diff.newFestivals.map(f => chip('festival', f.name, f.id)).join('');
+
+      const fieldRows = diff.fields.map(f => `
+        <div class="claim-review-row" data-field="${f.key}">
+          <span class="claim-review-key">${f.label}</span>
+          <span class="claim-field-value">${escHtml(f.value)}</span>
+          <button class="poll-anon-toggle on claim-field-toggle" aria-label="Include ${f.label}" onclick="this.classList.toggle('on')"></button>
+        </div>`).join('');
 
       if (hasAdds) {
-        const chipHtml = chipItems.map(t => `<span class="claim-tag">${escHtml(t)}</span>`).join('');
         bottomSection = `
           <div class="claim-review-block">
-            <div class="claim-review-label">✨ Your crew leader added these to your profile</div>
-            ${chipHtml ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">${chipHtml}</div>` : ''}
-            ${newBase      ? `<div class="claim-review-row"><span class="claim-review-key">📍 Base</span><span>${escHtml(newBase)}</span></div>` : ''}
-            ${newHandle    ? `<div class="claim-review-row"><span class="claim-review-key">🏷️ Handle</span><span>${escHtml(newHandle)}</span></div>` : ''}
-            ${newInstagram ? `<div class="claim-review-row"><span class="claim-review-key">📸 Instagram</span><span>@${escHtml(newInstagram)}</span></div>` : ''}
-            <div style="margin-top:10px;font-size:0.75rem;color:rgba(255,255,255,0.4);">These will be added to your profile when you claim. Nothing on your existing profile will be removed or overwritten.</div>
+            <div class="claim-review-label">✨ New from your crew leader</div>
+            <div class="claim-review-explainer">Claiming links this scanned profile to your account. Everything below is optional — untick anything you don't want. Nothing on your existing profile is ever removed or overwritten.</div>
+            ${section('🎵 Sound', soundChips)}
+            ${section('🎪 Festivals', festChips)}
+            ${section('✨ Vibe', vibeChips)}
+            ${fieldRows ? `<div class="claim-review-section">${fieldRows}</div>` : ''}
           </div>
           <div class="claim-spot-label">This profile was saved for you by your crew leader.</div>`;
       } else {
@@ -7132,6 +7252,27 @@ async function doProfilePasswordChange() {
     switchScannerTab('camera');
   }
 
+  // Reads the current DOM state of the claim-preview screen to reconstruct
+  // exactly what the user opted OUT of, so we only need to tell the server
+  // the exceptions to "accept everything" (keeps default/no-touch behavior
+  // byte-identical to the original accept-all flow).
+  function collectClaimDeclined() {
+    const declined = { genres: [], artist_ids: [], vibe_tags: [], custom_vibe_tags: [], festival_ids: [], fields: [] };
+    document.querySelectorAll('#preview-body .claim-chip-toggle.declined').forEach(el => {
+      const cat = el.dataset.cat;
+      if (cat === 'genre')          declined.genres.push(el.dataset.value);
+      else if (cat === 'artist')    declined.artist_ids.push(el.dataset.id);
+      else if (cat === 'vibe')      declined.vibe_tags.push(el.dataset.value);
+      else if (cat === 'customVibe') declined.custom_vibe_tags.push(el.dataset.value);
+      else if (cat === 'festival')  declined.festival_ids.push(el.dataset.id);
+    });
+    document.querySelectorAll('#preview-body .claim-field-toggle:not(.on)').forEach(el => {
+      const key = el.closest('.claim-review-row')?.dataset.field;
+      if (key) declined.fields.push(key);
+    });
+    return declined;
+  }
+
   // ── Commit claim ──────────────────────────────────────
   async function commitClaim() {
     const token = _pendingClaimToken;
@@ -7147,10 +7288,17 @@ async function doProfilePasswordChange() {
 
     const existingRaver = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
     const params = { p_token: token };
-    if (existingRaver) params.p_existing_raver_id = existingRaver.id;
+    if (existingRaver) {
+      params.p_existing_raver_id = existingRaver.id;
+      const declined = collectClaimDeclined();
+      const hasDeclines = Object.values(declined).some(a => a.length);
+      if (hasDeclines) params.p_declined = declined;
+    }
+    _lastClaimWasMerge = !!existingRaver;
 
     // Grab preview data before the claim so we can pass it to the success screen
     const { data: previewSnap } = await sb.rpc('get_claim_preview', { p_token: token });
+    _pendingPostClaimCrewName = previewSnap?.crew?.name || null;
 
     const { data: result, error } = await sb.rpc('claim_and_merge_raver', params);
     if (error || result?.error) {
@@ -7241,10 +7389,49 @@ async function doProfilePasswordChange() {
     if (canvas) { const ctx = canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height); }
     if (window._confettiFrame) { cancelAnimationFrame(window._confettiFrame); window._confettiFrame = null; }
     if (window._successAutoClose) { clearTimeout(window._successAutoClose); window._successAutoClose = null; }
+    // Merge claims get a one-time privacy check first; it hands off to
+    // runFirstTimeSetup() itself once dismissed (see closeClaimPrivacyNudge).
+    if (_lastClaimWasMerge) {
+      _lastClaimWasMerge = false;
+      const me = squad.find(r => r.isYou);
+      if (me) { showClaimPrivacyNudge(me); return; }
+    }
     // First-time members run the full genre/handle wizard now that they've
     // claimed their spot (no "welcome back" popup mid-onboarding).
     runFirstTimeSetup();
   }
+
+  // ── Post-merge privacy nudge ──────────────────────────
+  function showClaimPrivacyNudge(existingRaver) {
+    const rows = [
+      { key: 'privacyBaseVisible', label: 'Base location', hint: "Show where you're based to crewmates" },
+      { key: 'phoneVisible',       label: 'Phone number',   hint: 'Share your phone with crewmates' },
+    ];
+    document.getElementById('claim-privacy-rows').innerHTML = rows.map(row => `
+      <div class="poll-setting-row">
+        <div>
+          <div class="poll-setting-label">${row.label}</div>
+          <div class="poll-setting-hint">${row.hint}</div>
+        </div>
+        <button class="poll-anon-toggle${existingRaver[row.key] ? ' on' : ''}" data-key="${row.key}" onclick="this.classList.toggle('on')"></button>
+      </div>`).join('');
+    document.getElementById('claim-privacy-nudge').classList.add('open');
+  }
+
+  function closeClaimPrivacyNudge() {
+    document.getElementById('claim-privacy-nudge').classList.remove('open');
+    runFirstTimeSetup();
+  }
+
+  function commitClaimPrivacyNudge() {
+    const me = squad.find(r => r.isYou);
+    const patch = {};
+    document.querySelectorAll('#claim-privacy-rows .poll-anon-toggle').forEach(btn => { patch[btn.dataset.key] = btn.classList.contains('on'); });
+    if (me) savePrivacySettings(me.id, patch);
+    closeClaimPrivacyNudge();
+  }
+
+  function skipClaimPrivacyNudge() { closeClaimPrivacyNudge(); }
 
   // ── Confetti ──────────────────────────────────────────
   function launchConfetti() {
@@ -16214,14 +16401,39 @@ async function doProfilePasswordChange() {
         return `<div class="ob-genre-chip${selected ? ' ob-selected' : ''}" data-col="${col}" data-genre="${g}" tabindex="0" role="button" aria-pressed="${selected}" onclick="obToggleGenre(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();obToggleGenre(this);}"${style}>${g}</div>`;
       }).join('');
     }
-    const authName = currentUser?.user_metadata?.full_name || '';
+    const authName = currentUser?.user_metadata?.full_name || existingRaver?.name || '';
     setTimeout(() => {
-      const el = document.getElementById('ob-name-input');
-      if (el && authName) { el.value = authName; obCheckStep2Ready(); }
+      const nameEl = document.getElementById('ob-name-input');
+      if (nameEl && authName) { nameEl.value = authName; }
+      // Carry over an already-set handle instead of forcing re-entry.
+      const handleEl = document.getElementById('ob-handle-input');
+      if (handleEl && existingRaver?.handle) {
+        handleEl.value = existingRaver.handle.replace(/^@/, '');
+        obHandleInput(handleEl.value);
+      }
+      obCheckStep2Ready();
       const btn = document.getElementById('ob-step1-btn');
       if (btn) btn.disabled = _obGenres.size === 0;
     }, 50);
-    obGoToStep(1);
+
+    // If this user already finished sound + identity earlier (e.g. they
+    // started onboarding, closed the app before step 3, then completed an
+    // unrelated crew merge), don't make them redo it — jump to the crew step
+    // and acknowledge what carried over instead of looking "reset".
+    const subEl = document.getElementById('ob-step1-sub');
+    const alreadySetUp = !!(existingRaver && existingRaver.genres?.length && existingRaver.handle);
+    if (alreadySetUp) {
+      obGoToStep(3);
+      showToast("🎶 Good news — your sound & tag carried over. Just crew left!");
+    } else {
+      if (subEl) {
+        subEl.textContent = _pendingPostClaimCrewName
+          ? `Welcome to ${_pendingPostClaimCrewName}! Let's set up your sound — tap what moves you, or skip for now.`
+          : "Tap the genres that move you. This is your sonic identity — no wrong answers.";
+      }
+      obGoToStep(1);
+    }
+    _pendingPostClaimCrewName = null;
     document.getElementById('onboarding-screen').classList.add('show');
   }
 
@@ -16255,6 +16467,11 @@ async function doProfilePasswordChange() {
   function obStep1Next() {
     if (_obGenres.size === 0) return;
     showToast('🎶 Sound locked. The floor knows what you need.');
+    obGoToStep(2);
+  }
+
+  function obSkipStep1() {
+    showToast('🎧 No worries — set your sound anytime from your profile.');
     obGoToStep(2);
   }
 
