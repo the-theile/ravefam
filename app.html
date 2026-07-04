@@ -5995,18 +5995,20 @@
   }
 
   async function dbResolveFlag(flagId, note) {
-    const { error } = await sb.from('flags')
+    const { data, error } = await sb.from('flags')
       .update({ status: 'resolved', resolved_at: new Date().toISOString(), resolved_by: currentUser?.id, resolution_note: note || null })
-      .eq('id', flagId);
+      .eq('id', flagId).select().single();
     if (error) { console.error('flag resolve error', error); showToast('⚠️ Could not resolve — try again'); return false; }
+    await logAudit({ action: 'flag.resolve', entityType: data.target_type, entityId: data.target_id, reason: note, metadata: { flag_id: flagId } });
     return true;
   }
 
   async function dbDismissFlag(flagId, note) {
-    const { error } = await sb.from('flags')
+    const { data, error } = await sb.from('flags')
       .update({ status: 'dismissed', resolved_at: new Date().toISOString(), resolved_by: currentUser?.id, resolution_note: note || null })
-      .eq('id', flagId);
+      .eq('id', flagId).select().single();
     if (error) { console.error('flag dismiss error', error); showToast('⚠️ Could not dismiss — try again'); return false; }
+    await logAudit({ action: 'flag.dismiss', entityType: data.target_type, entityId: data.target_id, reason: note, metadata: { flag_id: flagId } });
     return true;
   }
 
@@ -6130,6 +6132,7 @@
    what festivalPerms()/crewPerms() allow. Already applied live; kept here for reference.
    Full migrations: supabase/migrations/20260703000000_moderators_and_perms_rls.sql
                     supabase/migrations/20260703000001_fix_is_moderator_search_path.sql
+                    supabase/migrations/20260706000000_fix_festivals_update_rsvp_block.sql
 
   -- Real moderator system (replaces a single hardcoded admin email)
   create table public.moderators (
@@ -6152,13 +6155,29 @@
   create policy moderators_delete on public.moderators for delete to authenticated
     using (is_moderator(auth.uid()));
 
-  -- festivals: any logged-in user can insert their own; creator or moderator can edit;
-  -- creator or moderator can delete, but ONLY while no other raver has RSVPed "Going"
+  -- festivals: any logged-in user can insert their own; creator or moderator can edit.
+  -- Soft delete is an UPDATE (sets deleted_at), so the "no other raver has RSVPed
+  -- Going" restriction lives in festivals_update's WITH CHECK, not festivals_delete
+  -- (which nothing calls anymore, now that hard delete is gone). Ordinary edits that
+  -- leave deleted_at unchanged are unaffected — the extra clause only bites on the
+  -- null -> not-null transition.
   create policy festivals_insert on public.festivals for insert
     with check (auth.uid() = created_by);
   create policy festivals_read   on public.festivals for select to authenticated using (true);
   create policy festivals_update on public.festivals for update
-    using ((auth.uid() = created_by) OR is_moderator(auth.uid()));
+    using ((auth.uid() = created_by) OR is_moderator(auth.uid()))
+    with check (
+      ((auth.uid() = created_by) OR is_moderator(auth.uid()))
+      and (
+        deleted_at is null
+        or not exists (
+          select 1 from public.raver_festivals rf
+          join public.ravers r on r.id = rf.raver_id
+          where rf.festival_id = festivals.id
+            and coalesce(r.claimed_by, r.created_by) <> festivals.created_by
+        )
+      )
+    );
   create policy festivals_delete on public.festivals for delete
     using (
       ((auth.uid() = created_by) OR is_moderator(auth.uid()))
@@ -8308,6 +8327,14 @@ async function doProfilePasswordChange() {
           return row.metadata.crew_ids.map(cid => ({ table: 'crew_members', match: { crew_id: cid, raver_id: row.entity_id } }));
         }
         return [{ table: 'crew_members', match: { crew_id: row.metadata?.crew_id, raver_id: row.entity_id } }];
+      case 'dream_pin':     return [{ table: 'dream_board_pins', match: { id: row.entity_id } }];
+      case 'archive_link':  return [{ table: 'crew_archive_links', match: { id: row.entity_id } }];
+      case 'poll':          return [{ table: 'crew_polls', match: { id: row.entity_id } }];
+      case 'jam':           return [{ table: 'crew_jams', match: { id: row.entity_id } }];
+      case 'photo':
+        // our_photos has no single `id` in play here — entityId is the uploader,
+        // metadata carries the pair, matching how logAudit recorded it above.
+        return [{ table: 'our_photos', match: { uploader_user_id: row.entity_id, raver_a_id: row.metadata?.raver_a_id, raver_b_id: row.metadata?.raver_b_id } }];
       default: return [];
     }
   }
@@ -8315,7 +8342,9 @@ async function doProfilePasswordChange() {
   function restoreFromAuditRowById(auditId) {
     const row = modDashRecentRows.find(r => String(r.id) === String(auditId));
     if (!row) { showToast('⚠️ Could not find that entry — refresh and try again'); return; }
-    restoreFromAuditRow(row);
+    const label = FLAG_TARGET_LABELS[row.entity_type] || row.entity_type;
+    showConfirm('Restore this?', `Undoes "${row.action}" and brings this ${label.replace(/^\S+\s/, '').toLowerCase()} back.`, '↩️ Restore',
+      () => restoreFromAuditRow(row));
   }
 
   async function restoreFromAuditRow(row) {
@@ -8623,7 +8652,7 @@ async function doProfilePasswordChange() {
     const myId = String(me.id);
     try {
       const { data: rows } = await sb.from('our_photos').select('uploader_user_id,raver_a_id,raver_b_id,photo_url')
-        .or(`raver_a_id.eq.${myId},raver_b_id.eq.${myId}`);
+        .or(`raver_a_id.eq.${myId},raver_b_id.eq.${myId}`).is('deleted_at', null);
       if (!rows) return;
       rows.forEach(p => {
         const otherId = String(p.raver_a_id) === myId ? String(p.raver_b_id) : String(p.raver_a_id);
@@ -8646,7 +8675,7 @@ async function doProfilePasswordChange() {
     if (!pair) return { mine: null, theirs: null };
     try {
       const { data: rows } = await sb.from('our_photos').select('uploader_user_id,photo_url')
-        .eq('raver_a_id', pair.a).eq('raver_b_id', pair.b);
+        .eq('raver_a_id', pair.a).eq('raver_b_id', pair.b).is('deleted_at', null);
       const result = { mine: null, theirs: null };
       (rows || []).forEach(p => {
         if (p.uploader_user_id === currentUser.id) result.mine = p.photo_url;
@@ -9093,16 +9122,14 @@ async function doProfilePasswordChange() {
       onConfirm: async () => {
         try {
           if (currentUser) {
-            const storagePath = ourPhotoStoragePath(viewingRaverId);
             const pair = ourPhotoPair(viewingRaverId);
-            if (storagePath) {
-              const { error: storageError } = await sb.storage.from('photos').remove([storagePath]);
-              if (storageError) console.warn('our photo storage remove error', storageError);
-            }
+            // Soft delete, like every other destructive action — leave the storage
+            // object in place so a Mod Dashboard restore has something to point back to.
             if (pair) {
-              const { error } = await sb.from('our_photos').delete()
-                .eq('uploader_user_id', currentUser.id).eq('raver_a_id', pair.a).eq('raver_b_id', pair.b);
-              if (error) throw error;
+              const match = { uploader_user_id: currentUser.id, raver_a_id: pair.a, raver_b_id: pair.b };
+              const { ok, rateLimited } = await softDeleteRow('our_photos', match);
+              if (!ok) { if (!rateLimited) showToast('⚠️ Could not remove photo'); return; }
+              await logAudit({ action: 'photo.remove', entityType: 'photo', entityId: currentUser.id, metadata: { raver_a_id: pair.a, raver_b_id: pair.b } });
             }
           }
           if (ourPhotosCache[String(viewingRaverId)]) ourPhotosCache[String(viewingRaverId)].mine = null;
@@ -9576,7 +9603,7 @@ async function doProfilePasswordChange() {
   function toggleStatus(id) {
     const crew = getCrew(id);
     if (!crew) return;
-    if (!crew.isLead) {
+    if (!crewPerms(crew).canChangeStatus) {
       showToast('🔒 Only the Crew Lead can change the status');
       return;
     }
@@ -9712,7 +9739,10 @@ async function doProfilePasswordChange() {
     }
   }
 
-  const FLAG_TARGET_LABELS = { raver: '👤 Raver', festival: '🎟️ Festival', crew: '🎪 Crew', crew_member: '👥 Crew Member', vibe_tag: '🏷️ Vibe Tag' };
+  const FLAG_TARGET_LABELS = {
+    raver: '👤 Raver', festival: '🎟️ Festival', crew: '🎪 Crew', crew_member: '👥 Crew Member', vibe_tag: '🏷️ Vibe Tag',
+    photo: '📸 Photo', dream_pin: '✨ Dream Pin', archive_link: '📸 Archive Link', poll: '🗳️ Poll', jam: '🎵 Jam'
+  };
 
   function formatModDate(iso) {
     if (!iso) return 'just now';
@@ -9731,7 +9761,7 @@ async function doProfilePasswordChange() {
             <div class="event-meta">${escHtml(f.reason || 'No reason given')}</div>
             <div class="event-meta" style="opacity:0.7;">Reported ${escHtml(when)}</div>
             <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
-              <button class="btn btn-ghost" style="padding:8px 14px;font-size:0.76rem;" onclick="viewFlagTarget('${f.target_type}','${escHtml(String(f.target_id))}')">👀 View</button>
+              <button class="btn btn-ghost" style="padding:8px 14px;font-size:0.76rem;" onclick="viewFlagTarget('${f.target_type}','${escHtml(String(f.target_id))}','${escHtml(String(f.metadata?.crew_id || ''))}')">👀 View</button>
               <button class="btn btn-ghost" style="padding:8px 14px;font-size:0.76rem;" onclick="handleDismissFlag('${f.id}')">Dismiss</button>
               <button class="btn btn-primary" style="padding:8px 14px;font-size:0.76rem;" onclick="handleResolveFlag('${f.id}')">Resolve</button>
             </div>
@@ -9760,16 +9790,18 @@ async function doProfilePasswordChange() {
 
   // Jump to the actual content so a mod acts through the app's existing
   // moderator-gated buttons — the Reports tab itself is triage-only.
-  function viewFlagTarget(targetType, targetId) {
+  function viewFlagTarget(targetType, targetId, crewId) {
     // crew_member reports use the raver_id as target_id (crew_id lives in
     // metadata) — same navigable target as a plain raver report.
     if (targetType === 'raver' || targetType === 'crew_member' || targetType === 'vibe_tag') { openProfile(targetId); return; }
     if (targetType === 'festival') { openRaveEditor(targetId); return; }
-    if (targetType === 'crew') {
+    if (targetType === 'crew' || (['dream_pin','archive_link','poll','jam'].includes(targetType) && crewId)) {
+      // Content that lives inside a crew (pins/links/polls/jams) has no page of
+      // its own — jump to the crew detail page where a mod can act on it directly.
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.getElementById('page-crew-detail').classList.add('active');
-      activeDetailId = targetId;
-      renderDetail(targetId);
+      activeDetailId = targetType === 'crew' ? targetId : crewId;
+      renderDetail(activeDetailId);
       return;
     }
     showToast('Nothing to preview for this report');
@@ -9822,7 +9854,7 @@ async function doProfilePasswordChange() {
       }
     }
 
-    const isAdmin = isModerator();
+    const canManageMembers = crewPerms(crew).canManageMembers;
     const isLockedIn = crew.status === 'locked-in';
     const memberList = people.length
       ? [...people].sort((a, b) => {
@@ -9833,12 +9865,12 @@ async function doProfilePasswordChange() {
           const isLeader = p.id === crew.leader_id;
           const isClaimed = isLeader || p.claimedBy || p.isYou || p.status === 'claimed';
           const statusDot = `<span class="${isClaimed ? 'claimed-dot' : 'unclaimed-dot'}" title="${isClaimed ? 'Claimed' : 'Unclaimed — share QR to invite'}"></span>`;
-          const canRemove = (crew.isLead || isAdmin) && !p.isYou && !isLeader;
+          const canRemove = canManageMembers && !p.isYou && !isLeader;
           let right;
           if (isLeader) {
             // Crew leader: always claimed, no QR, no remove — just navigate to profile
             right = `<span class="detail-member-arrow">›</span>`;
-          } else if (!isClaimed && (crew.isLead || isAdmin)) {
+          } else if (!isClaimed && canManageMembers) {
             // Unclaimed row for leader: QR (all non-Secret states) + edit + delete
             const qrBtn = !isSecret && p.qrToken
               ? `<button class="remove-member-btn" style="background:none;border:1.5px solid rgba(255,255,255,0.15);border-radius:8px;padding:2px 7px;font-size:0.8rem;" data-raver-id="${p.id}" onclick="event.stopPropagation(); showQRModal(this.dataset.raverId)" title="Show QR to invite" aria-label="Show QR to invite">📲</button>`
@@ -10007,7 +10039,7 @@ async function doProfilePasswordChange() {
   async function dbLoadDreamPins(crewId) {
     if (!currentUser) return;
     const { data, error } = await sb.from('dream_board_pins')
-      .select('*').eq('crew_id', crewId).order('created_at', { ascending: true });
+      .select('*').eq('crew_id', crewId).is('deleted_at', null).order('created_at', { ascending: true });
     if (!error) dreamPins = data || [];
   }
 
@@ -10020,9 +10052,10 @@ async function doProfilePasswordChange() {
     return data;
   }
 
-  async function dbDeleteDreamPin(pinId) {
-    const { error } = await sb.from('dream_board_pins').delete().eq('id', pinId);
-    if (error) { showToast('⚠️ Could not remove pin — try again'); return false; }
+  async function dbDeleteDreamPin(pinId, crewId) {
+    const { ok, rateLimited } = await softDeleteRow('dream_board_pins', { id: pinId });
+    if (!ok) { if (!rateLimited) showToast('⚠️ Could not remove pin — try again'); return false; }
+    await logAudit({ action: 'dream_pin.remove', entityType: 'dream_pin', entityId: pinId, metadata: { crew_id: crewId } });
     dreamPins = dreamPins.filter(p => p.id !== pinId);
     return true;
   }
@@ -10060,7 +10093,7 @@ async function doProfilePasswordChange() {
   }
 
   async function deleteDreamPin(pinId, crewId) {
-    const ok = await dbDeleteDreamPin(pinId);
+    const ok = await dbDeleteDreamPin(pinId, crewId);
     if (ok) rerenderDreamBoard(crewId);
   }
 
@@ -10078,12 +10111,12 @@ async function doProfilePasswordChange() {
   function buildDreamBoardHTML(crewId) {
     const crew = getCrew(crewId);
     const uid = currentUser?.id;
-    const isLead = crew?.isLead;
+    const canManage = crewPerms(crew).canEdit;
 
     const pinCards = dreamPins.map(pin => {
       const hyped = (pin.hyped_by || []).includes(uid);
       const hypeCount = (pin.hyped_by || []).length;
-      const canDelete = pin.added_by === uid || isLead || isModerator();
+      const canDelete = pin.added_by === uid || canManage;
       let addedByLabel = '';
       if (pin.added_by) {
         if (pin.added_by === uid) {
@@ -10109,7 +10142,8 @@ async function doProfilePasswordChange() {
             ${canDelete ? `<button class="dream-pin-del"
               data-pin-id="${escHtml(pin.id)}" data-crew-id="${escHtml(crewId)}"
               onclick="deleteDreamPin(this.dataset.pinId, this.dataset.crewId)"
-              title="Remove pin" aria-label="Remove pin">×</button>` : ''}
+              title="Remove pin" aria-label="Remove pin">×</button>`
+            : (uid ? `<button class="dream-pin-del" onclick="showReportModal('dream_pin','${escHtml(pin.id)}',{metadata:{crew_id:'${escHtml(crewId)}'}})" title="Report" aria-label="Report">🚩</button>` : '')}
           </div>
         </div>`;
     }).join('');
@@ -10142,7 +10176,7 @@ async function doProfilePasswordChange() {
 
   async function dbLoadArchiveLinks(crewId) {
     const { data, error } = await sb.from('crew_archive_links')
-      .select('*').eq('crew_id', crewId).order('created_at', { ascending: false });
+      .select('*').eq('crew_id', crewId).is('deleted_at', null).order('created_at', { ascending: false });
     if (error) { console.error('archive load error', error); return; }
     archiveLinks = data || [];
   }
@@ -10162,9 +10196,10 @@ async function doProfilePasswordChange() {
     return data;
   }
 
-  async function dbDeleteArchiveLink(linkId) {
-    const { error } = await sb.from('crew_archive_links').delete().eq('id', linkId);
-    if (error) { showToast('⚠️ Could not remove link — try again'); return false; }
+  async function dbDeleteArchiveLink(linkId, crewId) {
+    const { ok, rateLimited } = await softDeleteRow('crew_archive_links', { id: linkId });
+    if (!ok) { if (!rateLimited) showToast('⚠️ Could not remove link — try again'); return false; }
+    await logAudit({ action: 'archive_link.remove', entityType: 'archive_link', entityId: linkId, metadata: { crew_id: crewId } });
     archiveLinks = archiveLinks.filter(l => l.id !== linkId);
     return true;
   }
@@ -10189,7 +10224,7 @@ async function doProfilePasswordChange() {
   }
 
   async function deleteArchiveLink(linkId, crewId) {
-    const ok = await dbDeleteArchiveLink(linkId);
+    const ok = await dbDeleteArchiveLink(linkId, crewId);
     if (ok) rerenderArchive(crewId);
   }
 
@@ -10201,7 +10236,7 @@ async function doProfilePasswordChange() {
   function buildArchiveHTML(crewId) {
     const crew = getCrew(crewId);
     const uid = currentUser?.id;
-    const isLead = crew?.isLead;
+    const canManage = crewPerms(crew).canEdit;
 
     const sortedFests = [...festivals].sort((a, b) => b.date.localeCompare(a.date));
     const festOptions = sortedFests.map(f =>
@@ -10209,7 +10244,7 @@ async function doProfilePasswordChange() {
     ).join('');
 
     const cards = archiveLinks.map(link => {
-      const canDelete = link.added_by === uid || isLead || isModerator();
+      const canDelete = link.added_by === uid || canManage;
       let addedByLabel = '';
       if (link.added_by) {
         if (link.added_by === uid) {
@@ -10241,7 +10276,8 @@ async function doProfilePasswordChange() {
             ${canDelete ? `<button class="archive-link-del"
               data-link-id="${escHtml(link.id)}" data-crew-id="${escHtml(crewId)}"
               onclick="deleteArchiveLink(this.dataset.linkId, this.dataset.crewId)"
-              title="Remove link" aria-label="Remove link">×</button>` : ''}
+              title="Remove link" aria-label="Remove link">×</button>`
+            : (uid ? `<button class="archive-link-del" onclick="showReportModal('archive_link','${escHtml(link.id)}',{metadata:{crew_id:'${escHtml(crewId)}'}})" title="Report" aria-label="Report">🚩</button>` : '')}
           </div>
         </div>`;
     }).join('');
@@ -10321,7 +10357,7 @@ async function doProfilePasswordChange() {
   async function dbLoadPolls(crewId) {
     if (!currentUser) return;
     const { data: polls, error: pErr } = await sb.from('crew_polls')
-      .select('*').eq('crew_id', crewId).order('created_at', { ascending: false });
+      .select('*').eq('crew_id', crewId).is('deleted_at', null).order('created_at', { ascending: false });
     if (pErr) { console.error('polls load error', pErr); return; }
     crewPolls = polls || [];
     if (!crewPolls.length) return;
@@ -10365,9 +10401,10 @@ async function doProfilePasswordChange() {
     return data;
   }
 
-  async function dbDeletePoll(pollId) {
-    const { error } = await sb.from('crew_polls').delete().eq('id', pollId);
-    if (error) { showToast('⚠️ Could not delete poll'); return false; }
+  async function dbDeletePoll(pollId, crewId) {
+    const { ok, rateLimited } = await softDeleteRow('crew_polls', { id: pollId });
+    if (!ok) { if (!rateLimited) showToast('⚠️ Could not delete poll'); return false; }
+    await logAudit({ action: 'poll.remove', entityType: 'poll', entityId: pollId, metadata: { crew_id: crewId } });
     crewPolls = crewPolls.filter(p => p.id !== pollId);
     delete crewPollVotes[pollId];
     return true;
@@ -10440,9 +10477,8 @@ async function doProfilePasswordChange() {
     const open = pollIsOpen(poll);
     const canVote = open && uid && !hasVoted;
     const showResults = hasVoted || expired || poll.is_locked;
-    const isLead = getCrew(poll.crew_id)?.isLead;
     const isCreator = poll.created_by === uid;
-    const isAdmin = isModerator();
+    const canManage = crewPerms(getCrew(poll.crew_id)).canEdit;
     const timeLeft = pollTimeLeft(poll.expires_at);
     const escId = escHtml(poll.id);
     const escCrewId = escHtml(poll.crew_id);
@@ -10461,12 +10497,14 @@ async function doProfilePasswordChange() {
 
     // Lead-only actions
     let actions = '';
-    if (isCreator || isLead || isAdmin) {
+    if (isCreator || canManage) {
       actions += `<button class="poll-action-btn" title="Delete poll" aria-label="Delete poll"
         data-poll-id="${escId}" data-crew-id="${escCrewId}"
         onclick="deletePoll(this.dataset.pollId, this.dataset.crewId)">×</button>`;
+    } else if (uid) {
+      actions += `<button class="poll-action-btn" title="Report" aria-label="Report" onclick="showReportModal('poll','${escId}',{metadata:{crew_id:'${escCrewId}'}})">🚩</button>`;
     }
-    if (isLead && !expired) {
+    if (canManage && !expired) {
       const lockLabel = poll.is_locked ? '🔓' : '🔒';
       const lockTitle = poll.is_locked ? 'Unlock poll' : 'Lock poll early';
       actions = `<button class="poll-action-btn" title="${lockTitle}" aria-label="${lockTitle}"
@@ -10660,7 +10698,7 @@ async function doProfilePasswordChange() {
   }
 
   async function deletePoll(pollId, crewId) {
-    const ok = await dbDeletePoll(pollId);
+    const ok = await dbDeletePoll(pollId, crewId);
     if (ok) rerenderPolls(crewId);
   }
 
@@ -10912,6 +10950,7 @@ async function doProfilePasswordChange() {
     const { data, error } = await sb.from('crew_jams')
       .select('*')
       .eq('crew_id', crewId)
+      .is('deleted_at', null)
       .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: false });
     if (error) { console.error('jams load error', error); return; }
@@ -10941,9 +10980,10 @@ async function doProfilePasswordChange() {
     return data;
   }
 
-  async function dbDeleteJam(jamId) {
-    const { error } = await sb.from('crew_jams').delete().eq('id', jamId);
-    if (error) { showToast('⚠️ Could not remove playlist — try again'); return false; }
+  async function dbDeleteJam(jamId, crewId) {
+    const { ok, rateLimited } = await softDeleteRow('crew_jams', { id: jamId });
+    if (!ok) { if (!rateLimited) showToast('⚠️ Could not remove playlist — try again'); return false; }
+    await logAudit({ action: 'jam.remove', entityType: 'jam', entityId: jamId, metadata: { crew_id: crewId } });
     crewJams = crewJams.filter(j => j.id !== jamId);
     crewJamVibes = crewJamVibes.filter(v => v.jam_id !== jamId);
     return true;
@@ -11027,7 +11067,7 @@ async function doProfilePasswordChange() {
   function buildJamsHTML(crewId) {
     const crew = getCrew(crewId);
     const uid = currentUser?.id;
-    const isLead = crew?.isLead;
+    const canManage = crewPerms(crew).canEdit;
 
     const allTags = [...new Set(crewJams.map(j => j.tag).filter(Boolean))];
     const allFests = crewJams
@@ -11052,7 +11092,7 @@ async function doProfilePasswordChange() {
     }).join('');
     const filterBar = (tagPills || festPills) ? `<div class="jam-filter-bar">${tagPills}${festPills}</div>` : '';
 
-    const cards = visible.map(jam => renderJamCard(jam, uid, isLead, crewId)).join('');
+    const cards = visible.map(jam => renderJamCard(jam, uid, canManage, crewId)).join('');
     const emptyMsg = crewJams.length === 0
       ? `<div class="jam-empty es-block"><div class="es-icon">🎧</div><div class="es-headline">Dead air detected</div><div class="es-sub">Someone drop the first playlist — for the love of the music gods.</div></div>`
       : visible.length === 0
@@ -11071,10 +11111,10 @@ async function doProfilePasswordChange() {
       </div>`;
   }
 
-  function renderJamCard(jam, uid, isLead, crewId) {
+  function renderJamCard(jam, uid, canManage, crewId) {
     const escId   = escHtml(jam.id);
     const escCrew = escHtml(crewId);
-    const canDelete = jam.added_by === uid || isLead || isModerator();
+    const canDelete = jam.added_by === uid || canManage;
     const plat = PLATFORM_STYLES[jam.platform] || PLATFORM_STYLES.other;
     const reactions = jam.reactions || {};
     const vibesForJam = crewJamVibes.filter(v => v.jam_id === jam.id);
@@ -11139,7 +11179,7 @@ async function doProfilePasswordChange() {
 
     const pinLabel = jam.is_pinned ? '📌' : '📍';
     const pinTitle = jam.is_pinned ? 'Unpin' : 'Pin as official';
-    const leadActions = isLead
+    const leadActions = canManage
       ? `<button class="jam-action-btn" onclick="pinJam('${escId}','${escCrew}',${jam.is_pinned})" title="${pinTitle}" aria-label="${pinTitle}">${pinLabel}</button>`
       : '';
 
@@ -11163,7 +11203,8 @@ async function doProfilePasswordChange() {
           <div class="jam-card-actions">
             ${leadActions}
             <a class="jam-open-btn" href="${escHtml(jam.url)}" target="_blank" rel="noopener noreferrer" title="Open playlist">↗</a>
-            ${canDelete ? `<button class="jam-del-btn" onclick="deleteJam('${escId}','${escCrew}')" title="Remove playlist" aria-label="Remove playlist">×</button>` : ''}
+            ${canDelete ? `<button class="jam-del-btn" onclick="deleteJam('${escId}','${escCrew}')" title="Remove playlist" aria-label="Remove playlist">×</button>`
+              : (uid ? `<button class="jam-del-btn" onclick="showReportModal('jam','${escId}',{metadata:{crew_id:'${escCrew}'}})" title="Report" aria-label="Report">🚩</button>` : '')}
           </div>
         </div>
         ${jam.description ? `<div class="jam-description">${escHtml(jam.description)}</div>` : ''}
@@ -11178,7 +11219,7 @@ async function doProfilePasswordChange() {
 
   // Jam action handlers
   async function deleteJam(jamId, crewId) {
-    const ok = await dbDeleteJam(jamId);
+    const ok = await dbDeleteJam(jamId, crewId);
     if (ok) rerenderJams(crewId);
   }
 
@@ -11620,7 +11661,7 @@ async function doProfilePasswordChange() {
   // Full-view status set (Lead only) — shows confirmation first
   function setStatus(id, status) {
     const crew = getCrew(id);
-    if (!crew || !crew.isLead) { showToast('🔒 Only the Crew Lead can change the status'); return; }
+    if (!crew || !crewPerms(crew).canChangeStatus) { showToast('🔒 Only the Crew Lead can change the status'); return; }
     if (crew.status === status) return;
     showStatusWarn(id, status);
   }
@@ -11818,8 +11859,7 @@ async function doProfilePasswordChange() {
     // dataset values are strings; use String() coercion for safe comparison
     const crew  = crews.find(c => String(c.id) === String(crewId));
     const raver = squad.find(r => String(r.id) === String(raverId));
-    const isAdmin = isModerator();
-    if (!crew || (!crew.isLead && !isAdmin)) return;
+    if (!crew || !crewPerms(crew).canManageMembers) return;
     if (String(raverId) === String(crew.leader_id)) { showToast('⚠️ The crew leader cannot be removed.'); return; }
     crew.squadIds = crew.squadIds.filter(id => String(id) !== String(raverId));
     // Rebuild members array cleanly from remaining squadIds
@@ -11987,11 +12027,7 @@ async function doProfilePasswordChange() {
         <div class="modal-title" style="margin-bottom:12px;">Delete "${escHtml(crew.name)}"?</div>
         <p style="font-size:0.86rem;color:var(--muted);line-height:1.65;margin-bottom:8px;">${note}</p>
       </div>
-      <div class="form-group" style="text-align:left;padding:0 16px;">
-        <label class="form-label">Why are you dissolving this crew?</label>
-        <textarea id="crew-delete-reason" class="form-input" rows="2" maxlength="200" placeholder="e.g. crew merged with another, no longer active…" oninput="document.getElementById('crew-delete-confirm-btn').disabled = !this.value.trim()"></textarea>
-        <p style="font-size:0.72rem;color:var(--muted);margin-top:4px;">This helps moderators understand what happened, later.</p>
-      </div>
+      ${reasonFieldHTML({ textareaId: 'crew-delete-reason', confirmBtnId: 'crew-delete-confirm-btn', label: 'Why are you dissolving this crew?', placeholder: 'e.g. crew merged with another, no longer active…', padding: '0 16px' })}
       <p style="font-size:0.86rem;color:var(--neon-pink);font-weight:700;text-align:center;margin-top:16px;">This cannot be undone.</p>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="renderDetail(activeDetailId)" style="flex:1;padding:12px;">Cancel</button>
@@ -12003,6 +12039,7 @@ async function doProfilePasswordChange() {
   async function deleteCrew(id, reason = null) {
     const crew = crews.find(c => String(c.id) === String(id));
     if (!crew) return;
+    if (!crewPerms(crew).canDelete) { showToast('🔒 Only the crew lead or a moderator can delete this crew'); return; }
     const name = crew.name;
     const memberCount = (crew.squadIds || []).length;
     const idx = crews.findIndex(c => String(c.id) === String(id));
@@ -12346,7 +12383,7 @@ async function doProfilePasswordChange() {
 
   async function generateAndShareCrewInvite(crewId) {
     const crew = getCrew(crewId);
-    if (!crew || !crew.isLead) return;
+    if (!crew || !crewPerms(crew).canInvite) return;
     let token = crew.invite_token;
     if (!token) {
       token = (typeof crypto?.randomUUID === 'function') ? crypto.randomUUID()
@@ -14899,8 +14936,8 @@ async function doProfilePasswordChange() {
         <div id="re-raver-results" class="fest-search-dropdown" style="display:none;"></div>
       </div>` : ''}
       <div class="modal-actions">
-        ${f && festivalPerms(f).canDelete ? `<button class="btn btn-ghost" style="color:var(--neon-pink);" onclick="showDeleteRaveConfirm()">Delete</button>` : ''}
-        ${f && currentUser && !festivalPerms(f).canDelete ? `<button class="btn btn-ghost" onclick="showReportModal('festival', '${f.id}')">🚩 Report</button>` : ''}
+        ${f && festivalPerms(f).canEdit ? `<button class="btn btn-ghost" style="color:var(--neon-pink);" onclick="showDeleteRaveConfirm()">Delete</button>` : ''}
+        ${f && currentUser && !festivalPerms(f).canEdit ? `<button class="btn btn-ghost" onclick="showReportModal('festival', '${f.id}')">🚩 Report</button>` : ''}
         <button class="btn btn-ghost" onclick="closeRaveEditor()">Cancel</button>
         ${canEditFest ? `<button class="btn btn-primary" onclick="saveRave()">${f ? 'Save' : 'Add 🔥'}</button>` : ''}
       </div>
@@ -15159,6 +15196,10 @@ async function doProfilePasswordChange() {
     const f = getFestival(activeFestId);
     if (!f) return;
     const perms = festivalPerms(f);
+    // Gate on canEdit, not canDelete: canDelete already folds in "no other
+    // goers", but that's exactly the case this function needs to detect itself
+    // below so it can offer Archive as an alternative — canEdit just checks
+    // creator-or-moderator, deferring the goers question to the branches below.
     if (!perms.canEdit) {
       showToast('🔒 Only the creator or a moderator can delete this rave');
       return;
@@ -15195,11 +15236,7 @@ async function doProfilePasswordChange() {
           <div class="modal-title" style="margin-bottom:10px;">Delete "${escHtml(f.name)}"?</div>
           <p style="font-size:0.86rem;color:var(--muted);line-height:1.65;margin-bottom:8px;">${goers.length} tribe member${goers.length !== 1 ? 's' : ''} (${goerNames}) will have it removed from their profiles.</p>
         </div>
-        <div class="form-group" style="text-align:left;">
-          <label class="form-label">Why are you deleting this?</label>
-          <textarea id="fest-delete-reason" class="form-input" rows="2" maxlength="200" placeholder="e.g. duplicate entry, event got cancelled…" oninput="document.getElementById('fest-delete-confirm-btn').disabled = !this.value.trim()"></textarea>
-          <p style="font-size:0.72rem;color:var(--muted);margin-top:4px;">This helps moderators understand what happened, later.</p>
-        </div>
+        ${reasonFieldHTML({ textareaId: 'fest-delete-reason', confirmBtnId: 'fest-delete-confirm-btn', label: 'Why are you deleting this?', placeholder: 'e.g. duplicate entry, event got cancelled…' })}
         <p style="font-size:0.86rem;color:var(--neon-pink);font-weight:700;text-align:center;">This cannot be undone.</p>
         <div class="modal-actions">
           <button class="btn btn-ghost" style="flex:1;padding:12px;" onclick="closeDeleteRaveSheet()">Cancel</button>
@@ -15214,11 +15251,7 @@ async function doProfilePasswordChange() {
           <div class="modal-title" style="margin-bottom:12px;">Delete "${escHtml(f.name)}"?</div>
           <p style="font-size:0.86rem;color:var(--muted);line-height:1.65;margin-bottom:8px;">No tribe members are linked to this rave.</p>
         </div>
-        <div class="form-group" style="text-align:left;">
-          <label class="form-label">Why are you deleting this?</label>
-          <textarea id="fest-delete-reason" class="form-input" rows="2" maxlength="200" placeholder="e.g. duplicate entry, event got cancelled…" oninput="document.getElementById('fest-delete-confirm-btn').disabled = !this.value.trim()"></textarea>
-          <p style="font-size:0.72rem;color:var(--muted);margin-top:4px;">This helps moderators understand what happened, later.</p>
-        </div>
+        ${reasonFieldHTML({ textareaId: 'fest-delete-reason', confirmBtnId: 'fest-delete-confirm-btn', label: 'Why are you deleting this?', placeholder: 'e.g. duplicate entry, event got cancelled…' })}
         <p style="font-size:0.86rem;color:var(--neon-pink);font-weight:700;text-align:center;">This cannot be undone.</p>
         <div class="modal-actions">
           <button class="btn btn-ghost" onclick="openRaveEditor(activeFestId)" style="flex:1;padding:12px;">Cancel</button>
@@ -15242,6 +15275,7 @@ async function doProfilePasswordChange() {
   function deleteRave(id, reason = null) {
     const f = getFestival(id);
     if (!f) return;
+    if (!festivalPerms(f).canDelete) { showToast('🔒 Only the creator or a moderator can delete this rave'); return; }
     const i = festivals.findIndex(x => String(x.id) === String(id));
     if (i >= 0) festivals.splice(i, 1);
     squad.forEach(p => { if (p.festIds) p.festIds = p.festIds.filter(fid => String(fid) !== String(id)); });
@@ -15419,6 +15453,20 @@ async function doProfilePasswordChange() {
     if (currentUser) dbAddRaverFestival(raverId, festId);
     renderSquad(); renderEvents(); renderCrews();
     openProfile(raverId);
+  }
+
+  // Shared "why are you doing this?" textarea, used by the custom delete-confirmation
+  // screens (crew delete, rave delete) that need richer layout than the shared
+  // showConfirmWithReason modal offers — factored out so the reason-required
+  // pattern (required textarea, disabled-until-filled confirm button, mod hint)
+  // isn't hand-copied at each call site.
+  function reasonFieldHTML({ textareaId, confirmBtnId, label, placeholder, padding }) {
+    return `
+      <div class="form-group" style="text-align:left;${padding ? `padding:${padding};` : ''}">
+        <label class="form-label">${escHtml(label)}</label>
+        <textarea id="${textareaId}" class="form-input" rows="2" maxlength="200" placeholder="${escHtml(placeholder)}" oninput="document.getElementById('${confirmBtnId}').disabled = !this.value.trim()"></textarea>
+        <p style="font-size:0.72rem;color:var(--muted);margin-top:4px;">This helps moderators understand what happened, later.</p>
+      </div>`;
   }
 
   // ── Confirmation modal ────────────────────────────────────────────────────
