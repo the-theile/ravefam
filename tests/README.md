@@ -46,6 +46,12 @@ Per-domain flow coverage:
   poll create/vote/delete, jam add; each shows in its section and persists.
 - **`invites.spec.js`** — QR invite modal renders the code from `qr_token`; crew
   invite-link generation persists a token and copies the join URL.
+- **`privacy_permissions.spec.js`** — festival adds and vibe-tag suggestions are
+  blocked with a friendly message when a claimed owner opts out (self-add and
+  unclaimed placeholders are unaffected); base location and RSVPs are hidden
+  from other viewers when opted out; the Privacy & Permissions modal is
+  owner-only, its toggles persist, and both entry points (notification drawer,
+  own profile view) open it.
 
 ## Running
 
