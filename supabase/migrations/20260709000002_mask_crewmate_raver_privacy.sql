@@ -15,7 +15,7 @@ create or replace function public.get_crewmate_ravers(p_ids uuid[])
  returns table (
    id uuid, name text, handle text, created_by uuid, is_you boolean,
    base text, gradient text, avatar_url text, blocked_tags text[], genres text[],
-   fav_artist_ids uuid[], fest_ids uuid[], interested_fest_ids uuid[],
+   fav_artist_ids bigint[], fest_ids uuid[], interested_fest_ids uuid[],
    instagram text, radiate text, phone text, phone_visible boolean,
    met_story text, claimed_by uuid, status text,
    vibe_tags text[], custom_vibe_tags text[],
@@ -76,7 +76,7 @@ create or replace function public.get_own_and_created_ravers()
  returns table (
    id uuid, name text, handle text, created_by uuid, is_you boolean,
    base text, gradient text, avatar_url text, blocked_tags text[], genres text[],
-   fav_artist_ids uuid[], fest_ids uuid[], interested_fest_ids uuid[],
+   fav_artist_ids bigint[], fest_ids uuid[], interested_fest_ids uuid[],
    instagram text, radiate text, phone text, phone_visible boolean,
    met_story text, notes text, qr_token text, claimed_by uuid, status text,
    vibe_tags text[], custom_vibe_tags text[],

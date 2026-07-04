@@ -34,6 +34,13 @@ create trigger raver_festivals_privacy_insert
   before insert on public.raver_festivals
   for each row execute function public.enforce_raver_festival_add_privacy();
 
+-- Trigger-only function — Supabase auto-grants EXECUTE on new public functions
+-- to anon/authenticated, which would otherwise expose it directly as a callable
+-- RPC (/rest/v1/rpc/enforce_raver_festival_add_privacy). Revoke that; the trigger
+-- itself still fires regardless of these grants.
+revoke all on function public.enforce_raver_festival_add_privacy() from public;
+revoke execute on function public.enforce_raver_festival_add_privacy() from anon, authenticated;
+
 create or replace function public.enforce_raver_vibe_tag_privacy()
 returns trigger
 language plpgsql
@@ -57,3 +64,6 @@ drop trigger if exists ravers_privacy_writes on public.ravers;
 create trigger ravers_privacy_writes
   before update on public.ravers
   for each row execute function public.enforce_raver_vibe_tag_privacy();
+
+revoke all on function public.enforce_raver_vibe_tag_privacy() from public;
+revoke execute on function public.enforce_raver_vibe_tag_privacy() from anon, authenticated;
