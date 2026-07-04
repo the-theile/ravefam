@@ -6037,7 +6037,7 @@
   // Permission flags for the current viewer on a given raver object.
   function raverPerms(r) {
     const none = () => ({
-      editName:false, editHandle:false, editLocation:false, editInstagram:false, editRadiate:false,
+      editName:false, editLocation:false, editInstagram:false, editRadiate:false,
       editPhone:false, editTags:false, editGenres:false, editArtists:false, editFests:false,
       canDisconnect:false, canDelete:false, isLeaderOfRaver:false, isClaimed:false,
       // === PROFILE PRIVACY & PERMISSIONS ===
@@ -6045,7 +6045,7 @@
     });
     if (!r) return none();
     if (r.isYou) return {
-      editName:true, editHandle:true, editLocation:true, editInstagram:true, editRadiate:true,
+      editName:true, editLocation:true, editInstagram:true, editRadiate:true,
       editPhone:true, editTags:true, editGenres:true, editArtists:true, editFests:true,
       canDisconnect:false, canDelete:false, isLeaderOfRaver:false, isClaimed:true,
       canBeAddedToFestivals:true, canReceiveVibeTags:true, baseVisible:true, rsvpsVisible:true
@@ -6061,7 +6061,6 @@
     const isMember   = isCreator || shared.length > 0;
     return {
       editName:       isLeader,
-      editHandle:     false,
       editLocation:   isMember && !isClaimed,
       editInstagram:  isMember && !isClaimed,
       editRadiate:    isMember && !isClaimed,
@@ -7414,12 +7413,15 @@ async function doProfilePasswordChange() {
     // --- Ravers ---
     // Load own ravers AND any stubs the user has claimed (claimed_by = uid).
     // Exclude merged stubs — those were absorbed into the user's own profile.
+    // Routed through get_own_and_created_ravers() rather than a direct
+    // select('*') — `created_by = me` also matches a stub the caller created
+    // that someone ELSE has since claimed, so this query can return other
+    // people's now-claimed rows too, not just the caller's own. The RPC masks
+    // base/RSVPs/phone/notes/qr_token the same way get_crewmate_ravers()
+    // does whenever the row isn't actually the caller's own or an unclaimed
+    // stub they still manage.
     const { data: dbRavers, error: rErr } = await sb
-      .from('ravers')
-      .select('*, raver_festivals(festival_id), raver_festival_interest(festival_id), raver_favorite_artists(artist_id)')
-      .or(`created_by.eq.${uid},claimed_by.eq.${uid}`)
-      .neq('status', 'merged')
-      .is('deleted_at', null);
+      .rpc('get_own_and_created_ravers');
     if (!rErr && dbRavers) {
       const seen = new Set();
       dbRavers.forEach(r => {
@@ -7436,9 +7438,9 @@ async function doProfilePasswordChange() {
           avatarUrl: r.avatar_url || null,
           blockedTags: r.blocked_tags || [],
           genres: r.genres || [],
-          favArtistIds: (r.raver_favorite_artists || []).map(x => x.artist_id),
-          festIds: (r.raver_festivals || []).map(rf => rf.festival_id),
-          interestedFestIds: (r.raver_festival_interest || []).map(rf => rf.festival_id),
+          favArtistIds: r.fav_artist_ids || [],
+          festIds: r.fest_ids || [],
+          interestedFestIds: r.interested_fest_ids || [],
           instagram: r.instagram || '',
           radiate: r.radiate || '',
           phone: r.phone || '',
@@ -7510,7 +7512,12 @@ async function doProfilePasswordChange() {
     // --- Supplemental crewmate ravers ---
     // For non-leader crew members, load the profiles of the leader and fellow
     // members (created by other users) that RLS allows via user_is_crewmate_of_raver.
-    // Contact info is stripped — only rave-profile fields are exposed to crewmates.
+    // Routed through get_crewmate_ravers() rather than a direct select('*') —
+    // that RPC masks base/RSVPs server-side per privacy_base_visible/
+    // privacy_show_rsvps (and phone per phone_visible) instead of relying on
+    // the client to hide fields that already reached the browser over the
+    // wire. notes/qr_token are simply omitted by the RPC — crewmates never
+    // needed them.
     const knownIds = new Set(squad.map(r => String(r.id)));
     const missingIds = [];
     allCrews.forEach(c => {
@@ -7521,11 +7528,7 @@ async function doProfilePasswordChange() {
     });
     if (missingIds.length) {
       const { data: crewRavers } = await sb
-        .from('ravers')
-        .select('*, raver_festivals(festival_id), raver_festival_interest(festival_id), raver_favorite_artists(artist_id)')
-        .in('id', missingIds)
-        .neq('status', 'merged')
-        .is('deleted_at', null);
+        .rpc('get_crewmate_ravers', { p_ids: missingIds });
       if (crewRavers) {
         crewRavers.forEach(r => {
           squad.push({
@@ -7540,12 +7543,12 @@ async function doProfilePasswordChange() {
             avatarUrl: r.avatar_url || null,
             blockedTags: r.blocked_tags || [],
             genres: r.genres || [],
-            favArtistIds: (r.raver_favorite_artists || []).map(x => x.artist_id),
-            festIds: (r.raver_festivals || []).map(rf => rf.festival_id),
-            interestedFestIds: (r.raver_festival_interest || []).map(rf => rf.festival_id),
+            favArtistIds: r.fav_artist_ids || [],
+            festIds: r.fest_ids || [],
+            interestedFestIds: r.interested_fest_ids || [],
             instagram: r.instagram || '',
             radiate: r.radiate || '',
-            phone: r.phone_visible ? (r.phone || '') : '',
+            phone: r.phone || '',
             phoneVisible: r.phone_visible || false,
             metStory: r.met_story || '',
             notes: '',
@@ -8311,10 +8314,14 @@ async function doProfilePasswordChange() {
   // Undoes a soft delete (Mod Dashboard "Restore" action) and logs its own
   // audit entry for symmetry/accountability.
   async function dbRestoreRow(table, match, entityType, entityId, metadata) {
-    const { error } = await sb.from(table)
+    const { data, error } = await sb.from(table)
       .update({ deleted_at: null, deleted_by: null, delete_reason: null })
-      .match(match);
+      .match(match)
+      .select('*');
     if (error) { console.error(`${table} restore error`, error); showToast('⚠️ Could not restore — try again'); return false; }
+    // RLS can silently match 0 rows instead of erroring — without this check
+    // that reads as a false "Restored" success and a misleading audit entry.
+    if (!data?.length) { console.warn(`${table} restore: 0 rows affected (RLS block?)`, match); showToast('⚠️ Could not restore — permission denied'); return false; }
     await logAudit({ action: `${entityType}.restore`, entityType, entityId, metadata });
     return true;
   }
@@ -14035,7 +14042,7 @@ async function doProfilePasswordChange() {
     if (!results) return;
     const query = (q || '').trim().toLowerCase();
     if (!query) { results.innerHTML = ''; results.style.display = 'none'; return; }
-    const matches = festivals.filter(f => f.name.toLowerCase().includes(query)).slice(0, 5);
+    const matches = festivals.filter(f => !f.archived && f.name.toLowerCase().includes(query)).slice(0, 5);
     if (!matches.length) { results.innerHTML = ''; results.style.display = 'none'; return; }
     results.innerHTML = matches.map(f => {
       const d = festDate(f);
@@ -14139,7 +14146,7 @@ async function doProfilePasswordChange() {
     if (!results) return;
     const query = (q || '').trim().toLowerCase();
     if (!query) { results.innerHTML = ''; results.style.display = 'none'; return; }
-    const matches = festivals.filter(f => f.name.toLowerCase().includes(query)).slice(0, 5);
+    const matches = festivals.filter(f => !f.archived && f.name.toLowerCase().includes(query)).slice(0, 5);
     if (!matches.length) { results.innerHTML = ''; results.style.display = 'none'; return; }
     results.innerHTML = matches.map(f => {
       const d = festDate(f);
@@ -14292,7 +14299,7 @@ async function doProfilePasswordChange() {
     if (!results) return;
     const query = (q || '').trim().toLowerCase();
     if (!query) { results.innerHTML = ''; results.style.display = 'none'; return; }
-    const matches = festivals.filter(f => f.name.toLowerCase().includes(query)).slice(0, 5);
+    const matches = festivals.filter(f => !f.archived && f.name.toLowerCase().includes(query)).slice(0, 5);
     if (!matches.length) { results.innerHTML = ''; results.style.display = 'none'; return; }
     results.innerHTML = matches.map(f => {
       const d = festDate(f);
@@ -15168,6 +15175,7 @@ async function doProfilePasswordChange() {
       </div>` : ''}
       <div class="modal-actions">
         ${f && currentUser ? `<button class="btn btn-ghost" onclick="showFestivalHistoryInModal('${f.id}')">📜 History</button>` : ''}
+        ${f && f.archived && festivalPerms(f).canArchive ? `<button class="btn btn-ghost" onclick="unarchiveFestival('${f.id}')">🗄️ Unarchive</button>` : ''}
         ${f && festivalPerms(f).canEdit ? `<button class="btn btn-ghost" style="color:var(--neon-pink);" onclick="showDeleteRaveConfirm()">Delete</button>` : ''}
         ${f && currentUser && !festivalPerms(f).canEdit ? `<button class="btn btn-ghost" onclick="showReportModal('festival', '${f.id}')">🚩 Report</button>` : ''}
         <button class="btn btn-ghost" onclick="closeRaveEditor()">Cancel</button>
@@ -15563,6 +15571,26 @@ async function doProfilePasswordChange() {
         .eq('id', id);
       if (error) { console.error('festival archive error', error); showToast('⚠️ Could not archive — try again'); return; }
       await logAudit({ action: 'festival.archive', entityType: 'festival', entityId: id, reason });
+    }
+  }
+
+  // Undoes archiveFestival — until this existed, "archive" was a one-way
+  // door with no restore path anywhere in the app (unlike every true
+  // soft-delete, which has Mod Dashboard restore).
+  async function unarchiveFestival(id, reason = null) {
+    const f = getFestival(id);
+    if (!f) return;
+    if (!festivalPerms(f).canArchive) { showToast('🔒 Only the creator or a moderator can unarchive this rave'); return; }
+    f.archived = false;
+    closeRaveEditor();
+    renderEvents(); renderCrews();
+    showToast(`🗄️ ${f.name} unarchived — back on the active list.`);
+    if (currentUser) {
+      const { error } = await sb.from('festivals')
+        .update({ archived_at: null, archived_by: null })
+        .eq('id', id);
+      if (error) { console.error('festival unarchive error', error); showToast('⚠️ Could not unarchive — try again'); return; }
+      await logAudit({ action: 'festival.unarchive', entityType: 'festival', entityId: id, reason });
     }
   }
 
