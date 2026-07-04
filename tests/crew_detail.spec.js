@@ -84,7 +84,11 @@ test.describe('crew detail · polls', () => {
       return poll.id;
     });
     await page.evaluate(async (id) => { await dbDeletePoll(id); }, pollId);
-    expect(await page.evaluate(() => (window.__store.crew_polls || []).length)).toBe(0);
+    // Polls are soft-deleted (deleted_at set), not removed from the store —
+    // matches dbDeleteFestival/dbRemoveCrewMember in soft_delete.spec.js.
+    const poll = await page.evaluate((id) => window.__store.crew_polls.find(p => p.id === id), pollId);
+    expect(poll).toBeTruthy();
+    expect(poll.deleted_at).toBeTruthy();
   });
 });
 
