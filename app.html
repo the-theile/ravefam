@@ -2259,6 +2259,10 @@
     color: var(--neon-cyan);
     border-color: rgba(0,245,255,0.4);
   }
+  .notif-footer-btn.privacy-btn:hover {
+    color: var(--neon-green);
+    border-color: rgba(57,255,20,0.4);
+  }
 
   .notif-list {
     flex: 1;
@@ -5417,8 +5421,31 @@
       <p style="font-size:0.72rem;color:var(--muted);margin-top:4px;">This helps moderators understand what happened, later.</p>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeConfirm()">Cancel</button>
+      <button class="btn btn-ghost" id="confirm-cancel-btn" onclick="closeConfirm()">Cancel</button>
       <button class="btn btn-primary" id="confirm-ok-btn">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Privacy & Permissions Modal -->
+<div class="modal-overlay" id="privacy-settings-overlay" onclick="if(event.target===this)closePrivacySettingsModal()">
+  <div class="modal" style="max-width:420px;text-align:left;">
+    <div class="modal-title">🔒 Privacy &amp; Permissions</div>
+    <p style="font-size:0.8rem;color:var(--muted);margin-bottom:16px;line-height:1.5;">Control what your crew can do on your profile, and what other ravers can see.</p>
+    <div class="poll-modal-settings" id="privacy-settings-rows"><!-- filled by JS --></div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" style="flex:1;" onclick="closePrivacySettingsModal()">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Suggest a Vibe Tag Sheet (view-mode, add-only, immediate save) -->
+<div class="bottom-sheet-overlay" id="suggest-vibe-overlay" onclick="if(event.target===this)closeSuggestVibeSheet()">
+  <div class="bottom-sheet" style="max-height:80vh;overflow-y:auto;">
+    <div class="modal-title">🏷️ Suggest a Vibe Tag</div>
+    <div id="suggest-vibe-body"><!-- filled by JS --></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" style="flex:1;" onclick="closeSuggestVibeSheet()">Close</button>
     </div>
   </div>
 </div>
@@ -5529,6 +5556,7 @@
     <div class="notif-drawer-footer">
       <button class="notif-footer-btn edit-btn" onclick="notifDrawerEditProfile()">✏️ Edit Profile</button>
       <button class="notif-footer-btn pw-btn" onclick="notifDrawerChangePassword()">🔑 Password</button>
+      <button class="notif-footer-btn privacy-btn" onclick="notifDrawerPrivacySettings()">🔒 Privacy</button>
     </div>
   </div>
 </div>
@@ -5948,13 +5976,16 @@
     const none = () => ({
       editName:false, editHandle:false, editLocation:false, editInstagram:false, editRadiate:false,
       editPhone:false, editTags:false, editGenres:false, editArtists:false, editFests:false,
-      canDisconnect:false, canDelete:false, isLeaderOfRaver:false, isClaimed:false
+      canDisconnect:false, canDelete:false, isLeaderOfRaver:false, isClaimed:false,
+      // === PROFILE PRIVACY & PERMISSIONS ===
+      canBeAddedToFestivals:false, canReceiveVibeTags:false, baseVisible:false, rsvpsVisible:false
     });
     if (!r) return none();
     if (r.isYou) return {
       editName:true, editHandle:true, editLocation:true, editInstagram:true, editRadiate:true,
       editPhone:true, editTags:true, editGenres:true, editArtists:true, editFests:true,
-      canDisconnect:false, canDelete:false, isLeaderOfRaver:false, isClaimed:true
+      canDisconnect:false, canDelete:false, isLeaderOfRaver:false, isClaimed:true,
+      canBeAddedToFestivals:true, canReceiveVibeTags:true, baseVisible:true, rsvpsVisible:true
     };
     if (!currentUser) return none();
     const isClaimed  = !!(r.claimedBy || r.status === 'claimed');
@@ -5979,6 +6010,14 @@
       canDelete:      isLeader && !isClaimed,
       isLeaderOfRaver: isLeader,
       isClaimed,
+      // === PROFILE PRIVACY & PERMISSIONS ===
+      // Unclaimed stub profiles have no owner agency yet, so crew management
+      // of them stays unrestricted — only claimed (real-account) profiles
+      // defer to the owner's own consent settings.
+      canBeAddedToFestivals: !isClaimed || r.allowFestivalAdds !== false,
+      canReceiveVibeTags:    !isClaimed || r.allowVibeTags !== false,
+      baseVisible:           !isClaimed || r.privacyBaseVisible !== false,
+      rsvpsVisible:          !isClaimed || r.privacyShowRsvps !== false,
     };
   }
 
@@ -7321,7 +7360,12 @@ async function doProfilePasswordChange() {
           claimedBy: r.claimed_by || null,
           status: r.status || 'unclaimed',
           vibeTags: r.vibe_tags || [],
-          customVibeTags: r.custom_vibe_tags || []
+          customVibeTags: r.custom_vibe_tags || [],
+          // === PROFILE PRIVACY & PERMISSIONS ===
+          allowFestivalAdds:  r.allow_festival_adds !== false,
+          allowVibeTags:      r.allow_vibe_tags !== false,
+          privacyBaseVisible: r.privacy_base_visible !== false,
+          privacyShowRsvps:   r.privacy_show_rsvps !== false
         });
       });
     }
@@ -7420,7 +7464,12 @@ async function doProfilePasswordChange() {
             claimedBy: r.claimed_by || null,
             status: r.status || 'unclaimed',
             vibeTags: r.vibe_tags || [],
-            customVibeTags: r.custom_vibe_tags || []
+            customVibeTags: r.custom_vibe_tags || [],
+            // === PROFILE PRIVACY & PERMISSIONS ===
+            allowFestivalAdds:  r.allow_festival_adds !== false,
+            allowVibeTags:      r.allow_vibe_tags !== false,
+            privacyBaseVisible: r.privacy_base_visible !== false,
+            privacyShowRsvps:   r.privacy_show_rsvps !== false
           });
         });
         // Rebuild crew members arrays and re-resolve leader_id now that all
@@ -7884,6 +7933,41 @@ async function doProfilePasswordChange() {
   }
 
   // ===== SUPABASE WRITE HELPERS =====
+
+  // === PROFILE PRIVACY & PERMISSIONS ===
+  // Standalone save for the Privacy & Permissions toggles — deliberately
+  // separate from dbSaveRaver/saveProfile (the full Edit-Profile-mode save
+  // flow), since this must work from a lightweight settings modal with just
+  // booleans, not a whole edit session.
+  async function savePrivacySettings(raverId, patch) {
+    const r = getRaver(raverId);
+    if (!r || !r.isYou || r.readOnly || !currentUser) {
+      showToast('⚠️ You can only edit your own privacy settings');
+      return;
+    }
+    const fieldMap = {
+      allowFestivalAdds: 'allow_festival_adds', allowVibeTags: 'allow_vibe_tags',
+      privacyBaseVisible: 'privacy_base_visible', privacyShowRsvps: 'privacy_show_rsvps',
+      phoneVisible: 'phone_visible',
+    };
+    const dbPatch = {};
+    Object.keys(patch).forEach(k => { if (fieldMap[k]) dbPatch[fieldMap[k]] = !!patch[k]; });
+    if (!Object.keys(dbPatch).length) return;
+    const { error } = await sb.from('ravers').update(dbPatch).eq('id', raverId);
+    if (error) { console.error('privacy save error', error); showToast('⚠️ Could not save — try again'); return; }
+    Object.assign(r, patch);
+    showToast('✅ Privacy settings saved');
+    if ('phoneVisible' in patch) {
+      // Keep the Edit Profile checkbox in sync if both surfaces are open at once.
+      const cb = document.getElementById('pf-phone-visible');
+      if (cb) cb.checked = r.phoneVisible;
+    }
+    renderSquad();
+    if (document.getElementById('page-profile')?.classList.contains('active')) {
+      const actions = document.querySelector('#page-profile .profile-actions[data-raver-id]');
+      if (actions && String(actions.dataset.raverId) === String(raverId)) openProfile(raverId);
+    }
+  }
 
   async function dbSaveRaver(data, id) {
     const uid = currentUser?.id;
@@ -12551,9 +12635,15 @@ async function doProfilePasswordChange() {
           </div>`).join('')
       : '<div class="fest-empty">No raves in your history yet</div>';
 
+    // Permission flags for this viewer on this raver
+    const perms = raverPerms(r);
+
     // Personal next-rave countdown banner
+    // === PROFILE PRIVACY & PERMISSIONS ===
+    // Respect RSVP privacy here too — otherwise a "keep RSVPs private" viewer
+    // would still leak their next rave via this banner.
     let nextBanner = '';
-    if (upcomingFests.length) {
+    if (upcomingFests.length && (r.isYou || perms.rsvpsVisible)) {
       const f = upcomingFests[0];
       const n = daysUntil(f._d);
       nextBanner = `
@@ -12564,9 +12654,6 @@ async function doProfilePasswordChange() {
           <div class="cd-date">${festWhenLabel(f)} · 📍 ${escHtml(f.location || 'TBD')}</div>
         </div>`;
     }
-
-    // Permission flags for this viewer on this raver
-    const perms = raverPerms(r);
 
     // Inline tag chips — in view mode chips are display-only; editing requires Edit Profile
     const blockedTags = r.blockedTags || [];
@@ -12771,7 +12858,9 @@ async function doProfilePasswordChange() {
             <div class="profile-handle">${escHtml(r.handle)}</div>
             ${perms.editLocation
               ? `<div class="profile-base-line">📍 <span id="ief-wrap-${r.id}-base" class="ief-wrap">${inlineEditDisplay(r.id, 'base', r.base)}</span></div>`
-              : `<div class="profile-base-line">📍 Based in ${escHtml(r.base)}</div>`}
+              : perms.baseVisible
+                ? `<div class="profile-base-line">📍 Based in ${escHtml(r.base)}</div>`
+                : `<div class="profile-base-line">📍 Location private</div>`}
           </div>
         </div>
 
@@ -12779,12 +12868,18 @@ async function doProfilePasswordChange() {
 
         <div class="profile-actions" data-raver-id="${r.id}">
           ${ currentUser && (r.isYou || (perms.isLeaderOfRaver && !perms.isClaimed)) ? `<button class="btn btn-primary" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="enterProfileEditMode(this.dataset.raverId)">✏️ Edit Profile</button>` : ''}
+          ${r.isYou ? `<button class="btn btn-ghost" style="padding:11px;" data-raver-id="${r.id}" onclick="openPrivacySettingsModal(this.dataset.raverId)" title="Privacy & Permissions">🔒</button>` : ''}
           ${perms.canDisconnect ? `<button class="btn btn-ghost btn-disconnect" data-raver-id="${r.id}" onclick="showDisconnectConfirm(this.dataset.raverId)" title="Disconnect account">🔗</button>` : ''}
           ${(perms.canDelete || (!r.isYou && isModerator())) ? `<button class="btn btn-ghost" style="padding:11px;color:var(--neon-pink);border-color:rgba(255,45,120,0.3);" data-raver-id="${r.id}" onclick="deleteUnclaimedProfile(this.dataset.raverId)">🗑️</button>` : ''}
         </div>
 
         ${connectBlock}
 
+        ${(!r.isYou && !perms.rsvpsVisible) ? `
+        <div class="profile-section" style="${sg(0)}">
+          <h3>🎟️ Festivals</h3>
+          <div class="fest-empty">🔒 ${escHtml(displayName(r).split(' ')[0])} keeps their RSVPs private.</div>
+        </div>` : `
         <div class="profile-section" style="${sg(0)}">
           <h3>🎟️ Festivals — Going To</h3>
           ${upcomingFests.length
@@ -12811,7 +12906,7 @@ async function doProfilePasswordChange() {
                     ${(r.isYou || perms.editFests) ? `<button class="tag-remove-btn" title="Remove ${escHtml(f.name)}" aria-label="Remove ${escHtml(f.name)}" onclick="removeBeenTo('${r.id}','${f.id}')" style="flex-shrink:0;">&nbsp;✕</button>` : ''}
                   </span>
                 </div>`).join('')
-            : '<div class="fest-empty">No raves in your history yet</div>'}
+            : '<div class="fest-empty">No raves in your history yet</div>'}`}
         </div>
 
         <div class="profile-section" style="${sg(2)}">
@@ -12823,6 +12918,7 @@ async function doProfilePasswordChange() {
               ? `<div class="profile-vibes">${presetVibes}${customVibes}</div>`
               : `<div class="fest-empty">No vibes tagged yet${r.isYou || perms.isLeaderOfRaver ? ' — what\'s your flavor? Edit profile to add some' : ' — what\'s their flavor?'}</div>`;
           })()}
+          ${(!r.isYou && currentUser) ? `<button class="tag-edit-btn" style="margin-top:8px;" onclick="openSuggestVibeSheet('${r.id}')">🏷️ Suggest a vibe tag</button>` : ''}
         </div>
 
         <div class="profile-section" style="${sg(3)}">
@@ -14665,6 +14761,11 @@ async function doProfilePasswordChange() {
     if (!editingFestivalId) return;
     const r = getRaver(raverId);
     if (!r) return;
+    // === PROFILE PRIVACY & PERMISSIONS ===
+    if (!r.isYou && !raverPerms(r).canBeAddedToFestivals) {
+      showInfoModal('🔒 Not right now', `${displayName(r).split(' ')[0]} has chosen not to be added to festivals by others. You can reach out to them directly if you'd like to ask them to change this.`);
+      return;
+    }
     if ((r.festIds || []).some(fid => String(fid) === String(editingFestivalId))) {
       showToast('Already linked'); return;
     }
@@ -14958,9 +15059,94 @@ async function doProfilePasswordChange() {
     renderSquad();
     openProfile(raverId);
   }
+
+  // === PROFILE PRIVACY & PERMISSIONS ===
+  // "Suggest a Vibe Tag" — lets a crew member add (never remove) a vibe tag
+  // on a claimed crewmate's profile from view mode, immediately, without
+  // needing owner-only Edit Profile access. Deliberately a separate, minimal
+  // sheet rather than reusing the edit-session-coupled tag-sheet (openTagSheet)
+  // used by Edit Profile, to avoid any regression risk to that save flow.
+  let _suggestVibeRaverId = null;
+
+  function openSuggestVibeSheet(raverId) {
+    const r = getRaver(raverId);
+    if (!r) return;
+    if (!raverPerms(r).canReceiveVibeTags) {
+      showInfoModal('🔒 Vibe tags off', `${displayName(r).split(' ')[0]} has turned off community vibe tags. You can reach out to them directly if you'd like to ask them to change this.`);
+      return;
+    }
+    _suggestVibeRaverId = raverId;
+    renderSuggestVibeBody(raverId);
+    document.getElementById('suggest-vibe-overlay').classList.add('open');
+  }
+
+  function closeSuggestVibeSheet() {
+    document.getElementById('suggest-vibe-overlay').classList.remove('open');
+    _suggestVibeRaverId = null;
+  }
+
+  function renderSuggestVibeBody(raverId) {
+    const r = getRaver(raverId);
+    const body = document.getElementById('suggest-vibe-body');
+    if (!r || !body) return;
+    const already = new Set((r.vibeTags || []).map(String));
+    const accordion = VIBE_CATEGORIES.map(c => {
+      const chips = VIBE_PRESETS.filter(p => p.cat === c.id).map(p => {
+        const has = already.has(p.id);
+        return `<span class="vibe-preset${has ? ' picked' : ''}" style="color:${p.color};${has ? 'opacity:.4;pointer-events:none;' : ''}"
+                  onclick="${has ? '' : `submitSuggestedVibeTag('${p.id}')`}"><span class="vt-icon">${p.icon}</span>${escHtml(p.label)}</span>`;
+      }).join('');
+      return `<div class="tag-acc-title" style="margin-top:10px;">${c.label}</div><div class="tag-acc-body-inner">${chips}</div>`;
+    }).join('');
+    body.innerHTML = `
+      ${accordion}
+      <div class="tag-acc-title" style="margin-top:14px;">Something else?</div>
+      <div style="display:flex;gap:8px;margin-top:6px;">
+        <input class="form-input" id="suggest-vibe-custom-input" placeholder="Type a custom vibe…" maxlength="40" style="margin-bottom:0;">
+        <button class="btn btn-primary" style="padding:0 16px;" onclick="submitSuggestedVibeTagCustom()">Add</button>
+      </div>`;
+  }
+
+  function submitSuggestedVibeTag(presetId) {
+    const raverId = _suggestVibeRaverId;
+    const r = getRaver(raverId);
+    if (!r) return;
+    if (!raverPerms(r).canReceiveVibeTags) { closeSuggestVibeSheet(); return; }
+    if ((r.vibeTags || []).includes(presetId)) { showToast('Already on their profile'); return; }
+    r.vibeTags = [...(r.vibeTags || []), presetId];
+    if (currentUser) dbSaveRaver({ ...r }, r.id);
+    renderSquad();
+    renderSuggestVibeBody(raverId);
+    showToast('✅ Vibe tag added!');
+    if (document.getElementById('page-profile')?.classList.contains('active')) openProfile(raverId);
+  }
+
+  function submitSuggestedVibeTagCustom() {
+    const raverId = _suggestVibeRaverId;
+    const r = getRaver(raverId);
+    const input = document.getElementById('suggest-vibe-custom-input');
+    const v = (input?.value || '').trim();
+    if (!r || !v) return;
+    if (!raverPerms(r).canReceiveVibeTags) { closeSuggestVibeSheet(); return; }
+    const blocked = r.blockedTags || [];
+    if (blocked.includes(v.toLowerCase())) { showToast('That tag was blocked by the profile owner.'); return; }
+    if ((r.customVibeTags || []).map(x => x.toLowerCase()).includes(v.toLowerCase())) { showToast('Already on the list'); return; }
+    r.customVibeTags = [...(r.customVibeTags || []), v];
+    if (currentUser) dbSaveRaver({ ...r }, r.id);
+    renderSquad();
+    closeSuggestVibeSheet();
+    showToast('✅ Vibe tag added!');
+    if (document.getElementById('page-profile')?.classList.contains('active')) openProfile(raverId);
+  }
+
   function addBeenTo(raverId, festId) {
     const r = getRaver(raverId);
     if (!r) return;
+    // === PROFILE PRIVACY & PERMISSIONS ===
+    if (!r.isYou && !raverPerms(r).canBeAddedToFestivals) {
+      showInfoModal('🔒 Not right now', `${displayName(r).split(' ')[0]} has chosen not to be added to festivals by others. You can reach out to them directly if you'd like to ask them to change this.`);
+      return;
+    }
     if ((r.festIds || []).includes(festId)) { showToast('Already on their list'); return; }
     r.festIds = [...(r.festIds || []), festId];
     if (currentUser) dbAddRaverFestival(raverId, festId);
@@ -14973,6 +15159,7 @@ async function doProfilePasswordChange() {
     document.getElementById('confirm-title').textContent = title;
     document.getElementById('confirm-body').textContent = body;
     document.getElementById('confirm-reason-wrap').style.display = 'none';
+    document.getElementById('confirm-cancel-btn').style.display = '';
     const okBtn = document.getElementById('confirm-ok-btn');
     okBtn.disabled = false;
     okBtn.textContent = okLabel;
@@ -14988,6 +15175,7 @@ async function doProfilePasswordChange() {
     document.getElementById('confirm-body').textContent = body;
     document.getElementById('confirm-reason-wrap').style.display = 'block';
     document.getElementById('confirm-reason-label').textContent = label;
+    document.getElementById('confirm-cancel-btn').style.display = '';
     const input = document.getElementById('confirm-reason-input');
     input.value = '';
     input.placeholder = placeholder;
@@ -15004,6 +15192,58 @@ async function doProfilePasswordChange() {
   }
   function closeConfirm() { document.getElementById('confirm-overlay').classList.remove('open'); }
   function closeConfirmOutside(e) { if (e.target === document.getElementById('confirm-overlay')) closeConfirm(); }
+
+  // === PROFILE PRIVACY & PERMISSIONS ===
+  // Single-button informational variant of the confirm modal — for
+  // "blocked by owner's consent setting" messages that aren't a real
+  // yes/no decision, just a friendly acknowledgement.
+  function showInfoModal(title, body, okLabel = 'Got it') {
+    document.getElementById('confirm-title').textContent = title;
+    document.getElementById('confirm-body').textContent = body;
+    document.getElementById('confirm-reason-wrap').style.display = 'none';
+    document.getElementById('confirm-cancel-btn').style.display = 'none';
+    const okBtn = document.getElementById('confirm-ok-btn');
+    okBtn.disabled = false;
+    okBtn.textContent = okLabel;
+    okBtn.onclick = () => closeConfirm();
+    document.getElementById('confirm-overlay').classList.add('open');
+  }
+
+  // === PROFILE PRIVACY & PERMISSIONS ===
+  // Settings modal — owner-only (mirrors the entry-point gating on r.isYou),
+  // each toggle saves immediately on tap via savePrivacySettings(), matching
+  // the immediate-save convention already used by togglePollAnon().
+  function openPrivacySettingsModal(raverId) {
+    const r = getRaver(raverId);
+    if (!r || !r.isYou) return;
+    const rows = [
+      { key:'allowFestivalAdds',  label:'Festival adds',        hint:'Let crewmates add you to a rave lineup' },
+      { key:'allowVibeTags',      label:'Vibe tag suggestions', hint:'Let crewmates suggest a vibe tag on your profile' },
+      { key:'phoneVisible',       label:'Phone number',         hint:'Share your phone with crewmates' },
+      { key:'privacyBaseVisible', label:'Base location',        hint:"Show where you're based on your profile" },
+      { key:'privacyShowRsvps',   label:'Festival RSVPs',       hint:'Show your Going To / Been To on your profile' },
+    ];
+    document.getElementById('privacy-settings-rows').innerHTML = rows.map(row => `
+      <div class="poll-setting-row">
+        <div>
+          <div class="poll-setting-label">${row.label}</div>
+          <div class="poll-setting-hint">${row.hint}</div>
+        </div>
+        <button class="poll-anon-toggle${r[row.key] ? ' on' : ''}" data-key="${row.key}" onclick="togglePrivacySetting('${r.id}', this)"></button>
+      </div>`).join('');
+    document.getElementById('privacy-settings-overlay').classList.add('open');
+  }
+
+  function togglePrivacySetting(raverId, btn) {
+    const key = btn.dataset.key;
+    const on = !btn.classList.contains('on');
+    btn.classList.toggle('on', on);
+    savePrivacySettings(raverId, { [key]: on });
+  }
+
+  function closePrivacySettingsModal() {
+    document.getElementById('privacy-settings-overlay').classList.remove('open');
+  }
 
   // ── Offline banner ────────────────────────────────────
   (function initOfflineBanner() {
@@ -15441,6 +15681,12 @@ async function doProfilePasswordChange() {
   function notifDrawerChangePassword() {
     closeNotifDrawer();
     openChangePwModal();
+  }
+
+  function notifDrawerPrivacySettings() {
+    closeNotifDrawer();
+    const me = squad.find(r => r.isYou);
+    if (me) openPrivacySettingsModal(me.id);
   }
 
   function openChangePwModal() {
