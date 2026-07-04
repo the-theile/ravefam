@@ -247,6 +247,88 @@ async function installSupabaseStub(page, opts = {}) {
 
         const channel = { on() { return channel; }, subscribe() { return channel; }, unsubscribe() { return Promise.resolve('ok'); } };
 
+        // Re-implements the handful of security-definer RPCs the client
+        // actually calls (get_{festival,crew,raver}_history,
+        // get_crewmate_ravers, get_own_and_created_ravers) against the same
+        // in-memory store, so tests can assert on the real masking behaviour
+        // instead of a dummy empty result.
+        function makeRpc(fn, params) {
+          const args = params || {};
+          const uid = SESSION?.user?.id;
+          const isMod = () => (store.moderators || []).some(m => String(m.user_id) === String(uid));
+          function historyRows(entityType, targetId, limit) {
+            let rows;
+            if (entityType === 'festival') {
+              rows = (store.audit_logs || []).filter(a => a.entity_type === 'festival' && String(a.entity_id) === String(targetId));
+            } else if (entityType === 'crew') {
+              rows = (store.audit_logs || []).filter(a =>
+                (a.entity_type === 'crew' && String(a.entity_id) === String(targetId)) ||
+                (['crew_member', 'dream_pin', 'archive_link', 'poll', 'jam'].includes(a.entity_type)
+                  && a.metadata && String(a.metadata.crew_id) === String(targetId)));
+            } else {
+              rows = (store.audit_logs || []).filter(a => a.entity_type === 'raver' && String(a.entity_id) === String(targetId));
+            }
+            rows = rows.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, limit ?? 50);
+            const mod = isMod();
+            return rows.map(r => ({ ...clone(r), reason: mod ? (r.reason ?? null) : null }));
+          }
+          // Mirrors get_crewmate_ravers()/get_own_and_created_ravers()'s masking:
+          // base/RSVPs/phone hidden unless self, moderator, unclaimed, or the
+          // relevant privacy_* flag is on; notes/qr_token additionally require
+          // self-or-unclaimed (no moderator bypass — matches the SQL).
+          function maskRaver(r, { includeSelfOnlyFields }) {
+            const mod = isMod();
+            const selfOrMod = mod || String(r.claimed_by) === String(uid);
+            const selfOrUnclaimed = !r.claimed_by || String(r.claimed_by) === String(uid);
+            const baseVisible = !r.claimed_by || selfOrMod || r.privacy_base_visible !== false;
+            const rsvpVisible = !r.claimed_by || selfOrMod || r.privacy_show_rsvps !== false;
+            const festIds = (store.raver_festivals || []).filter(x => String(x.raver_id) === String(r.id)).map(x => x.festival_id);
+            const interestedFestIds = (store.raver_festival_interest || []).filter(x => String(x.raver_id) === String(r.id)).map(x => x.festival_id);
+            const favArtistIds = (store.raver_favorite_artists || []).filter(x => String(x.raver_id) === String(r.id)).map(x => x.artist_id);
+            const row = {
+              id: r.id, name: r.name, handle: r.handle, created_by: r.created_by, is_you: r.is_you,
+              base: baseVisible ? r.base : null,
+              gradient: r.gradient, avatar_url: r.avatar_url, blocked_tags: r.blocked_tags, genres: r.genres,
+              fav_artist_ids: favArtistIds,
+              fest_ids: rsvpVisible ? festIds : [],
+              interested_fest_ids: rsvpVisible ? interestedFestIds : [],
+              instagram: r.instagram, radiate: r.radiate,
+              phone: (selfOrMod || r.phone_visible) ? r.phone : null,
+              phone_visible: r.phone_visible, met_story: r.met_story, claimed_by: r.claimed_by, status: r.status,
+              vibe_tags: r.vibe_tags, custom_vibe_tags: r.custom_vibe_tags,
+              allow_festival_adds: r.allow_festival_adds, allow_vibe_tags: r.allow_vibe_tags,
+              privacy_base_visible: r.privacy_base_visible, privacy_show_rsvps: r.privacy_show_rsvps,
+            };
+            if (includeSelfOnlyFields) {
+              row.notes = selfOrUnclaimed ? r.notes : null;
+              row.qr_token = selfOrUnclaimed ? r.qr_token : null;
+            }
+            return row;
+          }
+          function exec() {
+            if (fn === 'get_festival_history') return { data: historyRows('festival', args.p_festival_id, args.p_limit), error: null };
+            if (fn === 'get_crew_history') return { data: historyRows('crew', args.p_crew_id, args.p_limit), error: null };
+            if (fn === 'get_raver_history') return { data: historyRows('raver', args.p_raver_id, args.p_limit), error: null };
+            if (fn === 'get_crewmate_ravers') {
+              const ids = (args.p_ids || []).map(String);
+              const rows = (store.ravers || []).filter(r => ids.includes(String(r.id)) && r.status !== 'merged' && !r.deleted_at);
+              return { data: rows.map(r => maskRaver(r, { includeSelfOnlyFields: false })), error: null };
+            }
+            if (fn === 'get_own_and_created_ravers') {
+              const rows = (store.ravers || []).filter(r =>
+                (String(r.created_by) === String(uid) || String(r.claimed_by) === String(uid))
+                && r.status !== 'merged' && !r.deleted_at);
+              return { data: rows.map(r => maskRaver(r, { includeSelfOnlyFields: true })), error: null };
+            }
+            return { data: [], error: null };
+          }
+          return {
+            then(f, j) { return Promise.resolve(exec()).then(f, j); },
+            catch(j) { return Promise.resolve(exec()).catch(j); },
+            finally(cb) { return Promise.resolve(exec()).finally(cb); },
+          };
+        }
+
         function createClient() {
           let authCb = null;
           const auth = {
@@ -267,7 +349,7 @@ async function installSupabaseStub(page, opts = {}) {
           }; } };
           // Expose the store for test introspection.
           window.__store = store;
-          return { auth, storage, from(t) { return makeBuilder(t); }, rpc() { return makeBuilder('__rpc'); }, channel() { return channel; }, removeChannel() { return Promise.resolve('ok'); } };
+          return { auth, storage, from(t) { return makeBuilder(t); }, rpc(fn, params) { return makeRpc(fn, params); }, channel() { return channel; }, removeChannel() { return Promise.resolve('ok'); } };
         }
 
         window.supabase = { createClient };
