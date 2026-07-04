@@ -5007,10 +5007,10 @@
     </div>
 
     <div id="auth-signup-form" style="display:none;">
-      <div style="background:#fff3cd; color:#856404; padding:12px; border-radius:8px; margin-bottom:16px; font-size:0.95rem; text-align:center;">
-  Sign-ups are temporarily paused while we finalize the full experience.<br>
-  Please join the waitlist on the landing page — we'll notify you when spots open.
-</div>
+      <div id="signup-waitlist-banner" style="background:rgba(255,45,120,0.08); border:1px solid rgba(255,45,120,0.25); color:var(--text); padding:12px 14px; border-radius:12px; margin-bottom:16px; font-size:0.85rem; line-height:1.5; text-align:center;">
+        Sign-ups are temporarily paused while we finalize the full experience.<br>
+        Please join the waitlist on the landing page — we'll notify you when spots open.
+      </div>
       <div class="form-group">
         <label class="form-label">Your Name</label>
         <input class="form-input" id="signup-name" type="text" placeholder="e.g. Jamie D." autocomplete="name">
@@ -5879,7 +5879,11 @@
   <div id="ob-whatnow" class="onboard-card" style="display:none;text-align:center;">
     <div style="font-size:2.8rem;margin-bottom:10px;">🎉</div>
     <div class="onboard-title" style="margin-bottom:6px;">You're in the fam!</div>
-    <div class="onboard-sub" style="margin-bottom:22px;">The floor is yours. What do you want to do first?</div>
+    <div class="onboard-sub" style="margin-bottom:14px;">The floor is yours. What do you want to do first?</div>
+    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:18px;">
+      🔒 Your profile's open to your crew by default —
+      <a href="#" onclick="completeOnboarding();openPrivacySettingsModal(squad.find(r=>r.isYou)?.id);return false;" style="color:var(--neon-pink);text-decoration:none;font-weight:600;">adjust anytime</a>.
+    </div>
     <div class="ob-whatnow-chips">
       <button class="ob-whatnow-chip" onclick="completeOnboarding();switchTab('events')">
         <span class="ob-whatnow-chip-icon">🗓️</span>
@@ -6219,6 +6223,12 @@
   let _bootedUserId = null; // guard: prevents bootApp() running more than once per session
 
   // ===== AUTH UI helpers =====
+  // True if the user arrived via a real crew QR/invite link — they were
+  // explicitly invited, so the general waitlist gate below shouldn't block them.
+  function hasPendingInvite() {
+    return !!(sessionStorage.getItem('pendingClaim') || sessionStorage.getItem('pendingCrewJoin')
+      || localStorage.getItem('pendingClaimToken'));
+  }
   function showAuthTab(tab) {
     document.getElementById('auth-login-form').style.display  = tab === 'login'  ? 'block' : 'none';
     document.getElementById('auth-signup-form').style.display = tab === 'signup' ? 'block' : 'none';
@@ -6227,6 +6237,9 @@
     document.getElementById('tab-signup').style.display = '';
     document.getElementById('tab-login').classList.toggle('active',  tab === 'login');
     document.getElementById('tab-signup').classList.toggle('active', tab === 'signup');
+    if (tab === 'signup' && hasPendingInvite() && document.getElementById('signup-waitlist-banner')) {
+      enableRealSignup({ inviteMode: true });
+    }
     clearAuthMessages();
   }
   function authError(msg) {
@@ -6334,15 +6347,27 @@ async function doProfilePasswordChange() {
     // onAuthStateChange will fire and handle the rest
   }
 
-  function unlockSignup() {
-    const banner = document.querySelector('#auth-signup-form > div[style*="background:#fff3cd"]');
-    if (banner) banner.remove();
+  // Turns the waitlist stand-in into the real signup form. `inviteMode` swaps
+  // the waitlist banner for invite-specific copy instead of just removing it,
+  // so someone who scanned a crew QR code understands *why* signup is open
+  // for them when the general public still sees the waitlist.
+  function enableRealSignup({ inviteMode = false } = {}) {
+    const tabBtn = document.getElementById('tab-signup');
+    if (tabBtn) tabBtn.textContent = 'Sign Up';
     const btn = document.getElementById('signup-btn');
-    btn.textContent = 'Create Account 🎉';
-    btn.onclick = doSignup;
+    if (btn) { btn.textContent = 'Create Account 🎉'; btn.onclick = doSignup; }
     const trigger = document.getElementById('secret-signup-trigger');
     if (trigger) trigger.outerHTML = 'signing up';
+    const banner = document.getElementById('signup-waitlist-banner');
+    if (banner) {
+      if (inviteMode) {
+        banner.textContent = "🎟️ You're invited — sign-ups are open just for you. Create your account below to claim your spot.";
+      } else {
+        banner.remove();
+      }
+    }
   }
+  function unlockSignup() { enableRealSignup({ inviteMode: false }); }
 
   async function doSignup() {
     const name     = document.getElementById('signup-name').value.trim();
@@ -6561,8 +6586,20 @@ async function doProfilePasswordChange() {
 
     const { data: preview, error } = await sb.rpc('get_claim_preview', { p_token: token });
     if (error) { showToast('⚠️ Could not load invite details.'); return; }
-    if (preview?.error === 'invalid_token')   { showToast('⚠️ This invite link is no longer valid.'); return; }
-    if (preview?.error === 'already_claimed') { showToast('⚠️ This spot has already been claimed.'); return; }
+    // These are terminal — the token can never resolve differently on a later
+    // load, so clear it now instead of re-showing this toast on every boot.
+    if (preview?.error === 'invalid_token') {
+      sessionStorage.removeItem('pendingClaim');
+      localStorage.removeItem('pendingClaimToken');
+      showToast('⚠️ This invite link is no longer valid.');
+      return;
+    }
+    if (preview?.error === 'already_claimed') {
+      sessionStorage.removeItem('pendingClaim');
+      localStorage.removeItem('pendingClaimToken');
+      showToast('⚠️ This spot has already been claimed.');
+      return;
+    }
 
     // Show scanner overlay in preview mode — no camera needed
     _pendingClaimToken = token;
@@ -7136,7 +7173,11 @@ async function doProfilePasswordChange() {
       if (editName)   updates.name       = editName;
       if (editHandle) updates.handle     = editHandle;
       if (editMet)    updates.met_story  = editMet;
-      await sb.from('ravers').update(updates).eq('id', claimedId);
+      const { error: editErr } = await sb.from('ravers').update(updates).eq('id', claimedId);
+      if (editErr) {
+        console.error('post-claim edit persist error', editErr);
+        showToast("⚠️ You're in! Just couldn't save your edited name/handle — update it from your profile.");
+      }
     }
 
     closeScanner();
@@ -8460,9 +8501,9 @@ async function doProfilePasswordChange() {
       </div>`;
   }
 
-  function buildHistoryListHTML(rows, { showReason = false, emptyMessage = 'No history yet — check back after the next edit 👀' } = {}) {
+  function buildHistoryListHTML(rows, { showReason = false, emptyMessage = 'Check back after the next edit 👀' } = {}) {
     if (!rows || !rows.length) {
-      return `<p style="font-size:0.82rem;color:var(--muted);text-align:center;padding:14px 0;">${escHtml(emptyMessage)}</p>`;
+      return `<div class="es-block" style="padding:24px 16px;"><div class="es-icon" style="font-size:2rem;">📜</div><div class="es-headline">No history yet</div><div class="es-sub">${escHtml(emptyMessage)}</div></div>`;
     }
     return `<div class="events-list">${rows.map(r => historyRowHTML(r, { showReason })).join('')}</div>`;
   }
@@ -9826,7 +9867,7 @@ async function doProfilePasswordChange() {
       <div style="font-size:0.86rem;color:var(--muted);margin-bottom:18px;">Keep the frequency clean — review reports and undo destructive actions.</div>
       <div class="status-toggle" style="margin-bottom:18px;">
         <button class="status-opt ${modDashTab==='reports'?'active':''}" onclick="switchModDashTab('reports')">🚩 Reports${openCount ? ` (${openCount})` : ''}</button>
-        <button class="status-opt ${modDashTab==='recent'?'active':''}" onclick="switchModDashTab('recent')">🗑️ Recent Deletes</button>
+        <button class="status-opt ${modDashTab==='recent'?'active':''}" onclick="switchModDashTab('recent')">🗑️ Recent Deletes${recent.length ? ` (${recent.length})` : ''}</button>
       </div>
       <div id="mod-dash-body"></div>
     `;
@@ -9851,14 +9892,15 @@ async function doProfilePasswordChange() {
   }
 
   const FLAG_TARGET_LABELS = {
-    raver: '👤 Raver', festival: '🎟️ Festival', crew: '🎪 Crew', crew_member: '👥 Crew Member', vibe_tag: '🏷️ Vibe Tag',
+    raver: '👤 Raver', festival: '🎟️ Rave', crew: '🎪 Crew', crew_member: '👥 Crew Member', vibe_tag: '🏷️ Vibe Tag',
     photo: '📸 Photo', dream_pin: '✨ Dream Pin', archive_link: '📸 Archive Link', poll: '🗳️ Poll', jam: '🎵 Jam'
   };
 
   function formatModDate(iso) {
-    if (!iso) return 'just now';
+    if (!iso) return { rel: 'just now', full: '' };
     const d = new Date(iso);
-    return isNaN(d.getTime()) ? 'just now' : d.toLocaleString();
+    if (isNaN(d.getTime())) return { rel: 'just now', full: '' };
+    return { rel: relativeTime(d.getTime()), full: d.toLocaleString() };
   }
 
   function flagCardHTML(f) {
@@ -9870,7 +9912,7 @@ async function doProfilePasswordChange() {
           <div class="event-info">
             <div class="event-name">${label}</div>
             <div class="event-meta">${escHtml(f.reason || 'No reason given')}</div>
-            <div class="event-meta" style="opacity:0.7;">Reported ${escHtml(when)}</div>
+            <div class="event-meta" style="opacity:0.7;" title="${escHtml(when.full)}">Reported ${escHtml(when.rel)}</div>
             <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
               <button class="btn btn-ghost" style="padding:8px 14px;font-size:0.76rem;" onclick="viewFlagTarget('${f.target_type}','${escHtml(String(f.target_id))}','${escHtml(String(f.metadata?.crew_id || ''))}')">👀 View</button>
               <button class="btn btn-ghost" style="padding:8px 14px;font-size:0.76rem;" onclick="handleDismissFlag('${f.id}')">Dismiss</button>
@@ -9882,15 +9924,15 @@ async function doProfilePasswordChange() {
   }
 
   function recentDeleteCardHTML(row) {
-    const label = FLAG_TARGET_LABELS[row.entity_type] || row.entity_type;
+    const { emoji: actionEmoji, label: actionLabel } = historyActionMeta(row.action);
     const when = formatModDate(row.created_at);
     return `
       <div class="event-item">
         <div class="event-item-body" style="align-items:flex-start;">
           <div class="event-info">
-            <div class="event-name">${label} — ${escHtml(row.action)}</div>
+            <div class="event-name">${actionEmoji} ${escHtml(actionLabel)}</div>
             <div class="event-meta">"${escHtml(row.reason || 'No reason given')}"</div>
-            <div class="event-meta" style="opacity:0.7;">${escHtml(when)}</div>
+            <div class="event-meta" style="opacity:0.7;" title="${escHtml(when.full)}">${escHtml(when.rel)}</div>
             <div style="display:flex;gap:8px;margin-top:10px;">
               <button class="btn btn-ghost" style="padding:8px 14px;font-size:0.76rem;color:var(--neon-pink);" data-audit-id="${row.id}" onclick="restoreFromAuditRowById(this.dataset.auditId)">↩️ Restore</button>
             </div>
@@ -9919,13 +9961,15 @@ async function doProfilePasswordChange() {
   }
 
   async function handleDismissFlag(flagId) {
-    showConfirm('Dismiss this report?', "It'll be marked as reviewed and cleared from the queue.", 'Dismiss',
-      async () => { if (await dbDismissFlag(flagId, null)) { showToast('Dismissed'); renderModDashboard(); } });
+    showConfirmWithReason('Dismiss this report?', "It'll be marked as reviewed and cleared from the queue.", 'Dismiss',
+      async (note) => { if (await dbDismissFlag(flagId, note)) { showToast('Dismissed'); renderModDashboard(); } },
+      { label: 'Note for the record (optional)', placeholder: 'Optional note for the record…', required: false });
   }
 
   async function handleResolveFlag(flagId) {
-    showConfirm('Mark this report resolved?', "It'll be marked as handled and cleared from the queue.", 'Resolve',
-      async () => { if (await dbResolveFlag(flagId, null)) { showToast('✅ Resolved'); renderModDashboard(); } });
+    showConfirmWithReason('Mark this report resolved?', "It'll be marked as handled and cleared from the queue.", 'Resolve',
+      async (note) => { if (await dbResolveFlag(flagId, note)) { showToast('✅ Resolved'); renderModDashboard(); } },
+      { label: 'Note for the record (optional)', placeholder: 'Optional note for the record…', required: false });
   }
 
   function goToProfileFromDetail(raverId) {
@@ -10469,7 +10513,7 @@ async function doProfilePasswordChange() {
     return `
       <div class="form-group crew-history-section" id="crew-history-section">
         <div class="section-banner"><span class="banner-inner">📜 Crew History <span class="banner-subtitle">· who did what, when</span></span></div>
-        ${buildHistoryListHTML(rows, { showReason: mod, emptyMessage: 'No crew activity logged yet.' })}
+        ${buildHistoryListHTML(rows, { showReason: mod, emptyMessage: "It'll fill in as the crew makes moves." })}
         ${showMoreBtn}
       </div>`;
   }
@@ -13569,7 +13613,7 @@ async function doProfilePasswordChange() {
             <span id="raver-history-toggle-label" style="font-size:0.72rem;color:var(--muted);">${raverHistoryExpanded ? '▲ Hide' : '▼ Show'}</span>
           </h3>
           <div id="raver-history-body" style="${raverHistoryExpanded ? '' : 'display:none;'}">
-            ${buildHistoryListHTML(raverHistoryRows, { showReason: isModerator(), emptyMessage: 'No history yet — check back after the next edit 👀' })}
+            ${buildHistoryListHTML(raverHistoryRows, { showReason: isModerator(), emptyMessage: 'Check back after the next edit 👀' })}
           </div>
         </div>
       `;
@@ -15194,7 +15238,7 @@ async function doProfilePasswordChange() {
     if (!modal) return;
     modal.innerHTML = `
       <div class="modal-title">📜 History${f ? ' — ' + escHtml(f.name) : ''}</div>
-      <div id="festival-history-list">${buildHistoryListHTML([], { emptyMessage: 'Loading…' })}</div>
+      <div id="festival-history-list"><p style="font-size:0.82rem;color:var(--muted);text-align:center;padding:14px 0;">Loading…</p></div>
       <div class="modal-actions">
         <button class="btn btn-ghost" data-fest-id="${escHtml(String(festId))}" onclick="openRaveEditor(this.dataset.festId)">← Back</button>
       </div>
@@ -15773,7 +15817,7 @@ async function doProfilePasswordChange() {
   // Same as showConfirm, but requires a short reason before the action fires —
   // for destructive actions that get written to the audit trail (deletes, etc.).
   function showConfirmWithReason(title, body, okLabel, callback, opts = {}) {
-    const { label = 'Why are you doing this?', placeholder = 'A few words is enough…' } = opts;
+    const { label = 'Why are you doing this?', placeholder = 'A few words is enough…', required = true } = opts;
     document.getElementById('confirm-title').textContent = title;
     document.getElementById('confirm-body').textContent = body;
     document.getElementById('confirm-reason-wrap').style.display = 'block';
@@ -15783,13 +15827,16 @@ async function doProfilePasswordChange() {
     input.value = '';
     input.placeholder = placeholder;
     const okBtn = document.getElementById('confirm-ok-btn');
-    okBtn.disabled = true;
+    okBtn.disabled = required;
     okBtn.textContent = okLabel;
+    // Optional-reason callers (e.g. mod dismiss/resolve) don't gate the button
+    // on the textarea having content — required ones do.
+    input.oninput = required ? () => { okBtn.disabled = !input.value.trim(); } : null;
     okBtn.onclick = () => {
       const reason = input.value.trim();
-      if (!reason) return;
+      if (required && !reason) return;
       closeConfirm();
-      callback(reason);
+      callback(reason || null);
     };
     document.getElementById('confirm-overlay').classList.add('open');
   }
@@ -15834,11 +15881,11 @@ async function doProfilePasswordChange() {
     const r = getRaver(raverId);
     if (!r || !r.isYou) return;
     const rows = [
-      { key:'allowFestivalAdds',  label:'Festival adds',        hint:'Let crewmates add you to a rave lineup' },
-      { key:'allowVibeTags',      label:'Vibe tag suggestions', hint:'Let crewmates suggest a vibe tag on your profile' },
-      { key:'phoneVisible',       label:'Phone number',         hint:'Share your phone with crewmates' },
-      { key:'privacyBaseVisible', label:'Base location',        hint:"Show where you're based on your profile" },
-      { key:'privacyShowRsvps',   label:'Festival RSVPs',       hint:'Show your Going To / Been To on your profile' },
+      { key:'allowFestivalAdds',  label:'Rave adds',            hint:'Let crewmates add you to a rave lineup (on by default)' },
+      { key:'allowVibeTags',      label:'Vibe tag suggestions', hint:'Let crewmates suggest a vibe tag on your profile (on by default)' },
+      { key:'phoneVisible',       label:'Phone number',         hint:'Share your phone with crewmates (off by default)' },
+      { key:'privacyBaseVisible', label:'Base location',        hint:"Show where you're based on your profile (on by default)" },
+      { key:'privacyShowRsvps',   label:'Rave RSVPs',           hint:'Show your Going To / Been To on your profile (on by default)' },
     ];
     document.getElementById('privacy-settings-rows').innerHTML = rows.map(row => `
       <div class="poll-setting-row">
@@ -15893,12 +15940,24 @@ async function doProfilePasswordChange() {
 
   // Toast
   let toastTimer;
+  let _toastQueue = [];
+  let _toastShowing = false;
   function showToast(msg) {
+    _toastQueue.push(msg);
+    if (!_toastShowing) _showNextToast();
+  }
+  function _showNextToast() {
+    const msg = _toastQueue.shift();
+    if (msg === undefined) { _toastShowing = false; return; }
+    _toastShowing = true;
     const t = document.getElementById('toast');
     t.textContent = msg;
     t.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+    toastTimer = setTimeout(() => {
+      t.classList.remove('show');
+      setTimeout(_showNextToast, 150);
+    }, 2500);
   }
 
   // ===== HANDLE PICKER =====
@@ -16005,6 +16064,7 @@ async function doProfilePasswordChange() {
   let _obGenres = new Set();
   let _obHandleValid = false;
   let _obHandleDebounce = null;
+  let _obHandleSeq = 0;
 
   function hexToRgba(hex, a) {
     const r = parseInt(hex.slice(1,3),16);
@@ -16015,19 +16075,27 @@ async function doProfilePasswordChange() {
 
   function showOnboarding() {
     isOnboarding = true;
-    _obGenres = new Set();
     _obHandleValid = false;
+    // Seed from any genres already on the user's raver record (e.g. set by a
+    // crew leader before they claimed, or from an earlier session) so this
+    // wizard never silently wipes them — it should only ever add to them.
+    const existingRaver = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
+    _obGenres = new Set(existingRaver?.genres || []);
     const grid = document.getElementById('ob-genre-grid');
     if (grid) {
       grid.innerHTML = OB_GENRE_PICKS.map(g => {
         const col = GENRE_FAMILY_COLORS[g] || '#00F5FF';
-        return `<div class="ob-genre-chip" data-col="${col}" data-genre="${g}" tabindex="0" role="button" aria-pressed="false" onclick="obToggleGenre(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();obToggleGenre(this);}">${g}</div>`;
+        const selected = _obGenres.has(g);
+        const style = selected ? ` style="color:${col};border-color:${col};background:${hexToRgba(col, 0.14)};"` : '';
+        return `<div class="ob-genre-chip${selected ? ' ob-selected' : ''}" data-col="${col}" data-genre="${g}" tabindex="0" role="button" aria-pressed="${selected}" onclick="obToggleGenre(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();obToggleGenre(this);}"${style}>${g}</div>`;
       }).join('');
     }
     const authName = currentUser?.user_metadata?.full_name || '';
     setTimeout(() => {
       const el = document.getElementById('ob-name-input');
       if (el && authName) { el.value = authName; obCheckStep2Ready(); }
+      const btn = document.getElementById('ob-step1-btn');
+      if (btn) btn.disabled = _obGenres.size === 0;
     }, 50);
     obGoToStep(1);
     document.getElementById('onboarding-screen').classList.add('show');
@@ -16080,12 +16148,14 @@ async function doProfilePasswordChange() {
     if (status) { status.textContent = 'Checking…'; status.className = 'ob-handle-status'; }
     if (input)  input.className = 'ob-inline-field';
     clearTimeout(_obHandleDebounce);
+    const seq = ++_obHandleSeq;
     _obHandleDebounce = setTimeout(async () => {
       const _obExisting = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
       const { data } = await sb.from('ravers').select('id')
         .ilike('handle', handle)
         .neq('id', _obExisting?.id || '00000000-0000-0000-0000-000000000000')
         .maybeSingle();
+      if (seq !== _obHandleSeq) return; // stale response — a newer check superseded this one
       if (data) {
         if (status) { status.textContent = `@${handle} is taken 😔`; status.className = 'ob-handle-status ob-err'; }
         if (input)  input.className = 'ob-inline-field ob-invalid';
@@ -16203,7 +16273,7 @@ async function doProfilePasswordChange() {
   function maybeAdvanceOnboarding(profileName) {
     if (!isOnboarding) return;
     obGoToStep(3);
-    showToast('\u2705 Profile created! Now build your crew.');
+    showToast('\u2705 Identity locked in. Now build your crew. \ud83c\udfa4');
   }
 
   // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
