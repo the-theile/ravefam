@@ -172,6 +172,22 @@ async function installSupabaseStub(page, opts = {}) {
               return { data: ins, error: null };
             }
             if (st.op === 'update') {
+              // Simplified stand-in for the real Postgres rate-limit trigger
+              // (enforce_destructive_action_rate_limit) — good enough to
+              // exercise softDeleteRow's client-side error-message parsing.
+              // Opt-in only: set window.__store.__rateLimit in a test.
+              const RATE_LIMITED_TABLES = ['festivals', 'ravers', 'crew_members', 'crews'];
+              if (RATE_LIMITED_TABLES.includes(table) && st.payload && st.payload.deleted_at) {
+                const rl = store.__rateLimit;
+                if (rl) {
+                  if ((rl.hourlyCount || 0) >= 5) {
+                    return { data: null, error: { message: 'RATE_LIMIT_HOURLY: Max 5 destructive actions per hour.' } };
+                  }
+                  if (rl.newAccount && (rl.newAccountCount || 0) >= 1) {
+                    return { data: null, error: { message: 'RATE_LIMIT_NEW_ACCOUNT: New accounts can only do 1 destructive action per 24 hours.' } };
+                  }
+                }
+              }
               const hit = tbl.filter(pred);
               hit.forEach(r => Object.assign(r, st.payload));
               return { data: hit.map(clone), error: null };
