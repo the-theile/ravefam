@@ -47,57 +47,65 @@ function button(label: string, href: string): string {
 
 const TEMPLATES: Record<string, { subject: string; render: (ctx: { firstName: string; crewName?: string }) => string }> = {
   welcome: {
-    subject: "Welcome to RaveFAM 🎉",
+    subject: "You're in the fam 🖤",
     render: ({ firstName }) => `
-      <h1 style="font-size:1.4rem;">Hey ${firstName}, you're in 🖤</h1>
-      <p>RaveFAM is where your crew lives — track the raves you're going to, see who else is going, and remember the moments after.</p>
-      <p>A few things worth trying first:</p>
+      <h1 style="font-size:1.4rem;">Hey ${firstName}, welcome to the tribe 🖤</h1>
+      <p>RaveFAM is where your crew lives between raves — track the shows you're hitting, see who's already going, and hang on to the memories after.</p>
+      <p>Here's where to start:</p>
       <ul>
-        <li><strong>Raves</strong> — track festivals/shows and RSVP</li>
-        <li><strong>Ravers</strong> — see your crew's directory</li>
-        <li><strong>Crews</strong> — start one or join with an invite link</li>
-        <li><strong>Photos</strong> — share memories with your crew</li>
+        <li>🎪 <strong>Crews</strong> — start one or join with an invite link</li>
+        <li>🎫 <strong>Raves</strong> — RSVP to the festivals and shows you're tracking</li>
+        <li>🫂 <strong>Ravers</strong> — your crew's directory, one tap away</li>
+        <li>📸 <strong>Photos</strong> — drop memories only your crew can see</li>
       </ul>
+      <p>More good stuff is coming your way over the next few weeks — for now, go build your squad.</p>
       ${button("Open RaveFAM", `${APP_ORIGIN}/app.html`)}`,
   },
   crew_joined: {
-    subject: "Welcome to the crew 🎪",
+    subject: "You're officially crewed up 🎪",
     render: ({ firstName, crewName }) => `
       <h1 style="font-size:1.4rem;">You're in${crewName ? ` ${crewName}` : " a crew"} now, ${firstName} 🎪</h1>
-      <p>Now that you're part of a crew, here's what you can do together:</p>
+      <p>This is where RaveFAM actually clicks. Here's what to do together:</p>
       <ul>
-        <li><strong>Crew Jams / FAM Poll</strong> — vote on music and plans</li>
-        <li><strong>Dream Board</strong> — pin the raves you all want to hit</li>
-        <li><strong>Archive Links</strong> — save aftermovies, sets, and photo dumps in one place</li>
+        <li>🎶 <strong>Crew Jams / FAM Poll</strong> — vote on the music and plans for your next rave</li>
+        <li>📌 <strong>Dream Board</strong> — pin the festivals you all want to hit next</li>
+        <li>🎬 <strong>Archive Links</strong> — save the aftermovie, the set, the group chat gold, all in one place</li>
+        <li>📸 <strong>Our Photos</strong> — the shared memory bank for your crew</li>
       </ul>
+      <p>Go say hi.</p>
       ${button("Open your crew", `${APP_ORIGIN}/app.html`)}`,
   },
   raves_together: {
-    subject: "See who you've raved with 👀",
+    subject: "See who you've already raved with 👀",
     render: ({ firstName }) => `
-      <h1 style="font-size:1.4rem;">Hey ${firstName}, try Raves Together</h1>
-      <p>RSVP to the festivals and shows you're going to, then check "Raves Together" on any raver's profile to see the overlap in what you've both been to.</p>
+      <h1 style="font-size:1.4rem;">Hey ${firstName}, ever wonder who's been at the same shows as you?</h1>
+      <p>RSVP to the raves you're going to (or already went to), and RaveFAM does the rest. Check <strong>Raves Together</strong> on any raver's profile and we'll surface every festival you both have in common — even the ones you never realized overlapped.</p>
+      <p>It only works once you start tracking, so go RSVP to your next one.</p>
       ${button("Track a rave", `${APP_ORIGIN}/app.html`)}`,
   },
   crew_nudge: {
-    subject: "Your crew is waiting 🫂",
+    subject: "Still flying solo? 🫂",
     render: ({ firstName }) => `
-      <h1 style="font-size:1.4rem;">${firstName}, RaveFAM is better with your people</h1>
-      <p>You haven't joined a crew yet. Start one and share the invite link with your people, or ask a friend for theirs.</p>
+      <h1 style="font-size:1.4rem;">${firstName}, RaveFAM hits different with your people</h1>
+      <p>You haven't joined a crew yet — and that's kind of the whole point of this app. Start one, keep it <strong>Secret</strong> while you build the roster, then flip it to <strong>Recruiting</strong> or <strong>Locked In</strong> when you're ready. Share your invite link and your crew fills itself in.</p>
+      <p>Or if a friend's already running one, ask them for their link — joining takes ten seconds.</p>
       ${button("Start a crew", `${APP_ORIGIN}/app.html`)}`,
   },
   dream_board_stats: {
-    subject: "Your Stats are ready 📊",
+    subject: "Your Vibe DNA is ready 📊",
     render: ({ firstName }) => `
-      <h1 style="font-size:1.4rem;">${firstName}, check your Stats</h1>
-      <p>See your personal rave stats and your crew's, and start pinning festivals you're dreaming about on your Dream Board.</p>
-      ${button("View Stats", `${APP_ORIGIN}/app.html`)}`,
+      <h1 style="font-size:1.4rem;">${firstName}, your Stats are live</h1>
+      <p>Head to the Stats tab for your <strong>Vibe DNA</strong> (the genres and artists that define your year), your <strong>Rave Passport</strong> (every show you've tracked, stamped), and a <strong>Rave Wrapped</strong> card worth screenshotting.</p>
+      <p>And while you're in there — pin a few festivals to your <strong>Dream Board</strong> so your crew knows what you're manifesting next.</p>
+      ${button("View my Stats", `${APP_ORIGIN}/app.html`)}`,
   },
   crew_jams_poll: {
-    subject: "One more thing before you go 🎶",
+    subject: "Last one, we promise 🎶",
     render: ({ firstName }) => `
-      <h1 style="font-size:1.4rem;">${firstName}, don't miss Crew Jams</h1>
-      <p>Vote on music with your crew in Crew Jams / FAM Poll, and drop photos from your last rave together in Our Photos.</p>
+      <h1 style="font-size:1.4rem;">One more thing before we leave you alone, ${firstName}</h1>
+      <p>If your crew hasn't tried <strong>Crew Jams / FAM Poll</strong> yet, that's your move — vote on music, settle the "what are we listening to in the car" debate, and lock in plans together.</p>
+      <p>And whenever you've got the photos from your last rave, drop them in <strong>Our Photos</strong> before they get lost in your camera roll forever.</p>
+      <p>That's the whole tour. See you out there 🖤</p>
       ${button("Open Crew Jams", `${APP_ORIGIN}/app.html`)}`,
   },
 };
