@@ -5049,8 +5049,7 @@
 
     <div class="auth-tabs">
       <button class="auth-tab active" id="tab-login" onclick="showAuthTab('login')">Log In</button>
-      <!-- <button class="auth-tab" id="tab-signup" onclick="showAuthTab('signup')">Sign Up</button> -->
-       <button class="auth-tab" id="tab-signup" onclick="showAuthTab('signup')">Join Waitlist</button>
+      <button class="auth-tab" id="tab-signup" onclick="showAuthTab('signup')">Sign Up</button>
     </div>
 
     <div class="auth-error" id="auth-error"></div>
@@ -5081,10 +5080,6 @@
     </div>
 
     <div id="auth-signup-form" style="display:none;">
-      <div id="signup-waitlist-banner" style="background:rgba(255,45,120,0.08); border:1px solid rgba(255,45,120,0.25); color:var(--text); padding:12px 14px; border-radius:12px; margin-bottom:16px; font-size:0.85rem; line-height:1.5; text-align:center;">
-        Sign-ups are temporarily paused while we finalize the full experience.<br>
-        Please join the waitlist on the landing page — we'll notify you when spots open.
-      </div>
       <div class="form-group">
         <label class="form-label">Your Name</label>
         <input class="form-input" id="signup-name" type="text" placeholder="e.g. Jamie D." autocomplete="name">
@@ -5101,13 +5096,12 @@
         <label class="form-label">Password</label>
         <input class="form-input" id="signup-password" type="password" placeholder="min 6 characters" autocomplete="new-password">
       </div>
-      <!-- <button class="auth-btn" id="signup-btn" onclick="doSignup()">Create Account 🎉</button> -->
-       <button class="auth-btn" id="signup-btn" onclick="window.location.href='index.html'">Join Waitlist 🎉</button>
+      <button class="auth-btn" id="signup-btn" onclick="doSignup()">Create Account 🎉</button>
       <p style="text-align:center;margin-top:16px;font-size:0.82rem;color:var(--muted);">
         Already have an account? <a href="#" onclick="showAuthTab('login');return false;" style="color:var(--neon-pink);text-decoration:none;font-weight:600;">Log in →</a>
       </p>
       <p style="text-align:center;margin-top:10px;font-size:0.75rem;color:var(--muted);">
-        By <span id="secret-signup-trigger" onclick="unlockSignup()" style="cursor:default;">signing up</span> you agree to our <a href="/terms.html" style="color:var(--muted);text-decoration:underline;">Terms</a> and <a href="/privacy.html" style="color:var(--muted);text-decoration:underline;">Privacy Policy</a>
+        By signing up you agree to our <a href="/terms.html" style="color:var(--muted);text-decoration:underline;">Terms</a> and <a href="/privacy.html" style="color:var(--muted);text-decoration:underline;">Privacy Policy</a>
       </p>
     </div>
 
@@ -6312,12 +6306,6 @@
   let _bootedUserId = null; // guard: prevents bootApp() running more than once per session
 
   // ===== AUTH UI helpers =====
-  // True if the user arrived via a real crew QR/invite link — they were
-  // explicitly invited, so the general waitlist gate below shouldn't block them.
-  function hasPendingInvite() {
-    return !!(sessionStorage.getItem('pendingClaim') || sessionStorage.getItem('pendingCrewJoin')
-      || localStorage.getItem('pendingClaimToken'));
-  }
   function showAuthTab(tab) {
     document.getElementById('auth-login-form').style.display  = tab === 'login'  ? 'block' : 'none';
     document.getElementById('auth-signup-form').style.display = tab === 'signup' ? 'block' : 'none';
@@ -6326,9 +6314,6 @@
     document.getElementById('tab-signup').style.display = '';
     document.getElementById('tab-login').classList.toggle('active',  tab === 'login');
     document.getElementById('tab-signup').classList.toggle('active', tab === 'signup');
-    if (tab === 'signup' && hasPendingInvite() && document.getElementById('signup-waitlist-banner')) {
-      enableRealSignup({ inviteMode: true });
-    }
     clearAuthMessages();
   }
   function authError(msg) {
@@ -6435,28 +6420,6 @@ async function doProfilePasswordChange() {
     if (error) { authError(error.message); return; }
     // onAuthStateChange will fire and handle the rest
   }
-
-  // Turns the waitlist stand-in into the real signup form. `inviteMode` swaps
-  // the waitlist banner for invite-specific copy instead of just removing it,
-  // so someone who scanned a crew QR code understands *why* signup is open
-  // for them when the general public still sees the waitlist.
-  function enableRealSignup({ inviteMode = false } = {}) {
-    const tabBtn = document.getElementById('tab-signup');
-    if (tabBtn) tabBtn.textContent = 'Sign Up';
-    const btn = document.getElementById('signup-btn');
-    if (btn) { btn.textContent = 'Create Account 🎉'; btn.onclick = doSignup; }
-    const trigger = document.getElementById('secret-signup-trigger');
-    if (trigger) trigger.outerHTML = 'signing up';
-    const banner = document.getElementById('signup-waitlist-banner');
-    if (banner) {
-      if (inviteMode) {
-        banner.textContent = "🎟️ You're invited — sign-ups are open just for you. Create your account below to claim your spot.";
-      } else {
-        banner.remove();
-      }
-    }
-  }
-  function unlockSignup() { enableRealSignup({ inviteMode: false }); }
 
   async function doSignup() {
     const name     = document.getElementById('signup-name').value.trim();
@@ -6568,7 +6531,12 @@ async function doProfilePasswordChange() {
     document.getElementById('app-loading').classList.add('hidden');
     document.getElementById('auth-screen').classList.remove('hidden');
     document.getElementById('main-app').style.display = 'none';
-    const tab = window._pendingAuthTab || 'login';
+
+    // QR/invite arrivals (claim or crew-join tokens) default to Sign Up since
+    // most scanners are new — everyone else still lands on Log In.
+    const pendingToken = sessionStorage.getItem('pendingClaim');
+    const pendingJoin  = sessionStorage.getItem('pendingCrewJoin');
+    const tab = window._pendingAuthTab || ((pendingToken || pendingJoin) ? 'signup' : 'login');
     window._pendingAuthTab = null;
     showAuthTab(tab);
 
@@ -6579,30 +6547,27 @@ async function doProfilePasswordChange() {
       setTimeout(() => { openScanner(); switchScannerTab('code'); }, 150);
     }
 
-    // If there's a pending claim token, overlay the branded intercept so the
-    // user understands WHY they're being asked to sign in / sign up.
-    const pendingToken = sessionStorage.getItem('pendingClaim');
+    // If there's a pending claim/join token, overlay the branded intercept so the
+    // user understands WHY they're being asked to sign in / sign up. Show it
+    // immediately with the default "You've been invited!" copy baked into the
+    // markup so the user sees it before any RPC latency, and leave it up even
+    // if the token turns out invalid/expired — signup is open to everyone now,
+    // so there's no reason to bail to a bare login form.
     if (pendingToken) {
-      // Show intercept immediately with default "You've been invited!" content
-      // so the user sees it before any RPC latency
       document.getElementById('claim-intercept').classList.add('open');
       // RPC is SECURITY DEFINER + granted to anon — works without auth
       sb.rpc('get_claim_preview', { p_token: pendingToken }).then(({ data }) => {
         if (data && !data.error) {
           showPreAuthIntercept(data, pendingToken);
-        } else {
-          // Invalid/used token — close intercept and fall back to plain auth form
-          document.getElementById('claim-intercept').classList.remove('open');
-          if (data?.error === 'invalid_token') sessionStorage.removeItem('pendingClaim');
+        } else if (data?.error === 'invalid_token') {
+          sessionStorage.removeItem('pendingClaim');
         }
-      }).catch(() => { document.getElementById('claim-intercept').classList.remove('open'); });
-    } else {
-      const pendingJoin = sessionStorage.getItem('pendingCrewJoin');
-      if (pendingJoin) {
-        sb.rpc('get_crew_by_invite_token', { p_token: pendingJoin }).then(({ data }) => {
-          if (data && !data.error) showPreAuthIntercept({ crew: data, raver: null }, pendingJoin);
-        }).catch(() => {});
-      }
+      }).catch(() => {});
+    } else if (pendingJoin) {
+      document.getElementById('claim-intercept').classList.add('open');
+      sb.rpc('get_crew_by_invite_token', { p_token: pendingJoin }).then(({ data }) => {
+        if (data && !data.error) showPreAuthIntercept({ crew: data, raver: null }, pendingJoin);
+      }).catch(() => {});
     }
   }
 
@@ -13732,6 +13697,7 @@ async function doProfilePasswordChange() {
 
         <div class="profile-actions" data-raver-id="${r.id}">
           ${ currentUser && (r.isYou || (perms.isLeaderOfRaver && !perms.isClaimed)) ? `<button class="btn btn-primary" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="enterProfileEditMode(this.dataset.raverId)">✏️ Edit Profile</button>` : ''}
+          ${ !perms.isClaimed && perms.isLeaderOfRaver && r.qrToken ? `<button class="btn btn-ghost" style="padding:11px;" data-raver-id="${r.id}" onclick="showQRModal(this.dataset.raverId)" title="Share invite QR">📲</button>` : ''}
           ${r.isYou ? `<button class="btn btn-ghost" style="padding:11px;" data-raver-id="${r.id}" onclick="openPrivacySettingsModal(this.dataset.raverId)" title="Privacy & Permissions">🔒</button>` : ''}
           ${perms.canDisconnect ? `<button class="btn btn-ghost btn-disconnect" data-raver-id="${r.id}" onclick="showDisconnectConfirm(this.dataset.raverId)" title="Disconnect account">🔗</button>` : ''}
           ${!r.isYou && currentUser ? `<button class="btn btn-ghost" style="padding:11px;" data-raver-id="${r.id}" onclick="showReportModal('raver', this.dataset.raverId)" title="Report">🚩</button>` : ''}
