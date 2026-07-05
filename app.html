@@ -34,6 +34,7 @@
     background: var(--bg);
     color: var(--text);
     min-height: 100vh;
+    min-height: 100dvh;
     overflow-x: hidden;
   }
 
@@ -63,7 +64,7 @@
   }
 
   /* Layout */
-  .app { position: relative; z-index: 1; display: flex; flex-direction: column; min-height: 100vh; }
+  .app { position: relative; z-index: 1; display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
 
   /* Header */
   header {
@@ -3162,6 +3163,7 @@
   /* ===== AUTH SCREEN ===== */
   #auth-screen {
     position: fixed; inset: 0; z-index: 1000;
+    height: 100vh; height: 100dvh;
     background: var(--bg);
     overflow-y: auto; overflow-x: hidden;
   }
@@ -3963,6 +3965,25 @@
   }
   .claim-crew-members { font-size: 0.78rem; color: rgba(255,255,255,0.55); font-family:'Outfit',sans-serif; }
 
+  /* ── Persistent post-onboarding guidance banner ── */
+  .guidance-banner {
+    position: relative;
+    border-radius: 16px;
+    padding: 18px 20px;
+    margin-bottom: 20px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    animation: fadeSlideUp 0.4s both;
+  }
+  .guidance-banner-close {
+    position: absolute; top: 12px; right: 12px;
+    background: none; border: none; color: var(--muted);
+    font-size: 1.2rem; line-height: 1; cursor: pointer; padding: 4px;
+  }
+  .guidance-banner-close:hover { color: var(--text); }
+  .guidance-banner-title { font-family:'Fraunces',sans-serif; font-weight:800; font-size:1.15rem; margin-bottom:4px; padding-right:24px; }
+  .guidance-banner-sub { font-size:0.85rem; color:var(--muted); margin-bottom:14px; }
+
   .claim-divider {
     display: flex;
     align-items: center;
@@ -4304,6 +4325,8 @@
   #claim-intercept {
     position: fixed;
     inset: 0;
+    height: 100vh;
+    height: 100dvh;
     z-index: 65;
     background: rgba(5,5,9,0.94);
     backdrop-filter: blur(22px);
@@ -4364,7 +4387,8 @@
   }
   .intercept-sub { font-size: 0.88rem; color: var(--muted); line-height: 1.6; margin-bottom: 20px; }
   .intercept-crew-pill {
-    display: none;
+    display: inline-flex;
+    visibility: hidden;
     align-items: center;
     gap: 8px;
     border-radius: 100px;
@@ -5209,6 +5233,7 @@
         🔔
         <span class="notif-badge" id="notif-badge"></span>
       </button>
+      <button class="notif-bell-btn" id="app-guide-btn" onclick="openAppGuide()" title="How RaveFam Works" aria-label="How RaveFam Works">❔</button>
 <button class="btn btn-ghost" id="logout-btn" onclick="doLogout()" title="Log out" aria-label="Log out" style="font-size:0.75rem;padding:9px 14px;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18.36 6.64A9 9 0 1 1 5.64 6.64"/><line x1="12" y1="2" x2="12" y2="12"/></svg></button>
     </div>
   </header>
@@ -5222,6 +5247,37 @@
   </nav>
 
   <main>
+
+    <!-- Persistent "what's next" guidance banner — shown post-onboarding and
+         after the welcome-back popup, until explicitly dismissed. -->
+    <div id="guidance-banner" class="guidance-banner" style="display:none;">
+      <button class="guidance-banner-close" onclick="dismissGuidanceBanner()" aria-label="Dismiss">×</button>
+      <div class="guidance-banner-title">🎉 You're in the fam!</div>
+      <div class="guidance-banner-sub">The floor is yours — what's first?</div>
+      <div class="ob-whatnow-chips">
+        <button class="ob-whatnow-chip" id="guidance-crew-chip" style="display:none;" onclick="guidanceGoToCrew()">
+          <span class="ob-whatnow-chip-icon">🎪</span>
+          <div>
+            <div class="ob-whatnow-chip-label" id="guidance-crew-label">Go to my crew</div>
+            <div class="ob-whatnow-chip-sub">Jump back into the crew you just joined</div>
+          </div>
+        </button>
+        <button class="ob-whatnow-chip" onclick="switchTab('events')">
+          <span class="ob-whatnow-chip-icon">🗓️</span>
+          <div>
+            <div class="ob-whatnow-chip-label">Find my next rave</div>
+            <div class="ob-whatnow-chip-sub">Browse raves and lock in your next one</div>
+          </div>
+        </button>
+        <button class="ob-whatnow-chip" onclick="openModal()">
+          <span class="ob-whatnow-chip-icon">👑</span>
+          <div>
+            <div class="ob-whatnow-chip-label">Rally your crew</div>
+            <div class="ob-whatnow-chip-sub">Invite your people, plan the season together</div>
+          </div>
+        </button>
+      </div>
+    </div>
 
     <!-- CREWS PAGE -->
     <div class="page active" id="page-crews">
@@ -5534,6 +5590,24 @@
   </div>
 </div>
 
+<!-- App Guide Modal — manually reopenable "how RaveFam works" walkthrough -->
+<div class="modal-overlay" id="app-guide-overlay" onclick="if(event.target===this)closeAppGuide()">
+  <div class="modal" style="max-width:460px;text-align:left;max-height:80vh;overflow-y:auto;">
+    <div class="modal-title">🎪 How RaveFam Works</div>
+    <p style="font-size:0.8rem;color:var(--muted);margin-bottom:16px;line-height:1.5;">A quick tour of the core features — come back here anytime from the 📖 Guide button.</p>
+    <div class="onboard-features">
+      <div class="onboard-feat"><span class="onboard-feat-icon">🎪</span><span><strong>Crews</strong> — your fam's home base. Lead a crew or join one; share your QR or invite link so ravers can hop in.</span></div>
+      <div class="onboard-feat"><span class="onboard-feat-icon">🗓️</span><span><strong>Raves</strong> — browse events and mark yourself Going or Interested so your crew knows the plan.</span></div>
+      <div class="onboard-feat"><span class="onboard-feat-icon">🎵</span><span><strong>Your profile</strong> — genres, favorite artists, and vibe tags help your crew (and future crews) know your sound.</span></div>
+      <div class="onboard-feat"><span class="onboard-feat-icon">📡</span><span><strong>Invites</strong> — scanning a QR or invite link claims a spot a crew leader saved for you, with your details ready to review first.</span></div>
+      <div class="onboard-feat"><span class="onboard-feat-icon">🔒</span><span><strong>Privacy</strong> — control what your crew and other ravers can see, anytime from <a href="#" onclick="closeAppGuide();openPrivacySettingsModal(squad.find(r=&gt;r.isYou)?.id);return false;" style="color:var(--neon-pink);text-decoration:none;font-weight:600;">Privacy Settings</a>.</span></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" style="flex:1;" onclick="closeAppGuide()">Done</button>
+    </div>
+  </div>
+</div>
+
 <!-- Suggest a Vibe Tag Sheet (view-mode, add-only, immediate save) -->
 <div class="bottom-sheet-overlay" id="suggest-vibe-overlay" onclick="if(event.target===this)closeSuggestVibeSheet()">
   <div class="bottom-sheet" style="max-height:80vh;overflow-y:auto;">
@@ -5652,6 +5726,7 @@
       <button class="notif-footer-btn edit-btn" onclick="notifDrawerEditProfile()">✏️ Edit Profile</button>
       <button class="notif-footer-btn pw-btn" onclick="notifDrawerChangePassword()">🔑 Password</button>
       <button class="notif-footer-btn privacy-btn" onclick="notifDrawerPrivacySettings()">🔒 Privacy</button>
+      <button class="notif-footer-btn guide-btn" onclick="notifDrawerAppGuide()">📖 Guide</button>
     </div>
   </div>
 </div>
@@ -5965,49 +6040,16 @@
         <div class="ob-progress-step-label active">Crew</div>
       </div>
     </div>
-    <div class="onboard-title">Start your crew 🔥</div>
-    <div class="onboard-sub">Gather your tribe and plan the season together — or explore the app solo first.</div>
+    <div class="onboard-title" id="ob-step3-title">Start your crew 🔥</div>
+    <div class="onboard-sub" id="ob-step3-sub">Gather your tribe and plan the season together — or explore the app solo first.</div>
     <div class="onboard-features">
       <div class="onboard-feat"><span class="onboard-feat-icon">👑</span><span>You're the Crew Lead — your fam follows</span></div>
       <div class="onboard-feat"><span class="onboard-feat-icon">📡</span><span>Share your QR — ravers scan to join in seconds</span></div>
       <div class="onboard-feat"><span class="onboard-feat-icon">🗓️</span><span>Track who's going to what, plan the lineup together</span></div>
     </div>
-    <button class="auth-btn" onclick="createCrewOnboarding()">Start My Crew →</button>
-    <button class="btn btn-ghost" onclick="obShowWhatNow()" style="width:100%;margin-top:10px;padding:12px;font-size:0.85rem;">Explore first →</button>
-  </div>
-
-  <!-- What Now? -->
-  <div id="ob-whatnow" class="onboard-card" style="display:none;text-align:center;">
-    <div style="font-size:2.8rem;margin-bottom:10px;">🎉</div>
-    <div class="onboard-title" style="margin-bottom:6px;">You're in the fam!</div>
-    <div class="onboard-sub" style="margin-bottom:14px;">The floor is yours — what's first?</div>
-    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:18px;">
-      🔒 Open to your crew by default —
-      <a href="#" onclick="completeOnboarding();openPrivacySettingsModal(squad.find(r=>r.isYou)?.id);return false;" style="color:var(--neon-pink);text-decoration:none;font-weight:600;">tweak anytime</a>.
-    </div>
-    <div class="ob-whatnow-chips">
-      <button class="ob-whatnow-chip" onclick="completeOnboarding();switchTab('events')">
-        <span class="ob-whatnow-chip-icon">🗓️</span>
-        <div>
-          <div class="ob-whatnow-chip-label">Find my next rave</div>
-          <div class="ob-whatnow-chip-sub">Browse raves and lock in your next one</div>
-        </div>
-      </button>
-      <button class="ob-whatnow-chip" onclick="completeOnboarding();openModal()">
-        <span class="ob-whatnow-chip-icon">👑</span>
-        <div>
-          <div class="ob-whatnow-chip-label">Rally your crew</div>
-          <div class="ob-whatnow-chip-sub">Invite your people, plan the season together</div>
-        </div>
-      </button>
-      <button class="ob-whatnow-chip" onclick="completeOnboarding()">
-        <span class="ob-whatnow-chip-icon">🔍</span>
-        <div>
-          <div class="ob-whatnow-chip-label">Just look around</div>
-          <div class="ob-whatnow-chip-sub">No pressure — dive in whenever</div>
-        </div>
-      </button>
-    </div>
+    <button class="auth-btn" id="ob-step3-primary-btn" onclick="createCrewOnboarding()">Start My Crew →</button>
+    <button class="btn btn-ghost" id="ob-step3-secondary-btn" style="display:none;width:100%;margin-top:10px;padding:12px;font-size:0.85rem;" onclick="createCrewOnboarding()">Start another crew →</button>
+    <button class="btn btn-ghost" onclick="obFinishExploring()" style="width:100%;margin-top:10px;padding:12px;font-size:0.85rem;">Explore first →</button>
   </div>
 </div>
 
@@ -6768,6 +6810,9 @@ async function doProfilePasswordChange() {
   let _pendingClaimToken = null;  // token awaiting user confirmation
   let _lastClaimWasMerge = false;       // true if the last commitClaim() merged into an existing profile
   let _pendingPostClaimCrewName = null; // crew name to greet with on the next showOnboarding()
+  let _pendingPostClaimCrewId = null;   // crew id to greet with on the next showOnboarding()
+  let _obJoinedCrewId = null;           // wizard-scoped: crew joined via *this* claim pass
+  let _obJoinedCrewName = null;         // wizard-scoped: crew name joined via *this* claim pass
 
   // ── Open / Close ──────────────────────────────────────
   function openScanner() {
@@ -7037,23 +7082,31 @@ async function doProfilePasswordChange() {
   // reconstruct exactly what the user opted out of. `radiate` is deliberately
   // excluded: claim_and_merge_raver never persists it, so showing it here
   // would promise something the app doesn't do.
+  // `existingRaver` is null for a direct claim (brand-new signup, no profile
+  // yet) — every comparison collection defaults to empty so everything on
+  // the stub shows up as "new" and gets a review row.
   function computeClaimDiff(raver, existingRaver) {
-    const newGenres = (raver.genres || []).filter(g => !existingRaver.genres.includes(g));
+    const ex = existingRaver || {};
+    const newGenres = (raver.genres || []).filter(g => !(ex.genres || []).includes(g));
     const newArtists = (raver.favorite_artist_ids || [])
-      .filter(id => !existingRaver.favArtistIds.includes(id))
+      .filter(id => !(ex.favArtistIds || []).includes(id))
       .map(id => ({ id, name: findArtistById(id)?.name }))
       .filter(a => a.name);
-    const newVibes = (raver.vibe_tags || []).filter(t => !existingRaver.vibeTags.includes(t));
-    const newCustomVibes = (raver.custom_vibe_tags || []).filter(t => !existingRaver.customVibeTags.includes(t));
+    const newVibes = (raver.vibe_tags || []).filter(t => !(ex.vibeTags || []).includes(t));
+    const newCustomVibes = (raver.custom_vibe_tags || []).filter(t => !(ex.customVibeTags || []).includes(t));
     const newFestivals = (raver.festival_ids || [])
-      .filter(id => !existingRaver.festIds.includes(String(id)))
+      .filter(id => !(ex.festIds || []).includes(String(id)))
+      .map(id => ({ id, name: festivals.find(f => String(f.id) === String(id))?.name }))
+      .filter(f => f.name);
+    const newInterestedFestivals = (raver.interested_fest_ids || [])
+      .filter(id => !(ex.interestedFestIds || []).includes(String(id)))
       .map(id => ({ id, name: festivals.find(f => String(f.id) === String(id))?.name }))
       .filter(f => f.name);
     const fields = [];
-    if (raver.base      && !existingRaver.base)      fields.push({ key: 'base',      label: '📍 Base',      value: raver.base });
-    if (raver.handle    && !existingRaver.handle)    fields.push({ key: 'handle',    label: '🏷️ Handle',    value: raver.handle });
-    if (raver.instagram && !existingRaver.instagram) fields.push({ key: 'instagram', label: '📸 Instagram', value: '@' + raver.instagram });
-    return { newGenres, newArtists, newVibes, newCustomVibes, newFestivals, fields };
+    if (raver.base      && !ex.base)      fields.push({ key: 'base',      label: '📍 Base',      value: raver.base });
+    if (raver.handle    && !ex.handle)    fields.push({ key: 'handle',    label: '🏷️ Handle',    value: raver.handle });
+    if (raver.instagram && !ex.instagram) fields.push({ key: 'instagram', label: '📸 Instagram', value: '@' + raver.instagram });
+    return { newGenres, newArtists, newVibes, newCustomVibes, newFestivals, newInterestedFestivals, fields };
   }
 
   function claimToggleChip(el) {
@@ -7088,76 +7141,75 @@ async function doProfilePasswordChange() {
     const existingRaver = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
     let bottomSection = '';
 
+    const diff = computeClaimDiff(raver, existingRaver);
+    const hasAdds = diff.newGenres.length || diff.newArtists.length || diff.newVibes.length
+      || diff.newCustomVibes.length || diff.newFestivals.length || diff.newInterestedFestivals.length || diff.fields.length;
+
+    const chip = (cat, value, id) =>
+      `<span class="claim-chip-toggle" data-cat="${cat}" data-value="${escHtml(value)}"${id != null ? ` data-id="${escHtml(String(id))}"` : ''}
+         tabindex="0" role="button" aria-pressed="true" onclick="claimToggleChip(this)"
+         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();claimToggleChip(this);}">${escHtml(value)}</span>`;
+
+    const section = (label, chipsHtml) => chipsHtml
+      ? `<div class="claim-review-section"><div class="claim-review-subhead">${label}</div><div class="claim-chip-row">${chipsHtml}</div></div>`
+      : '';
+
+    const soundChips      = [...diff.newGenres.map(g => chip('genre', g)),
+                             ...diff.newArtists.map(a => chip('artist', a.name, a.id))].join('');
+    const vibeChips       = [...diff.newVibes.map(v => chip('vibe', v)),
+                             ...diff.newCustomVibes.map(v => chip('customVibe', v))].join('');
+    const goingChips      = diff.newFestivals.map(f => chip('festival', f.name, f.id)).join('');
+    const interestedChips = diff.newInterestedFestivals.map(f => chip('festival', f.name, f.id)).join('');
+
+    const fieldRows = diff.fields.map(f => `
+      <div class="claim-review-row" data-field="${f.key}">
+        <span class="claim-review-key">${f.label}</span>
+        <span class="claim-field-value">${escHtml(f.value)}</span>
+        <button class="poll-anon-toggle on claim-field-toggle" aria-label="Include ${f.label}" onclick="this.classList.toggle('on')"></button>
+      </div>`).join('');
+
+    const reviewBlock = hasAdds ? `
+      <div class="claim-review-block">
+        <div class="claim-review-label">✨ New from your crew leader</div>
+        <div class="claim-review-explainer">Claiming links this scanned profile to your account. Everything below is optional — untick anything you don't want.${existingRaver ? ' Nothing on your existing profile is ever removed or overwritten.' : ''}</div>
+        ${section('🎵 Sound', soundChips)}
+        ${section('🎪 Going', goingChips)}
+        ${section('🤔 Interested', interestedChips)}
+        ${section('✨ Vibe', vibeChips)}
+        ${fieldRows ? `<div class="claim-review-section">${fieldRows}</div>` : ''}
+      </div>` : '';
+
     if (existingRaver) {
-      const diff = computeClaimDiff(raver, existingRaver);
-      const hasAdds = diff.newGenres.length || diff.newArtists.length || diff.newVibes.length
-        || diff.newCustomVibes.length || diff.newFestivals.length || diff.fields.length;
-
-      const chip = (cat, value, id) =>
-        `<span class="claim-chip-toggle" data-cat="${cat}" data-value="${escHtml(value)}"${id != null ? ` data-id="${escHtml(String(id))}"` : ''}
-           tabindex="0" role="button" aria-pressed="true" onclick="claimToggleChip(this)"
-           onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();claimToggleChip(this);}">${escHtml(value)}</span>`;
-
-      const section = (label, chipsHtml) => chipsHtml
-        ? `<div class="claim-review-section"><div class="claim-review-subhead">${label}</div><div class="claim-chip-row">${chipsHtml}</div></div>`
-        : '';
-
-      const soundChips = [...diff.newGenres.map(g => chip('genre', g)),
-                           ...diff.newArtists.map(a => chip('artist', a.name, a.id))].join('');
-      const vibeChips   = [...diff.newVibes.map(v => chip('vibe', v)),
-                           ...diff.newCustomVibes.map(v => chip('customVibe', v))].join('');
-      const festChips   = diff.newFestivals.map(f => chip('festival', f.name, f.id)).join('');
-
-      const fieldRows = diff.fields.map(f => `
-        <div class="claim-review-row" data-field="${f.key}">
-          <span class="claim-review-key">${f.label}</span>
-          <span class="claim-field-value">${escHtml(f.value)}</span>
-          <button class="poll-anon-toggle on claim-field-toggle" aria-label="Include ${f.label}" onclick="this.classList.toggle('on')"></button>
-        </div>`).join('');
-
-      if (hasAdds) {
-        bottomSection = `
-          <div class="claim-review-block">
-            <div class="claim-review-label">✨ New from your crew leader</div>
-            <div class="claim-review-explainer">Claiming links this scanned profile to your account. Everything below is optional — untick anything you don't want. Nothing on your existing profile is ever removed or overwritten.</div>
-            ${section('🎵 Sound', soundChips)}
-            ${section('🎪 Festivals', festChips)}
-            ${section('✨ Vibe', vibeChips)}
-            ${fieldRows ? `<div class="claim-review-section">${fieldRows}</div>` : ''}
-          </div>
-          <div class="claim-spot-label">This profile was saved for you by your crew leader.</div>`;
-      } else {
-        bottomSection = `<div class="claim-spot-label">This profile was saved for you by your crew leader. Claiming this spot just joins you to the crew — no changes to your existing profile.</div>`;
-      }
+      bottomSection = hasAdds
+        ? `${reviewBlock}<div class="claim-spot-label">This profile was saved for you by your crew leader.</div>`
+        : `<div class="claim-spot-label">This profile was saved for you by your crew leader. Claiming this spot just joins you to the crew — no changes to your existing profile.</div>`;
     } else {
       // Direct claim: stub becomes their profile
       const hasPreFill = raver.notes || raver.handle;
-      if (hasPreFill) {
-        bottomSection = `
-          <div class="claim-review-block">
-            <div class="claim-review-label">Your leader added these details for you</div>
-            ${raver.handle ? `<div class="claim-review-row"><span class="claim-review-key">Handle</span><span>${escHtml(raver.handle)}</span></div>` : ''}
-            ${raver.notes  ? `<div class="claim-review-row"><span class="claim-review-key">Note</span><span>${escHtml(raver.notes)}</span></div>`   : ''}
-            <button class="claim-edit-btn" onclick="toggleClaimEditForm(this)">✏️ Edit before claiming</button>
-            <div class="claim-review-edit-form" id="claim-edit-form">
-              <div>
-                <div class="claim-review-label" style="margin-bottom:5px;">Name</div>
-                <input class="form-input" id="claim-edit-name" value="${(raver.name || '').replace(/"/g,'&quot;')}" placeholder="Your name">
-              </div>
-              <div>
-                <div class="claim-review-label" style="margin-bottom:5px;">Handle</div>
-                <input class="form-input" id="claim-edit-handle" value="${(raver.handle || '').replace(/"/g,'&quot;')}" placeholder="@handle">
-              </div>
-              <div>
-                <div class="claim-review-label" style="margin-bottom:5px;">How we met</div>
-                <input class="form-input" id="claim-edit-met" value="${(raver.met_story || '').replace(/"/g,'&quot;')}" placeholder="Where did your paths cross?">
-              </div>
+      const editForm = hasPreFill ? `
+        <div class="claim-review-block">
+          <div class="claim-review-label">Your leader added these details for you</div>
+          ${raver.handle ? `<div class="claim-review-row"><span class="claim-review-key">Handle</span><span>${escHtml(raver.handle)}</span></div>` : ''}
+          ${raver.notes  ? `<div class="claim-review-row"><span class="claim-review-key">Note</span><span>${escHtml(raver.notes)}</span></div>`   : ''}
+          <button class="claim-edit-btn" onclick="toggleClaimEditForm(this)">✏️ Edit before claiming</button>
+          <div class="claim-review-edit-form" id="claim-edit-form">
+            <div>
+              <div class="claim-review-label" style="margin-bottom:5px;">Name</div>
+              <input class="form-input" id="claim-edit-name" value="${(raver.name || '').replace(/"/g,'&quot;')}" placeholder="Your name">
+            </div>
+            <div>
+              <div class="claim-review-label" style="margin-bottom:5px;">Handle</div>
+              <input class="form-input" id="claim-edit-handle" value="${(raver.handle || '').replace(/"/g,'&quot;')}" placeholder="@handle">
+            </div>
+            <div>
+              <div class="claim-review-label" style="margin-bottom:5px;">How we met</div>
+              <input class="form-input" id="claim-edit-met" value="${(raver.met_story || '').replace(/"/g,'&quot;')}" placeholder="Where did your paths cross?">
             </div>
           </div>
-          <div class="claim-spot-label">Review the details above — you can edit anything before joining.</div>`;
-      } else {
-        bottomSection = `<div class="claim-spot-label">This profile was saved for you by your crew leader.</div>`;
-      }
+        </div>` : '';
+      bottomSection = (editForm || reviewBlock)
+        ? `${editForm}${reviewBlock}<div class="claim-spot-label">Review the details above — you can edit or untick anything before joining.</div>`
+        : `<div class="claim-spot-label">This profile was saved for you by your crew leader.</div>`;
     }
 
     const slotGradient = raver.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)';
@@ -7271,17 +7323,16 @@ async function doProfilePasswordChange() {
 
     const existingRaver = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
     const params = { p_token: token };
-    if (existingRaver) {
-      params.p_existing_raver_id = existingRaver.id;
-      const declined = collectClaimDeclined();
-      const hasDeclines = Object.values(declined).some(a => a.length);
-      if (hasDeclines) params.p_declined = declined;
-    }
+    if (existingRaver) params.p_existing_raver_id = existingRaver.id;
+    const declined = collectClaimDeclined();
+    const hasDeclines = Object.values(declined).some(a => a.length);
+    if (hasDeclines) params.p_declined = declined;
     _lastClaimWasMerge = !!existingRaver;
 
     // Grab preview data before the claim so we can pass it to the success screen
     const { data: previewSnap } = await sb.rpc('get_claim_preview', { p_token: token });
     _pendingPostClaimCrewName = previewSnap?.crew?.name || null;
+    _pendingPostClaimCrewId   = previewSnap?.crew?.id   || null;
 
     const { data: result, error } = await sb.rpc('claim_and_merge_raver', params);
     if (error || result?.error) {
@@ -7492,7 +7543,7 @@ async function doProfilePasswordChange() {
       if (subEl) subEl.textContent =
         `${raverName ? raverName + ' is your spot. ' : ''}Create an account or log in to claim it.`;
       if (pillEl) {
-        pillEl.style.cssText = `display:inline-flex;background:${crewColor}20;border:1px solid ${crewColor}44;color:${crewColor};`;
+        pillEl.style.cssText = `visibility:visible;background:${crewColor}20;border:1px solid ${crewColor}44;color:${crewColor};`;
         if (dotEl) dotEl.style.background = crewColor;
         if (nameEl) nameEl.textContent = crewName;
       }
@@ -7894,6 +7945,37 @@ async function doProfilePasswordChange() {
 
   function closeWelcomePopup() {
     document.getElementById('welcome-back-overlay').classList.remove('open');
+    showGuidanceBanner();
+  }
+
+  // ── Persistent "what's next" guidance banner ──────────
+  // Shown right after onboarding finishes and again after the welcome-back
+  // popup is dismissed, until the user explicitly closes it — then never
+  // again (durable flag, same fire-and-forget pattern as `onboarded`).
+  function showGuidanceBanner() {
+    if (currentUser?.user_metadata?.guidance_dismissed) return;
+    const banner = document.getElementById('guidance-banner');
+    if (!banner) return;
+    const crewChip = document.getElementById('guidance-crew-chip');
+    if (crewChip) {
+      if (_obJoinedCrewId) {
+        crewChip.style.display = '';
+        const label = document.getElementById('guidance-crew-label');
+        if (label) label.textContent = `Go to ${_obJoinedCrewName || 'my crew'}`;
+      } else {
+        crewChip.style.display = 'none';
+      }
+    }
+    banner.style.display = '';
+  }
+
+  function dismissGuidanceBanner() {
+    document.getElementById('guidance-banner').style.display = 'none';
+    if (currentUser) sb.auth.updateUser({ data: { guidance_dismissed: true } });
+  }
+
+  function guidanceGoToCrew() {
+    if (_obJoinedCrewId && getCrew(_obJoinedCrewId)) openDetail(_obJoinedCrewId);
   }
 
   // ===== HOW WE MET — pairwise thought-bubble stories =====
@@ -16212,6 +16294,14 @@ async function doProfilePasswordChange() {
     document.getElementById('privacy-settings-overlay').classList.remove('open');
   }
 
+  function openAppGuide() {
+    document.getElementById('app-guide-overlay').classList.add('open');
+  }
+
+  function closeAppGuide() {
+    document.getElementById('app-guide-overlay').classList.remove('open');
+  }
+
   // ── Offline banner ────────────────────────────────────
   (function initOfflineBanner() {
     const banner = document.getElementById('offline-banner');
@@ -16379,6 +16469,10 @@ async function doProfilePasswordChange() {
   function showOnboarding() {
     isOnboarding = true;
     _obHandleValid = false;
+    // Snapshot crew context from this claim pass before anything below can
+    // jump to step 3 — the alreadySetUp fast path needs it too.
+    _obJoinedCrewId = _pendingPostClaimCrewId;
+    _obJoinedCrewName = _pendingPostClaimCrewName;
     // Seed from any genres already on the user's raver record (e.g. set by a
     // crew leader before they claimed, or from an earlier session) so this
     // wizard never silently wipes them — it should only ever add to them.
@@ -16426,15 +16520,37 @@ async function doProfilePasswordChange() {
       obGoToStep(1);
     }
     _pendingPostClaimCrewName = null;
+    _pendingPostClaimCrewId = null;
     document.getElementById('onboarding-screen').classList.add('show');
   }
 
+  // Adapts step 3's copy/primary action when the user already joined a crew
+  // via the claim that triggered this onboarding pass — otherwise they're
+  // confusingly told to "start" a crew they're already in.
+  function renderOnboardStep3() {
+    const crewMode = !!_obJoinedCrewId;
+    const titleEl = document.getElementById('ob-step3-title');
+    const subEl = document.getElementById('ob-step3-sub');
+    const primaryBtn = document.getElementById('ob-step3-primary-btn');
+    const secondaryBtn = document.getElementById('ob-step3-secondary-btn');
+    if (titleEl) titleEl.textContent = crewMode ? `You're already in ${_obJoinedCrewName || 'the crew'} 🔥` : 'Start your crew 🔥';
+    if (subEl) subEl.textContent = crewMode
+      ? "You joined via invite — dive in, or start a crew of your own too."
+      : 'Gather your tribe and plan the season together — or explore the app solo first.';
+    if (primaryBtn) {
+      primaryBtn.textContent = crewMode ? 'View My Crew →' : 'Start My Crew →';
+      primaryBtn.onclick = crewMode ? obViewCrewFromOnboarding : createCrewOnboarding;
+    }
+    if (secondaryBtn) secondaryBtn.style.display = crewMode ? '' : 'none';
+  }
+
   function obGoToStep(n) {
-    ['ob-step1','ob-step2','ob-step3','ob-whatnow'].forEach((id, i) => {
+    ['ob-step1','ob-step2','ob-step3'].forEach((id, i) => {
       const el = document.getElementById(id);
       if (el) el.style.display = (i === n-1) ? 'block' : 'none';
     });
     if (n === 2) setTimeout(() => document.getElementById('ob-name-input')?.focus(), 100);
+    if (n === 3) renderOnboardStep3();
   }
 
   function obToggleGenre(el) {
@@ -16566,18 +16682,16 @@ async function doProfilePasswordChange() {
     obGoToStep(3);
   }
 
-  function obShowWhatNow() {
-    isOnboarding = false;
-    renderSquad(); renderCrews(); renderEvents();
-    if (currentUser) sb.auth.updateUser({ data: { onboarded: true } });
-    obGoToStep(4);
-  }
-
   function completeOnboarding() {
     isOnboarding = false;
     document.getElementById('onboarding-screen').classList.remove('show');
     renderSquad(); renderCrews(); renderEvents();
     if (currentUser) sb.auth.updateUser({ data: { onboarded: true } });
+  }
+
+  function obFinishExploring() {
+    completeOnboarding();
+    showGuidanceBanner();
   }
 
   let _openDetailAfterCreate = false;
@@ -16595,12 +16709,16 @@ async function doProfilePasswordChange() {
   }
 
   function createCrewOnboarding() {
-    document.getElementById('onboarding-screen').classList.remove('show');
-    isOnboarding = false;
+    completeOnboarding();
     _openDetailAfterCreate = true;
-    renderSquad(); renderCrews(); renderEvents();
-    if (currentUser) sb.auth.updateUser({ data: { onboarded: true } });
     openModal();
+    showGuidanceBanner();
+  }
+
+  function obViewCrewFromOnboarding() {
+    completeOnboarding();
+    if (_obJoinedCrewId && getCrew(_obJoinedCrewId)) openDetail(_obJoinedCrewId);
+    showGuidanceBanner();
   }
 
   function maybeAdvanceOnboarding(profileName) {
@@ -16707,6 +16825,11 @@ async function doProfilePasswordChange() {
     closeNotifDrawer();
     const me = squad.find(r => r.isYou);
     if (me) openPrivacySettingsModal(me.id);
+  }
+
+  function notifDrawerAppGuide() {
+    closeNotifDrawer();
+    openAppGuide();
   }
 
   function openChangePwModal() {
