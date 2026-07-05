@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#050509">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="manifest" href="/manifest.json">
+  <title>Unsubscribe · RaveFAM</title>
+  <meta name="description" content="Unsubscribe from RaveFAM emails." />
+  <meta name="robots" content="noindex" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@700;800;900&family=Syne:wght@400;600;700;800&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0f;
+      --surface: #12121a;
+      --border: #1e1e2e;
+      --accent: #FF2D78;
+      --accent-glow: #FF6BA8;
+      --green: #39FF14;
+      --text: #e8e8f0;
+      --muted: #6b6b8a;
+      --heading-font: 'Syne', sans-serif;
+      --body-font: 'Outfit', sans-serif;
+    }
+
+    html { background: #0a0a0f !important; color-scheme: dark; }
+
+    body {
+      background: #0a0a0f !important;
+      color: #e8e8f0 !important;
+      font-family: var(--body-font);
+      font-size: 16px;
+      line-height: 1.75;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(10,10,15,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      display: flex;
+      align-items: center;
+      height: 60px;
+    }
+
+    .nav-logo { display: flex; align-items: center; gap: 9px; text-decoration: none; }
+    .nav-wordmark { font-family: 'Urbanist', sans-serif; font-weight: 800; font-size: 1.3rem; letter-spacing: -0.5px; }
+
+    main {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 1.5rem;
+      text-align: center;
+    }
+
+    .card {
+      max-width: 440px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 2.5rem 2rem;
+    }
+
+    .card .icon { font-size: 2.5rem; margin-bottom: 1rem; }
+
+    .card h1 {
+      font-family: var(--heading-font);
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+    }
+
+    .card p { color: var(--muted); font-size: 0.95rem; margin-bottom: 0.5rem; }
+
+    .card a.btn {
+      display: inline-block;
+      margin-top: 1.5rem;
+      padding: 0.7rem 1.6rem;
+      background: var(--accent);
+      color: #fff;
+      text-decoration: none;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+
+    footer {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 1.5rem;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <a href="/" class="nav-logo">
+      <span class="nav-wordmark"><span style="color:#fff">Rave</span><span style="color:#39FF14">FAM</span></span>
+    </a>
+  </nav>
+
+  <main>
+    <div class="card" id="unsub-card">
+      <div class="icon">⏳</div>
+      <h1>One sec…</h1>
+      <p>Updating your email preferences.</p>
+    </div>
+  </main>
+
+  <footer>© 2026 RaveFAM · Built for the tribe 🖤</footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const SUPA_URL = 'https://tvpgopciioqbqmjjjigh.supabase.co';
+    const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2cGdvcGNpaW9xYnFtampqaWdoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3NTY2OTUsImV4cCI6MjA5NjMzMjY5NX0.DAgcx2UsGV1gUCQzHdGmv1Pu0rXlJdQxhn-bf1wGsiI';
+    const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+    function render(icon, title, body) {
+      document.getElementById('unsub-card').innerHTML = `
+        <div class="icon">${icon}</div>
+        <h1>${title}</h1>
+        <p>${body}</p>
+        <a class="btn" href="/app.html">Back to RaveFAM</a>`;
+    }
+
+    (async () => {
+      const token = new URLSearchParams(window.location.search).get('u');
+      if (!token) {
+        render('⚠️', 'Missing link', "This unsubscribe link is missing its token. If you followed a link from one of our emails, please try again or email bump@myravefam.com.");
+        return;
+      }
+      const { error } = await sb.rpc('unsubscribe_by_token', { p_token: token });
+      if (error) {
+        render('⚠️', 'Something went wrong', "We couldn't process that request. Email bump@myravefam.com and we'll sort it out.");
+        return;
+      }
+      render('✅', "You're unsubscribed", "You won't get any more onboarding or feature emails from RaveFAM. You'll still get essential account emails like password resets.");
+    })();
+  </script>
+
+</body>
+</html>
