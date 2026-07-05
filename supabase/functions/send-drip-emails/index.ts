@@ -45,6 +45,17 @@ function button(label: string, href: string): string {
   return `<a href="${href}" style="display:inline-block;margin-top:20px;padding:12px 24px;background:#FF2D78;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;">${label}</a>`;
 }
 
+// Screenshots are captured via scripts/capture-email-screenshots.js (a
+// scripted walkthrough of app.html using the Playwright test suite's mocked
+// Supabase client) and committed as static assets under screenshots/email/.
+// Framed in a surface/border card so the dark UI screenshot doesn't bleed
+// into the email's own dark background with no visible edge.
+function screenshot(file: string, alt: string): string {
+  return `<div style="margin:20px 0;border:1px solid #1e1e2e;border-radius:12px;overflow:hidden;background:#12121a;">
+        <img src="${APP_ORIGIN}/screenshots/email/${file}" alt="${alt}" width="480" style="display:block;width:100%;max-width:480px;height:auto;" />
+      </div>`;
+}
+
 const TEMPLATES: Record<string, { subject: string; render: (ctx: { firstName: string; crewName?: string }) => string }> = {
   welcome: {
     subject: "You're in the fam 🖤",
@@ -72,6 +83,7 @@ const TEMPLATES: Record<string, { subject: string; render: (ctx: { firstName: st
         <li>🎬 <strong>Archive Links</strong> — save the aftermovie, the set, the group chat gold, all in one place</li>
         <li>📸 <strong>Our Photos</strong> — the shared memory bank for your crew</li>
       </ul>
+      ${screenshot("dream-board.png", "The Dream Board inside a crew, with festivals pinned by different members")}
       <p>Go say hi.</p>
       ${button("Open your crew", `${APP_ORIGIN}/app.html`)}`,
   },
@@ -80,6 +92,7 @@ const TEMPLATES: Record<string, { subject: string; render: (ctx: { firstName: st
     render: ({ firstName }) => `
       <h1 style="font-size:1.4rem;">Hey ${firstName}, ever wonder who's been at the same shows as you?</h1>
       <p>RSVP to the raves you're going to (or already went to), and RaveFAM does the rest. Check <strong>Raves Together</strong> on any raver's profile and we'll surface every festival you both have in common — even the ones you never realized overlapped.</p>
+      ${screenshot("raves-together.png", "A Raves Together card showing a shared festival count between two ravers")}
       <p>It only works once you start tracking, so go RSVP to your next one.</p>
       ${button("Track a rave", `${APP_ORIGIN}/app.html`)}`,
   },
@@ -88,6 +101,7 @@ const TEMPLATES: Record<string, { subject: string; render: (ctx: { firstName: st
     render: ({ firstName }) => `
       <h1 style="font-size:1.4rem;">${firstName}, RaveFAM hits different with your people</h1>
       <p>You haven't joined a crew yet — and that's kind of the whole point of this app. Start one, keep it <strong>Secret</strong> while you build the roster, then flip it to <strong>Recruiting</strong> or <strong>Locked In</strong> when you're ready. Share your invite link and your crew fills itself in.</p>
+      ${screenshot("crew-header.png", "A crew page showing the next rave up and who from the crew is going")}
       <p>Or if a friend's already running one, ask them for their link — joining takes ten seconds.</p>
       ${button("Start a crew", `${APP_ORIGIN}/app.html`)}`,
   },
@@ -96,6 +110,7 @@ const TEMPLATES: Record<string, { subject: string; render: (ctx: { firstName: st
     render: ({ firstName }) => `
       <h1 style="font-size:1.4rem;">${firstName}, your Stats are live</h1>
       <p>Head to the Stats tab for your <strong>Vibe DNA</strong> (the genres and artists that define your year), your <strong>Rave Passport</strong> (every show you've tracked, stamped), and a <strong>Rave Wrapped</strong> card worth screenshotting.</p>
+      ${screenshot("vibe-dna.png", "A Vibe DNA stats card showing a rave personality type and top genres")}
       <p>And while you're in there — pin a few festivals to your <strong>Dream Board</strong> so your crew knows what you're manifesting next.</p>
       ${button("View my Stats", `${APP_ORIGIN}/app.html`)}`,
   },
@@ -104,6 +119,7 @@ const TEMPLATES: Record<string, { subject: string; render: (ctx: { firstName: st
     render: ({ firstName }) => `
       <h1 style="font-size:1.4rem;">One more thing before we leave you alone, ${firstName}</h1>
       <p>If your crew hasn't tried <strong>Crew Jams / FAM Poll</strong> yet, that's your move — vote on music, settle the "what are we listening to in the car" debate, and lock in plans together.</p>
+      ${screenshot("crew-jams.png", "A Crew Jams playlist card shared inside a crew")}
       <p>And whenever you've got the photos from your last rave, drop them in <strong>Our Photos</strong> before they get lost in your camera roll forever.</p>
       <p>That's the whole tour. See you out there 🖤</p>
       ${button("Open Crew Jams", `${APP_ORIGIN}/app.html`)}`,
