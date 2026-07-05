@@ -1745,8 +1745,17 @@
     letter-spacing: 0.02em; padding: 2px 7px; border-radius: 100px;
     flex-shrink: 0; white-space: nowrap; vertical-align: middle;
   }
-  .claim-badge-claimed { color: #39FF14; background: rgba(57,255,20,0.1); border: 1px solid rgba(57,255,20,0.3); }
   .claim-badge-unclaimed { color: var(--muted); background: rgba(255,255,255,0.03); border: 1px dashed rgba(255,255,255,0.22); }
+
+  /* Claimed is the normal/expected state, so it only gets a quiet inline
+     verified-style checkmark (à la X/Instagram) rather than a competing pill. */
+  .verified-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: #39FF14; color: #050509;
+    font-size: 0.56rem; font-weight: 900; line-height: 1;
+    flex-shrink: 0; vertical-align: middle;
+  }
 
   /* Unclaimed avatars read as "not yet a real person" — desaturated + dashed ring */
   .member-avatar-ring-unclaimed { border: 2px dashed rgba(255,255,255,0.2); }
@@ -10305,7 +10314,7 @@ async function doProfilePasswordChange() {
           const isLeader = p.id === crew.leader_id;
           const isClaimed = isLeader || p.claimedBy || p.isYou || p.status === 'claimed';
           const statusDot = isLeader ? '' : isClaimed
-            ? `<span class="claim-badge claim-badge-claimed">✓ Claimed</span>`
+            ? `<span class="verified-badge" title="Claimed">✓</span>`
             : `<span class="claim-badge claim-badge-unclaimed" title="Share QR to invite">◌ Unclaimed</span>`;
           const canRemove = canManageMembers && !p.isYou && !isLeader;
           let right;
@@ -13398,7 +13407,7 @@ async function doProfilePasswordChange() {
 
       const isClaimed = raverPerms(r).isClaimed;
       const claimBadge = r.isYou ? '' : isClaimed
-        ? `<span class="claim-badge claim-badge-claimed">✓ Claimed</span>`
+        ? `<span class="verified-badge" title="Claimed">✓</span>`
         : `<span class="claim-badge claim-badge-unclaimed">◌ Unclaimed</span>`;
 
       card.innerHTML = `
