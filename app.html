@@ -1738,10 +1738,19 @@
     border: 1.5px solid var(--border); border-radius: 20px; background: transparent; color: var(--muted); cursor: pointer; }
   .qr-copy-btn:active { color: #39FF14; border-color: #39FF14; }
 
-  /* Unclaimed badge on crew member rows */
-  .unclaimed-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
-    background: var(--muted); margin-left: 5px; vertical-align: middle; flex-shrink: 0; }
-  .claimed-dot { background: #39FF14; }
+  /* Claimed vs unclaimed distinction — raver cards + crew roster rows */
+  .claim-badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.6rem;
+    letter-spacing: 0.02em; padding: 2px 7px; border-radius: 100px;
+    flex-shrink: 0; white-space: nowrap; vertical-align: middle;
+  }
+  .claim-badge-claimed { color: #39FF14; background: rgba(57,255,20,0.1); border: 1px solid rgba(57,255,20,0.3); }
+  .claim-badge-unclaimed { color: var(--muted); background: rgba(255,255,255,0.03); border: 1px dashed rgba(255,255,255,0.22); }
+
+  /* Unclaimed avatars read as "not yet a real person" — desaturated + dashed ring */
+  .member-avatar-ring-unclaimed { border: 2px dashed rgba(255,255,255,0.2); }
+  .avatar-unclaimed, .member-avatar-ring-unclaimed .member-avatar { filter: grayscale(0.65) opacity(0.75); }
 
   .modal {
     background: var(--surface2);
@@ -10295,7 +10304,9 @@ async function doProfilePasswordChange() {
         }).map(p => {
           const isLeader = p.id === crew.leader_id;
           const isClaimed = isLeader || p.claimedBy || p.isYou || p.status === 'claimed';
-          const statusDot = `<span class="${isClaimed ? 'claimed-dot' : 'unclaimed-dot'}" title="${isClaimed ? 'Claimed' : 'Unclaimed — share QR to invite'}"></span>`;
+          const statusDot = isLeader ? '' : isClaimed
+            ? `<span class="claim-badge claim-badge-claimed">✓ Claimed</span>`
+            : `<span class="claim-badge claim-badge-unclaimed" title="Share QR to invite">◌ Unclaimed</span>`;
           const canRemove = canManageMembers && !p.isYou && !isLeader;
           let right;
           if (isLeader) {
@@ -10311,8 +10322,9 @@ async function doProfilePasswordChange() {
               <button class="remove-member-btn" data-crew="${crew.id}" data-raver="${p.id}" onclick="event.stopPropagation(); confirmRemoveMember(this.dataset.crew, this.dataset.raver)" title="Remove from crew" aria-label="Remove from crew">×</button>
             </span>`;
           } else if (!isClaimed) {
-            // Unclaimed row for non-leader: subtle indicator
-            right = `<span style="font-size:0.68rem;color:var(--muted);padding:3px 8px;border:1px solid rgba(255,255,255,0.1);border-radius:6px;flex-shrink:0;">Unclaimed</span>`;
+            // Unclaimed row for non-leader: claim-badge next to the name already
+            // conveys status, so just navigate to profile like a claimed row.
+            right = `<span class="detail-member-arrow">›</span>`;
           } else if (canRemove) {
             right = `<button class="remove-member-btn" data-crew="${crew.id}" data-raver="${p.id}" onclick="event.stopPropagation(); confirmRemoveMember(this.dataset.crew, this.dataset.raver)" title="Remove from crew" aria-label="Remove from crew">×</button>`;
           } else {
@@ -10324,7 +10336,7 @@ async function doProfilePasswordChange() {
             : `<span>${pDisplayFirst}${p.isYou ? ' (You)' : ''} ${statusDot}</span>`;
           return `
             <div class="detail-member detail-member-link" data-raver-id="${p.id}" onclick="goToProfileFromDetail(this.dataset.raverId)" title="View ${escHtml(p.name)}'s profile">
-              ${raverAvatarHTML(p.avatarUrl, p.gradient, p.name, 'avatar', 'margin:0;')}
+              ${raverAvatarHTML(p.avatarUrl, p.gradient, p.name, isClaimed ? 'avatar' : 'avatar avatar-unclaimed', 'margin:0;')}
               ${nameDisplay}
               ${right}
             </div>`;
@@ -13384,11 +13396,16 @@ async function doProfilePasswordChange() {
       // Use gradient for the divider accent
       const dividerBg = r.isYou ? 'var(--neon-pink)' : r.gradient || 'rgba(255,255,255,0.15)';
 
+      const isClaimed = raverPerms(r).isClaimed;
+      const claimBadge = r.isYou ? '' : isClaimed
+        ? `<span class="claim-badge claim-badge-claimed">✓ Claimed</span>`
+        : `<span class="claim-badge claim-badge-unclaimed">◌ Unclaimed</span>`;
+
       card.innerHTML = `
-        <div class="member-avatar-ring" style="background:${r.avatarUrl ? '#FFB800' : extractFirstColor(r.gradient)}">${raverAvatarHTML(r.avatarUrl, r.gradient, r.name, 'member-avatar', '')}</div>
+        <div class="member-avatar-ring${isClaimed ? '' : ' member-avatar-ring-unclaimed'}" style="background:${r.avatarUrl ? '#FFB800' : extractFirstColor(r.gradient)}">${raverAvatarHTML(r.avatarUrl, r.gradient, r.name, 'member-avatar', '')}</div>
         <div class="member-divider" style="background:${dividerBg}"></div>
         <div class="member-info">
-          <div class="member-name">${escHtml(displayName(r))}${r.isYou ? ' <span style="font-size:0.75rem;margin-right:2px;">👑</span><span style="font-size:0.7rem;color:var(--neon-pink);font-family:\'Outfit\',sans-serif;font-weight:700;">YOU</span>' : ''}</div>
+          <div class="member-name">${escHtml(displayName(r))}${r.isYou ? ' <span style="font-size:0.75rem;margin-right:2px;">👑</span><span style="font-size:0.7rem;color:var(--neon-pink);font-family:\'Outfit\',sans-serif;font-weight:700;">YOU</span>' : ` ${claimBadge}`}</div>
           <div class="member-handle">${escHtml(r.handle)}</div>
           ${nextFestLine}
           ${raverPerms(r).baseVisible ? `<div class="member-base">📍 ${escHtml(r.base)}</div>` : ''}
