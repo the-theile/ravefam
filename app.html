@@ -12549,6 +12549,41 @@ async function doProfilePasswordChange() {
     }
   }
 
+  // Moderator-only permanent erasure for verified data-deletion requests
+  // (privacy.html "Your Rights & Choices"). Unlike deleteUnclaimedProfile
+  // (soft-delete, unclaimed profiles only), this hard-deletes the raver row
+  // via the purge_raver_data RPC (supabase/migrations) and cannot be undone
+  // -- it works on any profile, claimed or not.
+  function showPurgeRaverDataConfirm(raverId) {
+    if (!isModerator()) { showToast('🔒 Moderators only'); return; }
+    const r = getRaver(raverId);
+    if (!r) return;
+    const firstName = r.name.split(' ')[0];
+    showConfirmWithReason(
+      `Permanently erase ${firstName}'s data?`,
+      `This hard-deletes their profile, crew memberships, RSVPs, notes, photos of them, and every other record tied to this profile — for good, with no restore. Use this only for a confirmed data-deletion request.`,
+      '☠️ Permanently Delete',
+      (reason) => dbPurgeRaverData(raverId, reason),
+      { label: 'Reason (required for the compliance record)', placeholder: 'e.g. user emailed requesting erasure of their data' }
+    );
+  }
+
+  async function dbPurgeRaverData(raverId, reason) {
+    if (!reason || !reason.trim()) { showToast('⚠️ A reason is required for permanent deletion'); return; }
+    const { error } = await sb.rpc('purge_raver_data', { p_raver_id: raverId, p_reason: reason });
+    if (error) { console.error('purge_raver_data error', error); showToast('⚠️ Could not delete — try again'); return; }
+    crews.forEach(c => {
+      c.squadIds = (c.squadIds || []).filter(id => String(id) !== String(raverId));
+      c.members = c.squadIds.map(sid => squad.find(r2 => String(r2.id) === String(sid))).filter(Boolean)
+        .map(r2 => ({ i: initials(r2.name), c: c.color, t: '#fff', url: r2.avatarUrl || null }));
+    });
+    const keptIdx = squad.findIndex(r2 => String(r2.id) === String(raverId));
+    if (keptIdx !== -1) squad.splice(keptIdx, 1);
+    if (document.getElementById('page-profile')?.classList.contains('active')) backFromProfile();
+    renderCrews();
+    showToast('☠️ Profile data permanently deleted');
+  }
+
   function deleteUnclaimedProfile(raverId) {
     const r = getRaver(raverId);
     if (!r) return;
@@ -13826,6 +13861,7 @@ async function doProfilePasswordChange() {
           ${perms.canDisconnect ? `<button class="btn btn-ghost btn-disconnect" data-raver-id="${r.id}" onclick="showDisconnectConfirm(this.dataset.raverId)" title="Disconnect account">🔗</button>` : ''}
           ${!r.isYou && currentUser ? `<button class="btn btn-ghost" style="padding:11px;" data-raver-id="${r.id}" onclick="showReportModal('raver', this.dataset.raverId)" title="Report">🚩</button>` : ''}
           ${perms.canDelete ? `<button class="btn btn-ghost" style="padding:11px;color:var(--neon-pink);border-color:rgba(255,45,120,0.3);" data-raver-id="${r.id}" onclick="deleteUnclaimedProfile(this.dataset.raverId)">🗑️</button>` : ''}
+          ${isModerator() ? `<button class="btn btn-ghost" style="padding:11px;color:var(--neon-pink);border-color:rgba(255,45,120,0.3);" data-raver-id="${r.id}" onclick="showPurgeRaverDataConfirm(this.dataset.raverId)" title="Permanently delete this person's data (verified deletion request only)">☠️</button>` : ''}
         </div>
 
         ${connectBlock}
