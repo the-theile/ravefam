@@ -210,6 +210,21 @@ test.describe('Vendor Village · haul photos + attribute tags', () => {
 });
 
 test.describe('Vendor Village · fam discount + edit listing', () => {
+  test('dbAddVendor accepts a discount code at creation time, not just via edit', async ({ page }) => {
+    await bootAuthedApp(page);
+    await openVendorVillage(page);
+    const vendor = await page.evaluate(async () =>
+      dbAddVendor({
+        name: 'Day One Discount', category: 'health_wellness', description: '', websiteUrl: '', instagram: '',
+        discountCode: 'FAM15', discountDescription: '15% off for the fam',
+      }));
+    expect(vendor.discount_code).toBe('FAM15');
+    expect(vendor.category).toBe('health_wellness');
+
+    const stored = await page.evaluate((id) => window.__store.vendors.find(v => v.id === id), vendor.id);
+    expect(stored.discount_description).toBe('15% off for the fam');
+  });
+
   test('dbUpdateVendor updates the discount fields and basic fields', async ({ page }) => {
     await bootAuthedApp(page);
     await openVendorVillage(page);

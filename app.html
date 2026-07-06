@@ -12152,14 +12152,16 @@ async function doProfilePasswordChange() {
     vendors = data || [];
   }
 
-  async function dbAddVendor({ name, category, description, websiteUrl, instagram }) {
+  async function dbAddVendor({ name, category, description, websiteUrl, instagram, discountCode, discountDescription }) {
     const { data, error } = await sb.from('vendors').insert({
       created_by: currentUser.id,
       name: name.trim().slice(0, 80),
       category,
       description: description ? description.trim().slice(0, 600) : null,
       website_url: websiteUrl ? websiteUrl.trim() : null,
-      instagram: instagram ? instagram.trim() : null
+      instagram: instagram ? instagram.trim() : null,
+      discount_code: discountCode ? discountCode.trim().slice(0, 40) : null,
+      discount_description: discountDescription ? discountDescription.trim().slice(0, 200) : null
     }).select().single();
     if (error) { console.error('vendor insert error', error); showToast('⚠️ Could not add vendor — try again'); return null; }
     vendors.unshift(data);
@@ -12650,6 +12652,7 @@ async function doProfilePasswordChange() {
     glass_art:        '🎨 Glass & Art',
     gear_accessories: '🎒 Gear & Accessories',
     safety_comfort:   '🛟 Safety & Comfort',
+    health_wellness:  '🧘 Health & Wellness',
     food_drink:       '🍔 Food & Drink',
     services:         '🛠️ Services',
     other:            '✨ Other'
@@ -12862,6 +12865,14 @@ async function doProfilePasswordChange() {
         <label class="form-label">Instagram</label>
         <input class="form-input" id="vv-submit-instagram" type="text" placeholder="@handle">
       </div>
+      <div class="form-group">
+        <label class="form-label">🎁 Fam discount code <span style="font-weight:400;color:var(--muted);font-size:0.8rem;">optional</span></label>
+        <input class="form-input" id="vv-submit-discount-code" type="text" maxlength="40" placeholder="e.g. RAVEFAM10">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Discount description</label>
+        <input class="form-input" id="vv-submit-discount-desc" type="text" maxlength="200" placeholder="e.g. 10% off for the fam">
+      </div>
       ${festivalChips ? `<div class="form-group">
         <label class="form-label">Seen at these raves (optional)</label>
         <div class="jam-filter-bar" style="max-height:140px;overflow-y:auto;">${festivalChips}</div>
@@ -12909,9 +12920,11 @@ async function doProfilePasswordChange() {
     if (websiteUrl && !/^https?:\/\//i.test(websiteUrl)) { showToast('⚠️ Website must start with http:// or https://'); return; }
     const description = document.getElementById('vv-submit-desc').value;
     const instagram = document.getElementById('vv-submit-instagram').value.trim();
+    const discountCode = document.getElementById('vv-submit-discount-code').value.trim();
+    const discountDescription = document.getElementById('vv-submit-discount-desc').value.trim();
     const festivalIds = [..._vendorSubmitFestivalIds];
 
-    const vendor = await dbAddVendor({ name, category: _vendorSubmitCategory, description, websiteUrl, instagram });
+    const vendor = await dbAddVendor({ name, category: _vendorSubmitCategory, description, websiteUrl, instagram, discountCode, discountDescription });
     if (!vendor) return;
     await dbTagVendorFestivals(vendor.id, festivalIds);
 
