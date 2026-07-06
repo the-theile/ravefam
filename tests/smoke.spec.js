@@ -79,4 +79,14 @@ test.describe('double-tap tab to refresh', () => {
     await page.waitForTimeout(50);
     expect(await page.evaluate(() => window.__refreshCount)).toBe(0);
   });
+
+  test('still does not refresh on double-tap after Vendor Village is unlocked', async ({ page }) => {
+    await setup(page);
+    await page.evaluate(() => {
+      vendorVillageTap(); vendorVillageTap(); vendorVillageTap(); vendorVillageTap();
+    });
+    await page.evaluate(() => { switchTab('checklist'); switchTab('checklist'); });
+    await page.waitForTimeout(50);
+    expect(await page.evaluate(() => window.__refreshCount)).toBe(0);
+  });
 });

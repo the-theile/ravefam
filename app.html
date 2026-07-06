@@ -1670,6 +1670,50 @@
     color: var(--muted); padding: 3px 5px; border-radius: 6px; opacity: 0.7; transition: opacity 0.15s;
   }
   .jam-action-btn:hover { opacity: 1; }
+  /* Vendor Village — reuses .jam-card/.jam-cover/.jam-meta/.jam-fest-badge etc.
+     verbatim; these are the only genuinely new rules it needs. */
+  .vv-sponsored-badge {
+    font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 2px 8px; border-radius: 20px;
+    background: rgba(255,230,0,0.12); border: 1px solid rgba(255,230,0,0.35); color: var(--neon-yellow);
+  }
+  .vv-save-btn.saved { color: var(--neon-cyan); opacity: 1; }
+  .vv-card { cursor: pointer; }
+
+  /* Crew cosigns (Feature 1) — cyan accent, ties it visually to crew identity. */
+  .vv-cosign-line { color: var(--neon-cyan); opacity: 0.85; }
+
+  /* Practical attribute tally (Feature 8) — muted, informational, sits
+     alongside .jam-meta rather than competing with it visually. */
+  .vv-attribute-tally { opacity: 0.75; }
+
+  /* Vendor vibe tag chips (Feature 2) reuse .jam-fest-badge/.jam-filter-pill
+     verbatim — no extra rules needed beyond the .vv-vibe-tags hook itself
+     (kept as a bare class for potential future targeting). */
+
+  /* Spotted-right-now (Feature 3) — pink pulse accent, echoes the "In
+     development" pill's live-dot language elsewhere in the app. */
+  .vv-live-spot { color: var(--neon-pink); }
+
+  /* Fam discount block (Feature 4) — distinct from .vv-sponsored-badge's
+     yellow so the two "why is this vendor highlighted" reasons (paid
+     priority vs. a perk for ravers) don't visually blur together. */
+  .vv-discount-block {
+    background: rgba(191,0,255,0.08); border: 1px solid rgba(191,0,255,0.25);
+    border-radius: 10px; padding: 10px 14px; margin-bottom: 14px;
+  }
+  .vv-discount-title {
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.8rem;
+    color: #bf80ff; margin-bottom: 4px;
+  }
+  .vv-discount-desc { font-size: 0.82rem; color: var(--text); margin-bottom: 8px; }
+  .vv-discount-code {
+    background: rgba(255,255,255,0.06); border: 1px dashed rgba(191,0,255,0.4);
+    border-radius: 6px; padding: 6px 12px; font-family: monospace; font-size: 0.85rem;
+    font-weight: 700; color: #bf80ff; cursor: pointer;
+  }
+  .vv-discount-code:hover { background: rgba(191,0,255,0.12); }
+
   .jam-open-btn {
     background: none; border: 1.5px solid rgba(255,255,255,0.12); border-radius: 8px;
     padding: 3px 8px; font-size: 0.8rem; cursor: pointer; color: var(--muted);
@@ -5373,10 +5417,12 @@
         <div style="font-size:3.5rem;">✨</div>
         <div style="font-family:'Fraunces',sans-serif;font-weight:800;font-size:1.6rem;color:#fff;letter-spacing:-0.5px;">Something good<br>is coming</div>
         <div style="font-size:0.9rem;color:var(--muted);max-width:300px;line-height:1.65;">More features are on the way. We're building things that'll make the whole rave experience smoother — stay tuned.</div>
-        <div style="margin-top:8px;display:inline-flex;align-items:center;gap:8px;background:rgba(255,45,120,0.08);border:1px solid rgba(255,45,120,0.2);border-radius:100px;padding:8px 18px;font-family:'Outfit',sans-serif;font-weight:700;font-size:0.78rem;color:var(--neon-pink);letter-spacing:1px;text-transform:uppercase;">
+        <div onclick="vendorVillageTap()" style="cursor:pointer;user-select:none;margin-top:8px;display:inline-flex;align-items:center;gap:8px;background:rgba(255,45,120,0.08);border:1px solid rgba(255,45,120,0.2);border-radius:100px;padding:8px 18px;font-family:'Outfit',sans-serif;font-weight:700;font-size:0.78rem;color:var(--neon-pink);letter-spacing:1px;text-transform:uppercase;">
           <span style="width:6px;height:6px;border-radius:50%;background:var(--neon-pink);animation:pulse 2s infinite;display:inline-block;"></span>
           In development
         </div>
+
+        <div id="vendor-village-root" style="width:100%;"></div>
 
         <div style="margin-top:32px;width:100%;max-width:400px;text-align:left;">
           <div style="font-family:'Fraunces',sans-serif;font-weight:800;font-size:1.1rem;color:#fff;margin-bottom:6px;text-align:center;">Keep the party going ☕</div>
@@ -5463,6 +5509,20 @@
 <!-- Crew Detail Modal -->
 <div class="modal-overlay" id="detail-overlay" onclick="closeDetailOutside(event)">
   <div class="modal" id="detail-modal">
+    <!-- filled by JS -->
+  </div>
+</div>
+
+<!-- Vendor Village: Vendor Detail Modal -->
+<div class="modal-overlay" id="vv-detail-overlay" onclick="if(event.target===this)closeVendorDetail()">
+  <div class="modal" id="vv-detail-modal" style="max-height:88vh;overflow-y:auto;">
+    <!-- filled by JS -->
+  </div>
+</div>
+
+<!-- Vendor Village: Edit Vendor Modal -->
+<div class="modal-overlay" id="vv-edit-overlay" onclick="if(event.target===this)closeEditVendorModal()">
+  <div class="modal" id="vv-edit-modal" style="max-height:88vh;overflow-y:auto;">
     <!-- filled by JS -->
   </div>
 </div>
@@ -6195,6 +6255,14 @@
     if (!r) return '';
     if (r.isYou) return r.name;
     return nicknameCache[String(r.id)] || r.name;
+  }
+
+  // Resolves an auth user id (e.g. a vendor_reviews.raver_id, vendors.created_by)
+  // back to the loaded raver record — same lookup repeated inline in several
+  // places (jam/link/review authorship); pulled out for Vendor Village's new
+  // authorship-resolution needs (cosigns, badges, first-posted-by credit).
+  function raverByAuthUid(uid) {
+    return uid ? squad.find(r => r.claimedBy === uid) : null;
   }
 
   // ===== PERMISSION HELPERS =====
@@ -8670,6 +8738,9 @@ async function doProfilePasswordChange() {
       case 'archive_link':  return [{ table: 'crew_archive_links', match: { id: row.entity_id } }];
       case 'poll':          return [{ table: 'crew_polls', match: { id: row.entity_id } }];
       case 'jam':           return [{ table: 'crew_jams', match: { id: row.entity_id } }];
+      case 'vendor':        return [{ table: 'vendors', match: { id: row.entity_id } }];
+      case 'vendor_review': return [{ table: 'vendor_reviews', match: { id: row.entity_id } }];
+      case 'vendor_spot':   return [{ table: 'vendor_spots', match: { id: row.entity_id } }];
       case 'photo':
         // our_photos has no single `id` in play here — entityId is the uploader,
         // metadata carries the pair, matching how logAudit recorded it above.
@@ -8749,6 +8820,12 @@ async function doProfilePasswordChange() {
     'poll.remove':          { emoji: '🗑️', label: 'Poll removed' },
     'jam.remove':           { emoji: '🗑️', label: 'Jam removed' },
     'photo.remove':         { emoji: '🗑️', label: 'Photo removed' },
+    // Pre-existing gap patched alongside adding vendor_spot: these two
+    // actions have been logged since the Vendor Village base shipped but
+    // had no entry here, so they silently fell back to the generic 📌 label.
+    'vendor.remove':        { emoji: '🗑️', label: 'Vendor removed' },
+    'vendor_review.remove': { emoji: '🗑️', label: 'Vendor review removed' },
+    'vendor_spot.remove':   { emoji: '🗑️', label: 'Vendor spot removed' },
   };
   function historyActionMeta(action) {
     return HISTORY_ACTION_META[action] || { emoji: '📌', label: action };
@@ -10044,6 +10121,16 @@ async function doProfilePasswordChange() {
   let crewPollVotes = {};
   let crewJams = [];
   let crewJamVibes = [];
+  // Vendor Village — lazy-loaded only once the reveal gate is unlocked (see
+  // vendorVillageTap()), so normal sessions that never tap the pill pay no
+  // extra load cost.
+  let vendors = [];
+  let vendorFestivalTagsCache = {}; // vendorId -> [{ vendor_id, festival_id, ... }]
+  let vendorReviewsCache = {};      // vendorId -> [review rows]
+  let vendorVibeTagsCache = {};     // vendorId -> [{ vendor_id, tag_id, tagged_by, ... }]
+  let vendorSpotsCache = {};        // vendorId -> recent vendor_spots rows (display cache)
+  let myVendorSpots = [];           // current user's OWN spots across all vendors/festivals (badge-progress cache — kept separate from vendorSpotsCache, see dbLoadMyVendorSpots)
+  let savedVendorIds = new Set();
   let _jamFilters = { tag: null, festivalId: null };
   let _raveFilters = { time: null, status: null }; // time: 'upcoming'|'past'|null, status: 'going'|'interested'|null
   let crewAchievements = [];
@@ -10171,7 +10258,8 @@ async function doProfilePasswordChange() {
 
   const FLAG_TARGET_LABELS = {
     raver: '👤 Raver', festival: '🎟️ Rave', crew: '🎪 Crew', crew_member: '👥 Crew Member', vibe_tag: '🏷️ Vibe Tag',
-    photo: '📸 Photo', dream_pin: '✨ Dream Pin', archive_link: '📸 Archive Link', poll: '🗳️ Poll', jam: '🎵 Jam'
+    photo: '📸 Photo', dream_pin: '✨ Dream Pin', archive_link: '📸 Archive Link', poll: '🗳️ Poll', jam: '🎵 Jam',
+    vendor: '🏪 Vendor', vendor_review: '⭐ Vendor Review', vendor_spot: '📍 Vendor Spot'
   };
 
   function formatModDate(iso) {
@@ -10192,7 +10280,7 @@ async function doProfilePasswordChange() {
             <div class="event-meta">${escHtml(f.reason || 'No reason given')}</div>
             <div class="event-meta" style="opacity:0.7;" title="${escHtml(when.full)}">Reported ${escHtml(when.rel)}</div>
             <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
-              <button class="btn btn-ghost" style="padding:8px 14px;font-size:0.76rem;" onclick="viewFlagTarget('${f.target_type}','${escHtml(String(f.target_id))}','${escHtml(String(f.metadata?.crew_id || ''))}')">👀 View</button>
+              <button class="btn btn-ghost" style="padding:8px 14px;font-size:0.76rem;" onclick="viewFlagTarget('${f.target_type}','${escHtml(String(f.target_id))}','${escHtml(String(f.metadata?.crew_id || ''))}','${escHtml(String(f.metadata?.vendor_id || ''))}')">👀 View</button>
               <button class="btn btn-ghost" style="padding:8px 14px;font-size:0.76rem;" onclick="handleDismissFlag('${f.id}')">Dismiss</button>
               <button class="btn btn-primary" style="padding:8px 14px;font-size:0.76rem;" onclick="handleResolveFlag('${f.id}')">Resolve</button>
             </div>
@@ -10337,7 +10425,7 @@ async function doProfilePasswordChange() {
 
   // Jump to the actual content so a mod acts through the app's existing
   // moderator-gated buttons — the Reports tab itself is triage-only.
-  function viewFlagTarget(targetType, targetId, crewId) {
+  function viewFlagTarget(targetType, targetId, crewId, vendorId) {
     // crew_member reports use the raver_id as target_id (crew_id lives in
     // metadata) — same navigable target as a plain raver report.
     if (targetType === 'raver' || targetType === 'crew_member' || targetType === 'vibe_tag') { openProfile(targetId); return; }
@@ -10351,6 +10439,12 @@ async function doProfilePasswordChange() {
       renderDetail(activeDetailId);
       return;
     }
+    // Vendor Village lives behind the Coming Soon tap-gate — a mod triaging
+    // a report shouldn't have to find and 4-tap the pill themselves, so this
+    // force-unlocks and jumps straight to the vendor's detail view.
+    if (targetType === 'vendor') { jumpToVendorVillage(targetId); return; }
+    if (targetType === 'vendor_review' && vendorId) { jumpToVendorVillage(vendorId); return; }
+    if (targetType === 'vendor_spot' && vendorId) { jumpToVendorVillage(vendorId); return; }
     showToast('Nothing to preview for this report');
   }
 
@@ -10819,7 +10913,7 @@ async function doProfilePasswordChange() {
         if (link.added_by === uid) {
           addedByLabel = 'you';
         } else {
-          const adder = squad.find(r => r.claimedBy === link.added_by);
+          const adder = raverByAuthUid(link.added_by);
           if (adder) addedByLabel = displayName(adder).split(' ')[0];
         }
       }
@@ -11732,7 +11826,7 @@ async function doProfilePasswordChange() {
     if (jam.added_by === uid) {
       byLabel = 'you';
     } else {
-      const adder = squad.find(r => r.claimedBy === jam.added_by);
+      const adder = raverByAuthUid(jam.added_by);
       if (adder) byLabel = displayName(adder).split(' ')[0];
     }
 
@@ -12039,6 +12133,1207 @@ async function doProfilePasswordChange() {
     document.getElementById('add-jam-overlay').classList.remove('open');
     _addJamCrewId = null;
     _addJamMeta = null;
+  }
+
+  // ===== VENDOR VILLAGE — data layer =====
+  // Community vendor directory: any raver can post a vendor and it goes live
+  // immediately (no pre-approval queue). Modeled directly on the crew_jams
+  // CRUD shape (dbLoadJams/dbAddJam/dbDeleteJam/dbTogglePinJam, above) since
+  // it's the closest existing analog — a feed of user-submitted cards with
+  // soft delete + moderator-only priority flag.
+
+  async function dbLoadVendors() {
+    const { data, error } = await sb.from('vendors')
+      .select('*')
+      .is('deleted_at', null)
+      .order('sponsor_priority', { ascending: false })
+      .order('created_at', { ascending: false });
+    if (error) { console.error('vendors load error', error); return; }
+    vendors = data || [];
+  }
+
+  async function dbAddVendor({ name, category, description, websiteUrl, instagram }) {
+    const { data, error } = await sb.from('vendors').insert({
+      created_by: currentUser.id,
+      name: name.trim().slice(0, 80),
+      category,
+      description: description ? description.trim().slice(0, 600) : null,
+      website_url: websiteUrl ? websiteUrl.trim() : null,
+      instagram: instagram ? instagram.trim() : null
+    }).select().single();
+    if (error) { console.error('vendor insert error', error); showToast('⚠️ Could not add vendor — try again'); return null; }
+    vendors.unshift(data);
+    return data;
+  }
+
+  // Feature 4 — editing your own listing (name/category/description/links +
+  // the new discount fields). Deliberately excludes cover-photo re-upload and
+  // festival-tag editing in v1 — those already have their own mechanisms and
+  // aren't needed for a minimal edit flow. Client-gated same as the RLS.
+  async function dbUpdateVendor(vendorId, { name, category, description, websiteUrl, instagram, discountCode, discountDescription }) {
+    const vendor = vendors.find(v => v.id === vendorId);
+    if (!vendor || !currentUser || (vendor.created_by !== currentUser.id && !isModerator())) return null;
+    const { data, error } = await sb.from('vendors').update({
+      name: name.trim().slice(0, 80),
+      category,
+      description: description ? description.trim().slice(0, 600) : null,
+      website_url: websiteUrl ? websiteUrl.trim() : null,
+      instagram: instagram ? instagram.trim() : null,
+      discount_code: discountCode ? discountCode.trim().slice(0, 40) : null,
+      discount_description: discountDescription ? discountDescription.trim().slice(0, 200) : null
+    }).eq('id', vendorId).select().single();
+    if (error) { console.error('vendor update error', error); showToast('⚠️ Could not update vendor — try again'); return null; }
+    const idx = vendors.findIndex(v => v.id === vendorId);
+    if (idx >= 0) vendors[idx] = data;
+    return data;
+  }
+
+  async function dbTagVendorFestivals(vendorId, festivalIds) {
+    if (!festivalIds?.length) return;
+    const rows = festivalIds.map(fid => ({ vendor_id: vendorId, festival_id: fid, tagged_by: currentUser.id }));
+    const { data, error } = await sb.from('vendor_festival_tags').insert(rows).select();
+    if (error) { console.error('vendor_festival_tags insert error', error); return; }
+    vendorFestivalTagsCache[vendorId] = [...(vendorFestivalTagsCache[vendorId] || []), ...(data || [])];
+  }
+
+  async function dbLoadVendorFestivalTags(vendorIds) {
+    if (!vendorIds?.length) return;
+    const { data, error } = await sb.from('vendor_festival_tags').select('*').in('vendor_id', vendorIds);
+    if (error) { console.error('vendor_festival_tags load error', error); return; }
+    vendorFestivalTagsCache = {};
+    (data || []).forEach(row => {
+      (vendorFestivalTagsCache[row.vendor_id] ||= []).push(row);
+    });
+  }
+
+  // ===== VENDOR VILLAGE — Vendor vibe tags (Feature 2) =====
+  async function dbLoadVendorVibeTags(vendorIds) {
+    if (!vendorIds?.length) return;
+    const { data, error } = await sb.from('vendor_vibe_tags').select('*').in('vendor_id', vendorIds);
+    if (error) { console.error('vendor_vibe_tags load error', error); return; }
+    vendorVibeTagsCache = {};
+    (data || []).forEach(row => {
+      (vendorVibeTagsCache[row.vendor_id] ||= []).push(row);
+    });
+  }
+
+  async function dbAddVendorVibeTag(vendorId, tagId) {
+    if (!currentUser) return false;
+    const { data, error } = await sb.from('vendor_vibe_tags')
+      .insert({ vendor_id: vendorId, tag_id: tagId, tagged_by: currentUser.id }).select().single();
+    if (error) {
+      if (error.code === '23505') return true; // already tagged — treat as success
+      console.error('vendor_vibe_tags insert error', error); showToast('⚠️ Could not add tag'); return false;
+    }
+    (vendorVibeTagsCache[vendorId] ||= []).push(data);
+    return true;
+  }
+
+  async function dbRemoveVendorVibeTag(vendorId, tagId) {
+    if (!currentUser) return false;
+    const { error } = await sb.from('vendor_vibe_tags').delete().eq('vendor_id', vendorId).eq('tag_id', tagId);
+    if (error) { console.error('vendor_vibe_tags delete error', error); showToast('⚠️ Could not remove tag'); return false; }
+    vendorVibeTagsCache[vendorId] = (vendorVibeTagsCache[vendorId] || []).filter(t => t.tag_id !== tagId);
+    return true;
+  }
+
+  // Inline chip picker rather than the shared Tag Sheet component — the Tag
+  // Sheet is built around one person editing their own draft set with a
+  // commit-the-whole-set flow, which doesn't fit "many different people each
+  // immediately add one tag to someone else's listing."
+  function vendorVibeTagChipsHTML(vendorId, { compact = false } = {}) {
+    const applied = vendorVibeTagsCache[vendorId] || [];
+    if (compact) {
+      if (!applied.length) return '';
+      return `<div class="jam-meta vv-vibe-tags">${applied.slice(0, 3).map(t => `<span class="jam-fest-badge">${VENDOR_VIBE_PRESETS[t.tag_id] || escHtml(t.tag_id)}</span>`).join('')}</div>`;
+    }
+    const vendor = vendors.find(v => v.id === vendorId);
+    const appliedIds = new Set(applied.map(t => t.tag_id));
+    const escVid = escHtml(String(vendorId));
+    const appliedChips = applied.map(t => {
+      const canRemove = currentUser && (t.tagged_by === currentUser.id || vendor?.created_by === currentUser.id || isModerator());
+      return `<span class="jam-filter-pill active">${VENDOR_VIBE_PRESETS[t.tag_id] || escHtml(t.tag_id)}${canRemove ? ` <span onclick="handleRemoveVendorVibeTag('${escVid}','${t.tag_id}')" style="cursor:pointer;">✕</span>` : ''}</span>`;
+    }).join('');
+    const unusedChips = Object.entries(VENDOR_VIBE_PRESETS)
+      .filter(([tagId]) => !appliedIds.has(tagId))
+      .map(([tagId, label]) => `<button type="button" class="jam-filter-pill" onclick="handleAddVendorVibeTag('${escVid}','${tagId}')">${label}</button>`).join('');
+    return `
+      ${appliedChips ? `<div class="jam-filter-bar">${appliedChips}</div>` : ''}
+      ${currentUser ? `
+        <button type="button" class="jam-action-btn" onclick="toggleVendorVibeTagPicker(this)" style="margin-top:4px;">＋ Add tag</button>
+        <div class="jam-filter-bar" style="display:none;margin-top:6px;">${unusedChips}</div>
+      ` : ''}
+    `;
+  }
+
+  function toggleVendorVibeTagPicker(btn) {
+    const picker = btn.nextElementSibling;
+    if (!picker) return;
+    picker.style.display = picker.style.display === 'none' ? '' : 'none';
+  }
+
+  async function handleAddVendorVibeTag(vendorId, tagId) {
+    const ok = await dbAddVendorVibeTag(vendorId, tagId);
+    if (ok) { openVendorDetail(vendorId); if (vendorVillageTab === 'browse') renderVendorBrowsePanel(); }
+  }
+
+  async function handleRemoveVendorVibeTag(vendorId, tagId) {
+    const ok = await dbRemoveVendorVibeTag(vendorId, tagId);
+    if (ok) { openVendorDetail(vendorId); if (vendorVillageTab === 'browse') renderVendorBrowsePanel(); }
+  }
+
+  // ===== VENDOR VILLAGE — Spotted-right-now live check-ins (Feature 3) =====
+  async function dbLoadVendorSpots(vendorIds) {
+    const ids = Array.isArray(vendorIds) ? vendorIds : [vendorIds];
+    if (!ids.length) return [];
+    const { data, error } = await sb.from('vendor_spots')
+      .select('*').in('vendor_id', ids).is('deleted_at', null)
+      .order('created_at', { ascending: false });
+    if (error) { console.error('vendor_spots load error', error); return []; }
+    ids.forEach(id => { vendorSpotsCache[id] = []; });
+    (data || []).forEach(row => { (vendorSpotsCache[row.vendor_id] ||= []).push(row); });
+    return data || [];
+  }
+
+  // Separate from vendorSpotsCache (which only ever holds the currently
+  // *displayed* vendors' spots) — Marketplace Explorer needs to know how
+  // many distinct vendors the CURRENT USER has spotted at one festival,
+  // across every vendor, not just whichever ones happen to be on screen.
+  async function dbLoadMyVendorSpots() {
+    if (!currentUser) return;
+    const { data, error } = await sb.from('vendor_spots')
+      .select('*').eq('spotted_by', currentUser.id).is('deleted_at', null);
+    if (error) { console.error('my vendor_spots load error', error); return; }
+    myVendorSpots = data || [];
+  }
+
+  // Posting a spot also tags the vendor to that festival if it isn't already
+  // (reuses the existing dbTagVendorFestivals insert path — no new tagging
+  // logic) so discovering a vendor live naturally builds its festival history.
+  async function dbAddVendorSpot(vendorId, festivalId, caption) {
+    if (!currentUser) return null;
+    const { data, error } = await sb.from('vendor_spots').insert({
+      vendor_id: vendorId, festival_id: festivalId, spotted_by: currentUser.id,
+      caption: caption ? caption.trim().slice(0, 140) : null
+    }).select().single();
+    if (error) { console.error('vendor_spots insert error', error); showToast('⚠️ Could not post — try again'); return null; }
+    (vendorSpotsCache[vendorId] ||= []).unshift(data);
+    myVendorSpots.push(data);
+    const alreadyTagged = (vendorFestivalTagsCache[vendorId] || []).some(t => String(t.festival_id) === String(festivalId));
+    if (!alreadyTagged) await dbTagVendorFestivals(vendorId, [festivalId]);
+    return data;
+  }
+
+  async function dbDeleteVendorSpot(spotId, vendorId, reason = null) {
+    const { ok, rateLimited } = await softDeleteRow('vendor_spots', { id: spotId }, reason);
+    if (!ok) { if (!rateLimited) showToast('⚠️ Could not remove — try again'); return false; }
+    await logAudit({ action: 'vendor_spot.remove', entityType: 'vendor_spot', entityId: spotId, reason, metadata: { vendor_id: vendorId } });
+    vendorSpotsCache[vendorId] = (vendorSpotsCache[vendorId] || []).filter(s => s.id !== spotId);
+    myVendorSpots = myVendorSpots.filter(s => s.id !== spotId);
+    return true;
+  }
+
+  // "Currently spotted" is a pure render-time filter — no TTL column, no
+  // cron job. Older spots just stop showing as "live"; nothing deletes them.
+  function vendorLiveSpots(vendorId, windowMs = 24 * 60 * 60 * 1000) {
+    return (vendorSpotsCache[vendorId] || []).filter(s => Date.now() - new Date(s.created_at).getTime() < windowMs);
+  }
+
+  function vendorLiveSpotBadgeHTML(vendorId) {
+    const latest = vendorLiveSpots(vendorId)[0];
+    if (!latest) return '';
+    const fest = festivals.find(f => String(f.id) === String(latest.festival_id));
+    const when = formatModDate(latest.created_at);
+    return `<div class="jam-meta vv-live-spot">📍 Spotted ${escHtml(when.rel)}${fest ? ` at ${escHtml(fest.name)}` : ''}</div>`;
+  }
+
+  // ===== VENDOR VILLAGE — Personal badges (Feature 6) =====
+  // Deliberately a brand-new, crew-independent system — see
+  // vendor_raver_badges migration. Named in parallel to the crew FAM Pins
+  // system (BADGE_DEFINITIONS/awardAchievement/checkAndAwardBadges above),
+  // but `raverId` here always means an auth uid, never a crewId anywhere.
+  const VENDOR_BADGE_DEFINITIONS = [
+    { id: 'vendor_scout', name: 'Vendor Scout', emoji: '🧭', threshold: 1,
+      description: 'Posted your first vendor to Vendor Village.' },
+    { id: 'marketplace_explorer', name: 'Marketplace Explorer', emoji: '🗺️', threshold: 5,
+      description: 'Spotted 5+ distinct vendors at one rave.' }
+  ];
+
+  let vendorRaverBadges = []; // current user's earned vendor_raver_badges rows
+
+  async function dbLoadMyVendorBadges() {
+    if (!currentUser) return;
+    const { data, error } = await sb.from('vendor_raver_badges').select('*').eq('raver_id', currentUser.id);
+    if (error) { console.error('vendor_raver_badges load error', error); return; }
+    vendorRaverBadges = data || [];
+  }
+
+  function getVendorBadgeProgress(badgeId, authUid) {
+    if (badgeId === 'vendor_scout') {
+      return vendors.filter(v => v.created_by === authUid).length;
+    }
+    if (badgeId === 'marketplace_explorer') {
+      // Max, across every festival this raver has posted a spot at, of how
+      // many DISTINCT vendors they've spotted at that one festival.
+      const byFest = {};
+      myVendorSpots.filter(s => s.spotted_by === authUid).forEach(s => {
+        (byFest[s.festival_id] ||= new Set()).add(s.vendor_id);
+      });
+      return Object.values(byFest).reduce((max, set) => Math.max(max, set.size), 0);
+    }
+    return 0;
+  }
+
+  async function awardVendorBadge(badgeId) {
+    if (!currentUser) return;
+    const def = VENDOR_BADGE_DEFINITIONS.find(b => b.id === badgeId);
+    if (!def) return;
+    const { error } = await sb.from('vendor_raver_badges').insert({ raver_id: currentUser.id, badge_id: badgeId });
+    if (error) { if (error.code !== '23505') console.error('vendor_raver_badges insert error', error); return; }
+    vendorRaverBadges.push({ raver_id: currentUser.id, badge_id: badgeId, earned_at: new Date().toISOString() });
+    // Toast only — unlike crew badges (which notify OTHER crew members via
+    // notifyCrewMembers), the earner here is always the person who just
+    // acted, so there's no separate audience to notify.
+    showToast(`${def.emoji} Vendor badge unlocked: ${def.name}!`);
+    renderVendorBadgeStrip();
+  }
+
+  async function checkAndAwardVendorBadges() {
+    if (!currentUser) return;
+    for (const def of VENDOR_BADGE_DEFINITIONS) {
+      if (vendorRaverBadges.some(b => b.badge_id === def.id)) continue;
+      if (getVendorBadgeProgress(def.id, currentUser.id) >= def.threshold) await awardVendorBadge(def.id);
+    }
+  }
+
+  // Own-profile-only mention (v1 scope) — deliberately only shows EARNED
+  // badges from the already-loaded vendorRaverBadges cache, never "locked"
+  // ones: if the cache is empty because the viewer hasn't opened Vendor
+  // Village yet this session (not because they've earned nothing), showing
+  // a "locked" badge here would read as a false claim. Showing nothing in
+  // that case is always a safe, true statement. Cross-profile display
+  // (showing another raver's badges) is deferred — it would need its own
+  // query per profile view, which isn't worth adding for v1.
+  function vendorBadgeProfileMentionHTML() {
+    if (!vendorRaverBadges.length) return '';
+    const earned = VENDOR_BADGE_DEFINITIONS.filter(def => vendorRaverBadges.some(b => b.badge_id === def.id));
+    if (!earned.length) return '';
+    return `<div class="profile-section" style="margin-top:14px;">
+      <h3>🏪 Vendor Village</h3>
+      <div class="fam-pin-grid">${earned.map(def => `
+        <div class="fam-pin-wrap" title="${escHtml(def.description)}">
+          <div class="fam-pin earned"><span>${def.emoji}</span></div>
+          <div class="fam-pin-label">${escHtml(def.name)}</div>
+        </div>`).join('')}</div>
+    </div>`;
+  }
+
+  function vendorBadgeStripHTML() {
+    if (!currentUser) return '';
+    return `
+      <div class="fam-pin-grid" style="margin-top:16px;">
+        ${VENDOR_BADGE_DEFINITIONS.map(def => {
+          const earned = vendorRaverBadges.some(b => b.badge_id === def.id);
+          return `<div class="fam-pin-wrap" title="${escHtml(def.description)}">
+            <div class="fam-pin ${earned ? 'earned' : 'locked'}"><span>${def.emoji}</span></div>
+            <div class="fam-pin-label">${escHtml(def.name)}</div>
+          </div>`;
+        }).join('')}
+      </div>`;
+  }
+
+  async function dbDeleteVendor(vendorId, reason = null) {
+    const { ok, rateLimited } = await softDeleteRow('vendors', { id: vendorId }, reason);
+    if (!ok) { if (!rateLimited) showToast('⚠️ Could not remove vendor — try again'); return false; }
+    await logAudit({ action: 'vendor.remove', entityType: 'vendor', entityId: vendorId, reason });
+    vendors = vendors.filter(v => v.id !== vendorId);
+    return true;
+  }
+
+  // Moderator-only — toggles the paid-priority/affiliate fields. Gated
+  // client-side here and again server-side by the vendors_sponsorship_guard
+  // trigger, so this can never be self-service for the vendor's own poster.
+  async function dbSetVendorSponsored(vendorId, { isSponsored, sponsorPriority = 0, source = 'community' }) {
+    if (!isModerator()) return false;
+    const { data, error } = await sb.from('vendors')
+      .update({ is_sponsored: isSponsored, sponsor_priority: sponsorPriority, source })
+      .eq('id', vendorId).select().single();
+    if (error) { console.error('vendor sponsorship update error', error); showToast('⚠️ Could not update sponsorship'); return false; }
+    const idx = vendors.findIndex(v => v.id === vendorId);
+    if (idx >= 0) vendors[idx] = data;
+    vendors.sort((a, b) => (b.sponsor_priority - a.sponsor_priority) || (new Date(b.created_at) - new Date(a.created_at)));
+    return true;
+  }
+
+  // Single-item bookmark toggle — simplified version of
+  // dbSaveRaverFavoriteArtists's upsert-then-diff-delete shape, since this
+  // only ever touches the one vendor the user acted on, not a whole set.
+  async function dbToggleSaveVendor(vendorId) {
+    if (!currentUser) return;
+    const uid = currentUser.id;
+    if (savedVendorIds.has(vendorId)) {
+      const { error } = await sb.from('saved_vendors').delete().eq('raver_id', uid).eq('vendor_id', vendorId);
+      if (error) { console.error('saved_vendors delete error', error); showToast('⚠️ Could not update saved vendors'); return; }
+      savedVendorIds.delete(vendorId);
+    } else {
+      const { error } = await sb.from('saved_vendors')
+        .upsert({ raver_id: uid, vendor_id: vendorId }, { onConflict: 'raver_id,vendor_id', ignoreDuplicates: true });
+      if (error) { console.error('saved_vendors upsert error', error); showToast('⚠️ Could not save vendor'); return; }
+      savedVendorIds.add(vendorId);
+    }
+  }
+
+  async function dbLoadSavedVendors() {
+    if (!currentUser) return;
+    const { data, error } = await sb.from('saved_vendors').select('vendor_id').eq('raver_id', currentUser.id);
+    if (error) { console.error('saved_vendors load error', error); return; }
+    savedVendorIds = new Set((data || []).map(r => r.vendor_id));
+  }
+
+  async function dbLoadVendorReviews(vendorIds) {
+    const ids = Array.isArray(vendorIds) ? vendorIds : [vendorIds];
+    if (!ids.length) return [];
+    const { data, error } = await sb.from('vendor_reviews')
+      .select('*').in('vendor_id', ids).is('deleted_at', null)
+      .order('created_at', { ascending: false });
+    if (error) { console.error('vendor_reviews load error', error); return []; }
+    ids.forEach(id => { vendorReviewsCache[id] = []; });
+    (data || []).forEach(row => { (vendorReviewsCache[row.vendor_id] ||= []).push(row); });
+    return data || [];
+  }
+
+  // Upsert-on-conflict, directly modeled after dbSaveJamVibe (one review per
+  // (vendor, raver), re-saving edits the existing row instead of duplicating).
+  async function dbUpsertVendorReview(vendorId, { rating, body, photoUrl = null, attributeTags = [] }) {
+    if (!currentUser) return false;
+    const trimmed = (body || '').trim().slice(0, 300);
+    const { data, error } = await sb.from('vendor_reviews').upsert(
+      { vendor_id: vendorId, raver_id: currentUser.id, rating, body: trimmed || null,
+        photo_url: photoUrl || null, attribute_tags: attributeTags.length ? attributeTags : null },
+      { onConflict: 'vendor_id,raver_id' }
+    ).select().single();
+    if (error) { console.error('vendor_reviews upsert error', error); showToast('⚠️ Could not save review — try again'); return false; }
+    const list = vendorReviewsCache[vendorId] || [];
+    const idx = list.findIndex(r => r.raver_id === currentUser.id);
+    if (idx >= 0) list[idx] = data; else list.unshift(data);
+    vendorReviewsCache[vendorId] = list;
+    return true;
+  }
+
+  async function dbDeleteVendorReview(reviewId, vendorId, reason = null) {
+    const { ok, rateLimited } = await softDeleteRow('vendor_reviews', { id: reviewId }, reason);
+    if (!ok) { if (!rateLimited) showToast('⚠️ Could not remove review — try again'); return false; }
+    await logAudit({ action: 'vendor_review.remove', entityType: 'vendor_review', entityId: reviewId, reason, metadata: { vendor_id: vendorId } });
+    vendorReviewsCache[vendorId] = (vendorReviewsCache[vendorId] || []).filter(r => r.id !== reviewId);
+    return true;
+  }
+
+  // Pure helper — average + star display, same math as buildPollResultsUI's
+  // 'rating' branch above, just operating on vendor_reviews rows.
+  function vendorRatingSummary(reviews) {
+    if (!reviews?.length) return { avg: null, count: 0, starDisplay: '☆☆☆☆☆' };
+    const avg = reviews.reduce((s, r) => s + r.rating, 0) / reviews.length;
+    const rounded = Math.round(avg);
+    return {
+      avg: avg.toFixed(1),
+      count: reviews.length,
+      starDisplay: '★'.repeat(rounded) + '☆'.repeat(5 - rounded)
+    };
+  }
+
+  // Feature 8 — practical attribute tags are attached per-review (not
+  // permanently to the vendor) so they self-freshen: this is a pure
+  // client-side tally over the already-loaded review cache, no new query.
+  function vendorAttributeTagTally(vendorId, topN = 3) {
+    const counts = {};
+    (vendorReviewsCache[vendorId] || []).forEach(r => {
+      (r.attribute_tags || []).forEach(tagId => { counts[tagId] = (counts[tagId] || 0) + 1; });
+    });
+    return Object.entries(counts)
+      .map(([tagId, count]) => ({ tagId, count, label: VENDOR_ATTRIBUTE_TAG_PRESETS[tagId] || tagId }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, topN);
+  }
+
+  function vendorAttributeTallyLineHTML(vendorId) {
+    const tally = vendorAttributeTagTally(vendorId);
+    if (!tally.length) return '';
+    return `<div class="jam-meta vv-attribute-tally">${tally.map(t => `<span>${t.label} ×${t.count}</span>`).join(' · ')}</div>`;
+  }
+
+  // ===== VENDOR VILLAGE — UI =====
+  // Entry point called by vendorVillageTap() once unlocked (and by
+  // viewFlagTarget() for moderators triaging a vendor/vendor_review report,
+  // which force-unlocks and jumps straight in without the tap gate). Renders
+  // into the #vendor-village-root div that sits inside the existing
+  // #page-checklist placeholder — the placeholder content above/below it is
+  // untouched for everyone who hasn't unlocked this.
+  let vendorVillageTab = 'browse';
+
+  function renderVendorVillage() {
+    const root = document.getElementById('vendor-village-root');
+    if (!root) return;
+    if (!_vendorVillageUnlocked) { root.innerHTML = ''; return; }
+    root.innerHTML = vendorVillageShellHTML();
+    loadVendorVillageData();
+  }
+
+  function vendorVillageShellHTML() {
+    return `
+      <div id="vv-badge-strip"></div>
+      <div class="stats-subtabs" style="margin-top:32px;">
+        <button class="stats-subtab${vendorVillageTab === 'browse' ? ' active' : ''}" onclick="switchVendorTab('browse', this)">🏪 Browse</button>
+        <button class="stats-subtab${vendorVillageTab === 'saved' ? ' active' : ''}" onclick="switchVendorTab('saved', this)">💾 Saved</button>
+        <button class="stats-subtab${vendorVillageTab === 'submit' ? ' active' : ''}" onclick="switchVendorTab('submit', this)">➕ Add Vendor</button>
+      </div>
+      <div id="vv-browse-panel" style="display:${vendorVillageTab === 'browse' ? '' : 'none'};"></div>
+      <div id="vv-saved-panel" style="display:${vendorVillageTab === 'saved' ? '' : 'none'};"></div>
+      <div id="vv-submit-panel" style="display:${vendorVillageTab === 'submit' ? '' : 'none'};"></div>
+    `;
+  }
+
+  async function loadVendorVillageData() {
+    await Promise.all([dbLoadVendors(), dbLoadSavedVendors(), dbLoadMyVendorSpots(), dbLoadMyVendorBadges()]);
+    await dbLoadVendorReviews(vendors.map(v => v.id));
+    await dbLoadVendorFestivalTags(vendors.map(v => v.id));
+    await dbLoadVendorVibeTags(vendors.map(v => v.id));
+    await dbLoadVendorSpots(vendors.map(v => v.id));
+    renderVendorVillagePanel();
+  }
+
+  function renderVendorVillagePanel() {
+    if (vendorVillageTab === 'browse') renderVendorBrowsePanel();
+    else if (vendorVillageTab === 'saved') renderVendorSavedPanel();
+    else if (vendorVillageTab === 'submit') renderVendorSubmitPanel();
+    renderVendorBadgeStrip();
+  }
+
+  function renderVendorBadgeStrip() {
+    const el = document.getElementById('vv-badge-strip');
+    if (el) el.innerHTML = vendorBadgeStripHTML();
+  }
+
+  // Modeled on switchStatTab (stats page sub-tabs) — same active-class
+  // toggle + sibling-panel show/hide shape.
+  function switchVendorTab(tab, el) {
+    vendorVillageTab = tab;
+    const root = document.getElementById('vendor-village-root');
+    if (!root) return;
+    root.querySelectorAll('.stats-subtab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('vv-browse-panel').style.display = tab === 'browse' ? '' : 'none';
+    document.getElementById('vv-saved-panel').style.display = tab === 'saved' ? '' : 'none';
+    document.getElementById('vv-submit-panel').style.display = tab === 'submit' ? '' : 'none';
+    renderVendorVillagePanel();
+  }
+
+  // Force-unlocks Vendor Village, loads its data, and (once loaded) jumps
+  // straight to a vendor's detail view — bypassing the 4-tap gate. Used by
+  // moderators triaging a vendor/vendor_review/vendor_spot report (they
+  // shouldn't have to find and tap the pill themselves) AND by the
+  // "saved vendor spotted" notification action button (Feature 5) — a raver
+  // who already knows a vendor exists via a notification shouldn't have to
+  // rediscover the Easter-egg gate either. Renamed from
+  // openVendorVillageFromMod now that it's no longer mod-only.
+  async function jumpToVendorVillage(vendorIdToOpen) {
+    _vendorVillageUnlocked = true;
+    switchTab('checklist');
+    const root = document.getElementById('vendor-village-root');
+    if (root) root.innerHTML = vendorVillageShellHTML();
+    await loadVendorVillageData();
+    if (vendorIdToOpen) openVendorDetail(vendorIdToOpen);
+  }
+
+  const VENDOR_CATEGORY_LABELS = {
+    apparel_merch:    '👕 Apparel & Merch',
+    jewelry_kandi:    '💎 Jewelry & Kandi',
+    glass_art:        '🎨 Glass & Art',
+    gear_accessories: '🎒 Gear & Accessories',
+    safety_comfort:   '🛟 Safety & Comfort',
+    food_drink:       '🍔 Food & Drink',
+    services:         '🛠️ Services',
+    other:            '✨ Other'
+  };
+
+  // Curated, preset-only vibe tags (Feature 2) — no free text, so there's no
+  // text-spam surface on a vendor listing. Anyone can tap one on; removal is
+  // gated in dbRemoveVendorVibeTag's RLS-mirrored client check.
+  const VENDOR_VIBE_PRESETS = {
+    festival_fit_certified: '☀️ Festival Fit Certified',
+    hydration_hero:         '💧 Hydration Hero',
+    plur_approved:          '✨ PLUR Approved',
+    repair_wizard:          '🛠️ Repair Wizard',
+    budget_friendly:        '💸 Budget Friendly',
+    worth_the_splurge:      '💎 Worth The Splurge',
+    great_freebies:         '🎁 Great Freebies',
+    friendly_crew:          '🤝 Friendly Crew',
+    fast_service:           '⚡ Fast Service',
+    only_here_find:         '🌈 Only-Here Find',
+    easy_returns:           '🔄 Easy Returns',
+    quality_craftsmanship:  '🧵 Quality Craftsmanship',
+    always_restocked:       '📦 Always Restocked',
+    exclusive_drops:        '🕶️ Festival-Exclusive Drops'
+  };
+
+  // Practical, situational intel picked when posting a review (Feature 8) —
+  // deliberately attached per-review, not permanently to the vendor, so a
+  // "long line" tag from an old review ages out of the tally as new reviews
+  // roll in rather than sticking around forever.
+  const VENDOR_ATTRIBUTE_TAG_PRESETS = {
+    long_line:      '🕐 Long line',
+    cash_only:      '💸 Cash only',
+    sells_out_fast: '📦 Sells out fast',
+    hard_to_find:   '📍 Hard to find the booth',
+    super_friendly: '🤝 Super friendly',
+    a_bit_pricey:   '💰 A bit pricey',
+    quick_service:  '⚡ Quick service',
+    card_accepted:  '💳 Card accepted'
+  };
+
+  // ===== VENDOR VILLAGE — Browse panel =====
+  let _vendorCategoryFilter = null;
+
+  function renderVendorBrowsePanel() {
+    const panel = document.getElementById('vv-browse-panel');
+    if (!panel) return;
+    panel.innerHTML = vendorBrowsePanelHTML();
+  }
+
+  function vendorBrowsePanelHTML() {
+    const cats = [...new Set(vendors.map(v => v.category))];
+    const filterPills = cats.map(cat => {
+      const active = _vendorCategoryFilter === cat;
+      return `<button class="jam-filter-pill${active ? ' active' : ''}"
+        onclick="toggleVendorCategoryFilter('${escHtml(cat)}')">${VENDOR_CATEGORY_LABELS[cat] || escHtml(cat)}</button>`;
+    }).join('');
+    const visible = _vendorCategoryFilter ? vendors.filter(v => v.category === _vendorCategoryFilter) : vendors;
+    const cards = visible.map(v => vendorCardHTML(v)).join('');
+    const emptyMsg = vendors.length === 0
+      ? `<div class="jam-empty es-block"><div class="es-icon">🏪</div><div class="es-headline">No vendors yet</div><div class="es-sub">Be the first to post a vendor you love — merch, kandi, glass, gear, whatever keeps the fam supplied.</div></div>`
+      : visible.length === 0
+      ? `<div class="jam-empty" style="text-align:center;padding:20px 0;color:var(--muted);font-size:0.82rem;">No vendors in this category yet</div>`
+      : '';
+    return `
+      ${filterPills ? `<div class="jam-filter-bar" style="margin-top:16px;">${filterPills}</div>` : ''}
+      <div class="jam-cards-list vv-cards-list" style="margin-top:12px;">
+        ${emptyMsg}
+        ${cards}
+      </div>`;
+  }
+
+  function toggleVendorCategoryFilter(cat) {
+    _vendorCategoryFilter = _vendorCategoryFilter === cat ? null : cat;
+    renderVendorBrowsePanel();
+  }
+
+  function vendorPlaceholderEmoji(category) {
+    // [...str][0] (not str[0]) — the label starts with an emoji, which is a
+    // surrogate pair in UTF-16; indexing by [0] alone grabs half of it.
+    return [...(VENDOR_CATEGORY_LABELS[category] || '✨🏪')][0];
+  }
+
+  // ===== VENDOR VILLAGE — Crew cosigns (Feature 1, no schema — pure client-side) =====
+  // Surfaces when someone in the viewer's OWN crew(s) has also reviewed this
+  // vendor. `crews` only ever holds crews the viewer belongs to (see
+  // raverPerms' identical `shared` computation above), so finding a reviewer
+  // in any crew's squadIds here automatically means "a crew I'm also in."
+  function vendorCrewCosigns(vendorId) {
+    if (!currentUser) return [];
+    const reviews = (vendorReviewsCache[vendorId] || []).filter(r => r.raver_id !== currentUser.id);
+    const byCrew = {};
+    reviews.forEach(review => {
+      const reviewer = raverByAuthUid(review.raver_id);
+      if (!reviewer) return;
+      crews.filter(c => (c.squadIds || []).some(id => String(id) === String(reviewer.id)))
+        .forEach(crew => { (byCrew[crew.id] ||= { crew, ratings: [] }).ratings.push(review.rating); });
+    });
+    return Object.values(byCrew)
+      .map(({ crew, ratings }) => ({ crew, count: ratings.length, avgRating: ratings.reduce((a, b) => a + b, 0) / ratings.length }))
+      .sort((a, b) => b.count - a.count);
+  }
+
+  function vendorCosignLineHTML(cosign) {
+    const rounded = Math.round(cosign.avgRating);
+    const stars = '★'.repeat(rounded) + '☆'.repeat(5 - rounded);
+    return `<div class="jam-meta vv-cosign-line">👥 ${cosign.count} from ${escHtml(cosign.crew.name)} rated this ${stars}</div>`;
+  }
+
+  function vendorCardHTML(v) {
+    const escId = escHtml(String(v.id));
+    const reviews = vendorReviewsCache[v.id] || [];
+    const { avg, count, starDisplay } = vendorRatingSummary(reviews);
+    const saved = savedVendorIds.has(v.id);
+    const tags = vendorFestivalTagsCache[v.id] || [];
+    const coverHTML = v.cover_photo_url
+      ? `<img class="jam-cover" src="${escHtml(v.cover_photo_url)}" alt="${escHtml(v.name)}" loading="lazy">`
+      : `<div class="jam-cover-placeholder">${vendorPlaceholderEmoji(v.category)}</div>`;
+    const festBadges = tags.map(t => {
+      const fest = festivals.find(f => String(f.id) === String(t.festival_id));
+      return fest ? `<span class="jam-fest-badge">🎪 ${escHtml(fest.name)}</span>` : '';
+    }).join('');
+    const cosigns = vendorCrewCosigns(v.id);
+    return `
+      <div class="jam-card vv-card" id="vv-card-${escId}" onclick="openVendorDetail('${escId}')">
+        <div class="jam-card-header">
+          ${coverHTML}
+          <div class="jam-card-info">
+            <div class="jam-card-toprow">
+              <span class="jam-title" style="white-space:normal;overflow:visible;">${escHtml(v.name)}</span>
+              ${v.is_sponsored ? `<span class="vv-sponsored-badge">Sponsored</span>` : ''}
+              ${v.discount_code ? `<span class="jam-fest-badge" title="Fam discount available">🎁 Discount</span>` : ''}
+            </div>
+            <div class="jam-meta">${VENDOR_CATEGORY_LABELS[v.category] || escHtml(v.category)}</div>
+            <div class="jam-meta">
+              <span>${starDisplay}</span>
+              <span>${count ? `${avg} · ${count} review${count !== 1 ? 's' : ''}` : 'No reviews yet'}</span>
+            </div>
+            ${festBadges ? `<div class="jam-meta">${festBadges}</div>` : ''}
+            ${vendorVibeTagChipsHTML(v.id, { compact: true })}
+            ${vendorAttributeTallyLineHTML(v.id)}
+            ${cosigns.length ? vendorCosignLineHTML(cosigns[0]) : ''}
+            ${vendorLiveSpotBadgeHTML(v.id)}
+          </div>
+          <div class="jam-card-actions">
+            <button class="jam-action-btn vv-save-btn${saved ? ' saved' : ''}"
+              onclick="event.stopPropagation(); handleToggleSaveVendor('${escId}')"
+              title="${saved ? 'Saved' : 'Save'}" aria-label="${saved ? 'Unsave vendor' : 'Save vendor'}">${saved ? '💾' : '🔖'}</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  async function handleToggleSaveVendor(vendorId) {
+    await dbToggleSaveVendor(vendorId);
+    if (vendorVillageTab === 'browse') renderVendorBrowsePanel();
+    else if (vendorVillageTab === 'saved') renderVendorSavedPanel();
+    const detailBtn = document.getElementById('vv-detail-save-btn');
+    if (detailBtn) refreshVendorDetailSaveBtn(vendorId);
+  }
+
+  // ===== VENDOR VILLAGE — Saved panel =====
+  function renderVendorSavedPanel() {
+    const panel = document.getElementById('vv-saved-panel');
+    if (!panel) return;
+    const saved = vendors.filter(v => savedVendorIds.has(v.id));
+    panel.innerHTML = `
+      <div class="jam-cards-list vv-cards-list" style="margin-top:16px;">
+        ${saved.length === 0
+          ? `<div class="jam-empty es-block"><div class="es-icon">💾</div><div class="es-headline">Nothing saved yet</div><div class="es-sub">Tap 🔖 on a vendor in Browse to keep it here.</div></div>`
+          : saved.map(v => vendorCardHTML(v)).join('')}
+      </div>`;
+  }
+
+  // ===== VENDOR VILLAGE — Add Vendor form =====
+  let _vendorSubmitCategory = null;
+  let _vendorSubmitFestivalIds = new Set();
+
+  function renderVendorSubmitPanel() {
+    const panel = document.getElementById('vv-submit-panel');
+    if (!panel) return;
+    _vendorSubmitCategory = null;
+    _vendorSubmitFestivalIds = new Set();
+    panel.innerHTML = vendorSubmitPanelHTML();
+  }
+
+  function vendorSubmitPanelHTML() {
+    const categoryChips = Object.entries(VENDOR_CATEGORY_LABELS).map(([cat, label]) => `
+      <button type="button" class="jam-filter-pill" data-cat="${escHtml(cat)}" onclick="selectVendorSubmitCategory('${escHtml(cat)}', this)">${label}</button>`).join('');
+    const festivalChips = festivals.map(f => `
+      <button type="button" class="jam-filter-pill" data-fest-id="${escHtml(String(f.id))}" onclick="toggleVendorSubmitFestival('${escHtml(String(f.id))}', this)">🎪 ${escHtml(f.name)}</button>`).join('');
+
+    return `
+      <div class="form-group" style="margin-top:16px;">
+        <label class="form-label">Vendor name</label>
+        <input class="form-input" id="vv-submit-name" type="text" maxlength="80" placeholder="e.g. Soft Landings">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Category</label>
+        <div class="jam-filter-bar">${categoryChips}</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <textarea class="form-input" id="vv-submit-desc" rows="3" maxlength="600" placeholder="What do they sell? Why do you rate them?"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Website</label>
+        <input class="form-input" id="vv-submit-website" type="text" placeholder="https://…">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Instagram</label>
+        <input class="form-input" id="vv-submit-instagram" type="text" placeholder="@handle">
+      </div>
+      ${festivalChips ? `<div class="form-group">
+        <label class="form-label">Seen at these raves (optional)</label>
+        <div class="jam-filter-bar" style="max-height:140px;overflow-y:auto;">${festivalChips}</div>
+      </div>` : ''}
+      <div class="form-group">
+        <label class="form-label">Cover photo (optional)</label>
+        <label class="btn btn-ghost" style="display:inline-block;cursor:pointer;padding:9px 16px;font-size:0.82rem;">
+          📷 Choose photo
+          <input type="file" accept="image/*" id="vv-submit-photo" style="display:none" onchange="handleVendorPhotoPicked(event)">
+        </label>
+        <span id="vv-submit-photo-name" style="font-size:0.78rem;color:var(--muted);margin-left:8px;"></span>
+      </div>
+      <button class="btn btn-primary" style="width:100%;margin-top:8px;" onclick="handleVendorSubmit()">🏪 Add Vendor</button>
+    `;
+  }
+
+  function selectVendorSubmitCategory(cat, el) {
+    _vendorSubmitCategory = cat;
+    el.closest('.jam-filter-bar').querySelectorAll('.jam-filter-pill').forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
+  }
+
+  function toggleVendorSubmitFestival(festId, el) {
+    if (_vendorSubmitFestivalIds.has(festId)) {
+      _vendorSubmitFestivalIds.delete(festId);
+      el.classList.remove('active');
+    } else {
+      _vendorSubmitFestivalIds.add(festId);
+      el.classList.add('active');
+    }
+  }
+
+  function handleVendorPhotoPicked(event) {
+    const file = event.target.files[0];
+    const label = document.getElementById('vv-submit-photo-name');
+    if (label) label.textContent = file ? file.name : '';
+  }
+
+  async function handleVendorSubmit() {
+    const nameEl = document.getElementById('vv-submit-name');
+    const name = nameEl.value.trim();
+    if (!name) { showToast('⚠️ Vendor name is required'); return; }
+    if (!_vendorSubmitCategory) { showToast('⚠️ Pick a category'); return; }
+    const websiteUrl = document.getElementById('vv-submit-website').value.trim();
+    if (websiteUrl && !/^https?:\/\//i.test(websiteUrl)) { showToast('⚠️ Website must start with http:// or https://'); return; }
+    const description = document.getElementById('vv-submit-desc').value;
+    const instagram = document.getElementById('vv-submit-instagram').value.trim();
+    const festivalIds = [..._vendorSubmitFestivalIds];
+
+    const vendor = await dbAddVendor({ name, category: _vendorSubmitCategory, description, websiteUrl, instagram });
+    if (!vendor) return;
+    await dbTagVendorFestivals(vendor.id, festivalIds);
+
+    const file = document.getElementById('vv-submit-photo').files[0];
+    if (file) {
+      try {
+        const url = await uploadPhotoToStorage(file, `vendors/${vendor.id}/cover.jpg`);
+        await sb.from('vendors').update({ cover_photo_url: url }).eq('id', vendor.id);
+        vendor.cover_photo_url = url;
+      } catch (e) {
+        console.error('vendor cover upload error', e);
+        showToast('⚠️ Vendor added, but photo upload failed');
+      }
+    }
+    vendorReviewsCache[vendor.id] = [];
+    showToast('🏪 Vendor added!');
+    await checkAndAwardVendorBadges();
+    switchVendorTab('browse', document.querySelector('#vendor-village-root .stats-subtab'));
+  }
+
+  // ===== VENDOR VILLAGE — Edit Vendor modal (Feature 4) =====
+  // Same overlay/modal shell shape as #vv-detail-overlay, and the same
+  // category-chip-picker pattern as the Add Vendor form (vendorSubmitPanelHTML)
+  // — prefilled from the existing row instead of blank.
+  let _vendorEditCategory = null;
+
+  function openEditVendorModal(vendorId) {
+    const vendor = vendors.find(v => v.id === vendorId);
+    if (!vendor || !currentUser || (vendor.created_by !== currentUser.id && !isModerator())) return;
+    _vendorEditCategory = vendor.category;
+    document.getElementById('vv-edit-modal').innerHTML = vendorEditModalHTML(vendor);
+    document.getElementById('vv-edit-overlay').classList.add('open');
+  }
+
+  function closeEditVendorModal() {
+    document.getElementById('vv-edit-overlay').classList.remove('open');
+  }
+
+  function vendorEditModalHTML(vendor) {
+    const escId = escHtml(String(vendor.id));
+    const categoryChips = Object.entries(VENDOR_CATEGORY_LABELS).map(([cat, label]) => `
+      <button type="button" class="jam-filter-pill${cat === _vendorEditCategory ? ' active' : ''}"
+        data-cat="${escHtml(cat)}" onclick="selectVendorEditCategory('${escHtml(cat)}', this)">${label}</button>`).join('');
+    return `
+      <div class="modal-title">Edit Listing</div>
+      <div class="form-group" style="margin-top:4px;">
+        <label class="form-label">Vendor name</label>
+        <input class="form-input" id="vv-edit-name" type="text" maxlength="80" value="${escHtml(vendor.name)}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Category</label>
+        <div class="jam-filter-bar">${categoryChips}</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <textarea class="form-input" id="vv-edit-desc" rows="3" maxlength="600">${escHtml(vendor.description || '')}</textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Website</label>
+        <input class="form-input" id="vv-edit-website" type="text" value="${escHtml(vendor.website_url || '')}" placeholder="https://…">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Instagram</label>
+        <input class="form-input" id="vv-edit-instagram" type="text" value="${escHtml(vendor.instagram || '')}" placeholder="@handle">
+      </div>
+      <div class="form-group">
+        <label class="form-label">🎁 Fam discount code <span style="font-weight:400;color:var(--muted);font-size:0.8rem;">optional</span></label>
+        <input class="form-input" id="vv-edit-discount-code" type="text" maxlength="40" value="${escHtml(vendor.discount_code || '')}" placeholder="e.g. RAVEFAM10">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Discount description</label>
+        <input class="form-input" id="vv-edit-discount-desc" type="text" maxlength="200" value="${escHtml(vendor.discount_description || '')}" placeholder="e.g. 10% off for the fam">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeEditVendorModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="handleVendorEditSubmit('${escId}')">Save Changes</button>
+      </div>
+    `;
+  }
+
+  function selectVendorEditCategory(cat, el) {
+    _vendorEditCategory = cat;
+    el.closest('.jam-filter-bar').querySelectorAll('.jam-filter-pill').forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
+  }
+
+  async function handleVendorEditSubmit(vendorId) {
+    const name = document.getElementById('vv-edit-name').value.trim();
+    if (!name) { showToast('⚠️ Vendor name is required'); return; }
+    if (!_vendorEditCategory) { showToast('⚠️ Pick a category'); return; }
+    const websiteUrl = document.getElementById('vv-edit-website').value.trim();
+    if (websiteUrl && !/^https?:\/\//i.test(websiteUrl)) { showToast('⚠️ Website must start with http:// or https://'); return; }
+    const description = document.getElementById('vv-edit-desc').value;
+    const instagram = document.getElementById('vv-edit-instagram').value.trim();
+    const discountCode = document.getElementById('vv-edit-discount-code').value.trim();
+    const discountDescription = document.getElementById('vv-edit-discount-desc').value.trim();
+
+    const vendor = await dbUpdateVendor(vendorId, { name, category: _vendorEditCategory, description, websiteUrl, instagram, discountCode, discountDescription });
+    if (!vendor) return;
+    closeEditVendorModal();
+    showToast('✅ Listing updated');
+    openVendorDetail(vendorId);
+    if (vendorVillageTab === 'browse') renderVendorBrowsePanel();
+  }
+
+  function copyDiscountCode(code) {
+    navigator.clipboard.writeText(code);
+    showToast('📋 Code copied!');
+  }
+
+  // ===== VENDOR VILLAGE — Detail view + reviews =====
+  let _vendorDetailId = null;
+  let _vendorDetailDraftRating = 0;
+
+  function openVendorDetail(vendorId) {
+    const vendor = vendors.find(v => String(v.id) === String(vendorId));
+    if (!vendor) return;
+    _vendorDetailId = vendor.id;
+    document.getElementById('vv-detail-modal').innerHTML = vendorDetailModalHTML(vendor);
+    document.getElementById('vv-detail-overlay').classList.add('open');
+  }
+
+  function closeVendorDetail() {
+    document.getElementById('vv-detail-overlay').classList.remove('open');
+    _vendorDetailId = null;
+  }
+
+  function vendorDetailModalHTML(vendor) {
+    const escId = escHtml(String(vendor.id));
+    const allReviews = vendorReviewsCache[vendor.id] || [];
+    const myReview = currentUser ? allReviews.find(r => r.raver_id === currentUser.id) : null;
+    const otherReviews = allReviews.filter(r => r !== myReview);
+    const { avg, count, starDisplay } = vendorRatingSummary(allReviews);
+    const saved = savedVendorIds.has(vendor.id);
+    const tags = vendorFestivalTagsCache[vendor.id] || [];
+    const festBadges = tags.map(t => {
+      const fest = festivals.find(f => String(f.id) === String(t.festival_id));
+      return fest ? `<span class="jam-fest-badge">🎪 ${escHtml(fest.name)}</span>` : '';
+    }).join('');
+
+    const coverHTML = vendor.cover_photo_url
+      ? `<img src="${escHtml(vendor.cover_photo_url)}" alt="${escHtml(vendor.name)}" style="width:100%;max-height:220px;object-fit:cover;border-radius:12px;margin:10px 0 14px;">`
+      : '';
+
+    const linksHTML = [
+      vendor.website_url ? `<a href="${escHtml(vendor.website_url)}" target="_blank" rel="noopener noreferrer" class="btn btn-ghost" style="font-size:0.78rem;padding:8px 14px;">🔗 Website</a>` : '',
+      vendor.instagram ? `<a href="https://instagram.com/${escHtml(vendor.instagram.replace(/^@/, ''))}" target="_blank" rel="noopener noreferrer" class="btn btn-ghost" style="font-size:0.78rem;padding:8px 14px;">📷 ${escHtml(vendor.instagram)}</a>` : ''
+    ].filter(Boolean).join('');
+
+    const cosigns = vendorCrewCosigns(vendor.id);
+
+    // Feature 9 — "first spotted by" credit: pure display of vendors.created_by/
+    // created_at (whoever originally posted this LISTING), deliberately separate
+    // from the "Recently Spotted" live check-ins section (who's live-pinging it
+    // at a festival right now — a different concept, see vendorSpotsSectionHTML).
+    const posterRaver = raverByAuthUid(vendor.created_by);
+    const posterName = posterRaver ? displayName(posterRaver).split(' ')[0] : 'A raver';
+    const postedWhen = formatModDate(vendor.created_at);
+
+    return `
+      <div class="modal-title" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        ${escHtml(vendor.name)}
+        ${vendor.is_sponsored ? `<span class="vv-sponsored-badge">Sponsored</span>` : ''}
+      </div>
+      ${coverHTML}
+      <div class="jam-meta" style="margin-bottom:6px;">${VENDOR_CATEGORY_LABELS[vendor.category] || escHtml(vendor.category)}</div>
+      <div class="jam-meta" style="margin-bottom:10px;"><span>${starDisplay}</span><span>${count ? `${avg} · ${count} review${count !== 1 ? 's' : ''}` : 'No reviews yet'}</span></div>
+      ${festBadges ? `<div class="jam-meta" style="margin-bottom:10px;">${festBadges}</div>` : ''}
+      <div style="margin-bottom:10px;">${vendorVibeTagChipsHTML(vendor.id)}</div>
+      ${vendorAttributeTallyLineHTML(vendor.id) ? `<div style="margin-bottom:10px;">${vendorAttributeTallyLineHTML(vendor.id)}</div>` : ''}
+      ${cosigns.length ? `<div style="margin-bottom:10px;">${cosigns.map(vendorCosignLineHTML).join('')}</div>` : ''}
+      <div class="jam-meta" style="margin-bottom:10px;">🧭 First posted by ${escHtml(posterName)} · <span title="${escHtml(postedWhen.full)}">${escHtml(postedWhen.rel)}</span></div>
+      ${vendor.description ? `<p style="font-size:0.86rem;color:var(--text);line-height:1.6;margin-bottom:14px;">${escHtml(vendor.description)}</p>` : ''}
+      ${vendor.discount_code ? `
+        <div class="vv-discount-block">
+          <div class="vv-discount-title">🎁 Fam Discount</div>
+          ${vendor.discount_description ? `<div class="vv-discount-desc">${escHtml(vendor.discount_description)}</div>` : ''}
+          <button type="button" class="vv-discount-code" onclick="copyDiscountCode('${escHtml(vendor.discount_code)}')" title="Tap to copy">${escHtml(vendor.discount_code)} 📋</button>
+        </div>` : ''}
+      ${linksHTML ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">${linksHTML}</div>` : ''}
+      <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;">
+        ${currentUser ? `<button class="btn btn-ghost" id="vv-detail-save-btn" style="flex:1;" onclick="handleToggleSaveVendor('${escId}')">${saved ? '💾 Saved' : '🔖 Save'}</button>` : ''}
+        ${currentUser ? `<button class="btn btn-ghost" style="flex:1;color:var(--neon-pink);" onclick="showReportModal('vendor','${escId}')">🚩 Report</button>` : ''}
+        ${currentUser && vendor.created_by === currentUser.id ? `<button class="btn btn-ghost" style="flex:1;" onclick="openEditVendorModal('${escId}')">✏️ Edit Listing</button>` : ''}
+        ${isModerator() ? `<button class="btn btn-ghost" style="flex:1;" onclick="toggleVendorSponsorship('${escId}')">${vendor.is_sponsored ? '🛡️ Unsponsor' : '🛡️ Mark Sponsored'}</button>` : ''}
+      </div>
+
+      <div class="section-banner"><span class="banner-inner">⭐ Reviews</span></div>
+      ${currentUser ? vendorReviewComposerHTML(vendor.id, myReview) : ''}
+      <div class="jam-cards-list" style="margin-top:12px;">
+        ${myReview ? vendorReviewRowHTML(myReview, vendor.id) : ''}
+        ${allReviews.length === 0 ? `<div class="jam-empty" style="text-align:center;padding:14px 0;color:var(--muted);font-size:0.82rem;">No reviews yet — be the first.</div>` : ''}
+        ${otherReviews.map(r => vendorReviewRowHTML(r, vendor.id)).join('')}
+      </div>
+
+      ${vendorSpotsSectionHTML(vendor.id)}
+
+      <div class="modal-actions">
+        <button class="btn btn-ghost" style="flex:1;" onclick="closeVendorDetail()">Close</button>
+      </div>
+    `;
+  }
+
+  // Star picker for the review composer — deliberately separate from
+  // highlightStars/clearStarHighlight (used by crew poll voting above)
+  // because those reset to blank on mouseleave, which would erase a
+  // persisted selection; this variant resets to the current draft rating.
+  let _vendorDetailDraftAttributeTags = new Set();
+
+  function vendorReviewComposerHTML(vendorId, myReview) {
+    _vendorDetailDraftRating = myReview?.rating || 0;
+    _vendorDetailDraftAttributeTags = new Set(myReview?.attribute_tags || []);
+    const escVid = escHtml(String(vendorId));
+    const stars = [1, 2, 3, 4, 5].map(n => `
+      <button type="button" class="poll-star-btn${n <= _vendorDetailDraftRating ? ' lit' : ''}"
+        onmouseover="highlightVendorStars(this,${n})" onmouseleave="resetVendorStarHighlight(this)"
+        onclick="setVendorReviewRating(this,${n})">★</button>`).join('');
+    const attributeChips = Object.entries(VENDOR_ATTRIBUTE_TAG_PRESETS).map(([tagId, label]) => `
+      <button type="button" class="jam-filter-pill${_vendorDetailDraftAttributeTags.has(tagId) ? ' active' : ''}"
+        onclick="toggleVendorReviewAttributeTag('${tagId}', this)">${label}</button>`).join('');
+    const existingPhoto = myReview?.photo_url
+      ? `<img src="${escHtml(myReview.photo_url)}" alt="Your haul photo" style="width:56px;height:56px;object-fit:cover;border-radius:8px;vertical-align:middle;margin-right:8px;">`
+      : '';
+    return `
+      <div class="poll-star-row" id="vv-review-stars">${stars}</div>
+      <textarea class="form-input" id="vv-review-body" rows="2" maxlength="300" placeholder="Optional — what should other ravers know?">${escHtml(myReview?.body || '')}</textarea>
+      <div class="jam-filter-bar" style="margin-top:8px;">${attributeChips}</div>
+      <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
+        ${existingPhoto}
+        <label class="btn btn-ghost" style="display:inline-block;cursor:pointer;padding:8px 14px;font-size:0.78rem;">
+          📷 ${myReview?.photo_url ? 'Replace haul photo' : 'Add a haul photo'}
+          <input type="file" accept="image/*" id="vv-review-photo" style="display:none" onchange="handleVendorReviewPhotoPicked(event)">
+        </label>
+        <span id="vv-review-photo-name" style="font-size:0.78rem;color:var(--muted);"></span>
+      </div>
+      <button class="btn btn-primary" style="margin-top:8px;width:100%;" onclick="submitVendorReview('${escVid}')">${myReview ? 'Update review' : 'Post review'}</button>
+    `;
+  }
+
+  function toggleVendorReviewAttributeTag(tagId, el) {
+    if (_vendorDetailDraftAttributeTags.has(tagId)) _vendorDetailDraftAttributeTags.delete(tagId);
+    else _vendorDetailDraftAttributeTags.add(tagId);
+    el.classList.toggle('active');
+  }
+
+  function handleVendorReviewPhotoPicked(event) {
+    const file = event.target.files[0];
+    const label = document.getElementById('vv-review-photo-name');
+    if (label) label.textContent = file ? file.name : '';
+  }
+
+  function highlightVendorStars(btn, n) {
+    const row = btn.closest('.poll-star-row');
+    if (!row) return;
+    row.querySelectorAll('.poll-star-btn').forEach((b, i) => b.classList.toggle('lit', i < n));
+  }
+
+  function resetVendorStarHighlight(btn) {
+    const row = btn.closest('.poll-star-row');
+    if (!row) return;
+    row.querySelectorAll('.poll-star-btn').forEach((b, i) => b.classList.toggle('lit', i < _vendorDetailDraftRating));
+  }
+
+  function setVendorReviewRating(btn, n) {
+    _vendorDetailDraftRating = n;
+    highlightVendorStars(btn, n);
+  }
+
+  async function submitVendorReview(vendorId) {
+    if (!_vendorDetailDraftRating) { showToast('⚠️ Pick a star rating first'); return; }
+    const body = document.getElementById('vv-review-body').value;
+    const attributeTags = [..._vendorDetailDraftAttributeTags];
+    const existingReview = (vendorReviewsCache[vendorId] || []).find(r => r.raver_id === currentUser?.id);
+    let photoUrl = existingReview?.photo_url ?? null;
+    const file = document.getElementById('vv-review-photo')?.files[0];
+    if (file) {
+      try {
+        photoUrl = await uploadPhotoToStorage(file, `vendor-reviews/${vendorId}/${currentUser.id}.jpg`);
+      } catch (e) {
+        console.error('vendor review photo upload error', e);
+        showToast('⚠️ Could not upload photo — saving review without it');
+        photoUrl = existingReview?.photo_url ?? null;
+      }
+    }
+    const ok = await dbUpsertVendorReview(vendorId, { rating: _vendorDetailDraftRating, body, photoUrl, attributeTags });
+    if (!ok) return;
+    showToast('⭐ Review saved!');
+    openVendorDetail(vendorId);
+    if (vendorVillageTab === 'browse') renderVendorBrowsePanel();
+  }
+
+  function vendorReviewRowHTML(review, vendorId) {
+    const escRid = escHtml(String(review.id));
+    const escVid = escHtml(String(vendorId));
+    const isMine = currentUser && review.raver_id === currentUser.id;
+    const rater = raverByAuthUid(review.raver_id);
+    const name = isMine ? 'You' : (rater ? displayName(rater).split(' ')[0] : 'A raver');
+    const stars = '★'.repeat(review.rating) + '☆'.repeat(5 - review.rating);
+    const when = formatModDate(review.created_at);
+    const canDelete = isMine || isModerator();
+    // Feature 1 — crew cosign chip: is this reviewer in a crew I'm also in?
+    const sharedCrew = (!isMine && rater && currentUser)
+      ? crews.find(c => (c.squadIds || []).some(id => String(id) === String(rater.id)))
+      : null;
+    return `
+      <div class="jam-card" style="gap:4px;">
+        <div class="jam-card-toprow">
+          <span class="jam-title" style="white-space:normal;">${escHtml(name)}</span>
+          ${sharedCrew ? `<span class="jam-fest-badge" title="Also in your crew ${escHtml(sharedCrew.name)}">👥 ${escHtml(sharedCrew.name)}</span>` : ''}
+          <span style="color:var(--neon-yellow);font-size:0.82rem;">${stars}</span>
+        </div>
+        ${review.body ? `<div style="font-size:0.84rem;color:var(--text);line-height:1.5;">${escHtml(review.body)}</div>` : ''}
+        ${review.photo_url ? `<img src="${escHtml(review.photo_url)}" alt="Haul photo" loading="lazy" style="width:56px;height:56px;object-fit:cover;border-radius:8px;cursor:pointer;" onclick="openPhotoLightbox('${escHtml(review.photo_url)}', null, null)">` : ''}
+        ${(review.attribute_tags || []).length ? `<div class="jam-meta">${review.attribute_tags.map(t => `<span class="jam-fest-badge">${VENDOR_ATTRIBUTE_TAG_PRESETS[t] || escHtml(t)}</span>`).join('')}</div>` : ''}
+        <div class="jam-meta">
+          <span title="${escHtml(when.full)}">${escHtml(when.rel)}</span>
+          ${!isMine ? `<button class="jam-action-btn" onclick="showReportModal('vendor_review','${escRid}',{metadata:{vendor_id:'${escVid}'}})" title="Report">🚩</button>` : ''}
+          ${canDelete ? `<button class="jam-action-btn" onclick="handleDeleteVendorReview('${escRid}','${escVid}')" title="Delete">🗑️</button>` : ''}
+        </div>
+      </div>`;
+  }
+
+  async function handleDeleteVendorReview(reviewId, vendorId) {
+    const ok = await dbDeleteVendorReview(reviewId, vendorId);
+    if (ok) openVendorDetail(vendorId);
+  }
+
+  function refreshVendorDetailSaveBtn(vendorId) {
+    const btn = document.getElementById('vv-detail-save-btn');
+    if (!btn) return;
+    btn.textContent = savedVendorIds.has(vendorId) ? '💾 Saved' : '🔖 Save';
+  }
+
+  // Moderator-only — flips is_sponsored on/off with a default priority.
+  // Fine-grained priority tuning across multiple sponsors is a future-work
+  // concern; for now this is a simple on/off switch moderators can use.
+  async function toggleVendorSponsorship(vendorId) {
+    const vendor = vendors.find(v => String(v.id) === String(vendorId));
+    if (!vendor) return;
+    const next = !vendor.is_sponsored;
+    const ok = await dbSetVendorSponsored(vendorId, {
+      isSponsored: next,
+      sponsorPriority: next ? 10 : 0,
+      source: next ? 'official' : 'community'
+    });
+    if (ok) {
+      showToast(next ? '🛡️ Marked as sponsored' : 'Sponsorship removed');
+      openVendorDetail(vendorId);
+      if (vendorVillageTab === 'browse') renderVendorBrowsePanel();
+    }
+  }
+
+  // ===== VENDOR VILLAGE — Spotted-right-now UI (Feature 3) =====
+  let _vendorSpotFestivalId = null;
+
+  function vendorSpotsSectionHTML(vendorId) {
+    const live = vendorLiveSpots(vendorId);
+    return `
+      <div class="section-banner"><span class="banner-inner">📍 Recently Spotted</span></div>
+      ${currentUser ? vendorSpotComposerHTML(vendorId) : ''}
+      <div class="jam-cards-list" style="margin-top:12px;">
+        ${live.length === 0 ? `<div class="jam-empty" style="text-align:center;padding:14px 0;color:var(--muted);font-size:0.82rem;">No one's spotted them recently — be the first to call it out.</div>` : ''}
+        ${live.map(vendorSpotRowHTML).join('')}
+      </div>
+    `;
+  }
+
+  function vendorSpotComposerHTML(vendorId) {
+    _vendorSpotFestivalId = null;
+    const escVid = escHtml(String(vendorId));
+    const festivalChips = festivals.map(f => `
+      <button type="button" class="jam-filter-pill" data-fest-id="${escHtml(String(f.id))}" onclick="selectVendorSpotFestival('${escHtml(String(f.id))}', this)">🎪 ${escHtml(f.name)}</button>`).join('');
+    return `
+      <div class="jam-filter-bar" id="vv-spot-fest-picker">${festivalChips}</div>
+      <input class="form-input" id="vv-spot-caption" type="text" maxlength="140" placeholder="Optional — where exactly? what's the vibe?" style="margin-top:8px;">
+      <button class="btn btn-primary" style="margin-top:8px;width:100%;" onclick="submitVendorSpot('${escVid}')">📍 I see them here!</button>
+    `;
+  }
+
+  function selectVendorSpotFestival(festId, el) {
+    _vendorSpotFestivalId = festId;
+    el.closest('.jam-filter-bar').querySelectorAll('.jam-filter-pill').forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
+  }
+
+  async function submitVendorSpot(vendorId) {
+    if (!_vendorSpotFestivalId) { showToast('⚠️ Pick which rave you see them at'); return; }
+    const caption = document.getElementById('vv-spot-caption').value;
+    const spot = await dbAddVendorSpot(vendorId, _vendorSpotFestivalId, caption);
+    if (!spot) return;
+    showToast('📍 Posted!');
+    await checkAndAwardVendorBadges();
+    openVendorDetail(vendorId);
+    if (vendorVillageTab === 'browse') renderVendorBrowsePanel();
+  }
+
+  function vendorSpotRowHTML(spot) {
+    const escSid = escHtml(String(spot.id));
+    const escVid = escHtml(String(spot.vendor_id));
+    const isMine = currentUser && spot.spotted_by === currentUser.id;
+    const spotter = raverByAuthUid(spot.spotted_by);
+    const name = isMine ? 'You' : (spotter ? displayName(spotter).split(' ')[0] : 'A raver');
+    const fest = festivals.find(f => String(f.id) === String(spot.festival_id));
+    const when = formatModDate(spot.created_at);
+    const canDelete = isMine || isModerator();
+    return `
+      <div class="jam-card" style="gap:4px;">
+        <div class="jam-card-toprow">
+          <span class="jam-title" style="white-space:normal;">${escHtml(name)}${fest ? ` @ ${escHtml(fest.name)}` : ''}</span>
+        </div>
+        ${spot.caption ? `<div style="font-size:0.84rem;color:var(--text);line-height:1.5;">${escHtml(spot.caption)}</div>` : ''}
+        <div class="jam-meta">
+          <span title="${escHtml(when.full)}">${escHtml(when.rel)}</span>
+          ${!isMine ? `<button class="jam-action-btn" onclick="showReportModal('vendor_spot','${escSid}',{metadata:{vendor_id:'${escVid}'}})" title="Report">🚩</button>` : ''}
+          ${canDelete ? `<button class="jam-action-btn" onclick="handleDeleteVendorSpot('${escSid}','${escVid}')" title="Delete">🗑️</button>` : ''}
+        </div>
+      </div>`;
+  }
+
+  async function handleDeleteVendorSpot(spotId, vendorId) {
+    const ok = await dbDeleteVendorSpot(spotId, vendorId);
+    if (ok) openVendorDetail(vendorId);
   }
 
   // ===== FAM PINS — Crew Achievements =====
@@ -13867,6 +15162,8 @@ async function doProfilePasswordChange() {
         </div>
 
         ${connectBlock}
+
+        ${r.isYou ? vendorBadgeProfileMentionHTML() : ''}
 
         ${(!r.isYou && !perms.rsvpsVisible) ? `
         <div class="profile-section" style="${sg(0)}">
@@ -16829,9 +18126,12 @@ async function doProfilePasswordChange() {
       return;
     }
     el.innerHTML = list.map(n => {
-      const action = (n.type === 'festival_add' && n.data && n.data.festival_id && n.data.raver_id)
+      let action = (n.type === 'festival_add' && n.data && n.data.festival_id && n.data.raver_id)
         ? `<button class="notif-action-btn" onclick="notifOptOutFestival('${escHtml(String(n.data.raver_id))}','${escHtml(String(n.data.festival_id))}',this)">Nah, take me off the lineup</button>`
         : '';
+      if (n.type === 'vendor_spotted' && n.data?.vendor_id) {
+        action = `<button class="notif-action-btn" onclick="jumpToVendorVillage('${escHtml(String(n.data.vendor_id))}')">👀 See ${escHtml(n.data.vendor_name || 'vendor')}</button>`;
+      }
       return `
       <div class="notif-item ${n.read ? 'notif-read' : 'unread'}">
         <span class="notif-dot"></span>
@@ -17014,6 +18314,25 @@ async function doProfilePasswordChange() {
       _wrappedStarTaps = 0;
       loadStatsPage();
       showToast('✨ You found it. Rave Wrapped unlocked!');
+    }
+  }
+
+  // Coming Soon tab dev-reveal: 4 taps on the "In development" pill unlocks
+  // Vendor Village in place, for dogfooding before a real public launch
+  // switch exists. In-memory only, resets on reload — same posture as
+  // wrappedStarTap above. When a real launch switch is added later, this
+  // counter and its one call site (the pill's onclick) are the only things
+  // to remove; nothing else depends on the gate existing.
+  let _vendorVillageTaps = 0;
+  let _vendorVillageUnlocked = false;
+
+  function vendorVillageTap() {
+    _vendorVillageTaps++;
+    if (_vendorVillageTaps >= 4) {
+      _vendorVillageUnlocked = true;
+      _vendorVillageTaps = 0;
+      renderVendorVillage();
+      showToast('🏪 Vendor Village unlocked!');
     }
   }
 
