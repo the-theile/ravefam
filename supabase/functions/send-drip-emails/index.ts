@@ -7,6 +7,12 @@
 // and marks the row sent/skipped/failed. Uses the service-role key so it can
 // read across all users regardless of RLS.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  wrapEmail as wrapEmailShared,
+  button,
+  screenshot as screenshotShared,
+  feature as featureShared,
+} from "../_shared/email-templates.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -23,46 +29,11 @@ type QueueRow = {
   scheduled_for: string;
 };
 
-function wrapEmail(preheader: string, bodyHtml: string, unsubToken: string): string {
-  const unsubUrl = `${APP_ORIGIN}/unsubscribe.html?u=${unsubToken}`;
-  return `<!doctype html>
-<html><body style="margin:0;background:#0a0a0f;font-family:Outfit,Arial,sans-serif;color:#e8e8f0;">
-<span style="display:none;">${preheader}</span>
-<div style="max-width:520px;margin:0 auto;padding:32px 24px;">
-  <div style="font-family:Syne,Arial,sans-serif;font-weight:800;font-size:1.2rem;margin-bottom:24px;">
-    <span style="color:#fff;">Rave</span><span style="color:#39FF14;">FAM</span>
-  </div>
-  ${bodyHtml}
-  <div style="margin-top:40px;padding-top:16px;border-top:1px solid #1e1e2e;font-size:0.75rem;color:#6b6b8a;">
-    You're getting this because you signed up for RaveFAM.
-    <a href="${unsubUrl}" style="color:#6b6b8a;">Unsubscribe</a>
-  </div>
-</div>
-</body></html>`;
-}
-
-function button(label: string, href: string): string {
-  return `<a href="${href}" style="display:inline-block;margin-top:20px;padding:12px 24px;background:#FF2D78;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;">${label}</a>`;
-}
-
-// Screenshots are captured via scripts/capture-email-screenshots.js (a
-// scripted walkthrough of app.html using the Playwright test suite's mocked
-// Supabase client) and committed as static assets under screenshots/email/.
-// Framed in a surface/border card so the dark UI screenshot doesn't bleed
-// into the email's own dark background with no visible edge.
-function screenshot(file: string, alt: string): string {
-  return `<div style="margin:12px 0 24px;border:1px solid #1e1e2e;border-radius:12px;overflow:hidden;background:#12121a;">
-        <img src="${APP_ORIGIN}/screenshots/email/${file}" alt="${alt}" width="480" style="display:block;width:100%;max-width:480px;height:auto;" />
-      </div>`;
-}
-
-// A labeled feature callout followed by its screenshot -- the repeating unit
-// for the "one screenshot per feature mentioned" emails, so a stack of these
-// reads as a visual tour rather than a bare list of unlabeled images.
-function feature(emoji: string, title: string, desc: string, file: string, alt: string): string {
-  return `<p style="margin-bottom:6px;"><strong>${emoji} ${title}</strong> — ${desc}</p>
-      ${screenshot(file, alt)}`;
-}
+const wrapEmail = (preheader: string, bodyHtml: string, unsubToken: string) =>
+  wrapEmailShared(APP_ORIGIN, preheader, bodyHtml, unsubToken);
+const screenshot = (file: string, alt: string) => screenshotShared(APP_ORIGIN, file, alt);
+const feature = (emoji: string, title: string, desc: string, file: string, alt: string) =>
+  featureShared(APP_ORIGIN, emoji, title, desc, file, alt);
 
 const TEMPLATES: Record<string, { subject: string; render: (ctx: { firstName: string; crewName?: string }) => string }> = {
   welcome: {
