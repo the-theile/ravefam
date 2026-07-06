@@ -51,9 +51,17 @@ function button(label: string, href: string): string {
 // Framed in a surface/border card so the dark UI screenshot doesn't bleed
 // into the email's own dark background with no visible edge.
 function screenshot(file: string, alt: string): string {
-  return `<div style="margin:20px 0;border:1px solid #1e1e2e;border-radius:12px;overflow:hidden;background:#12121a;">
+  return `<div style="margin:12px 0 24px;border:1px solid #1e1e2e;border-radius:12px;overflow:hidden;background:#12121a;">
         <img src="${APP_ORIGIN}/screenshots/email/${file}" alt="${alt}" width="480" style="display:block;width:100%;max-width:480px;height:auto;" />
       </div>`;
+}
+
+// A labeled feature callout followed by its screenshot -- the repeating unit
+// for the "one screenshot per feature mentioned" emails, so a stack of these
+// reads as a visual tour rather than a bare list of unlabeled images.
+function feature(emoji: string, title: string, desc: string, file: string, alt: string): string {
+  return `<p style="margin-bottom:6px;"><strong>${emoji} ${title}</strong> — ${desc}</p>
+      ${screenshot(file, alt)}`;
 }
 
 const TEMPLATES: Record<string, { subject: string; render: (ctx: { firstName: string; crewName?: string }) => string }> = {
@@ -63,12 +71,10 @@ const TEMPLATES: Record<string, { subject: string; render: (ctx: { firstName: st
       <h1 style="font-size:1.4rem;">Hey ${firstName}, welcome to the tribe 🖤</h1>
       <p>RaveFAM is where your crew lives between raves — track the shows you're hitting, see who's already going, and hang on to the memories after.</p>
       <p>Here's where to start:</p>
-      <ul>
-        <li>🎪 <strong>Crews</strong> — start one or join with an invite link</li>
-        <li>🎫 <strong>Raves</strong> — RSVP to the festivals and shows you're tracking</li>
-        <li>🫂 <strong>Ravers</strong> — your crew's directory, one tap away</li>
-        <li>📸 <strong>Photos</strong> — drop memories only your crew can see</li>
-      </ul>
+      ${feature("🎪", "Crews", "start one or join with an invite link", "crew-header.png", "A crew page showing the next rave up and who from the crew is going")}
+      ${feature("🎫", "Raves", "RSVP to the festivals and shows you're tracking", "raves-list.png", "The Raves list showing upcoming festivals and who's going")}
+      ${feature("🫂", "Ravers", "your crew's directory, one tap away", "ravers-list.png", "The Ravers directory listing crew members")}
+      ${feature("📸", "Our Photos", "build a shared photo album with every raver you connect with", "our-photos.png", "Our Photos showing shared memory polaroids between two ravers")}
       <p>More good stuff is coming your way over the next few weeks — for now, go build your squad.</p>
       ${button("Open RaveFAM", `${APP_ORIGIN}/app.html`)}`,
   },
@@ -77,13 +83,11 @@ const TEMPLATES: Record<string, { subject: string; render: (ctx: { firstName: st
     render: ({ firstName, crewName }) => `
       <h1 style="font-size:1.4rem;">You're in${crewName ? ` ${crewName}` : " a crew"} now, ${firstName} 🎪</h1>
       <p>This is where RaveFAM actually clicks. Here's what to do together:</p>
-      <ul>
-        <li>🎶 <strong>Crew Jams / FAM Poll</strong> — vote on the music and plans for your next rave</li>
-        <li>📌 <strong>Dream Board</strong> — pin the festivals you all want to hit next</li>
-        <li>🎬 <strong>Archive Links</strong> — save the aftermovie, the set, the group chat gold, all in one place</li>
-        <li>📸 <strong>Our Photos</strong> — the shared memory bank for your crew</li>
-      </ul>
-      ${screenshot("dream-board.png", "The Dream Board inside a crew, with festivals pinned by different members")}
+      ${feature("🎶", "Crew Jams", "drop the tracks getting everyone hyped for the next rave", "crew-jams.png", "A Crew Jams playlist card shared inside a crew")}
+      ${feature("🗳️", "FAM Poll", "vote as a group on where to go and what to do next", "fam-poll.png", "A FAM Poll with live vote results")}
+      ${feature("📌", "Dream Board", "pin the festivals you all want to hit next", "dream-board.png", "The Dream Board inside a crew, with festivals pinned by different members")}
+      ${feature("🎬", "Archive Links", "save the aftermovie, the set, the group chat gold, all in one place", "archive-links.png", "The Archive with a saved aftermovie link")}
+      ${feature("📸", "Our Photos", "a shared photo album with each crewmate", "our-photos.png", "Our Photos showing shared memory polaroids between two ravers")}
       <p>Go say hi.</p>
       ${button("Open your crew", `${APP_ORIGIN}/app.html`)}`,
   },
@@ -109,18 +113,21 @@ const TEMPLATES: Record<string, { subject: string; render: (ctx: { firstName: st
     subject: "Your Vibe DNA is ready 📊",
     render: ({ firstName }) => `
       <h1 style="font-size:1.4rem;">${firstName}, your Stats are live</h1>
-      <p>Head to the Stats tab for your <strong>Vibe DNA</strong> (the genres and artists that define your year), your <strong>Rave Passport</strong> (every show you've tracked, stamped), and a <strong>Rave Wrapped</strong> card worth screenshotting.</p>
-      ${screenshot("vibe-dna.png", "A Vibe DNA stats card showing a rave personality type and top genres")}
-      <p>And while you're in there — pin a few festivals to your <strong>Dream Board</strong> so your crew knows what you're manifesting next.</p>
+      <p>Head to the Stats tab for a full breakdown of your year:</p>
+      ${feature("🧬", "Vibe DNA", "the genres, tags, and personality type that define your year", "vibe-dna.png", "A Vibe DNA stats card showing a rave personality type and top genres")}
+      ${feature("🛂", "Rave Passport", "every show you've tracked, stamped", "rave-passport.png", "A Rave Passport grid of stamped festivals")}
+      ${feature("✨", "Rave Wrapped", "a year-in-review card worth screenshotting", "rave-wrapped.png", "A Rave Wrapped card with yearly rave stats and personality")}
+      ${feature("📌", "Dream Board", "pin a few festivals so your crew knows what you're manifesting next", "dream-board.png", "The Dream Board inside a crew, with festivals pinned by different members")}
       ${button("View my Stats", `${APP_ORIGIN}/app.html`)}`,
   },
   crew_jams_poll: {
     subject: "Last one, we promise 🎶",
     render: ({ firstName }) => `
       <h1 style="font-size:1.4rem;">One more thing before we leave you alone, ${firstName}</h1>
-      <p>If your crew hasn't tried <strong>Crew Jams / FAM Poll</strong> yet, that's your move — vote on music, settle the "what are we listening to in the car" debate, and lock in plans together.</p>
-      ${screenshot("crew-jams.png", "A Crew Jams playlist card shared inside a crew")}
-      <p>And whenever you've got the photos from your last rave, drop them in <strong>Our Photos</strong> before they get lost in your camera roll forever.</p>
+      <p>If your crew hasn't tried these yet, that's your move:</p>
+      ${feature("🎶", "Crew Jams", "vote on music, settle the \"what are we listening to in the car\" debate", "crew-jams.png", "A Crew Jams playlist card shared inside a crew")}
+      ${feature("🗳️", "FAM Poll", "lock in plans together with a live group vote", "fam-poll.png", "A FAM Poll with live vote results")}
+      ${feature("📸", "Our Photos", "drop the photos from your last rave before they get lost in your camera roll forever", "our-photos.png", "Our Photos showing shared memory polaroids between two ravers")}
       <p>That's the whole tour. See you out there 🖤</p>
       ${button("Open Crew Jams", `${APP_ORIGIN}/app.html`)}`,
   },
