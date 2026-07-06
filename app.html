@@ -7835,7 +7835,7 @@ async function doProfilePasswordChange() {
         const members = squadIds
           .map(sid => squad.find(r => r.id === sid))
           .filter(Boolean)
-          .map(r => ({ i: initials(r.name), c: c.color || '#FF2D78', t: '#fff', url: r.avatarUrl || null }));
+          .map(r => ({ i: initials(r.name), c: r.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)', t: '#fff', url: r.avatarUrl || null }));
         // Resolve auth UUID → raver ID.
         // 1. claimed_by match (QR-claimed stub or claimed crew member)
         // 2. own raver (is_you=true, onboarding path) when the current user IS the leader
@@ -7925,7 +7925,7 @@ async function doProfilePasswordChange() {
           crew.members = crew.squadIds
             .map(sid => squad.find(r => String(r.id) === String(sid)))
             .filter(Boolean)
-            .map(r => ({ i: initials(r.name), c: crew.color, t: '#fff', url: r.avatarUrl || null }));
+            .map(r => ({ i: initials(r.name), c: r.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)', t: '#fff', url: r.avatarUrl || null }));
           if (crew.leader_id === null) {
             const lr = squad.find(r => r.claimedBy === c.leader_id)
               || (c.leader_id === uid ? squad.find(r => r.isYou) : null)
@@ -7944,9 +7944,13 @@ async function doProfilePasswordChange() {
 
     // Load Our Photos before render so cards show memory photos on first paint
     await loadAllOurPhotos().catch(() => {});
-    // Load private phones, nicknames, and viewer notes into cache (non-blocking)
+
+    // Load nicknames before render so crew/raver cards show them on first
+    // paint instead of falling back to the real name until the next re-render.
+    await loadNicknames().catch(() => {});
+    // Load private phones and viewer notes into cache (non-blocking) — these
+    // only matter once a detail view is opened, not for first-paint cards.
     loadPrivatePhones().catch(() => {});
-    loadNicknames().catch(() => {});
     loadViewerNotes().catch(() => {});
   }
 
@@ -13767,7 +13771,7 @@ async function doProfilePasswordChange() {
     crew.members = crew.squadIds
       .map(sid => squad.find(r => String(r.id) === String(sid)))
       .filter(Boolean)
-      .map(r => ({ i: initials(r.name), c: crew.color, t: '#fff', url: r.avatarUrl || null }));
+      .map(r => ({ i: initials(r.name), c: r.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)', t: '#fff', url: r.avatarUrl || null }));
     renderCrews();
     renderDetail(crew.id);
     if (crew.status === 'secret') {
@@ -13789,7 +13793,7 @@ async function doProfilePasswordChange() {
       showToast('You\'re already in this crew'); return;
     }
     crew.squadIds.push(me.id);
-    crew.members.push({ i: initials(me.name), c: crew.color, t: '#000', url: me.avatarUrl || null });
+    crew.members.push({ i: initials(me.name), c: me.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)', t: '#000', url: me.avatarUrl || null });
     renderCrews();
     renderDetail(id);
     showToast(`🎉 You joined ${crew.name}!`);
@@ -13820,7 +13824,7 @@ async function doProfilePasswordChange() {
     crew.members = crew.squadIds
       .map(sid => squad.find(r => String(r.id) === String(sid)))
       .filter(Boolean)
-      .map(r => ({ i: initials(r.name), c: crew.color, t: '#fff', url: r.avatarUrl || null }));
+      .map(r => ({ i: initials(r.name), c: r.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)', t: '#fff', url: r.avatarUrl || null }));
     renderCrews();
     renderDetail(crew.id);
     const removedName = raver ? raver.name.split(' ')[0] : 'Member';
@@ -13914,7 +13918,7 @@ async function doProfilePasswordChange() {
     crews.forEach(c => {
       c.squadIds = (c.squadIds || []).filter(id => String(id) !== String(raverId));
       c.members = c.squadIds.map(sid => squad.find(r2 => String(r2.id) === String(sid))).filter(Boolean)
-        .map(r2 => ({ i: initials(r2.name), c: c.color, t: '#fff', url: r2.avatarUrl || null }));
+        .map(r2 => ({ i: initials(r2.name), c: r2.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)', t: '#fff', url: r2.avatarUrl || null }));
     });
     const keptIdx = squad.findIndex(r2 => String(r2.id) === String(raverId));
     if (keptIdx !== -1) squad.splice(keptIdx, 1);
@@ -13947,7 +13951,7 @@ async function doProfilePasswordChange() {
         crews.forEach(c => {
           c.squadIds = (c.squadIds || []).filter(id => String(id) !== String(raverId));
           c.members = c.squadIds.map(sid => squad.find(r2 => String(r2.id) === String(sid))).filter(Boolean)
-            .map(r2 => ({ i: initials(r2.name), c: c.color, t: '#fff', url: r2.avatarUrl || null }));
+            .map(r2 => ({ i: initials(r2.name), c: r2.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)', t: '#fff', url: r2.avatarUrl || null }));
         });
         const keptIdx = squad.findIndex(r2 => String(r2.id) === String(raverId));
         if (keptIdx !== -1) squad.splice(keptIdx, 1);
@@ -14073,7 +14077,7 @@ async function doProfilePasswordChange() {
       status: 'secret', isLead: true,
       leader_id: you?.id ?? null,
       squadIds: you ? [you.id] : [],
-      members: [{ i: you ? initials(you.name) : 'ME', c: color, t: '#000' }]
+      members: [{ i: you ? initials(you.name) : 'ME', c: you?.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)', t: '#000' }]
     };
     crews.push(newCrew);
     renderCrews();
@@ -14194,7 +14198,7 @@ async function doProfilePasswordChange() {
       crew.members = crew.squadIds
         .map(sid => squad.find(r => String(r.id) === String(sid)))
         .filter(Boolean)
-        .map(r => ({ i: initials(r.name), c: crew.color, t: '#fff', url: r.avatarUrl || null }));
+        .map(r => ({ i: initials(r.name), c: r.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)', t: '#fff', url: r.avatarUrl || null }));
       addedTo.push(crew.name);
       if (currentUser) dbAddCrewMember(crew.id, raverId);
     });
@@ -14366,7 +14370,6 @@ async function doProfilePasswordChange() {
     crew.color = newColor;
     crew.gradient = newGradient;
     crew.description = newDesc;
-    crew.members = crew.members.map(m => ({ ...m, c: newColor }));
     closeCrewEditModal();
     renderCrews();
     renderDetail(id);
@@ -16632,7 +16635,7 @@ async function doProfilePasswordChange() {
           crew.members = crew.squadIds
             .map(sid => squad.find(x => String(x.id) === String(sid)))
             .filter(Boolean)
-            .map(x => ({ i: initials(x.name), c: crew.color, t: '#fff' }));
+            .map(x => ({ i: initials(x.name), c: x.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)', t: '#fff' }));
           renderCrews();
           openDetail(crew.id);
           showToast(`🎉 Created ${r.name} and added to ${crew.name}`);
@@ -16673,7 +16676,7 @@ async function doProfilePasswordChange() {
               crew.members = crew.squadIds
                 .map(sid => squad.find(x => String(x.id) === String(sid)))
                 .filter(Boolean)
-                .map(x => ({ i: initials(x.name), c: crew.color, t: '#fff' }));
+                .map(x => ({ i: initials(x.name), c: x.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)', t: '#fff' }));
               anyCrewUpdated = true;
               // Only persist once the crew itself also has a real DB ID
               if (!String(crew.id).startsWith('temp_')) {
