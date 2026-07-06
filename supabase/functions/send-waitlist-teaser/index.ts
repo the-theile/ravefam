@@ -95,7 +95,7 @@ Deno.serve(async (req) => {
     return json({ ok: false, error: "forbidden" }, 403);
   }
 
-  let waitlistId: number | undefined;
+  let waitlistId: string | undefined;
   try {
     ({ waitlist_id: waitlistId } = await req.json());
   } catch {
