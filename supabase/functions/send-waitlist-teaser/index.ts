@@ -15,6 +15,22 @@ const SUPER_ADMIN = "bump@myravefam.com";
 
 const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
+// The admin console at myravefam.com calls this function directly from the
+// browser (unlike send-drip-emails, which is only ever invoked server-side
+// by pg_cron), so it needs CORS headers and a preflight OPTIONS response.
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 function wrapEmail(preheader: string, bodyHtml: string): string {
   return `<!doctype html>
 <html><body style="margin:0;background:#0a0a0f;font-family:Outfit,Arial,sans-serif;color:#e8e8f0;">
@@ -64,15 +80,19 @@ async function sendResendEmail(to: string, subject: string, html: string) {
 }
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
   const authHeader = req.headers.get("Authorization") ?? "";
   const token = authHeader.replace(/^Bearer\s+/i, "");
   if (!token) {
-    return new Response(JSON.stringify({ ok: false, error: "missing_auth" }), { status: 401 });
+    return json({ ok: false, error: "missing_auth" }, 401);
   }
 
   const { data: userData, error: userError } = await sb.auth.getUser(token);
   if (userError || userData.user?.email !== SUPER_ADMIN) {
-    return new Response(JSON.stringify({ ok: false, error: "forbidden" }), { status: 403 });
+    return json({ ok: false, error: "forbidden" }, 403);
   }
 
   let waitlistId: number | undefined;
@@ -82,7 +102,7 @@ Deno.serve(async (req) => {
     // fall through to validation below
   }
   if (!waitlistId) {
-    return new Response(JSON.stringify({ ok: false, error: "missing_waitlist_id" }), { status: 400 });
+    return json({ ok: false, error: "missing_waitlist_id" }, 400);
   }
 
   const { data: entry, error: entryError } = await sb
@@ -92,13 +112,13 @@ Deno.serve(async (req) => {
     .maybeSingle();
 
   if (entryError) {
-    return new Response(JSON.stringify({ ok: false, error: entryError.message }), { status: 500 });
+    return json({ ok: false, error: entryError.message }, 500);
   }
   if (!entry) {
-    return new Response(JSON.stringify({ ok: false, error: "not_found" }), { status: 404 });
+    return json({ ok: false, error: "not_found" }, 404);
   }
   if (!entry.email) {
-    return new Response(JSON.stringify({ ok: false, error: "no_email_on_file" }), { status: 400 });
+    return json({ ok: false, error: "no_email_on_file" }, 400);
   }
 
   const firstName = (entry.name ?? "there").split(" ")[0];
@@ -107,10 +127,8 @@ Deno.serve(async (req) => {
     const html = wrapEmail(TEASER_SUBJECT, renderTeaser(firstName));
     await sendResendEmail(entry.email, TEASER_SUBJECT, html);
   } catch (err) {
-    return new Response(JSON.stringify({ ok: false, error: String(err) }), { status: 502 });
+    return json({ ok: false, error: String(err) }, 502);
   }
 
-  return new Response(JSON.stringify({ ok: true }), {
-    headers: { "Content-Type": "application/json" },
-  });
+  return json({ ok: true });
 });
