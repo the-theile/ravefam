@@ -33,8 +33,15 @@ function wrapEmail(preheader: string, bodyHtml: string): string {
 
 function renderTeaser(firstName: string): string {
   return `
-    <h1 style="font-size:1.4rem;">Hey ${firstName}, the countdown's basically over 👀</h1>
-    <p>We've been backstage this whole time — testing the sound, dialing in the lights, and yeah, actually rolling out a red carpet. In <strong>less than 7 days</strong>, you're in.</p>
+    <div style="text-align:center;padding:8px 0 28px;">
+      <div style="height:3px;width:64px;margin:0 auto 20px;border-radius:2px;background-color:#FF2D78;background-image:linear-gradient(90deg,#FF2D78 0%,#00F5FF 55%,#39FF14 100%);"></div>
+      <div style="display:inline-block;padding:6px 16px;border-radius:100px;background-color:#1a0f17;background-image:linear-gradient(90deg,rgba(255,45,120,0.22),rgba(0,245,255,0.22),rgba(57,255,20,0.22));border:1px solid rgba(255,45,120,0.35);color:#FF2D78;font-weight:700;font-size:0.72rem;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:22px;">⏳ Launch Incoming</div>
+      <div style="font-size:1.9rem;font-weight:800;line-height:1.3;color:#fff;">
+        The stage is set.<br>
+        <span style="background-color:#39FF14;background-image:linear-gradient(90deg,#FF2D78 0%,#00F5FF 55%,#39FF14 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:#39FF14;">Less than 7 days.</span>
+      </div>
+    </div>
+    <p>Hey ${firstName} — we've been backstage this whole time: testing the sound, dialing in the lights, and yeah, actually rolling out a red carpet.</p>
     <p>You made the list. That's not nothing. RaveFAM is about to open up to the fam, and your spot's already got your name on it.</p>
     <p>Keep your phone close — when the doors open, we're not waiting around to tell you. 🖤</p>
     <p>— The RaveFAM crew 🎪</p>`;
