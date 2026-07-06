@@ -242,6 +242,43 @@ test.describe('Vendor Village · fam discount + edit listing', () => {
     expect(stored.discount_description).toBe('10% off for the fam');
   });
 
+  test('adding a cover photo via Edit Listing to a vendor that had none persists it', async ({ page }) => {
+    await bootAuthedApp(page);
+    await openVendorVillage(page);
+    const vendorId = await page.evaluate(async () =>
+      (await dbAddVendor({ name: 'Needs a Photo', category: 'other', description: '', websiteUrl: '', instagram: '' })).id);
+
+    await page.evaluate((id) => openEditVendorModal(id), vendorId);
+    await expect(page.locator('#vv-edit-modal')).toContainText('Add a cover photo');
+
+    // Stub the upload pipeline (same technique smoke.spec.js uses for
+    // loadAllData) — compressImageToBlob needs a real decodable image and
+    // the offline storage stub always returns an empty publicUrl, neither
+    // of which is what this test actually cares about (that a picked file
+    // reaches uploadPhotoToStorage and the result gets persisted).
+    await page.evaluate(() => { window.uploadPhotoToStorage = async () => 'https://example.com/fake-cover.jpg'; });
+    await page.locator('#vv-edit-photo').setInputFiles({ name: 'cover.png', mimeType: 'image/png', buffer: Buffer.from('fake') });
+    await page.evaluate((id) => handleVendorEditSubmit(id), vendorId);
+    await page.waitForTimeout(200);
+
+    const stored = await page.evaluate((id) => window.__store.vendors.find(v => v.id === id), vendorId);
+    expect(stored.cover_photo_url).toBe('https://example.com/fake-cover.jpg');
+  });
+
+  test('editing a vendor that already has a photo shows the replace label', async ({ page }) => {
+    await bootAuthedApp(page);
+    await openVendorVillage(page);
+    const vendorId = await page.evaluate(async () => {
+      const v = await dbAddVendor({ name: 'Has A Photo', category: 'other', description: '', websiteUrl: '', instagram: '' });
+      v.cover_photo_url = 'https://example.com/existing.jpg';
+      window.__store.vendors.find(x => x.id === v.id).cover_photo_url = 'https://example.com/existing.jpg';
+      return v.id;
+    });
+
+    await page.evaluate((id) => openEditVendorModal(id), vendorId);
+    await expect(page.locator('#vv-edit-modal')).toContainText('Replace cover photo');
+  });
+
   test('a non-creator cannot edit someone else\'s vendor', async ({ page }) => {
     await bootAuthedApp(page);
     await openVendorVillage(page);

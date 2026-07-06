@@ -12998,6 +12998,17 @@ async function doProfilePasswordChange() {
         <label class="form-label">Discount description</label>
         <input class="form-input" id="vv-edit-discount-desc" type="text" maxlength="200" value="${escHtml(vendor.discount_description || '')}" placeholder="e.g. 10% off for the fam">
       </div>
+      <div class="form-group">
+        <label class="form-label">Cover photo</label>
+        <div style="display:flex;align-items:center;gap:10px;">
+          ${vendor.cover_photo_url ? `<img src="${escHtml(vendor.cover_photo_url)}" alt="Current cover photo" style="width:44px;height:44px;object-fit:cover;border-radius:8px;">` : ''}
+          <label class="btn btn-ghost" style="display:inline-block;cursor:pointer;padding:9px 16px;font-size:0.82rem;">
+            ${vendor.cover_photo_url ? '🔄 Replace cover photo' : '📷 Add a cover photo'}
+            <input type="file" accept="image/*" id="vv-edit-photo" style="display:none" onchange="handleVendorEditPhotoPicked(event)">
+          </label>
+          <span id="vv-edit-photo-name" style="font-size:0.78rem;color:var(--muted);"></span>
+        </div>
+      </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeEditVendorModal()">Cancel</button>
         <button class="btn btn-primary" onclick="handleVendorEditSubmit('${escId}')">Save Changes</button>
@@ -13009,6 +13020,12 @@ async function doProfilePasswordChange() {
     _vendorEditCategory = cat;
     el.closest('.jam-filter-bar').querySelectorAll('.jam-filter-pill').forEach(b => b.classList.remove('active'));
     el.classList.add('active');
+  }
+
+  function handleVendorEditPhotoPicked(event) {
+    const file = event.target.files[0];
+    const label = document.getElementById('vv-edit-photo-name');
+    if (label) label.textContent = file ? file.name : '';
   }
 
   async function handleVendorEditSubmit(vendorId) {
@@ -13024,6 +13041,18 @@ async function doProfilePasswordChange() {
 
     const vendor = await dbUpdateVendor(vendorId, { name, category: _vendorEditCategory, description, websiteUrl, instagram, discountCode, discountDescription });
     if (!vendor) return;
+
+    const file = document.getElementById('vv-edit-photo').files[0];
+    if (file) {
+      try {
+        const url = await uploadPhotoToStorage(file, `vendors/${vendorId}/cover.jpg`);
+        await sb.from('vendors').update({ cover_photo_url: url }).eq('id', vendorId);
+        vendor.cover_photo_url = url;
+      } catch (e) {
+        console.error('vendor cover upload error', e);
+        showToast('⚠️ Listing updated, but photo upload failed');
+      }
+    }
     closeEditVendorModal();
     showToast('✅ Listing updated');
     openVendorDetail(vendorId);
