@@ -92,12 +92,12 @@
   .data-table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:28px;}
   .data-table-head{display:grid;padding:11px 18px;background:rgba(255,255,255,0.03);border-bottom:1px solid var(--border);font-family:'Outfit',sans-serif;font-weight:700;font-size:0.66rem;text-transform:uppercase;letter-spacing:1.4px;color:var(--muted);}
   .data-table-head.users-head{grid-template-columns:1fr 1fr 1fr 120px;}
-  .data-table-head.wait-head{grid-template-columns:1fr 1fr 1fr 80px;}
+  .data-table-head.wait-head{grid-template-columns:1fr 1fr 1fr 180px;}
   .data-row{display:grid;padding:12px 18px;border-bottom:1px solid rgba(255,255,255,0.04);align-items:center;font-size:0.83rem;transition:background 0.15s;}
   .data-row:last-child{border-bottom:none;}
   .data-row:hover{background:rgba(255,255,255,0.025);}
   .data-row.users-row{grid-template-columns:1fr 1fr 1fr 120px;}
-  .data-row.wait-row{grid-template-columns:1fr 1fr 1fr 80px;}
+  .data-row.wait-row{grid-template-columns:1fr 1fr 1fr 180px;}
   .cell-muted{color:var(--muted);font-size:0.76rem;}
 
   /* ── Action buttons ── */
@@ -111,6 +111,10 @@
   .act-delete:hover{background:rgba(255,45,120,0.2);}
   .act-remove{background:rgba(255,45,120,0.1);color:var(--pink);border-color:rgba(255,45,120,0.25);}
   .act-remove:hover{background:rgba(255,45,120,0.2);}
+  .act-teaser{background:rgba(57,255,20,0.1);color:var(--green);border-color:rgba(57,255,20,0.25);}
+  .act-teaser:hover{background:rgba(57,255,20,0.2);}
+  .act-copy{background:rgba(0,245,255,0.1);color:var(--cyan);border-color:rgba(0,245,255,0.25);}
+  .act-copy:hover{background:rgba(0,245,255,0.2);}
   .empty-state{padding:28px;text-align:center;color:var(--muted);font-family:'Outfit',sans-serif;font-size:0.82rem;font-style:italic;}
 
   /* ── Confirm sheet ── */
@@ -468,17 +472,26 @@
   function renderWaitlist(entries) {
     const el = document.getElementById('waitlist-rows');
     if (!entries || !entries.length) { el.innerHTML = '<div class="empty-state">No waitlist entries</div>'; return; }
-    el.innerHTML = entries.map(w => `
+    el.innerHTML = entries.map(w => {
+      const name = esc(w.name);
+      const email = esc(w.email);
+      const teaserBtn = w.email
+        ? `<button class="act-btn act-teaser" data-id="${w.id}" data-name="${name}" data-email="${email}"
+            onclick="promptSendTeaser(this.dataset.id,this.dataset.name,this.dataset.email)">Send Teaser</button>`
+        : `<button class="act-btn act-copy" data-name="${name}"
+            onclick="copyTeaserForDM(this.dataset.name)">Copy for DM</button>`;
+      return `
       <div class="data-row wait-row">
         <span>${w.name || '—'}</span>
         <span class="cell-muted">${[w.instagram, w.email].filter(Boolean).join(' · ') || '—'}</span>
         <span class="cell-muted">${fmt(w.created_at)}</span>
         <div class="row-actions">
-          <button class="act-btn act-remove" data-id="${w.id}" data-name="${(w.name||'').replace(/"/g,'&quot;')}"
+          ${teaserBtn}
+          <button class="act-btn act-remove" data-id="${w.id}" data-name="${name}"
             onclick="promptRemoveWaitlist(this.dataset.id,this.dataset.name)">Remove</button>
         </div>
-      </div>`
-    ).join('');
+      </div>`;
+    }).join('');
   }
 
   function renderTrend(trend) {
@@ -607,6 +620,36 @@
           showToast(`Removed ${name} from waitlist`); loadAll();
         } catch (e) { showToast('❌ ' + e.message); }
       });
+  }
+
+  function promptSendTeaser(id, name, email) {
+    openConfirm('Send teaser email?', `"${name}" (${email}) will get the launch teaser.`,
+      'Send', 'act-teaser', async () => {
+        try {
+          const { data: { session } } = await sb.auth.getSession();
+          const token = session?.access_token || SUPA_KEY;
+          const res = await fetch(`${SUPA_URL}/functions/v1/send-waitlist-teaser`, {
+            method: 'POST',
+            headers: {
+              'apikey': SUPA_KEY,
+              'Authorization': 'Bearer ' + token,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ waitlist_id: Number(id) })
+          });
+          const r = await res.json();
+          if (!res.ok || !r.ok) throw new Error(r.error || `Failed (${res.status})`);
+          showToast(`🎪 Teaser sent to ${name}`);
+        } catch (e) { showToast('❌ ' + e.message); }
+      });
+  }
+
+  function copyTeaserForDM(name) {
+    const firstName = (name || '').split(' ')[0] || 'there';
+    const text = `Hey ${firstName} 👀 We're prepping the stage for you — backstage testing the sound, dialing in the lights, and rolling out the red carpet. In less than 7 days, you're in.\n\nYou made the list. That's not nothing. Keep your phone close — when the doors open, we're not waiting around to tell you. 🖤\n\n— The RaveFAM crew 🎪`;
+    navigator.clipboard.writeText(text)
+      .then(() => showToast('📋 Copied — paste into their DMs'))
+      .catch(() => showToast('❌ Could not copy to clipboard'));
   }
 
   // ── Toast ──
