@@ -2768,6 +2768,15 @@
   }
   .huddle-bubble-reaction-picker-right { left: auto; right: 0; }
 
+  .huddle-bubble-edited { font-size: 0.68rem; color: var(--muted); margin-top: 3px; display: block; }
+  .huddle-bubble-actions { display: flex; align-items: center; gap: 4px; margin-top: 5px; }
+  .huddle-bubble-action-btn {
+    background: none; border: none; cursor: pointer;
+    font-size: 0.78rem; opacity: 0.55; padding: 2px 4px; line-height: 1;
+    transition: opacity 0.15s;
+  }
+  .huddle-bubble-action-btn:hover { opacity: 1; }
+
   .huddle-beacon-fab-inline {
     flex-shrink: 0;
     width: 34px;
@@ -11102,6 +11111,8 @@ async function doProfilePasswordChange() {
   let _huddleChannel = null;
   let _huddlePresenceChannel = null;
   let _huddlePresenceState = {};
+  const HUDDLE_EDIT_WINDOW_MS = 5 * 60 * 1000;
+  const _huddleEditingIds = new Set();
   let _huddleRecorder = null;
   let _huddleRecordedChunks = [];
   let _huddleRecordingStartedAt = 0;
@@ -11222,11 +11233,32 @@ async function doProfilePasswordChange() {
       </div>`;
   }
 
-  function huddleBubbleHTML(m) {
+  function huddleBubbleHTML(m, crew) {
     const isYou = currentUser && m.sender_id === currentUser.id;
     const senderName = huddleSenderName(m.sender_id);
     const senderRaver = raverByAuthUid(m.sender_id);
     const avatarHtml = raverAvatarHTML(senderRaver?.avatarUrl, senderRaver?.gradient || 'linear-gradient(135deg,#FF2D78,#00F5FF)', senderName, 'avatar huddle-bubble-avatar', '');
+
+    const canEdit = isYou && m.kind === 'text' && !m.deleted_at
+      && (Date.now() - new Date(m.created_at).getTime()) < HUDDLE_EDIT_WINDOW_MS;
+    const canDelete = ownerOrManager(m.sender_id, currentUser?.id, (crew && crew.leader_id === currentUser?.id) || isModerator());
+
+    if (_huddleEditingIds.has(m.id)) {
+      const escBody = escHtml(m.body || '');
+      return `
+        <div class="huddle-bubble-row${isYou ? ' huddle-bubble-row-you' : ''}">
+          ${avatarHtml}
+          <div class="huddle-bubble${isYou ? ' huddle-bubble-you' : ''}">
+            <div class="huddle-inline-form">
+              <textarea id="huddle-edit-input-${m.id}" class="form-input huddle-textarea" maxlength="500" rows="1" oninput="autoGrowHuddleTextarea(this)">${escBody}</textarea>
+              <div class="huddle-inline-form-actions">
+                <button type="button" class="btn btn-ghost" onclick="toggleHuddleMessageEditMode('${m.id}')">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitHuddleMessageEdit('${m.id}')">Save</button>
+              </div>
+            </div>
+          </div>
+        </div>`;
+    }
 
     let bodyHtml;
     if (m.kind === 'photo') {
@@ -11263,6 +11295,12 @@ async function doProfilePasswordChange() {
 
     const stateClass = m._pending ? ' huddle-bubble-pending' : (m._failed ? ' huddle-bubble-failed' : '');
     const retryBtn = m._failed ? `<button type="button" class="huddle-bubble-retry" data-mid="${m.id}" onclick="retryHuddleMessage(this.dataset.mid)">Retry ↻</button>` : '';
+    const editedLabel = m.updated_at ? `<span class="huddle-bubble-edited" title="Edited ${escHtml(formatModDate(m.updated_at))}">edited</span>` : '';
+    const actionsHTML = (canEdit || canDelete) ? `
+      <div class="huddle-bubble-actions">
+        ${canEdit ? `<button type="button" class="huddle-bubble-action-btn" data-mid="${m.id}" onclick="toggleHuddleMessageEditMode(this.dataset.mid)" title="Edit">✏️</button>` : ''}
+        ${canDelete ? `<button type="button" class="huddle-bubble-action-btn" data-mid="${m.id}" onclick="deleteHuddleMessage(this.dataset.mid)" title="Delete">🗑️</button>` : ''}
+      </div>` : '';
 
     return `
       <div class="huddle-bubble-row${isYou ? ' huddle-bubble-row-you' : ''}">
@@ -11270,7 +11308,9 @@ async function doProfilePasswordChange() {
         <div class="huddle-bubble${isYou ? ' huddle-bubble-you' : ''}${stateClass}">
           ${!isYou ? `<div class="huddle-bubble-sender">${escHtml(senderName)}</div>` : ''}
           <div class="huddle-bubble-body">${bodyHtml}</div>
+          ${editedLabel}
           <div class="huddle-reaction-row">${reactionRow}${addReactionBtn}</div>
+          ${actionsHTML}
           ${retryBtn}
         </div>
       </div>`;
@@ -11330,7 +11370,7 @@ async function doProfilePasswordChange() {
     const roomPickerHTML = huddleRooms.map(r =>
       `<button type="button" class="huddle-room-pill${r.id === _huddleActiveRoomId ? ' active' : ''}" data-room-id="${r.id}" onclick="switchHuddleRoom(this.dataset.roomId); hideHuddleRoomMenu();">${huddleRoomLabel(r)}</button>`
     ).join('');
-    const messagesHTML = huddleMessages.length ? huddleMessages.map(huddleBubbleHTML).join('') : huddleEmptyStateHTML();
+    const messagesHTML = huddleMessages.length ? huddleMessages.map(m => huddleBubbleHTML(m, crew)).join('') : huddleEmptyStateHTML();
 
     root.innerHTML = `
       <div class="huddle-header">
@@ -11384,6 +11424,49 @@ async function doProfilePasswordChange() {
     const { id, room_id, crew_id, sender_id, created_at, _pending, _failed, reactions, ...fields } = huddleMessages[idx];
     huddleMessages.splice(idx, 1);
     await sendHuddleMessage(fields);
+  }
+
+  function toggleHuddleMessageEditMode(messageId) {
+    if (_huddleEditingIds.has(messageId)) _huddleEditingIds.delete(messageId);
+    else _huddleEditingIds.add(messageId);
+    renderHuddleUI();
+    const input = document.getElementById(`huddle-edit-input-${messageId}`);
+    if (input) { input.focus(); autoGrowHuddleTextarea(input); }
+  }
+
+  async function submitHuddleMessageEdit(messageId) {
+    const input = document.getElementById(`huddle-edit-input-${messageId}`);
+    if (!input) return;
+    const body = input.value.trim();
+    if (!body) { showToast('Message can\'t be empty'); return; }
+    await editHuddleMessage(messageId, body);
+    _huddleEditingIds.delete(messageId);
+    renderHuddleUI();
+  }
+
+  async function editHuddleMessage(messageId, newBody) {
+    const { data, error } = await sb.from('huddle_messages')
+      .update({ body: newBody }).eq('id', messageId).select().single();
+    if (error || !data) {
+      console.error('huddle_messages edit error', error);
+      const msg = error?.message || '';
+      if (msg.includes('edit window has expired')) showToast('⏱️ Edit window expired');
+      else if (msg.includes('only text messages')) showToast('⚠️ Only text messages can be edited');
+      else showToast('⚠️ Could not edit message — try again');
+      return false;
+    }
+    const idx = huddleMessages.findIndex(m => m.id === messageId);
+    if (idx >= 0) huddleMessages[idx] = data;
+    return true;
+  }
+
+  async function deleteHuddleMessage(messageId) {
+    const { ok, rateLimited } = await softDeleteRow('huddle_messages', { id: messageId }, null);
+    if (!ok) { if (!rateLimited) showToast('⚠️ Could not delete message — try again'); return false; }
+    await logAudit({ action: 'huddle_message.remove', entityType: 'huddle_message', entityId: messageId });
+    huddleMessages = huddleMessages.filter(m => m.id !== messageId);
+    renderHuddleUI();
+    return true;
   }
 
   function submitHuddleTextMessage() {
@@ -11628,9 +11711,16 @@ async function doProfilePasswordChange() {
         renderHuddleUI();
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'huddle_messages', filter: `room_id=eq.${roomId}` }, payload => {
+        if (payload.new.deleted_at) {
+          huddleMessages = huddleMessages.filter(m => m.id !== payload.new.id);
+          _huddleEditingIds.delete(payload.new.id);
+          if (_huddleActiveBeacon?.id === payload.new.id) _huddleActiveBeacon = null;
+          renderHuddleUI();
+          return;
+        }
         const idx = huddleMessages.findIndex(m => m.id === payload.new.id);
         if (idx >= 0) huddleMessages[idx] = payload.new;
-        if (payload.new.kind === 'beacon' && !payload.new.deleted_at) _huddleActiveBeacon = payload.new;
+        if (payload.new.kind === 'beacon') _huddleActiveBeacon = payload.new;
         renderHuddleUI();
       })
       .subscribe();
