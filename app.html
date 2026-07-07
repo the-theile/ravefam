@@ -5994,6 +5994,26 @@
   </div>
 </div>
 
+<!-- Beacon Push Notifications Modal -->
+<div class="modal-overlay" id="push-settings-overlay" onclick="if(event.target===this)closePushSettingsModal()">
+  <div class="modal" style="max-width:420px;text-align:left;">
+    <div class="modal-title">🔔 Push Notifications</div>
+    <p style="font-size:0.8rem;color:var(--muted);margin-bottom:16px;line-height:1.5;">Get a native notification the instant a crewmate sends a Beacon, even with the app closed.</p>
+    <div class="poll-modal-settings">
+      <div class="poll-setting-row">
+        <div>
+          <div class="poll-setting-label">Beacon push notifications</div>
+          <div class="poll-setting-hint">Requires browser notification permission</div>
+        </div>
+        <button class="poll-anon-toggle" id="push-settings-toggle" onclick="toggleBeaconPush(this)"></button>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" style="flex:1;" onclick="closePushSettingsModal()">Done</button>
+    </div>
+  </div>
+</div>
+
 <!-- App Guide Modal — manually reopenable "how RaveFam works" walkthrough -->
 <div class="modal-overlay" id="app-guide-overlay" onclick="if(event.target===this)closeAppGuide()">
   <div class="modal" style="max-width:460px;text-align:left;max-height:80vh;overflow-y:auto;">
@@ -6132,6 +6152,7 @@
       <button class="notif-footer-btn edit-btn" onclick="notifDrawerEditProfile()">✏️ Edit Profile</button>
       <button class="notif-footer-btn pw-btn" onclick="notifDrawerChangePassword()">🔑 Password</button>
       <button class="notif-footer-btn privacy-btn" onclick="notifDrawerPrivacySettings()">🔒 Privacy</button>
+      <button class="notif-footer-btn push-btn" onclick="notifDrawerPushSettings()">🔔 Push</button>
       <button class="notif-footer-btn guide-btn" onclick="notifDrawerAppGuide()">📖 Guide</button>
     </div>
   </div>
@@ -6239,7 +6260,21 @@
   </div>
 </div>
 
-
+<!-- Meetup Pin Map Picker — zoom/pan a festival map, tap to place a pin -->
+<div id="meetup-map-overlay" class="photo-crop-overlay">
+  <div class="photo-crop-box">
+    <div class="photo-crop-title">📍 Tap to mark the spot</div>
+    <div id="meetup-map-viewport" class="photo-crop-viewport">
+      <img id="meetup-map-img" class="photo-crop-img" draggable="false" alt="Festival map">
+      <div id="meetup-map-marker" style="display:none;position:absolute;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:var(--neon-pink);border:2px solid #fff;pointer-events:none;z-index:2;"></div>
+    </div>
+    <input id="meetup-map-zoom" class="photo-crop-zoom" type="range" min="100" max="400" value="100">
+    <div class="photo-crop-actions">
+      <button type="button" class="photo-crop-cancel" onclick="cancelMeetupMapPin()">Cancel</button>
+      <button type="button" class="photo-crop-save" onclick="confirmMeetupMapPin()">Use Spot</button>
+    </div>
+  </div>
+</div>
 
 <!-- ══════════════════════════════════════════════
      QR SCANNER OVERLAY
@@ -6506,6 +6541,9 @@
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
   const SUPA_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2cGdvcGNpaW9xYnFtampqaWdoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3NTY2OTUsImV4cCI6MjA5NjMzMjY5NX0.DAgcx2UsGV1gUCQzHdGmv1Pu0rXlJdQxhn-bf1wGsiI';
   const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+  // Public VAPID key for Beacon push subscriptions — pairs with VAPID_PRIVATE_KEY
+  // configured as a send-beacon-push Edge Function secret; not sensitive on its own.
+  const VAPID_PUBLIC_KEY = 'BCF_mOzUV61zYqsbcN-NuAiGrmuc3pPx6qQDCmRV057Dw8JNy-IwvrPb9mpYDvqDBLruXtLCk9-Q1E7caAfn_6M';
 
   // Fire-and-forget pageview
   sb.rpc('log_pageview', { p_path: location.pathname, p_referrer: document.referrer });
@@ -8084,7 +8122,7 @@ async function doProfilePasswordChange() {
       .order('date', { ascending: true });
     if (!fErr && dbFests) {
       dbFests.forEach(f => {
-        festivals.push({ id: f.id, name: f.name, date: f.date, location: f.location || '', color: f.color || null, days: f.days || null, createdBy: f.created_by || null, archived: !!f.archived_at });
+        festivals.push({ id: f.id, name: f.name, date: f.date, location: f.location || '', color: f.color || null, days: f.days || null, createdBy: f.created_by || null, archived: !!f.archived_at, mapUrl: f.map_url || null });
       });
     }
 
@@ -11128,6 +11166,7 @@ async function doProfilePasswordChange() {
   let _huddleActiveCrewId = null;
   let _huddleActiveRoomId = null;
   let _huddleActiveBeacon = null;
+  let _pendingMeetupPin = null; // {x,y} normalized 0-1 coords tapped on the room's festival map
   let _huddleChannel = null;
   let _huddlePresenceChannel = null;
   let _huddlePresenceState = {};
@@ -11272,6 +11311,7 @@ async function doProfilePasswordChange() {
     const canEdit = isYou && m.kind === 'text' && !m.deleted_at
       && (Date.now() - new Date(m.created_at).getTime()) < HUDDLE_EDIT_WINDOW_MS;
     const canDelete = ownerOrManager(m.sender_id, currentUser?.id, (crew && crew.leader_id === currentUser?.id) || isModerator());
+    const canReport = !isYou && !m.deleted_at;
 
     if (_huddleEditingIds.has(m.id)) {
       const escBody = escHtml(m.body || '');
@@ -11298,7 +11338,19 @@ async function doProfilePasswordChange() {
       bodyHtml = `<button type="button" class="huddle-voice-play-btn" data-src="${escHtml(m.media_url)}" onclick="toggleHuddleVoicePlayback(this)">▶</button><span class="huddle-voice-duration">0:${String(secs).padStart(2,'0')}</span>`;
     } else if (m.kind === 'meetup') {
       const when = m.meetup_at ? new Date(m.meetup_at).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : '';
-      bodyHtml = `<div class="huddle-bubble-meetup"><span class="huddle-meetup-icon">📍</span> <strong>${escHtml(m.body || '')}</strong>${when ? `<div class="huddle-meetup-when">${escHtml(when)}</div>` : ''}</div>`;
+      let mapThumbHtml = '';
+      if (m.pin_x != null && m.pin_y != null) {
+        const pinRoom = huddleRooms.find(r => r.id === m.room_id);
+        const pinFestival = pinRoom && pinRoom.festival_id
+          ? festivals.find(f => String(f.id) === String(pinRoom.festival_id)) : null;
+        if (pinFestival?.mapUrl) {
+          mapThumbHtml = `<div style="position:relative;margin-top:6px;cursor:zoom-in;" onclick="openPhotoLightbox('${pinFestival.mapUrl.replace(/'/g,"\\'")}')">
+            <img src="${escHtml(pinFestival.mapUrl)}" alt="Festival map" style="width:100%;border-radius:8px;display:block;">
+            <div style="position:absolute;left:${m.pin_x * 100}%;top:${m.pin_y * 100}%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:var(--neon-pink);border:2px solid #fff;"></div>
+          </div>`;
+        }
+      }
+      bodyHtml = `<div class="huddle-bubble-meetup"><span class="huddle-meetup-icon">📍</span> <strong>${escHtml(m.body || '')}</strong>${when ? `<div class="huddle-meetup-when">${escHtml(when)}</div>` : ''}${mapThumbHtml}</div>`;
     } else if (m.kind === 'beacon') {
       bodyHtml = `<div class="huddle-bubble-beacon-text">📣 ${escHtml(m.body || '')}</div>`;
     } else {
@@ -11328,8 +11380,9 @@ async function doProfilePasswordChange() {
     const editedLabel = m.updated_at ? `<span class="huddle-bubble-edited" title="Edited ${escHtml(formatModDate(m.updated_at))}">edited</span>` : '';
     const menuRows = `
         ${canEdit ? `<button type="button" class="huddle-bubble-menu-row" data-mid="${m.id}" onclick="toggleHuddleBubbleActionsMenu(this.dataset.mid); toggleHuddleMessageEditMode('${m.id}')">✏️ Edit</button>` : ''}
-        ${canDelete ? `<button type="button" class="huddle-bubble-menu-row" data-mid="${m.id}" onclick="toggleHuddleBubbleActionsMenu(this.dataset.mid); deleteHuddleMessage('${m.id}')">🗑️ Delete</button>` : ''}`;
-    const actionsHTML = (canEdit || canDelete) ? `
+        ${canDelete ? `<button type="button" class="huddle-bubble-menu-row" data-mid="${m.id}" onclick="toggleHuddleBubbleActionsMenu(this.dataset.mid); deleteHuddleMessage('${m.id}')">🗑️ Delete</button>` : ''}
+        ${canReport ? `<button type="button" class="huddle-bubble-menu-row" data-mid="${m.id}" onclick="toggleHuddleBubbleActionsMenu(this.dataset.mid); showReportModal('huddle_message','${m.id}',{metadata:{crew_id:'${crew.id}',room_id:'${m.room_id}'}})">🚩 Report</button>` : ''}`;
+    const actionsHTML = (canEdit || canDelete || canReport) ? `
       <div class="huddle-bubble-menu-wrap">
         <button type="button" class="huddle-bubble-menu-btn" data-mid="${m.id}" onclick="toggleHuddleBubbleActionsMenu(this.dataset.mid)" title="More">⋯</button>
         <div id="huddle-bubble-menu-${m.id}" class="huddle-bubble-menu${isYou ? ' huddle-bubble-menu-right' : ''}" style="display:none;">${menuRows}</div>
@@ -11350,6 +11403,10 @@ async function doProfilePasswordChange() {
 
   function huddleComposerHTML() {
     const pickerBtns = HUDDLE_REACTION_EMOJIS.map(e => `<button type="button" class="huddle-reaction-picker-btn" data-emoji="${e}" onclick="quickReactToLastHuddleMessage(this.dataset.emoji)">${e}</button>`).join('');
+    const currentRoom = huddleRooms.find(r => r.id === _huddleActiveRoomId);
+    const roomFestival = currentRoom && currentRoom.festival_id
+      ? festivals.find(f => String(f.id) === String(currentRoom.festival_id)) : null;
+    const mapUrl = roomFestival?.mapUrl || null;
     return `
       <div class="huddle-composer">
         <div id="huddle-recording-bar" class="huddle-recording-bar" style="display:none;">
@@ -11360,6 +11417,7 @@ async function doProfilePasswordChange() {
         <div id="huddle-meetup-form" class="huddle-inline-form" style="display:none;">
           <input type="text" id="huddle-meetup-place" class="form-input" placeholder="Where's the meetup? (e.g. Main Stage sound booth)" maxlength="120">
           <input type="datetime-local" id="huddle-meetup-when" class="form-input">
+          ${mapUrl ? `<div id="huddle-meetup-pin-preview" style="margin-top:4px;">${meetupPinPreviewHTML()}</div>` : ''}
           <div class="huddle-inline-form-actions">
             <button type="button" class="btn btn-ghost" onclick="toggleHuddleMeetupForm()">Cancel</button>
             <button type="button" class="btn btn-primary" onclick="submitHuddleMeetupPin()">📍 Drop Pin</button>
@@ -11530,9 +11588,13 @@ async function doProfilePasswordChange() {
     const place = placeInput.value.trim();
     if (!place) { showToast('Add a place first'); return; }
     const whenVal = whenInput && whenInput.value ? new Date(whenInput.value).toISOString() : null;
+    const pin = _pendingMeetupPin;
     placeInput.value = ''; if (whenInput) whenInput.value = '';
     toggleHuddleMeetupForm();
-    await sendHuddleMessage({ kind: 'meetup', body: place, meetup_at: whenVal });
+    await sendHuddleMessage({
+      kind: 'meetup', body: place, meetup_at: whenVal,
+      ...(pin ? { pin_x: pin.x, pin_y: pin.y } : {})
+    });
   }
 
   async function submitHuddleBeacon() {
@@ -11605,6 +11667,135 @@ async function doProfilePasswordChange() {
     const opening = el.style.display === 'none';
     huddleHideAllInlineForms();
     el.style.display = opening ? '' : 'none';
+    _pendingMeetupPin = null;
+    const preview = document.getElementById('huddle-meetup-pin-preview');
+    if (preview) preview.innerHTML = meetupPinPreviewHTML();
+  }
+
+  function meetupPinPreviewHTML() {
+    return _pendingMeetupPin
+      ? `<button type="button" class="btn btn-ghost" onclick="openMeetupMapPicker()">📍 Spot marked — tap to change</button>
+         <button type="button" class="btn btn-ghost" onclick="clearMeetupMapPin()">✕ Clear</button>`
+      : `<button type="button" class="btn btn-ghost" onclick="openMeetupMapPicker()">🗺️ Tap to mark the spot (optional)</button>`;
+  }
+
+  // ── Meetup pin map picker (zoom/pan a festival map, tap to place a pin) ──
+  // Mirrors the photo-crop viewport pattern (openPhotoCropModal/applyCropTransform,
+  // ~line 9865) but reads a tap-without-drag as "place the pin here" instead of
+  // always panning, since festival maps are often a small area inside a much
+  // larger poster image and need real zoom to tap accurately.
+  let mapPinState = null;
+  let mapPinDrag = null;
+
+  function openMeetupMapPicker() {
+    const currentRoom = huddleRooms.find(r => r.id === _huddleActiveRoomId);
+    const roomFestival = currentRoom && currentRoom.festival_id
+      ? festivals.find(f => String(f.id) === String(currentRoom.festival_id)) : null;
+    const mapUrl = roomFestival?.mapUrl;
+    if (!mapUrl) return;
+    const overlay = document.getElementById('meetup-map-overlay');
+    const viewport = document.getElementById('meetup-map-viewport');
+    const imgEl = document.getElementById('meetup-map-img');
+    const zoomEl = document.getElementById('meetup-map-zoom');
+    const pendingPin = _pendingMeetupPin;
+    const img = new Image();
+    img.onload = () => {
+      const vp = viewport.getBoundingClientRect().width || 300;
+      const baseScale = Math.max(vp / img.naturalWidth, vp / img.naturalHeight);
+      mapPinState = { naturalW: img.naturalWidth, naturalH: img.naturalHeight, vp, baseScale, scale: baseScale, x: 0, y: 0, pin: pendingPin };
+      mapPinState.x = (vp - img.naturalWidth * baseScale) / 2;
+      mapPinState.y = (vp - img.naturalHeight * baseScale) / 2;
+      imgEl.src = mapUrl;
+      zoomEl.value = 100;
+      applyMapPinTransform();
+      overlay.classList.add('open');
+    };
+    img.src = mapUrl;
+  }
+
+  function applyMapPinTransform() {
+    if (!mapPinState) return;
+    const img = document.getElementById('meetup-map-img');
+    img.style.width = (mapPinState.naturalW * mapPinState.scale) + 'px';
+    img.style.height = (mapPinState.naturalH * mapPinState.scale) + 'px';
+    img.style.transform = `translate(${mapPinState.x}px, ${mapPinState.y}px)`;
+    const marker = document.getElementById('meetup-map-marker');
+    if (mapPinState.pin) {
+      marker.style.left = (mapPinState.x + mapPinState.pin.x * mapPinState.naturalW * mapPinState.scale) + 'px';
+      marker.style.top = (mapPinState.y + mapPinState.pin.y * mapPinState.naturalH * mapPinState.scale) + 'px';
+      marker.style.display = 'block';
+    } else {
+      marker.style.display = 'none';
+    }
+  }
+
+  function clampMapPinOffset() {
+    if (!mapPinState) return;
+    const w = mapPinState.naturalW * mapPinState.scale, h = mapPinState.naturalH * mapPinState.scale;
+    mapPinState.x = Math.max(Math.min(0, mapPinState.vp - w), Math.min(0, mapPinState.x));
+    mapPinState.y = Math.max(Math.min(0, mapPinState.vp - h), Math.min(0, mapPinState.y));
+  }
+
+  document.addEventListener('pointerdown', e => {
+    if (!mapPinState) return;
+    const vp = e.target.closest('#meetup-map-viewport');
+    if (!vp) return;
+    e.preventDefault();
+    const rect = vp.getBoundingClientRect();
+    mapPinDrag = {
+      startX: e.clientX, startY: e.clientY, origX: mapPinState.x, origY: mapPinState.y,
+      localX: e.clientX - rect.left, localY: e.clientY - rect.top, moved: false
+    };
+    vp.setPointerCapture(e.pointerId);
+  });
+  document.addEventListener('pointermove', e => {
+    if (!mapPinDrag || !mapPinState) return;
+    const dx = e.clientX - mapPinDrag.startX, dy = e.clientY - mapPinDrag.startY;
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) mapPinDrag.moved = true;
+    mapPinState.x = mapPinDrag.origX + dx;
+    mapPinState.y = mapPinDrag.origY + dy;
+    clampMapPinOffset();
+    applyMapPinTransform();
+  });
+  document.addEventListener('pointerup', () => {
+    if (!mapPinDrag || !mapPinState) { mapPinDrag = null; return; }
+    if (!mapPinDrag.moved) {
+      const normX = (mapPinDrag.localX - mapPinState.x) / mapPinState.scale / mapPinState.naturalW;
+      const normY = (mapPinDrag.localY - mapPinState.y) / mapPinState.scale / mapPinState.naturalH;
+      mapPinState.pin = { x: Math.min(1, Math.max(0, normX)), y: Math.min(1, Math.max(0, normY)) };
+      applyMapPinTransform();
+    }
+    mapPinDrag = null;
+  });
+  document.addEventListener('pointercancel', () => { mapPinDrag = null; });
+  document.addEventListener('input', e => {
+    if (e.target.id !== 'meetup-map-zoom' || !mapPinState) return;
+    const factor = Number(e.target.value) / 100;
+    const cx = mapPinState.vp / 2, cy = mapPinState.vp / 2;
+    const relX = (cx - mapPinState.x) / mapPinState.scale, relY = (cy - mapPinState.y) / mapPinState.scale;
+    mapPinState.scale = mapPinState.baseScale * factor;
+    mapPinState.x = cx - relX * mapPinState.scale;
+    mapPinState.y = cy - relY * mapPinState.scale;
+    clampMapPinOffset();
+    applyMapPinTransform();
+  });
+
+  function cancelMeetupMapPin() {
+    document.getElementById('meetup-map-overlay').classList.remove('open');
+    mapPinState = null;
+  }
+  function confirmMeetupMapPin() {
+    if (!mapPinState) return;
+    _pendingMeetupPin = mapPinState.pin || null;
+    document.getElementById('meetup-map-overlay').classList.remove('open');
+    mapPinState = null;
+    const preview = document.getElementById('huddle-meetup-pin-preview');
+    if (preview) preview.innerHTML = meetupPinPreviewHTML();
+  }
+  function clearMeetupMapPin() {
+    _pendingMeetupPin = null;
+    const preview = document.getElementById('huddle-meetup-pin-preview');
+    if (preview) preview.innerHTML = meetupPinPreviewHTML();
   }
   function toggleHuddleBeaconForm() {
     const el = document.getElementById('huddle-beacon-form'); if (!el) return;
@@ -18080,6 +18271,52 @@ async function doProfilePasswordChange() {
     );
   }
 
+  // Moderator-only: uploads a static map image for a festival so crew can
+  // tap a spot on it when dropping a Huddle meetup pin. Not gated behind
+  // festivalPerms().canEdit — the creator alone shouldn't control this.
+  async function handleFestivalMapUpload(event, festivalId) {
+    const file = event.target.files[0];
+    if (!file) return;
+    event.target.value = '';
+    if (!isModerator()) { showToast('🔒 Moderators only'); return; }
+    if (!file.type.startsWith('image/')) { showToast('⚠️ Please select an image file'); return; }
+    if (file.size > 10 * 1024 * 1024) { showToast('⚠️ Map image must be under 10 MB'); return; }
+    showToast('🗺️ Uploading map…');
+    try {
+      const blob = await compressImageToBlob(file, 1600, 0.85);
+      const path = `festivals/${festivalId}.jpg`;
+      const { error: upErr } = await sb.storage.from('festival-maps').upload(path, blob, { cacheControl: '3600', upsert: true, contentType: 'image/jpeg' });
+      if (upErr) throw upErr;
+      const { data } = sb.storage.from('festival-maps').getPublicUrl(path);
+      const { error } = await sb.from('festivals').update({
+        map_url: data.publicUrl, map_uploaded_by: currentUser.id, map_uploaded_at: new Date().toISOString()
+      }).eq('id', festivalId);
+      if (error) throw error;
+      const f = getFestival(festivalId);
+      if (f) f.mapUrl = data.publicUrl;
+      showToast('✅ Festival map updated!');
+      openRaveEditor(festivalId);
+    } catch (e) {
+      console.error('Festival map upload error', e);
+      showToast('⚠️ Map upload failed — try again');
+    }
+  }
+
+  async function removeFestivalMap(festivalId) {
+    if (!isModerator()) { showToast('🔒 Moderators only'); return; }
+    try {
+      const { error } = await sb.from('festivals').update({ map_url: null, map_uploaded_by: null, map_uploaded_at: null }).eq('id', festivalId);
+      if (error) throw error;
+      const f = getFestival(festivalId);
+      if (f) f.mapUrl = null;
+      showToast('🗺️ Map removed');
+      openRaveEditor(festivalId);
+    } catch (e) {
+      console.error('Festival map remove error', e);
+      showToast('⚠️ Could not remove map');
+    }
+  }
+
   function openRaveEditor(id) {
     const f = id ? getFestival(id) : null;
     // Editing details (name/date/location/etc.) is gated to the creator or a moderator,
@@ -18120,6 +18357,13 @@ async function doProfilePasswordChange() {
         <label class="form-label">Card Colour</label>
         <div class="color-picker-grid" id="fe-color-grid">${swatchHtml}</div>
       </div>
+      ${f && isModerator() ? `
+      <div class="form-group">
+        <label class="form-label">🗺️ Festival Map <span style="color:var(--muted);font-weight:400;">(moderators only — lets crew tap a spot on meetup pins)</span></label>
+        ${f.mapUrl ? `<img src="${escHtml(f.mapUrl)}" alt="Festival map" style="width:100%;border-radius:10px;margin-bottom:8px;max-height:220px;object-fit:cover;">` : ''}
+        <input type="file" accept="image/*" onchange="handleFestivalMapUpload(event, '${f.id}')">
+        ${f.mapUrl ? `<button class="btn btn-ghost" style="margin-top:8px;" onclick="removeFestivalMap('${f.id}')">Remove map</button>` : ''}
+      </div>` : ''}
       ${f ? `<div class="fest-goers-note" id="re-goers-note">${goers.length ? goers.length + ' tribe member' + (goers.length!==1?'s':'') + ' linked: ' + goers.map(g=>escHtml(g.name.split(' ')[0])).join(', ') : 'No tribe members linked yet'}</div>
       <div class="fest-search-wrap" style="margin-top:8px;margin-bottom:4px;">
         <input class="form-input" id="re-raver-search" placeholder="🔍 Search tribe to add…" autocomplete="off" style="font-size:16px;"
@@ -18819,6 +19063,91 @@ async function doProfilePasswordChange() {
     document.getElementById('privacy-settings-overlay').classList.remove('open');
   }
 
+  // ── Beacon push notifications ─────────────────────────
+  async function openPushSettingsModal() {
+    const toggle = document.getElementById('push-settings-toggle');
+    toggle.classList.remove('on');
+    document.getElementById('push-settings-overlay').classList.add('open');
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      toggle.classList.toggle('on', !!sub);
+    } catch (_) {}
+  }
+
+  function closePushSettingsModal() {
+    document.getElementById('push-settings-overlay').classList.remove('open');
+  }
+
+  async function toggleBeaconPush(btn) {
+    const enabling = !btn.classList.contains('on');
+    btn.disabled = true;
+    try {
+      if (enabling) await enableBeaconPush();
+      else await disableBeaconPush();
+      btn.classList.toggle('on', enabling);
+    } catch (err) {
+      // enableBeaconPush/disableBeaconPush already toast the specific reason
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
+    return outputArray;
+  }
+
+  async function enableBeaconPush() {
+    if (!currentUser) return;
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      showToast("Push notifications aren't supported on this browser");
+      throw new Error('unsupported');
+    }
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') {
+      showToast(perm === 'denied'
+        ? '🔕 Notifications are blocked — enable them in your browser settings'
+        : 'Notification permission needed for push');
+      throw new Error('permission_denied');
+    }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+    });
+    const json = sub.toJSON();
+    const { error } = await sb.from('push_subscriptions').upsert({
+      user_id: currentUser.id,
+      endpoint: json.endpoint,
+      p256dh: json.keys.p256dh,
+      auth: json.keys.auth,
+      user_agent: navigator.userAgent,
+    }, { onConflict: 'endpoint' });
+    if (error) { showToast('Could not save push subscription'); throw error; }
+    await sb.from('email_preferences').update({ beacon_push_opt_in: true }).eq('user_id', currentUser.id);
+    showToast('🔔 Beacon push notifications on');
+  }
+
+  async function disableBeaconPush() {
+    if (!currentUser) return;
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration();
+      const sub = reg && await reg.pushManager.getSubscription();
+      if (sub) {
+        await sb.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
+        await sub.unsubscribe();
+      }
+    }
+    await sb.from('email_preferences').update({ beacon_push_opt_in: false }).eq('user_id', currentUser.id);
+    showToast('🔕 Beacon push notifications off');
+  }
+
   function openAppGuide() {
     document.getElementById('app-guide-overlay').classList.add('open');
   }
@@ -19353,6 +19682,11 @@ async function doProfilePasswordChange() {
     closeNotifDrawer();
     const me = squad.find(r => r.isYou);
     if (me) openPrivacySettingsModal(me.id);
+  }
+
+  function notifDrawerPushSettings() {
+    closeNotifDrawer();
+    openPushSettingsModal();
   }
 
   function notifDrawerAppGuide() {
