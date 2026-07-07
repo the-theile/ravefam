@@ -1834,6 +1834,43 @@
   }
   .modal-overlay.open .modal { transform: scale(1); }
 
+  /* Full-screen page panel — reusable alternative to .modal for content that
+     can grow tall (forms with dynamic sections, long lists) where a small
+     centered modal risks overflowing the viewport with no way to reach the
+     footer actions. Fixed header + footer, independently scrolling body. */
+  .page-panel-overlay {
+    position: fixed; inset: 0;
+    background: var(--surface2);
+    z-index: 250;
+    display: flex; flex-direction: column;
+    opacity: 0; pointer-events: none;
+    transform: translateY(12px);
+    transition: opacity 0.22s, transform 0.22s;
+  }
+  .page-panel-overlay.open { opacity: 1; pointer-events: all; transform: translateY(0); }
+  .page-panel { display: flex; flex-direction: column; height: 100%; height: 100dvh; }
+  /* Full-bleed header/footer chrome, but content stays a readable column
+     width on wide screens instead of stretching edge-to-edge like a form
+     that grew up assuming a 440px-wide modal. */
+  .page-panel-header, .page-panel-body, .page-panel-footer {
+    max-width: 640px; margin: 0 auto; width: 100%; box-sizing: border-box;
+  }
+  .page-panel-header {
+    flex-shrink: 0; display: flex; align-items: center; gap: 12px;
+    padding: 18px 20px; border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .page-panel-back {
+    background: none; border: none; color: var(--muted); cursor: pointer;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.85rem;
+    padding: 6px 4px; flex-shrink: 0; white-space: nowrap;
+  }
+  .page-panel-header .modal-title { margin: 0; flex: 1; }
+  .page-panel-body { flex: 1; overflow-y: auto; padding: 20px; }
+  .page-panel-footer {
+    flex-shrink: 0; display: flex; gap: 10px; flex-wrap: wrap;
+    padding: 14px 20px; border-top: 1px solid rgba(255,255,255,0.08);
+  }
+
   /* Delete-rave bottom sheet */
   .bottom-sheet-overlay {
     position: fixed;
@@ -5913,9 +5950,9 @@
   </div>
 </div>
 
-<!-- Rave Editor Modal -->
-<div class="modal-overlay" id="rave-edit-overlay" onclick="closeRaveEditorOutside(event)">
-  <div class="modal" id="rave-edit-modal">
+<!-- Rave Editor Page -->
+<div class="page-panel-overlay" id="rave-edit-overlay">
+  <div class="page-panel" id="rave-edit-modal">
     <!-- filled by JS -->
   </div>
 </div>
@@ -18331,47 +18368,52 @@ async function doProfilePasswordChange() {
       `<div class="color-swatch${c === editRaveColor ? ' selected' : ''}" data-color="${c}" style="background:${c};" ${canEditFest ? `onclick="pickRaveColor('${c}')"` : 'style="pointer-events:none;opacity:0.6;"'}></div>`
     ).join('');
     document.getElementById('rave-edit-modal').innerHTML = `
-      <div class="modal-title">${f ? '✏️ Edit Rave' : '🎉 Add Rave'}</div>
-      ${!canEditFest ? `<p style="font-size:0.78rem;color:var(--muted);margin:-4px 0 12px;">🔒 Only the creator or a moderator can edit these details.</p>` : ''}
-      ${fieldRow('Rave Name','fe-name', f?.name, 'e.g. Awakenings or Basement at Fabric this Friday', false, 100)}
-      <div class="form-group">
-        <label class="form-label">Date</label>
-        <input class="form-input" id="fe-date" type="date" value="${(() => { if (!f) return ''; if (f.date) return f.date; const d = festDate(f); if (!d || isNaN(d)) return ''; return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })()}" style="color-scheme:dark;" ${canEditFest ? '' : 'disabled'}>
+      <div class="page-panel-header">
+        <button type="button" class="page-panel-back" onclick="closeRaveEditor()">← Back</button>
+        <div class="modal-title">${f ? '✏️ Edit Rave' : '🎉 Add Rave'}</div>
       </div>
-      <div class="form-group">
-        <label class="form-label">Location</label>
-        <div class="loc-autocomplete-wrap">
-          <input class="form-input" id="fe-loc" value="${(f?.location||'').replace(/"/g,'&quot;')}"
-            placeholder="e.g. Amsterdam, NL" autocomplete="off" maxlength="100"
-            oninput="locSearchDebounce(this.value)"
-            onkeydown="locKeydown(event)"
-            onblur="setTimeout(closeLoc,200)" ${canEditFest ? '' : 'disabled'}>
-          <div class="loc-dropdown" id="loc-dropdown"></div>
+      <div class="page-panel-body">
+        ${!canEditFest ? `<p style="font-size:0.78rem;color:var(--muted);margin:-4px 0 12px;">🔒 Only the creator or a moderator can edit these details.</p>` : ''}
+        ${fieldRow('Rave Name','fe-name', f?.name, 'e.g. Awakenings or Basement at Fabric this Friday', false, 100)}
+        <div class="form-group">
+          <label class="form-label">Date</label>
+          <input class="form-input" id="fe-date" type="date" value="${(() => { if (!f) return ''; if (f.date) return f.date; const d = festDate(f); if (!d || isNaN(d)) return ''; return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })()}" style="color-scheme:dark;" ${canEditFest ? '' : 'disabled'}>
         </div>
+        <div class="form-group">
+          <label class="form-label">Location</label>
+          <div class="loc-autocomplete-wrap">
+            <input class="form-input" id="fe-loc" value="${(f?.location||'').replace(/"/g,'&quot;')}"
+              placeholder="e.g. Amsterdam, NL" autocomplete="off" maxlength="100"
+              oninput="locSearchDebounce(this.value)"
+              onkeydown="locKeydown(event)"
+              onblur="setTimeout(closeLoc,200)" ${canEditFest ? '' : 'disabled'}>
+            <div class="loc-dropdown" id="loc-dropdown"></div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">How Many Days? <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
+          <input class="form-input" id="fe-days" type="number" min="1" max="14" value="${f?.days || ''}" placeholder="e.g. 3" style="max-width:120px;" ${canEditFest ? '' : 'disabled'}>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Card Colour</label>
+          <div class="color-picker-grid" id="fe-color-grid">${swatchHtml}</div>
+        </div>
+        ${f && isModerator() ? `
+        <div class="form-group">
+          <label class="form-label">🗺️ Festival Map <span style="color:var(--muted);font-weight:400;">(moderators only — lets crew tap a spot on meetup pins)</span></label>
+          ${f.mapUrl ? `<img src="${escHtml(f.mapUrl)}" alt="Festival map" style="width:100%;border-radius:10px;margin-bottom:8px;max-height:220px;object-fit:cover;">` : ''}
+          <input type="file" accept="image/*" onchange="handleFestivalMapUpload(event, '${f.id}')">
+          ${f.mapUrl ? `<button class="btn btn-ghost" style="margin-top:8px;" onclick="removeFestivalMap('${f.id}')">Remove map</button>` : ''}
+        </div>` : ''}
+        ${f ? `<div class="fest-goers-note" id="re-goers-note">${goers.length ? goers.length + ' tribe member' + (goers.length!==1?'s':'') + ' linked: ' + goers.map(g=>escHtml(g.name.split(' ')[0])).join(', ') : 'No tribe members linked yet'}</div>
+        <div class="fest-search-wrap" style="margin-top:8px;margin-bottom:4px;">
+          <input class="form-input" id="re-raver-search" placeholder="🔍 Search tribe to add…" autocomplete="off" style="font-size:16px;"
+            oninput="reSearch(this.value)"
+            onblur="setTimeout(()=>{const d=document.getElementById('re-raver-results');if(d)d.style.display='none';},200)">
+          <div id="re-raver-results" class="fest-search-dropdown" style="display:none;"></div>
+        </div>` : ''}
       </div>
-      <div class="form-group">
-        <label class="form-label">How Many Days? <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
-        <input class="form-input" id="fe-days" type="number" min="1" max="14" value="${f?.days || ''}" placeholder="e.g. 3" style="max-width:120px;" ${canEditFest ? '' : 'disabled'}>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Card Colour</label>
-        <div class="color-picker-grid" id="fe-color-grid">${swatchHtml}</div>
-      </div>
-      ${f && isModerator() ? `
-      <div class="form-group">
-        <label class="form-label">🗺️ Festival Map <span style="color:var(--muted);font-weight:400;">(moderators only — lets crew tap a spot on meetup pins)</span></label>
-        ${f.mapUrl ? `<img src="${escHtml(f.mapUrl)}" alt="Festival map" style="width:100%;border-radius:10px;margin-bottom:8px;max-height:220px;object-fit:cover;">` : ''}
-        <input type="file" accept="image/*" onchange="handleFestivalMapUpload(event, '${f.id}')">
-        ${f.mapUrl ? `<button class="btn btn-ghost" style="margin-top:8px;" onclick="removeFestivalMap('${f.id}')">Remove map</button>` : ''}
-      </div>` : ''}
-      ${f ? `<div class="fest-goers-note" id="re-goers-note">${goers.length ? goers.length + ' tribe member' + (goers.length!==1?'s':'') + ' linked: ' + goers.map(g=>escHtml(g.name.split(' ')[0])).join(', ') : 'No tribe members linked yet'}</div>
-      <div class="fest-search-wrap" style="margin-top:8px;margin-bottom:4px;">
-        <input class="form-input" id="re-raver-search" placeholder="🔍 Search tribe to add…" autocomplete="off" style="font-size:16px;"
-          oninput="reSearch(this.value)"
-          onblur="setTimeout(()=>{const d=document.getElementById('re-raver-results');if(d)d.style.display='none';},200)">
-        <div id="re-raver-results" class="fest-search-dropdown" style="display:none;"></div>
-      </div>` : ''}
-      <div class="modal-actions">
+      <div class="page-panel-footer">
         ${f && currentUser ? `<button class="btn btn-ghost" onclick="showFestivalHistoryInModal('${f.id}')">📜 History</button>` : ''}
         ${f && f.archived && festivalPerms(f).canArchive ? `<button class="btn btn-ghost" onclick="unarchiveFestival('${f.id}')">🗄️ Unarchive</button>` : ''}
         ${f && festivalPerms(f).canEdit ? `<button class="btn btn-ghost" style="color:var(--neon-pink);" onclick="showDeleteRaveConfirm()">Delete</button>` : ''}
@@ -18391,10 +18433,12 @@ async function doProfilePasswordChange() {
     const modal = document.getElementById('rave-edit-modal');
     if (!modal) return;
     modal.innerHTML = `
-      <div class="modal-title">📜 History${f ? ' — ' + escHtml(f.name) : ''}</div>
-      <div id="festival-history-list"><p style="font-size:0.82rem;color:var(--muted);text-align:center;padding:14px 0;">Loading…</p></div>
-      <div class="modal-actions">
-        <button class="btn btn-ghost" data-fest-id="${escHtml(String(festId))}" onclick="openRaveEditor(this.dataset.festId)">← Back</button>
+      <div class="page-panel-header">
+        <button type="button" class="page-panel-back" data-fest-id="${escHtml(String(festId))}" onclick="openRaveEditor(this.dataset.festId)">← Back</button>
+        <div class="modal-title">📜 History${f ? ' — ' + escHtml(f.name) : ''}</div>
+      </div>
+      <div class="page-panel-body">
+        <div id="festival-history-list"><p style="font-size:0.82rem;color:var(--muted);text-align:center;padding:14px 0;">Loading…</p></div>
       </div>
     `;
     const rows = await dbLoadFestivalHistory(festId);
@@ -18481,9 +18525,6 @@ async function doProfilePasswordChange() {
   function closeRaveEditor() {
     document.getElementById('rave-edit-overlay').classList.remove('open');
     editingFestivalId = null;
-  }
-  function closeRaveEditorOutside(e) {
-    if (e.target === document.getElementById('rave-edit-overlay')) closeRaveEditor();
   }
 
   let _reSearchQuery = '';
@@ -18710,16 +18751,22 @@ async function doProfilePasswordChange() {
         </div>`;
       document.getElementById('delete-rave-sheet-overlay').classList.add('open');
     } else {
-      // No linked goers — use the existing in-modal confirmation
+      // No linked goers — use the existing in-page confirmation
       document.getElementById('rave-edit-modal').innerHTML = `
-        <div style="text-align:center;padding:8px 0 24px;">
-          <div style="font-size:2.8rem;margin-bottom:14px;">🗑️</div>
-          <div class="modal-title" style="margin-bottom:12px;">Delete "${escHtml(f.name)}"?</div>
-          <p style="font-size:0.86rem;color:var(--muted);line-height:1.65;margin-bottom:8px;">No tribe members are linked to this rave.</p>
+        <div class="page-panel-header">
+          <button type="button" class="page-panel-back" onclick="openRaveEditor(activeFestId)">← Back</button>
+          <div class="modal-title">Delete rave?</div>
         </div>
-        ${reasonFieldHTML({ textareaId: 'fest-delete-reason', confirmBtnId: 'fest-delete-confirm-btn', label: 'Why are you deleting this?', placeholder: 'e.g. duplicate entry, event got cancelled…' })}
-        <p style="font-size:0.86rem;color:var(--neon-pink);font-weight:700;text-align:center;">This cannot be undone.</p>
-        <div class="modal-actions">
+        <div class="page-panel-body">
+          <div style="text-align:center;padding:8px 0 24px;">
+            <div style="font-size:2.8rem;margin-bottom:14px;">🗑️</div>
+            <div class="modal-title" style="margin-bottom:12px;">Delete "${escHtml(f.name)}"?</div>
+            <p style="font-size:0.86rem;color:var(--muted);line-height:1.65;margin-bottom:8px;">No tribe members are linked to this rave.</p>
+          </div>
+          ${reasonFieldHTML({ textareaId: 'fest-delete-reason', confirmBtnId: 'fest-delete-confirm-btn', label: 'Why are you deleting this?', placeholder: 'e.g. duplicate entry, event got cancelled…' })}
+          <p style="font-size:0.86rem;color:var(--neon-pink);font-weight:700;text-align:center;">This cannot be undone.</p>
+        </div>
+        <div class="page-panel-footer">
           <button class="btn btn-ghost" onclick="openRaveEditor(activeFestId)" style="flex:1;padding:12px;">Cancel</button>
           <button class="btn btn-primary" id="fest-delete-confirm-btn" disabled onclick="deleteRave(activeFestId, document.getElementById('fest-delete-reason').value.trim())" style="flex:1;padding:12px;background:var(--neon-pink);">Yes, delete it</button>
         </div>`;
