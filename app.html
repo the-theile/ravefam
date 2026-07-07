@@ -41,6 +41,7 @@
     --surface2: #16161F;
     --text: #F0EEFF;
     --muted: #8585A5;
+    color-scheme: dark;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -3161,6 +3162,59 @@
     margin-top: 12px;
   }
 
+  /* Map pin lightbox */
+  .map-pin-lightbox {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.88);
+    z-index: 9999;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.25s;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  .map-pin-lightbox.open { opacity: 1; pointer-events: all; }
+  .map-pin-lightbox-viewport {
+    width: 92vw; height: 86vh;
+    overflow: hidden;
+    position: relative;
+    touch-action: none;
+  }
+  .map-pin-lightbox-stage {
+    position: absolute; top: 50%; left: 50%;
+    transform-origin: center center;
+    cursor: grab;
+  }
+  .map-pin-lightbox-stage.dragging { cursor: grabbing; }
+  .map-pin-lightbox-img {
+    display: block;
+    max-width: 92vw;
+    max-height: 86vh;
+    width: auto; height: auto;
+    border-radius: 8px;
+    user-select: none;
+    -webkit-user-drag: none;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.8), 4px 8px 24px rgba(0,0,0,0.5);
+  }
+  .map-pin-lightbox-marker {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+  .map-pin-lightbox-close {
+    position: absolute; top: 18px; right: 18px;
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(0,0,0,0.55);
+    color: #fff;
+    font-size: 1rem;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s;
+  }
+  .map-pin-lightbox-close:hover { background: rgba(220,38,38,0.85); }
+
   /* Photo crop modal */
   .photo-crop-overlay {
     position: fixed; inset: 0;
@@ -6279,6 +6333,17 @@
     <img id="photo-lightbox-img" src="" alt="Memory photo" class="photo-lightbox-img">
     <div class="photo-lightbox-label">✦ our memory ✦</div>
     <button id="photo-lightbox-remove" class="photo-lightbox-remove" onclick="removeOurPhotoFromLightbox()" title="Remove photo">🗑️ Remove</button>
+  </div>
+</div>
+
+<!-- Map Pin Lightbox -->
+<div id="map-pin-lightbox" class="map-pin-lightbox" onclick="if (event.target === this) closeMapPinLightbox()">
+  <button type="button" class="map-pin-lightbox-close" onclick="closeMapPinLightbox()" title="Close">✕</button>
+  <div id="map-pin-lightbox-viewport" class="map-pin-lightbox-viewport">
+    <div id="map-pin-lightbox-stage" class="map-pin-lightbox-stage">
+      <img id="map-pin-lightbox-img" src="" alt="Festival map" class="map-pin-lightbox-img" draggable="false">
+      <div id="map-pin-lightbox-marker" class="map-pin-lightbox-marker" style="display:none;"></div>
+    </div>
   </div>
 </div>
 
@@ -10016,8 +10081,145 @@ async function doProfilePasswordChange() {
     removeOurPhoto(lightboxCtx.viewingRaverId, lightboxCtx.slot);
   }
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closePhotoLightbox();
+    if (e.key === 'Escape') { closePhotoLightbox(); closeMapPinLightbox(); }
   });
+
+  // Map pin lightbox — shows the full festival map with the dropped pin
+  // still visible, and lets the viewer pinch/wheel-zoom + drag to pan.
+  function pinAvatarMarkerHTML(avatarUrl, gradient, name, size) {
+    const bg = gradient || 'linear-gradient(135deg,#FF2D78,#00F5FF)';
+    const inner = avatarUrl
+      ? `<img src="${escHtml(avatarUrl)}" alt="${escHtml(name || '')}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;">`
+      : `<div style="width:100%;height:100%;border-radius:50%;display:flex;align-items:center;justify-content:center;background:${bg};color:#fff;font-family:'Outfit',sans-serif;font-weight:800;font-size:${Math.round(size * 0.36)}px;">${escHtml(initials(name || '').toUpperCase())}</div>`;
+    return `<div style="width:${size}px;height:${size}px;border-radius:50%;border:2px solid #fff;box-shadow:0 3px 10px rgba(0,0,0,0.45);overflow:hidden;">${inner}</div>`;
+  }
+
+  const MAP_PIN_LB_MIN_SCALE = 1;
+  const MAP_PIN_LB_MAX_SCALE = 5;
+  let mapPinLightboxState = null;
+
+  function openMapPinLightbox(mapUrl, pinX, pinY, avatarUrl, gradient, name) {
+    const img = document.getElementById('map-pin-lightbox-img');
+    const marker = document.getElementById('map-pin-lightbox-marker');
+    img.src = mapUrl;
+    if (pinX != null && pinY != null) {
+      marker.innerHTML = pinAvatarMarkerHTML(avatarUrl, gradient, name, 44);
+      marker.style.left = (pinX * 100) + '%';
+      marker.style.top = (pinY * 100) + '%';
+      marker.style.display = '';
+    } else {
+      marker.style.display = 'none';
+    }
+    mapPinLightboxState = { scale: 1, panX: 0, panY: 0 };
+    applyMapPinLightboxTransform();
+    document.getElementById('map-pin-lightbox').classList.add('open');
+  }
+  function closeMapPinLightbox() {
+    const el = document.getElementById('map-pin-lightbox');
+    if (el) el.classList.remove('open');
+    mapPinLightboxState = null;
+  }
+  function applyMapPinLightboxTransform() {
+    const s = mapPinLightboxState;
+    if (!s) return;
+    const stage = document.getElementById('map-pin-lightbox-stage');
+    if (stage) stage.style.transform = `translate(-50%, -50%) translate(${s.panX}px, ${s.panY}px) scale(${s.scale})`;
+  }
+  function clampMapPinLightboxScale(scale) {
+    return Math.min(MAP_PIN_LB_MAX_SCALE, Math.max(MAP_PIN_LB_MIN_SCALE, scale));
+  }
+
+  (function initMapPinLightboxGestures() {
+    const viewport = document.getElementById('map-pin-lightbox-viewport');
+    const stage = document.getElementById('map-pin-lightbox-stage');
+    if (!viewport || !stage) return;
+
+    function viewportOffset(clientX, clientY) {
+      const rect = viewport.getBoundingClientRect();
+      return { x: clientX - rect.left - rect.width / 2, y: clientY - rect.top - rect.height / 2 };
+    }
+    function zoomAt(clientX, clientY, newScale) {
+      const s = mapPinLightboxState;
+      if (!s) return;
+      const off = viewportOffset(clientX, clientY);
+      const localX = (off.x - s.panX) / s.scale;
+      const localY = (off.y - s.panY) / s.scale;
+      s.scale = clampMapPinLightboxScale(newScale);
+      s.panX = off.x - s.scale * localX;
+      s.panY = off.y - s.scale * localY;
+      applyMapPinLightboxTransform();
+    }
+
+    viewport.addEventListener('wheel', e => {
+      if (!mapPinLightboxState) return;
+      e.preventDefault();
+      const factor = Math.exp(-e.deltaY * 0.0015);
+      zoomAt(e.clientX, e.clientY, mapPinLightboxState.scale * factor);
+    }, { passive: false });
+
+    // Mouse drag-to-pan
+    let mouseDrag = null;
+    stage.addEventListener('mousedown', e => {
+      if (!mapPinLightboxState) return;
+      mouseDrag = { startX: e.clientX, startY: e.clientY, panX: mapPinLightboxState.panX, panY: mapPinLightboxState.panY };
+      stage.classList.add('dragging');
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', e => {
+      if (!mouseDrag || !mapPinLightboxState) return;
+      mapPinLightboxState.panX = mouseDrag.panX + (e.clientX - mouseDrag.startX);
+      mapPinLightboxState.panY = mouseDrag.panY + (e.clientY - mouseDrag.startY);
+      applyMapPinLightboxTransform();
+    });
+    window.addEventListener('mouseup', () => { mouseDrag = null; stage.classList.remove('dragging'); });
+
+    // Touch drag-to-pan + pinch-to-zoom
+    let touchState = null;
+    function touchDist(t0, t1) { return Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY); }
+    function touchMid(t0, t1) { return { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 }; }
+
+    viewport.addEventListener('touchstart', e => {
+      if (!mapPinLightboxState) return;
+      if (e.touches.length === 1) {
+        const t = e.touches[0];
+        touchState = { mode: 'pan', startX: t.clientX, startY: t.clientY, panX: mapPinLightboxState.panX, panY: mapPinLightboxState.panY };
+      } else if (e.touches.length === 2) {
+        const mid = touchMid(e.touches[0], e.touches[1]);
+        const off = viewportOffset(mid.x, mid.y);
+        touchState = {
+          mode: 'pinch',
+          startDist: touchDist(e.touches[0], e.touches[1]),
+          startScale: mapPinLightboxState.scale,
+          localX: (off.x - mapPinLightboxState.panX) / mapPinLightboxState.scale,
+          localY: (off.y - mapPinLightboxState.panY) / mapPinLightboxState.scale
+        };
+      }
+      e.preventDefault();
+    }, { passive: false });
+
+    viewport.addEventListener('touchmove', e => {
+      if (!touchState || !mapPinLightboxState) return;
+      e.preventDefault();
+      if (touchState.mode === 'pan' && e.touches.length === 1) {
+        const t = e.touches[0];
+        mapPinLightboxState.panX = touchState.panX + (t.clientX - touchState.startX);
+        mapPinLightboxState.panY = touchState.panY + (t.clientY - touchState.startY);
+        applyMapPinLightboxTransform();
+      } else if (touchState.mode === 'pinch' && e.touches.length === 2) {
+        const dist = touchDist(e.touches[0], e.touches[1]);
+        const mid = touchMid(e.touches[0], e.touches[1]);
+        const off = viewportOffset(mid.x, mid.y);
+        const newScale = clampMapPinLightboxScale(touchState.startScale * (dist / touchState.startDist));
+        mapPinLightboxState.scale = newScale;
+        mapPinLightboxState.panX = off.x - newScale * touchState.localX;
+        mapPinLightboxState.panY = off.y - newScale * touchState.localY;
+        applyMapPinLightboxTransform();
+      }
+    }, { passive: false });
+
+    viewport.addEventListener('touchend', () => { touchState = null; });
+    viewport.addEventListener('touchcancel', () => { touchState = null; });
+  })();
 
   async function removeOurPhoto(viewingRaverId, slot) {
     closePhotoLightbox();
@@ -11381,9 +11583,18 @@ async function doProfilePasswordChange() {
         const pinFestival = pinRoom && pinRoom.festival_id
           ? festivals.find(f => String(f.id) === String(pinRoom.festival_id)) : null;
         if (pinFestival?.mapUrl) {
-          mapThumbHtml = `<div style="position:relative;margin-top:6px;cursor:zoom-in;" onclick="openPhotoLightbox('${pinFestival.mapUrl.replace(/'/g,"\\'")}')">
+          const pinAvatarUrl = senderRaver?.avatarUrl || null;
+          const pinGradient = senderRaver?.gradient || 'linear-gradient(135deg,#FF2D78,#00F5FF)';
+          const openArgs = [
+            `'${pinFestival.mapUrl.replace(/'/g,"\\'")}'`,
+            m.pin_x, m.pin_y,
+            pinAvatarUrl ? `'${pinAvatarUrl.replace(/'/g,"\\'")}'` : 'null',
+            `'${pinGradient.replace(/'/g,"\\'")}'`,
+            `'${senderName.replace(/'/g,"\\'")}'`
+          ].join(', ');
+          mapThumbHtml = `<div style="position:relative;margin-top:6px;cursor:zoom-in;" onclick="openMapPinLightbox(${openArgs})">
             <img src="${escHtml(pinFestival.mapUrl)}" alt="Festival map" style="width:100%;border-radius:8px;display:block;">
-            <div style="position:absolute;left:${m.pin_x * 100}%;top:${m.pin_y * 100}%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:var(--neon-pink);border:2px solid #fff;"></div>
+            <div style="position:absolute;left:${m.pin_x * 100}%;top:${m.pin_y * 100}%;transform:translate(-50%,-50%);">${pinAvatarMarkerHTML(pinAvatarUrl, pinGradient, senderName, 28)}</div>
           </div>`;
         }
       }
@@ -11453,7 +11664,7 @@ async function doProfilePasswordChange() {
         </div>
         <div id="huddle-meetup-form" class="huddle-inline-form" style="display:none;">
           <input type="text" id="huddle-meetup-place" class="form-input" placeholder="Where's the meetup? (e.g. Main Stage sound booth)" maxlength="120">
-          <input type="datetime-local" id="huddle-meetup-when" class="form-input">
+          <input type="datetime-local" id="huddle-meetup-when" class="form-input" style="color-scheme:dark;">
           ${mapUrl ? `<div id="huddle-meetup-pin-preview" style="margin-top:4px;">${meetupPinPreviewHTML()}</div>` : ''}
           <div class="huddle-inline-form-actions">
             <button type="button" class="btn btn-ghost" onclick="toggleHuddleMeetupForm()">Cancel</button>
