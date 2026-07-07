@@ -1,4 +1,4 @@
-const CACHE = 'ravefam-v6';
+const CACHE = 'ravefam-v7';
 const PRECACHE = [
   '/',
   '/app.html',
@@ -63,4 +63,23 @@ self.addEventListener('fetch', e => {
       return res;
     }))
   );
+});
+
+self.addEventListener('push', e => {
+  const data = e.data ? e.data.json() : {};
+  e.waitUntil(self.registration.showNotification(data.title || 'RaveFAM', {
+    body: data.body || '',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    data: { crewId: data.crewId, roomId: data.roomId, messageId: data.messageId }
+  }));
+});
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = '/app.html';
+  e.waitUntil(clients.matchAll({ type: 'window' }).then(list => {
+    for (const c of list) if ('focus' in c) return c.focus();
+    return clients.openWindow(url);
+  }));
 });
