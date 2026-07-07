@@ -5303,7 +5303,7 @@
     <button class="nav-tab" onclick="switchTab('events', this)"><span class="tab-icon">🎟️</span>Raves</button>
     <button class="nav-tab" onclick="switchTab('members', this)"><span class="tab-icon">👥</span>Ravers</button>
     <button class="nav-tab" onclick="switchTab('stats', this); loadStatsPage();"><span class="tab-icon">📊</span>Stats</button>
-    <button class="nav-tab" onclick="switchTab('checklist', this)"><span class="tab-icon">✨</span>Coming Soon</button>
+    <button class="nav-tab" onclick="switchTab('checklist', this)"><span class="tab-icon">✨</span><span class="tab-label">Coming Soon</span></button>
   </nav>
 
   <main>
@@ -5413,7 +5413,7 @@
 
     <!-- CHECKLIST PAGE -->
     <div class="page" id="page-checklist">
-      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:60px 24px;gap:20px;">
+      <div id="vv-gate-wrap" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:60px 24px;gap:20px;">
         <div style="font-size:3.5rem;">✨</div>
         <div style="font-family:'Fraunces',sans-serif;font-weight:800;font-size:1.6rem;color:#fff;letter-spacing:-0.5px;">Something good<br>is coming</div>
         <div style="font-size:0.9rem;color:var(--muted);max-width:300px;line-height:1.65;">More features are on the way. We're building things that'll make the whole rave experience smoother — stay tuned.</div>
@@ -5421,8 +5421,6 @@
           <span style="width:6px;height:6px;border-radius:50%;background:var(--neon-pink);animation:pulse 2s infinite;display:inline-block;"></span>
           In development
         </div>
-
-        <div id="vendor-village-root" style="width:100%;"></div>
 
         <div style="margin-top:32px;width:100%;max-width:400px;text-align:left;">
           <div style="font-family:'Fraunces',sans-serif;font-weight:800;font-size:1.1rem;color:#fff;margin-bottom:6px;text-align:center;">Keep the party going ☕</div>
@@ -5433,6 +5431,12 @@
           </div>
         </div>
       </div>
+
+      <div id="vv-live-header" class="section-header" style="display:none;margin-bottom:16px;">
+        <div class="section-title">Vendor Village 🏪</div>
+      </div>
+
+      <div id="vendor-village-root" style="width:100%;"></div>
     </div>
 
     <!-- STATS PAGE -->
@@ -7746,6 +7750,7 @@ async function doProfilePasswordChange() {
     await dbLoadModerators().catch(() => {});
     if (isModerator()) await dbLoadFlags().catch(() => {});
     updateModBadge();
+    await dbLoadMyVendorBadges().catch(() => {});
 
     // --- Festivals ---
     const { data: dbFests, error: fErr } = await sb
@@ -12401,7 +12406,6 @@ async function doProfilePasswordChange() {
     // notifyCrewMembers), the earner here is always the person who just
     // acted, so there's no separate audience to notify.
     showToast(`${def.emoji} Vendor badge unlocked: ${def.name}!`);
-    renderVendorBadgeStrip();
   }
 
   async function checkAndAwardVendorBadges() {
@@ -12412,40 +12416,25 @@ async function doProfilePasswordChange() {
     }
   }
 
-  // Own-profile-only mention (v1 scope) — deliberately only shows EARNED
-  // badges from the already-loaded vendorRaverBadges cache, never "locked"
-  // ones: if the cache is empty because the viewer hasn't opened Vendor
-  // Village yet this session (not because they've earned nothing), showing
-  // a "locked" badge here would read as a false claim. Showing nothing in
-  // that case is always a safe, true statement. Cross-profile display
+  // Own-profile-only mention (v1 scope). vendorRaverBadges is now loaded at
+  // login (loadAllData -> dbLoadMyVendorBadges), so it always reflects the
+  // real earned state — always show all badge definitions, locked or
+  // earned, same as the crew FAM Pins profile section. Cross-profile display
   // (showing another raver's badges) is deferred — it would need its own
   // query per profile view, which isn't worth adding for v1.
   function vendorBadgeProfileMentionHTML() {
-    if (!vendorRaverBadges.length) return '';
-    const earned = VENDOR_BADGE_DEFINITIONS.filter(def => vendorRaverBadges.some(b => b.badge_id === def.id));
-    if (!earned.length) return '';
+    const items = VENDOR_BADGE_DEFINITIONS.map(def => {
+      const earned = vendorRaverBadges.some(b => b.badge_id === def.id);
+      return `
+        <div class="fam-pin fam-pin-sm ${earned ? 'earned' : 'locked'} profile-fam-pin" title="${escHtml(def.name)}">
+          <span>${def.emoji}</span>
+          <div class="profile-pin-tooltip">${escHtml(def.name)}<br><span style="color:var(--muted);font-size:0.7rem;">${escHtml(def.description)}</span></div>
+        </div>`;
+    }).join('');
     return `<div class="profile-section" style="margin-top:14px;">
       <h3>🏪 Vendor Village</h3>
-      <div class="fam-pin-grid">${earned.map(def => `
-        <div class="fam-pin-wrap" title="${escHtml(def.description)}">
-          <div class="fam-pin earned"><span>${def.emoji}</span></div>
-          <div class="fam-pin-label">${escHtml(def.name)}</div>
-        </div>`).join('')}</div>
+      <div class="profile-fam-pins-grid">${items}</div>
     </div>`;
-  }
-
-  function vendorBadgeStripHTML() {
-    if (!currentUser) return '';
-    return `
-      <div class="fam-pin-grid" style="margin-top:16px;">
-        ${VENDOR_BADGE_DEFINITIONS.map(def => {
-          const earned = vendorRaverBadges.some(b => b.badge_id === def.id);
-          return `<div class="fam-pin-wrap" title="${escHtml(def.description)}">
-            <div class="fam-pin ${earned ? 'earned' : 'locked'}"><span>${def.emoji}</span></div>
-            <div class="fam-pin-label">${escHtml(def.name)}</div>
-          </div>`;
-        }).join('')}
-      </div>`;
   }
 
   async function dbDeleteVendor(vendorId, reason = null) {
@@ -12571,23 +12560,38 @@ async function doProfilePasswordChange() {
   // Entry point called by vendorVillageTap() once unlocked (and by
   // viewFlagTarget() for moderators triaging a vendor/vendor_review report,
   // which force-unlocks and jumps straight in without the tap gate). Renders
-  // into the #vendor-village-root div that sits inside the existing
-  // #page-checklist placeholder — the placeholder content above/below it is
-  // untouched for everyone who hasn't unlocked this.
+  // into the #vendor-village-root div that sits inside #page-checklist.
+  // Once unlocked, applyVendorVillageUnlockedUI() hides the "coming soon"
+  // gate copy + donation nudge (#vv-gate-wrap) and swaps in the live header
+  // + nav tab label, so the feature no longer reads as an easter egg.
   let vendorVillageTab = 'browse';
+
+  function applyVendorVillageUnlockedUI() {
+    const gate = document.getElementById('vv-gate-wrap');
+    if (gate) gate.style.display = 'none';
+    const header = document.getElementById('vv-live-header');
+    if (header) header.style.display = '';
+    const tab = document.querySelector('.nav-tab[onclick*="\'checklist\'"]');
+    if (tab) {
+      const icon = tab.querySelector('.tab-icon');
+      const label = tab.querySelector('.tab-label');
+      if (icon) icon.textContent = '🏪';
+      if (label) label.textContent = 'Vendor Village';
+    }
+  }
 
   function renderVendorVillage() {
     const root = document.getElementById('vendor-village-root');
     if (!root) return;
     if (!_vendorVillageUnlocked) { root.innerHTML = ''; return; }
+    applyVendorVillageUnlockedUI();
     root.innerHTML = vendorVillageShellHTML();
     loadVendorVillageData();
   }
 
   function vendorVillageShellHTML() {
     return `
-      <div id="vv-badge-strip"></div>
-      <div class="stats-subtabs" style="margin-top:32px;">
+      <div class="stats-subtabs">
         <button class="stats-subtab${vendorVillageTab === 'browse' ? ' active' : ''}" onclick="switchVendorTab('browse', this)">🏪 Browse</button>
         <button class="stats-subtab${vendorVillageTab === 'saved' ? ' active' : ''}" onclick="switchVendorTab('saved', this)">💾 Saved</button>
         <button class="stats-subtab${vendorVillageTab === 'submit' ? ' active' : ''}" onclick="switchVendorTab('submit', this)">➕ Add Vendor</button>
@@ -12611,12 +12615,6 @@ async function doProfilePasswordChange() {
     if (vendorVillageTab === 'browse') renderVendorBrowsePanel();
     else if (vendorVillageTab === 'saved') renderVendorSavedPanel();
     else if (vendorVillageTab === 'submit') renderVendorSubmitPanel();
-    renderVendorBadgeStrip();
-  }
-
-  function renderVendorBadgeStrip() {
-    const el = document.getElementById('vv-badge-strip');
-    if (el) el.innerHTML = vendorBadgeStripHTML();
   }
 
   // Modeled on switchStatTab (stats page sub-tabs) — same active-class
@@ -12643,6 +12641,7 @@ async function doProfilePasswordChange() {
   // openVendorVillageFromMod now that it's no longer mod-only.
   async function jumpToVendorVillage(vendorIdToOpen) {
     _vendorVillageUnlocked = true;
+    applyVendorVillageUnlockedUI();
     switchTab('checklist');
     const root = document.getElementById('vendor-village-root');
     if (root) root.innerHTML = vendorVillageShellHTML();
