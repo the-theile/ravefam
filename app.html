@@ -2769,13 +2769,33 @@
   .huddle-bubble-reaction-picker-right { left: auto; right: 0; }
 
   .huddle-bubble-edited { font-size: 0.68rem; color: var(--muted); margin-top: 3px; display: block; }
-  .huddle-bubble-actions { display: flex; align-items: center; gap: 4px; margin-top: 5px; }
-  .huddle-bubble-action-btn {
-    background: none; border: none; cursor: pointer;
-    font-size: 0.78rem; opacity: 0.55; padding: 2px 4px; line-height: 1;
-    transition: opacity 0.15s;
+  .huddle-bubble-menu-wrap { position: relative; display: inline-block; }
+  .huddle-bubble-menu-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px;
+    background: rgba(255,255,255,0.05); border: 1.5px solid rgba(255,255,255,0.1);
+    border-radius: 50%; font-size: 0.8rem; line-height: 1; cursor: pointer;
+    color: var(--muted); transition: all 0.15s;
   }
-  .huddle-bubble-action-btn:hover { opacity: 1; }
+  .huddle-bubble-menu-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
+  .huddle-bubble-menu {
+    position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 3;
+    display: flex; flex-direction: column;
+    min-width: 120px;
+    background: var(--surface2);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 4px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  .huddle-bubble-menu-row {
+    display: flex; align-items: center; gap: 8px;
+    background: none; border: none; cursor: pointer;
+    color: var(--text); font-size: 0.82rem; text-align: left;
+    padding: 7px 10px; border-radius: 8px; white-space: nowrap;
+  }
+  .huddle-bubble-menu-row:hover { background: rgba(255,255,255,0.08); }
+  .huddle-bubble-menu-right { left: auto; right: 0; }
 
   .huddle-beacon-fab-inline {
     flex-shrink: 0;
@@ -11296,10 +11316,13 @@ async function doProfilePasswordChange() {
     const stateClass = m._pending ? ' huddle-bubble-pending' : (m._failed ? ' huddle-bubble-failed' : '');
     const retryBtn = m._failed ? `<button type="button" class="huddle-bubble-retry" data-mid="${m.id}" onclick="retryHuddleMessage(this.dataset.mid)">Retry ↻</button>` : '';
     const editedLabel = m.updated_at ? `<span class="huddle-bubble-edited" title="Edited ${escHtml(formatModDate(m.updated_at))}">edited</span>` : '';
+    const menuRows = `
+        ${canEdit ? `<button type="button" class="huddle-bubble-menu-row" data-mid="${m.id}" onclick="toggleHuddleBubbleActionsMenu(this.dataset.mid); toggleHuddleMessageEditMode('${m.id}')">✏️ Edit</button>` : ''}
+        ${canDelete ? `<button type="button" class="huddle-bubble-menu-row" data-mid="${m.id}" onclick="toggleHuddleBubbleActionsMenu(this.dataset.mid); deleteHuddleMessage('${m.id}')">🗑️ Delete</button>` : ''}`;
     const actionsHTML = (canEdit || canDelete) ? `
-      <div class="huddle-bubble-actions">
-        ${canEdit ? `<button type="button" class="huddle-bubble-action-btn" data-mid="${m.id}" onclick="toggleHuddleMessageEditMode(this.dataset.mid)" title="Edit">✏️</button>` : ''}
-        ${canDelete ? `<button type="button" class="huddle-bubble-action-btn" data-mid="${m.id}" onclick="deleteHuddleMessage(this.dataset.mid)" title="Delete">🗑️</button>` : ''}
+      <div class="huddle-bubble-menu-wrap">
+        <button type="button" class="huddle-bubble-menu-btn" data-mid="${m.id}" onclick="toggleHuddleBubbleActionsMenu(this.dataset.mid)" title="More">⋯</button>
+        <div id="huddle-bubble-menu-${m.id}" class="huddle-bubble-menu${isYou ? ' huddle-bubble-menu-right' : ''}" style="display:none;">${menuRows}</div>
       </div>` : '';
 
     return `
@@ -11309,8 +11332,7 @@ async function doProfilePasswordChange() {
           ${!isYou ? `<div class="huddle-bubble-sender">${escHtml(senderName)}</div>` : ''}
           <div class="huddle-bubble-body">${bodyHtml}</div>
           ${editedLabel}
-          <div class="huddle-reaction-row">${reactionRow}${addReactionBtn}</div>
-          ${actionsHTML}
+          <div class="huddle-reaction-row">${reactionRow}${addReactionBtn}${actionsHTML}</div>
           ${retryBtn}
         </div>
       </div>`;
@@ -11590,6 +11612,12 @@ async function doProfilePasswordChange() {
     const el = document.getElementById('huddle-bubble-picker-' + messageId); if (!el) return;
     const opening = el.style.display === 'none';
     document.querySelectorAll('.huddle-bubble-reaction-picker').forEach(p => { if (p !== el) p.style.display = 'none'; });
+    el.style.display = opening ? '' : 'none';
+  }
+  function toggleHuddleBubbleActionsMenu(messageId) {
+    const el = document.getElementById('huddle-bubble-menu-' + messageId); if (!el) return;
+    const opening = el.style.display === 'none';
+    document.querySelectorAll('.huddle-bubble-menu').forEach(m => { if (m !== el) m.style.display = 'none'; });
     el.style.display = opening ? '' : 'none';
   }
 
