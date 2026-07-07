@@ -64,6 +64,10 @@ test.describe('crew history', () => {
     await expect(page.locator('#page-crew-detail')).toHaveClass(/active/);
     await expect(page.locator('#crew-history-section')).toContainText('Removed from the crew');
 
+    // History lives behind the "History" feature tile — open it before
+    // interacting with anything inside (it starts collapsed on Overview).
+    await page.locator('.crew-feature-tile[data-feature="history"]').click();
+
     // Collapsed to 6 by default with 8 rows seeded — "Show more" appears.
     const showMoreBtn = page.locator('#crew-history-section button', { hasText: 'Show' });
     await expect(showMoreBtn).toContainText('Show 2 more');
