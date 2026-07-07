@@ -121,3 +121,157 @@
     renderToggle: renderToggle
   };
 })();
+
+// Home-screen icon: a Lineup-Explorer-specific mark (distinct from the main
+// RaveFAM app icon), applied via apple-touch-icon (iOS) and a per-page
+// manifest (Android). The manifest is built per page rather than shared as a
+// static file so each installed shortcut's start_url points back at the
+// specific event page it was added from, not the /lineup-explorer/ hub.
+(function () {
+  "use strict";
+
+  var appleTouchIcon = document.querySelector('link[rel="apple-touch-icon"]');
+  if (!appleTouchIcon) {
+    appleTouchIcon = document.createElement("link");
+    appleTouchIcon.rel = "apple-touch-icon";
+    document.head.appendChild(appleTouchIcon);
+  }
+  appleTouchIcon.href = "/lineup-explorer/apple-touch-icon.png";
+
+  var title = (document.title.split(" — ")[0] || "RaveFAM").replace(/ Lineup$/, "").trim();
+  var manifest = {
+    name: title,
+    short_name: title,
+    start_url: window.location.pathname,
+    scope: "/lineup-explorer/",
+    display: "standalone",
+    background_color: "#07050f",
+    theme_color: "#07050f",
+    icons: [
+      { src: "/lineup-explorer/icon-192.png", sizes: "192x192", type: "image/png" },
+      { src: "/lineup-explorer/icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable any" }
+    ]
+  };
+  var blob = new Blob([JSON.stringify(manifest)], { type: "application/manifest+json" });
+  var manifestLink = document.createElement("link");
+  manifestLink.rel = "manifest";
+  manifestLink.href = URL.createObjectURL(blob);
+  document.head.appendChild(manifestLink);
+})();
+
+(function () {
+  "use strict";
+
+  function isStandalone() {
+    if (window.navigator.standalone === true) return true;
+    try { return window.matchMedia("(display-mode: standalone)").matches; } catch (e) { return false; }
+  }
+
+  function detectOS() {
+    var ua = window.navigator.userAgent || "";
+    var isIOS = /iPhone|iPad|iPod/.test(ua) ||
+      (window.navigator.platform === "MacIntel" && window.navigator.maxTouchPoints > 1);
+    if (isIOS) return "ios";
+    if (/Android/.test(ua)) return "android";
+    return "other";
+  }
+
+  function stepsFor(os) {
+    if (os === "ios") {
+      return {
+        title: "Save to Home Screen",
+        sub: "Add this page as an icon on your iPhone or iPad — opens instantly, just like an app.",
+        steps: [
+          "Tap the <b>Share</b> icon (the square with an arrow) in Safari's toolbar.",
+          "Scroll down and tap <b>Add to Home Screen</b>.",
+          "Tap <b>Add</b> in the top right corner."
+        ],
+        note: "Opening this from Instagram, TikTok, or another app? Tap the <b>•••</b> menu first and choose <b>Open in Safari</b> — the Share option only shows up there."
+      };
+    }
+    if (os === "android") {
+      return {
+        title: "Save to Home Screen",
+        sub: "Add this page as an icon on your Android phone — opens instantly, just like an app.",
+        steps: [
+          "Tap the <b>⋮</b> menu in the top right of Chrome.",
+          "Tap <b>Add to Home screen</b> (or <b>Install app</b>).",
+          "Tap <b>Add</b> to confirm."
+        ]
+      };
+    }
+    return {
+      title: "Save to Home Screen",
+      sub: "Open this page on your phone to save it to your home screen — works on both iPhone and Android.",
+      steps: []
+    };
+  }
+
+  function buildModal(os) {
+    var content = stepsFor(os);
+    var overlay = document.createElement("div");
+    overlay.className = "a2hs-overlay";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-labelledby", "a2hsTitle");
+
+    var stepsHtml = content.steps.length
+      ? '<ol class="a2hs-steps">' + content.steps.map(function (s) { return "<li>" + s + "</li>"; }).join("") + "</ol>"
+      : "";
+    var noteHtml = content.note ? '<p class="a2hs-note">' + content.note + "</p>" : "";
+
+    overlay.innerHTML =
+      '<div class="a2hs-modal">' +
+        '<button type="button" class="a2hs-close" aria-label="Close">✕</button>' +
+        '<h3 id="a2hsTitle">' + content.title + "</h3>" +
+        '<p class="a2hs-sub">' + content.sub + "</p>" +
+        stepsHtml + noteHtml +
+      "</div>";
+
+    function close() {
+      overlay.classList.remove("show");
+      setTimeout(function () { overlay.remove(); }, 200);
+    }
+
+    overlay.querySelector(".a2hs-close").addEventListener("click", close);
+    overlay.addEventListener("click", function (e) { if (e.target === overlay) close(); });
+    document.addEventListener("keydown", function onKey(e) {
+      if (e.key === "Escape") { close(); document.removeEventListener("keydown", onKey); }
+    });
+
+    document.body.appendChild(overlay);
+    void overlay.offsetHeight; // force reflow so the transition below actually animates
+    overlay.classList.add("show");
+  }
+
+  function injectButton() {
+    if (isStandalone()) return;
+    var bar = document.querySelector(".brandbar");
+    if (!bar) return;
+
+    var os = detectOS();
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "a2hs-btn";
+    btn.innerHTML = "📲 Save";
+    btn.setAttribute("aria-label", "Save this page to your home screen");
+    btn.addEventListener("click", function () { buildModal(os); });
+
+    var yr = bar.querySelector(".yr");
+    if (yr) {
+      var wrap = document.createElement("span");
+      wrap.className = "a2hs-yr-wrap";
+      yr.parentNode.insertBefore(wrap, yr);
+      wrap.appendChild(btn);
+      wrap.appendChild(yr);
+    } else {
+      bar.appendChild(btn);
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", injectButton);
+  } else {
+    injectButton();
+  }
+})();
