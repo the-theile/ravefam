@@ -11138,8 +11138,11 @@ async function doProfilePasswordChange() {
   let _huddleRecordingStartedAt = 0;
   let _huddleRecordingTimerInterval = null;
 
-  // All shared upcoming festivals for a crew, one entry per festival —
-  // sibling to crewNextUp() (which only returns the single nearest one).
+  // Shared upcoming festivals for a crew, one entry per festival — sibling
+  // to crewNextUp(crew, socialOnly=true) (which only returns the single
+  // nearest one). Requires at least one OTHER member attending, same
+  // whoRavers.some(r => !r.isYou) rule crewNextUp's social-only mode uses,
+  // so a solo RSVP doesn't spin up a crew chat room nobody else is in.
   function deriveCrewFestivalRooms(crew) {
     const people = crewSquad(crew);
     const byFest = {};
@@ -11149,7 +11152,9 @@ async function doProfilePasswordChange() {
         byFest[f.id].who.push(p);
       });
     });
-    return Object.values(byFest).sort((a, b) => a.festival._d - b.festival._d);
+    return Object.values(byFest)
+      .filter(entry => entry.who.some(p => !p.isYou))
+      .sort((a, b) => a.festival._d - b.festival._d);
   }
 
   function huddleSenderName(uid) {
@@ -11193,7 +11198,12 @@ async function doProfilePasswordChange() {
       root.innerHTML = `<div class="es-block"><div class="es-icon">⚠️</div><div class="es-headline">Couldn't load the Huddle</div><div class="es-sub">Try again in a moment.</div></div>`;
       return;
     }
-    huddleRooms = rooms;
+    // Hide any already-materialized festival room that no longer has a 2nd
+    // attendee (created before shared-attendance gating existed, or the
+    // other member since cancelled) — recomputed live on every open, so a
+    // room quietly reappears if attendance overlap returns.
+    const qualifyingFestIds = new Set(festRooms.map(fr => String(fr.festival.id)));
+    huddleRooms = rooms.filter(r => r.kind !== 'festival' || qualifyingFestIds.has(String(r.festival_id)));
     const stillValid = _huddleActiveRoomId && huddleRooms.some(r => r.id === _huddleActiveRoomId);
     const defaultRoom = huddleRooms.find(r => r.room_key === 'main') || huddleRooms[0];
     await switchHuddleRoom(stillValid ? _huddleActiveRoomId : defaultRoom.id);
