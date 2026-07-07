@@ -1968,6 +1968,7 @@
   }
   .remove-member-btn:hover { color: var(--neon-pink); background: rgba(255,45,120,0.12); }
   .danger-zone { border-top: 1px solid rgba(255,45,120,0.15); margin-top: 20px; padding-top: 16px; }
+  .crew-danger-actions { display: flex; gap: 8px; }
   .inline-confirm {
     background: rgba(255,45,120,0.08); border: 1px solid rgba(255,45,120,0.25);
     border-radius: 12px; padding: 14px 16px; margin-top: 10px;
@@ -2550,19 +2551,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .crew-edit-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 0.9rem;
-    opacity: 0.4;
-    padding: 4px;
-    line-height: 1;
-    transition: opacity 0.15s;
-    flex-shrink: 0;
-    color: var(--text);
-  }
-  .crew-edit-btn:hover { opacity: 1; }
   .crew-invite-row {
     display: flex;
     align-items: center;
@@ -2581,6 +2569,35 @@
     color: var(--muted);
     line-height: 1.4;
   }
+
+  .crew-feature-tile-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .crew-feature-tile {
+    background: var(--surface2);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+    padding: 14px 6px;
+    text-align: center;
+    cursor: pointer;
+    font-family: 'Outfit', sans-serif;
+    transition: all 0.15s;
+  }
+  .crew-feature-tile:hover { background: rgba(255,255,255,0.06); }
+  .crew-feature-tile.active {
+    border-color: var(--neon-pink);
+    box-shadow: 0 0 12px rgba(255,45,120,0.3);
+  }
+  .crew-feature-tile-icon { font-size: 1.5rem; margin-bottom: 5px; }
+  .crew-feature-tile-label {
+    font-weight: 700;
+    font-size: 0.68rem;
+    color: var(--text);
+  }
+  .crew-feature-panel { margin-bottom: 16px; }
 
   /* ── Huddle: crew chat ── */
   #crew-detail-panel-huddle { position: relative; }
@@ -2782,8 +2799,18 @@
     transition: all 0.15s;
   }
   .huddle-quick-btn:hover { background: rgba(255,255,255,0.12); }
-  .huddle-composer-input-row { display: flex; align-items: center; gap: 6px; }
-  .huddle-composer-input-row .form-input { flex: 1; min-width: 0; }
+  .huddle-composer-input-row { display: flex; flex-direction: column; gap: 8px; }
+  .huddle-textarea {
+    width: 100%;
+    resize: none;
+    max-height: 120px;
+    overflow-y: auto;
+    line-height: 1.4;
+    padding: 10px 12px;
+    font-family: inherit;
+  }
+  .huddle-composer-actions-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .huddle-composer-quick-btns { display: flex; gap: 6px; }
   .huddle-send-btn { flex-shrink: 0; padding: 9px 14px; }
 
   .huddle-inline-form {
@@ -10960,19 +10987,9 @@ async function doProfilePasswordChange() {
     // Everything except the roster + Huddle — the Overview tab.
     const overviewPanelHTML = `
       ${crew.description ? `<div style="font-size:0.85rem;color:var(--muted);margin:-4px 0 14px;line-height:1.5;">${escHtml(crew.description)}</div>` : ''}
-      ${crewNextFestBlock(crew)}
       ${totemBlock}
-      ${crew.isLead && isRecruiting ? `
-      <div class="crew-invite-row">
-        <button class="btn btn-ghost crew-invite-link-btn" onclick="generateAndShareCrewInvite('${crew.id}')">🔗 Copy Invite Link</button>
-        <span class="crew-invite-hint">Share with anyone — they can join straight from the link</span>
-      </div>` : ''}
-      ${buildFamPinsHTML(crew.id)}
-      ${buildDreamBoardHTML(crew.id)}
-      ${!isSecret ? buildPollsHTML(crew.id) : ''}
-      ${!isSecret ? buildJamsHTML(crew.id) : ''}
-      ${buildArchiveHTML(crew.id)}
-      ${buildCrewHistoryHTML(crew.id)}
+      ${crewNextFestBlock(crew)}
+      ${buildCrewFeatureTilesHTML(crew, isSecret)}
       <div class="crew-status-zone">
         <div class="crew-status-zone-header">
           <span class="crew-status-zone-label">Status</span>
@@ -10983,8 +11000,11 @@ async function doProfilePasswordChange() {
       </div>
       ${crewPerms(crew).canDelete ? `
         <div class="danger-zone">
-          <button class="btn btn-ghost" style="width:100%;padding:10px;font-size:0.8rem;color:var(--neon-pink);border-color:rgba(255,45,120,0.25);"
-            onclick="showDeleteCrewConfirm(activeDetailId)">🗑️ Delete Crew</button>
+          <div class="crew-danger-actions">
+            <button class="btn btn-ghost" style="flex:1;padding:10px;font-size:0.8rem;" onclick="showCrewEditModal('${crew.id}')">✏️ Edit Crew</button>
+            <button class="btn btn-ghost" style="flex:1;padding:10px;font-size:0.8rem;color:var(--neon-pink);border-color:rgba(255,45,120,0.25);"
+              onclick="showDeleteCrewConfirm(activeDetailId)">🗑️ Delete Crew</button>
+          </div>
         </div>` : (() => {
           const leaveBtn = crewPerms(crew).canLeave
             ? `<button class="btn btn-ghost" style="width:100%;padding:10px;font-size:0.8rem;color:var(--neon-pink);border-color:rgba(255,45,120,0.25);"
@@ -10999,6 +11019,11 @@ async function doProfilePasswordChange() {
 
     // Member list + add-member control — the Roster tab.
     const rosterPanelHTML = `
+      ${crew.isLead && isRecruiting ? `
+      <div class="crew-invite-row">
+        <button class="btn btn-ghost crew-invite-link-btn" onclick="generateAndShareCrewInvite('${crew.id}')">🔗 Copy Invite Link</button>
+        <span class="crew-invite-hint">Share with anyone — they can join straight from the link</span>
+      </div>` : ''}
       ${addMemberControl}
       <div class="form-group crew-members-section">
         <div class="section-banner"><span class="banner-inner">Crew Members</span></div>
@@ -11011,7 +11036,6 @@ async function doProfilePasswordChange() {
       <div class="detail-bar" style="background:${crew.gradient}"></div>
       <div class="crew-detail-title-row">
         <div class="modal-title">${escHtml(crew.name)}</div>
-        ${crew.isLead ? `<button class="crew-edit-btn" onclick="showCrewEditModal('${crew.id}')" title="Edit crew name and colour" aria-label="Edit crew name and colour">✏️</button>` : ''}
         <span class="crew-status ${s.cls}${crew.isLead ? ' tappable-lead' : ''}"
           ${crew.isLead ? `onclick="toggleStatus('${crew.id}')" title="Tap to change status"` : ''}>${s.label}</span>
       </div>
@@ -11044,6 +11068,21 @@ async function doProfilePasswordChange() {
       openHuddle(activeDetailId);
     } else {
       teardownHuddleLive();
+    }
+  }
+
+  // Accordion toggle for the Overview tab's crew feature tiles (Pins, Dream
+  // Board, Poll, Jams, Archive, History) — only one panel open at a time.
+  function toggleCrewFeatureTile(feature, btnEl) {
+    const panel = document.getElementById('crew-feature-panel-' + feature);
+    if (!panel) return;
+    const wasOpen = panel.style.display !== 'none';
+    document.querySelectorAll('.crew-feature-panel').forEach(p => p.style.display = 'none');
+    document.querySelectorAll('.crew-feature-tile').forEach(t => t.classList.remove('active'));
+    if (!wasOpen) {
+      panel.style.display = '';
+      btnEl.classList.add('active');
+      panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }
 
@@ -11263,13 +11302,17 @@ async function doProfilePasswordChange() {
         </div>
         <div id="huddle-reaction-picker" class="huddle-reaction-picker" style="display:none;">${pickerBtns}</div>
         <form class="huddle-composer-input-row" onsubmit="event.preventDefault(); submitHuddleTextMessage();">
-          <button type="button" class="huddle-quick-btn" title="Photo" onclick="document.getElementById('huddle-photo-input').click()">📸</button>
+          <textarea id="huddle-text-input" class="form-input huddle-textarea" placeholder="Say something to the crew…" maxlength="500" rows="1" oninput="autoGrowHuddleTextarea(this)" onkeydown="handleHuddleComposerKeydown(event)"></textarea>
           <input type="file" id="huddle-photo-input" accept="image/*" style="display:none" onchange="handleHuddlePhotoInput(event)">
-          <button type="button" class="huddle-quick-btn" title="Voice note" onclick="startHuddleVoiceRecording()">🎤</button>
-          <button type="button" class="huddle-quick-btn" title="Meetup pin" onclick="toggleHuddleMeetupForm()">📍</button>
-          <button type="button" class="huddle-quick-btn" title="Set reaction" onclick="toggleHuddleReactionPicker()">🔥</button>
-          <input type="text" id="huddle-text-input" class="form-input" placeholder="Say something to the crew…" maxlength="500" autocomplete="off">
-          <button type="submit" class="btn btn-primary huddle-send-btn">Send</button>
+          <div class="huddle-composer-actions-row">
+            <div class="huddle-composer-quick-btns">
+              <button type="button" class="huddle-quick-btn" title="Photo" onclick="document.getElementById('huddle-photo-input').click()">📸</button>
+              <button type="button" class="huddle-quick-btn" title="Voice note" onclick="startHuddleVoiceRecording()">🎤</button>
+              <button type="button" class="huddle-quick-btn" title="Meetup pin" onclick="toggleHuddleMeetupForm()">📍</button>
+              <button type="button" class="huddle-quick-btn" title="Set reaction" onclick="toggleHuddleReactionPicker()">🔥</button>
+            </div>
+            <button type="submit" class="btn btn-primary huddle-send-btn">Send</button>
+          </div>
         </form>
       </div>`;
   }
@@ -11349,7 +11392,20 @@ async function doProfilePasswordChange() {
     const text = input.value.trim();
     if (!text) return;
     input.value = '';
+    autoGrowHuddleTextarea(input);
     sendHuddleMessage({ kind: 'text', body: text });
+  }
+
+  function autoGrowHuddleTextarea(el) {
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+  }
+
+  function handleHuddleComposerKeydown(event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      submitHuddleTextMessage();
+    }
   }
 
   async function submitHuddleMeetupPin() {
@@ -14437,6 +14493,36 @@ async function doProfilePasswordChange() {
       const { current } = getBadgeProgress(def.id, crewId, me.id);
       if (current >= def.threshold) await awardAchievement(def.id, crewId, me.id);
     }
+  }
+
+  // Tile grid for the Overview tab that hides the 6 crew feature sections
+  // (Pins, Dream Board, Poll, Jams, Archive, History) behind tappable tiles
+  // instead of stacking all of them full-length on the page. Each panel is
+  // rendered up front (so the existing rerenderDreamBoard/Archive/Polls/Jams/
+  // FamPins/CrewHistory live-patch functions keep working) and toggled via
+  // display:none/'' by toggleCrewFeatureTile — same pattern as the tab panels.
+  function buildCrewFeatureTilesHTML(crew, isSecret) {
+    const tiles = [
+      { key: 'pins', icon: '✨', label: 'Pins' },
+      { key: 'dreamboard', icon: '✨', label: 'Dream Board' },
+      !isSecret ? { key: 'poll', icon: '🗳️', label: 'Poll' } : null,
+      !isSecret ? { key: 'jams', icon: '🎵', label: 'Jams' } : null,
+      { key: 'archive', icon: '📸', label: 'Archive' },
+      { key: 'history', icon: '📜', label: 'History' }
+    ].filter(Boolean);
+    const tileGrid = tiles.map(t => `
+      <button type="button" class="crew-feature-tile" data-feature="${t.key}" onclick="toggleCrewFeatureTile('${t.key}', this)">
+        <div class="crew-feature-tile-icon">${t.icon}</div>
+        <div class="crew-feature-tile-label">${t.label}</div>
+      </button>`).join('');
+    return `
+      <div class="crew-feature-tile-grid">${tileGrid}</div>
+      <div class="crew-feature-panel" id="crew-feature-panel-pins" style="display:none;">${buildFamPinsHTML(crew.id)}</div>
+      <div class="crew-feature-panel" id="crew-feature-panel-dreamboard" style="display:none;">${buildDreamBoardHTML(crew.id)}</div>
+      ${!isSecret ? `<div class="crew-feature-panel" id="crew-feature-panel-poll" style="display:none;">${buildPollsHTML(crew.id)}</div>` : ''}
+      ${!isSecret ? `<div class="crew-feature-panel" id="crew-feature-panel-jams" style="display:none;">${buildJamsHTML(crew.id)}</div>` : ''}
+      <div class="crew-feature-panel" id="crew-feature-panel-archive" style="display:none;">${buildArchiveHTML(crew.id)}</div>
+      <div class="crew-feature-panel" id="crew-feature-panel-history" style="display:none;">${buildCrewHistoryHTML(crew.id)}</div>`;
   }
 
   function buildFamPinsHTML(crewId) {
