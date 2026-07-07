@@ -1,4 +1,4 @@
-const CACHE = 'ravefam-v5';
+const CACHE = 'ravefam-v6';
 const PRECACHE = [
   '/',
   '/app.html',
