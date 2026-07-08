@@ -10121,7 +10121,8 @@ async function doProfilePasswordChange() {
   // tip — not the avatar's center — sits exactly on the marked coordinate.
   // `status` ('on_way' | 'here' | null) tints the ring as a subtle at-a-
   // glance cue; the exact label is surfaced separately on tap.
-  const MEETUP_STATUS_COLOR = { on_way: '#f59e0b', here: '#22c55e' };
+  const MEETUP_STATUS_COLOR = { on_way: '#9ca3af', here: '#22c55e' };
+  const MEETUP_STATUS_RING_STYLE = { on_way: 'dotted', here: 'solid' };
   const MEETUP_STATUS_LABEL = { on_way: 'On the way', here: 'Here' };
   function pinAvatarMarkerHTML(avatarUrl, gradient, name, size, status) {
     const bg = gradient || 'linear-gradient(135deg,#FF2D78,#00F5FF)';
@@ -10132,11 +10133,17 @@ async function doProfilePasswordChange() {
     const tailW = Math.max(4, Math.round(size * 0.26));
     const tailH = Math.max(5, Math.round(size * 0.32));
     const tailColor = ring || '#fff';
-    // White border always separates the avatar from the halo so the status
-    // color reads clearly regardless of the avatar's own gradient hue.
-    const halo = ring ? `, 0 0 0 3px ${ring}` : '';
+    // The avatar keeps its own white border regardless of status; the status
+    // ring is a separate bordered halo around it (not a box-shadow) so it can
+    // be dotted, with a couple px of gap so the white border still separates
+    // it from the avatar's own gradient hue.
+    const haloSize = size + 8;
+    const avatarCircle = `<div style="width:${size}px;height:${size}px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.5);overflow:hidden;flex-shrink:0;">${inner}</div>`;
+    const withHalo = ring
+      ? `<div style="width:${haloSize}px;height:${haloSize}px;border-radius:50%;border:2px ${MEETUP_STATUS_RING_STYLE[status]} ${ring};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${avatarCircle}</div>`
+      : avatarCircle;
     return `<div style="display:flex;flex-direction:column;align-items:center;">
-      <div style="width:${size}px;height:${size}px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.5)${halo};overflow:hidden;flex-shrink:0;">${inner}</div>
+      ${withHalo}
       <div style="width:0;height:0;border-left:${tailW}px solid transparent;border-right:${tailW}px solid transparent;border-top:${tailH}px solid ${tailColor};margin-top:-1px;filter:drop-shadow(0 2px 2px rgba(0,0,0,0.4));"></div>
     </div>`;
   }
