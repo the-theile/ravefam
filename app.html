@@ -36,6 +36,7 @@
     --neon-yellow: #FFE600;
     --neon-purple: #BF00FF;
     --neon-green: #39FF14;
+    --neon-indigo: #5B6EFF;
     --bg: #050509;
     --surface: #0E0E16;
     --surface2: #16161F;
@@ -2629,7 +2630,17 @@
     border-color: var(--neon-pink);
     box-shadow: 0 0 12px rgba(255,45,120,0.3);
   }
-  .crew-feature-tile-icon { font-size: 1.5rem; margin-bottom: 5px; }
+  .crew-feature-tile-icon {
+    width: 38px; height: 38px; margin: 0 auto 6px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.06);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border: 1px solid rgba(255,255,255,0.14);
+    box-shadow: 0 0 20px -6px var(--ac, var(--neon-pink));
+  }
+  .crew-feature-tile-icon svg { width: 21px; height: 21px; stroke: var(--ac, var(--neon-pink)); }
   .crew-feature-tile-label {
     font-weight: 700;
     font-size: 0.68rem;
@@ -15062,6 +15073,22 @@ async function doProfilePasswordChange() {
     }
   }
 
+  // Glyph paths for the crew feature tiles below — hand-drawn stroke icons in
+  // the same style as the app's other inline SVGs (logout/QR/eye), each glyph
+  // distinct so Pins and Dream Board no longer share an emoji.
+  const CREW_FEATURE_GLYPHS = {
+    pins: '<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>',
+    dreamboard: '<rect x="2" y="4" width="16" height="16" rx="3"/><circle cx="7.2" cy="9.4" r="1.6"/><path d="m18 15-3.2-3.2a2 2 0 0 0-2.8 0L4 20"/><path d="M19 1.2 19.9 3.1 21.8 4 19.9 4.9 19 6.8 18.1 4.9 16.2 4 18.1 3.1Z"/>',
+    poll: '<path d="M9 12l2 2 4-4"/><path d="M5 7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v12H5V7z"/><path d="M22 19H2"/>',
+    jams: '<path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H3v-7a9 9 0 0 1 18 0v7h-3a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/>',
+    archive: '<rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
+    history: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>'
+  };
+
+  function crewFeatureIconSVG(key) {
+    return `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${CREW_FEATURE_GLYPHS[key]}</svg>`;
+  }
+
   // Tile grid for the Overview tab that hides the 6 crew feature sections
   // (Pins, Dream Board, Poll, Jams, Archive, History) behind tappable tiles
   // instead of stacking all of them full-length on the page. Each panel is
@@ -15070,16 +15097,16 @@ async function doProfilePasswordChange() {
   // display:none/'' by toggleCrewFeatureTile — same pattern as the tab panels.
   function buildCrewFeatureTilesHTML(crew, isSecret) {
     const tiles = [
-      { key: 'pins', icon: '✨', label: 'Pins' },
-      { key: 'dreamboard', icon: '✨', label: 'Dream Board' },
-      !isSecret ? { key: 'poll', icon: '🗳️', label: 'Poll' } : null,
-      !isSecret ? { key: 'jams', icon: '🎵', label: 'Jams' } : null,
-      { key: 'archive', icon: '📸', label: 'Archive' },
-      { key: 'history', icon: '📜', label: 'History' }
+      { key: 'pins', ac: '--neon-pink', label: 'Pins' },
+      { key: 'dreamboard', ac: '--neon-purple', label: 'Dream Board' },
+      !isSecret ? { key: 'poll', ac: '--neon-cyan', label: 'Poll' } : null,
+      !isSecret ? { key: 'jams', ac: '--neon-green', label: 'Jams' } : null,
+      { key: 'archive', ac: '--neon-yellow', label: 'Archive' },
+      { key: 'history', ac: '--neon-indigo', label: 'History' }
     ].filter(Boolean);
     const tileGrid = tiles.map(t => `
       <button type="button" class="crew-feature-tile" data-feature="${t.key}" onclick="toggleCrewFeatureTile('${t.key}', this)">
-        <div class="crew-feature-tile-icon">${t.icon}</div>
+        <div class="crew-feature-tile-icon" style="--ac:var(${t.ac})">${crewFeatureIconSVG(t.key)}</div>
         <div class="crew-feature-tile-label">${t.label}</div>
       </button>`).join('');
     return `
