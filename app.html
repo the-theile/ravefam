@@ -3209,7 +3209,7 @@
   }
   .map-pin-lightbox-marker {
     position: absolute;
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, -100%);
     pointer-events: none;
   }
   .map-pin-lightbox-close {
@@ -3223,8 +3223,22 @@
     cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     transition: background 0.15s;
+    z-index: 10;
   }
   .map-pin-lightbox-close:hover { background: rgba(220,38,38,0.85); }
+  .map-pin-lightbox-zoom-wrap {
+    position: absolute; left: 50%; bottom: 22px;
+    transform: translateX(-50%);
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    padding: 8px 14px;
+    border-radius: 20px;
+    z-index: 6;
+  }
+  .map-pin-lightbox-zoom { width: min(60vw, 240px); }
+  .map-pin-lightbox-zoom-icon { color: #fff; font-size: 0.85rem; user-select: none; }
 
   /* Photo crop modal */
   .photo-crop-overlay {
@@ -6355,6 +6369,11 @@
       <img id="map-pin-lightbox-img" src="" alt="Festival map" class="map-pin-lightbox-img" draggable="false">
       <div id="map-pin-lightbox-marker" class="map-pin-lightbox-marker" style="display:none;"></div>
     </div>
+  </div>
+  <div class="map-pin-lightbox-zoom-wrap">
+    <span class="map-pin-lightbox-zoom-icon">−</span>
+    <input id="map-pin-lightbox-zoom" class="map-pin-lightbox-zoom" type="range" min="100" max="500" value="100">
+    <span class="map-pin-lightbox-zoom-icon">+</span>
   </div>
 </div>
 
@@ -10097,31 +10116,54 @@ async function doProfilePasswordChange() {
 
   // Map pin lightbox — shows the full festival map with the dropped pin
   // still visible, and lets the viewer pinch/wheel-zoom + drag to pan.
-  function pinAvatarMarkerHTML(avatarUrl, gradient, name, size) {
+  // Renders a small map-pin: a tiny avatar circle sitting atop a pointed
+  // tail. Callers anchor with transform:translate(-50%,-100%) so the tail's
+  // tip — not the avatar's center — sits exactly on the marked coordinate.
+  // `status` ('on_way' | 'here' | null) tints the ring as a subtle at-a-
+  // glance cue; the exact label is surfaced separately on tap.
+  const MEETUP_STATUS_COLOR = { on_way: '#f59e0b', here: '#22c55e' };
+  const MEETUP_STATUS_LABEL = { on_way: 'On the way', here: 'Here' };
+  function pinAvatarMarkerHTML(avatarUrl, gradient, name, size, status) {
     const bg = gradient || 'linear-gradient(135deg,#FF2D78,#00F5FF)';
+    const ring = MEETUP_STATUS_COLOR[status];
     const inner = avatarUrl
       ? `<img src="${escHtml(avatarUrl)}" alt="${escHtml(name || '')}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;">`
-      : `<div style="width:100%;height:100%;border-radius:50%;display:flex;align-items:center;justify-content:center;background:${bg};color:#fff;font-family:'Outfit',sans-serif;font-weight:800;font-size:${Math.round(size * 0.36)}px;">${escHtml(initials(name || '').toUpperCase())}</div>`;
-    return `<div style="width:${size}px;height:${size}px;border-radius:50%;border:2px solid #fff;box-shadow:0 3px 10px rgba(0,0,0,0.45);overflow:hidden;">${inner}</div>`;
+      : `<div style="width:100%;height:100%;border-radius:50%;display:flex;align-items:center;justify-content:center;background:${bg};color:#fff;font-family:'Outfit',sans-serif;font-weight:800;font-size:${Math.round(size * 0.42)}px;">${escHtml(initials(name || '').toUpperCase())}</div>`;
+    const tailW = Math.max(4, Math.round(size * 0.26));
+    const tailH = Math.max(5, Math.round(size * 0.32));
+    const tailColor = ring || '#fff';
+    // White border always separates the avatar from the halo so the status
+    // color reads clearly regardless of the avatar's own gradient hue.
+    const halo = ring ? `, 0 0 0 3px ${ring}` : '';
+    return `<div style="display:flex;flex-direction:column;align-items:center;">
+      <div style="width:${size}px;height:${size}px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.5)${halo};overflow:hidden;flex-shrink:0;">${inner}</div>
+      <div style="width:0;height:0;border-left:${tailW}px solid transparent;border-right:${tailW}px solid transparent;border-top:${tailH}px solid ${tailColor};margin-top:-1px;filter:drop-shadow(0 2px 2px rgba(0,0,0,0.4));"></div>
+    </div>`;
   }
 
   const MAP_PIN_LB_MIN_SCALE = 1;
   const MAP_PIN_LB_MAX_SCALE = 5;
   let mapPinLightboxState = null;
 
-  function openMapPinLightbox(mapUrl, pinX, pinY, avatarUrl, gradient, name) {
+  function openMapPinLightbox(mapUrl, pinX, pinY, avatarUrl, gradient, name, messageId, senderId, status) {
     const img = document.getElementById('map-pin-lightbox-img');
     const marker = document.getElementById('map-pin-lightbox-marker');
     img.src = mapUrl;
-    if (pinX != null && pinY != null) {
-      marker.innerHTML = pinAvatarMarkerHTML(avatarUrl, gradient, name, 44);
+    const hasPin = pinX != null && pinY != null;
+    if (hasPin) {
       marker.style.left = (pinX * 100) + '%';
       marker.style.top = (pinY * 100) + '%';
-      marker.style.display = '';
-    } else {
-      marker.style.display = 'none';
     }
-    mapPinLightboxState = { scale: 1, panX: 0, panY: 0 };
+    mapPinLightboxState = {
+      scale: 1, panX: 0, panY: 0,
+      pin: hasPin ? {
+        messageId, avatarUrl, gradient, name, status,
+        isYou: !!(currentUser && senderId && currentUser.id === senderId)
+      } : null
+    };
+    renderMapPinLightboxMarker();
+    const zoomSlider = document.getElementById('map-pin-lightbox-zoom');
+    if (zoomSlider) zoomSlider.value = 100;
     applyMapPinLightboxTransform();
     document.getElementById('map-pin-lightbox').classList.add('open');
   }
@@ -10130,11 +10172,68 @@ async function doProfilePasswordChange() {
     if (el) el.classList.remove('open');
     mapPinLightboxState = null;
   }
+  // Renders the lightbox's own pin from mapPinLightboxState.pin, wiring the
+  // tap handler each time so it always reflects the current status: the
+  // sender taps their own pin to cycle "on the way" <-> "here"; anyone else
+  // tapping a statused pin gets a brief text label instead.
+  function renderMapPinLightboxMarker() {
+    const marker = document.getElementById('map-pin-lightbox-marker');
+    if (!marker) return;
+    const s = mapPinLightboxState;
+    const p = s && s.pin;
+    if (!p) {
+      marker.style.display = 'none';
+      marker.style.pointerEvents = 'none';
+      marker.onclick = null;
+      return;
+    }
+    marker.innerHTML = pinAvatarMarkerHTML(p.avatarUrl, p.gradient, p.name, 26, p.status);
+    marker.style.display = '';
+    const interactive = p.isYou || !!p.status;
+    marker.style.pointerEvents = interactive ? 'auto' : 'none';
+    marker.style.cursor = interactive ? 'pointer' : 'default';
+    marker.onclick = (e) => {
+      e.stopPropagation();
+      if (p.isYou) toggleMeetupPinStatus(p.messageId);
+      else if (p.status) flashMeetupPinStatusLabel(marker, p.status);
+    };
+  }
+  function flashMeetupPinStatusLabel(marker, status) {
+    const existing = marker.querySelector('.map-pin-status-flash');
+    if (existing) existing.remove();
+    const label = document.createElement('div');
+    label.className = 'map-pin-status-flash';
+    label.textContent = MEETUP_STATUS_LABEL[status] || '';
+    label.style.cssText = "position:absolute;left:50%;bottom:100%;transform:translateX(-50%);margin-bottom:4px;background:rgba(0,0,0,0.85);color:#fff;font-family:'Outfit',sans-serif;font-weight:700;font-size:11px;padding:4px 10px;border-radius:10px;white-space:nowrap;pointer-events:none;z-index:20;";
+    marker.appendChild(label);
+    setTimeout(() => label.remove(), 1600);
+  }
+  async function toggleMeetupPinStatus(messageId) {
+    const s = mapPinLightboxState;
+    if (!s || !s.pin || s.pin.messageId !== messageId) return;
+    const prevStatus = s.pin.status;
+    const nextStatus = prevStatus === 'here' ? 'on_way' : 'here';
+    s.pin.status = nextStatus;
+    renderMapPinLightboxMarker();
+    const idx = huddleMessages.findIndex(m => m.id === messageId);
+    if (idx >= 0) { huddleMessages[idx] = { ...huddleMessages[idx], meetup_status: nextStatus }; renderHuddleUI(); }
+    const { error } = await sb.from('huddle_messages').update({ meetup_status: nextStatus }).eq('id', messageId);
+    if (error) {
+      if (mapPinLightboxState && mapPinLightboxState.pin && mapPinLightboxState.pin.messageId === messageId) {
+        mapPinLightboxState.pin.status = prevStatus;
+        renderMapPinLightboxMarker();
+      }
+      if (idx >= 0) { huddleMessages[idx] = { ...huddleMessages[idx], meetup_status: prevStatus }; renderHuddleUI(); }
+      showToast("Couldn't update status");
+    }
+  }
   function applyMapPinLightboxTransform() {
     const s = mapPinLightboxState;
     if (!s) return;
     const stage = document.getElementById('map-pin-lightbox-stage');
     if (stage) stage.style.transform = `translate(-50%, -50%) translate(${s.panX}px, ${s.panY}px) scale(${s.scale})`;
+    const zoomSlider = document.getElementById('map-pin-lightbox-zoom');
+    if (zoomSlider) zoomSlider.value = Math.round(s.scale * 100);
   }
   function clampMapPinLightboxScale(scale) {
     return Math.min(MAP_PIN_LB_MAX_SCALE, Math.max(MAP_PIN_LB_MIN_SCALE, scale));
@@ -10143,7 +10242,17 @@ async function doProfilePasswordChange() {
   (function initMapPinLightboxGestures() {
     const viewport = document.getElementById('map-pin-lightbox-viewport');
     const stage = document.getElementById('map-pin-lightbox-stage');
+    const marker = document.getElementById('map-pin-lightbox-marker');
     if (!viewport || !stage) return;
+
+    // When the marker is interactive (pointer-events:auto), stop pan/pinch
+    // handling on the ancestor stage/viewport from swallowing the tap —
+    // otherwise touchstart's preventDefault() up in viewport kills the
+    // synthesized click before it can reach the marker on mobile.
+    if (marker) {
+      marker.addEventListener('mousedown', e => e.stopPropagation());
+      marker.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+    }
 
     function viewportOffset(clientX, clientY) {
       const rect = viewport.getBoundingClientRect();
@@ -10167,6 +10276,17 @@ async function doProfilePasswordChange() {
       const factor = Math.exp(-e.deltaY * 0.0015);
       zoomAt(e.clientX, e.clientY, mapPinLightboxState.scale * factor);
     }, { passive: false });
+
+    // Zoom slider — mirrors the marking-mode picker so viewing has the same
+    // precise, discoverable zoom control instead of relying on gestures alone.
+    const zoomSlider = document.getElementById('map-pin-lightbox-zoom');
+    if (zoomSlider) {
+      zoomSlider.addEventListener('input', () => {
+        if (!mapPinLightboxState) return;
+        const rect = viewport.getBoundingClientRect();
+        zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, Number(zoomSlider.value) / 100);
+      });
+    }
 
     // Mouse drag-to-pan
     let mouseDrag = null;
@@ -11601,11 +11721,14 @@ async function doProfilePasswordChange() {
             m.pin_x, m.pin_y,
             pinAvatarUrl ? `'${pinAvatarUrl.replace(/'/g,"\\'")}'` : 'null',
             `'${pinGradient.replace(/'/g,"\\'")}'`,
-            `'${senderName.replace(/'/g,"\\'")}'`
+            `'${senderName.replace(/'/g,"\\'")}'`,
+            `'${m.id}'`,
+            m.sender_id ? `'${m.sender_id}'` : 'null',
+            m.meetup_status ? `'${m.meetup_status}'` : 'null'
           ].join(', ');
           mapThumbHtml = `<div style="position:relative;margin-top:6px;cursor:zoom-in;" onclick="openMapPinLightbox(${openArgs})">
             <img src="${escHtml(pinFestival.mapUrl)}" alt="Festival map" style="width:100%;border-radius:8px;display:block;">
-            <div style="position:absolute;left:${m.pin_x * 100}%;top:${m.pin_y * 100}%;transform:translate(-50%,-50%);">${pinAvatarMarkerHTML(pinAvatarUrl, pinGradient, senderName, 28)}</div>
+            <div style="position:absolute;left:${m.pin_x * 100}%;top:${m.pin_y * 100}%;transform:translate(-50%,-100%);pointer-events:none;">${pinAvatarMarkerHTML(pinAvatarUrl, pinGradient, senderName, 18, m.meetup_status)}</div>
           </div>`;
         }
       }
@@ -11852,7 +11975,7 @@ async function doProfilePasswordChange() {
     toggleHuddleMeetupForm();
     await sendHuddleMessage({
       kind: 'meetup', body: place, meetup_at: whenVal,
-      ...(pin ? { pin_x: pin.x, pin_y: pin.y } : {})
+      ...(pin ? { pin_x: pin.x, pin_y: pin.y, meetup_status: 'on_way' } : {})
     });
   }
 
@@ -12209,6 +12332,10 @@ async function doProfilePasswordChange() {
         const idx = huddleMessages.findIndex(m => m.id === payload.new.id);
         if (idx >= 0) huddleMessages[idx] = payload.new;
         if (payload.new.kind === 'beacon') _huddleActiveBeacon = payload.new;
+        if (mapPinLightboxState?.pin?.messageId === payload.new.id) {
+          mapPinLightboxState.pin.status = payload.new.meetup_status;
+          renderMapPinLightboxMarker();
+        }
         renderHuddleUI();
       })
       .subscribe();
