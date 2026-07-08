@@ -11429,9 +11429,9 @@ async function doProfilePasswordChange() {
 
   // Shared upcoming festivals for a crew, one entry per festival — sibling
   // to crewNextUp(crew, socialOnly=true) (which only returns the single
-  // nearest one). Requires at least one OTHER member attending, same
-  // whoRavers.some(r => !r.isYou) rule crewNextUp's social-only mode uses,
-  // so a solo RSVP doesn't spin up a crew chat room nobody else is in.
+  // nearest one). Requires the viewer AND at least one OTHER member
+  // attending, so a solo RSVP (by you or by someone else alone) doesn't
+  // spin up a crew chat room the viewer isn't actually going to.
   function deriveCrewFestivalRooms(crew) {
     const people = crewSquad(crew);
     const byFest = {};
@@ -11442,7 +11442,7 @@ async function doProfilePasswordChange() {
       });
     });
     return Object.values(byFest)
-      .filter(entry => entry.who.some(p => !p.isYou))
+      .filter(entry => entry.who.some(p => p.isYou) && entry.who.some(p => !p.isYou))
       .sort((a, b) => a.festival._d - b.festival._d);
   }
 
