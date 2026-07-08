@@ -2421,6 +2421,21 @@
     background: transparent;
     cursor: default;
   }
+  .notif-action-btn.notif-ghost-btn {
+    border-color: var(--muted);
+    background: transparent;
+    color: var(--muted);
+    margin-left: 6px;
+    margin-top: 0;
+  }
+  .notif-action-btn.notif-ghost-btn:hover { background: rgba(255,255,255,0.06); }
+  .notif-actions-row {
+    flex-basis: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    margin-left: 20px;
+  }
+  .notif-actions-row .notif-action-btn { margin-left: 0; }
   .notif-item:last-child { border-bottom: none; }
   /* Unread — bright, prominent */
   .notif-item.unread { background: rgba(255,45,120,0.10); }
@@ -9068,7 +9083,14 @@ async function doProfilePasswordChange() {
   async function dbAddRaverFestival(raverId, festId) {
     const { error } = await sb.from('raver_festivals')
       .upsert([{ raver_id: raverId, festival_id: festId }], { onConflict: 'raver_id,festival_id', ignoreDuplicates: true });
-    if (error) { console.error('raver_festivals add error', error); showToast('⚠️ Could not save festival attendance'); }
+    if (error) {
+      console.error('raver_festivals add error', error);
+      if ((error.message || '').includes('RSVP_BLOCKED')) {
+        showToast('🔒 They asked not to be re-added to this rave');
+      } else {
+        showToast('⚠️ Could not save festival attendance');
+      }
+    }
     else logAudit({ action: 'festival.rsvp_add', entityType: 'festival', entityId: festId, metadata: { raver_id: raverId } });
   }
 
@@ -9106,9 +9128,13 @@ async function doProfilePasswordChange() {
   }
 
   async function dbDeleteFestival(id, reason = null) {
-    await sb.from('raver_festivals').delete().eq('festival_id', id);
+    // Soft-delete the festival BEFORE bulk-removing raver_festivals rows —
+    // the "you were removed" notification trigger checks festivals.deleted_at
+    // to tell "someone unlinked you" apart from "the whole rave got deleted"
+    // (which shouldn't spam every attendee with a removal notification).
     const { ok, rateLimited } = await softDeleteRow('festivals', { id }, reason);
     if (!ok) { if (!rateLimited) showToast('⚠️ Could not delete rave — try again'); return; }
+    await sb.from('raver_festivals').delete().eq('festival_id', id);
     await logAudit({ action: 'festival.soft_delete', entityType: 'festival', entityId: id, reason });
   }
 
@@ -9149,7 +9175,14 @@ async function doProfilePasswordChange() {
     const { error } = await sb.from('crew_members')
       .upsert({ crew_id: crewId, raver_id: raverId, added_by: uid, deleted_at: null, deleted_by: null, delete_reason: null },
                { onConflict: 'crew_id,raver_id', ignoreDuplicates: false });
-    if (error) { console.error('crew member add error', error); showToast('⚠️ Could not add member — try again'); }
+    if (error) {
+      console.error('crew member add error', error);
+      if ((error.message || '').includes('CREW_BLOCKED')) {
+        showToast('🔒 They asked not to be re-added to this crew');
+      } else {
+        showToast('⚠️ Could not add member — try again');
+      }
+    }
     else logAudit({ action: 'crew_member.add', entityType: 'crew_member', entityId: raverId, metadata: { crew_id: crewId } });
   }
 
@@ -9411,7 +9444,9 @@ async function doProfilePasswordChange() {
       timestamp: new Date(n.created_at).getTime(),
       read: n.read,
       type: n.type || null,
-      data: n.data || null
+      data: n.data || null,
+      entityType: n.entity_type || null,
+      entityId: n.entity_id || null
     }));
     updateNotifBadge();
   }
@@ -15568,16 +15603,29 @@ async function doProfilePasswordChange() {
     if (!crew) return;
     showConfirm(
       `Leave ${crew.name}?`,
-      `You'll lose access to shared memories, photos, and everything else. Only the Crew Lead can re-add you — and only while the crew is in Recruiting mode.`,
+      `You'll lose access to shared memories, photos, and everything else. The crew lead will get to decide whether to keep your spot or remove it completely.`,
       `✌️ Leave Crew`,
-      () => {
+      async () => {
         const me = squad.find(r => r.isYou);
-        if (!me) return;
-        const leaveMsg = `${me.name.split(' ')[0]} has left the crew and bounced! ✌️`;
-        notifyCrewMembers(crew, leaveMsg);
-        removeMemberFromCrew(crewId, me.id);
+        if (!me || !currentUser) return;
+        // Ordinary members can't delete/update crew_members rows directly
+        // (RLS restricts that to the leader/a moderator) — request_leave_crew
+        // is a security-definer RPC so leaving actually works, and it fires
+        // an actionable notification to the leader about the vacant slot.
+        const { data, error } = await sb.rpc('request_leave_crew', { p_crew_id: crewId });
+        if (error || data?.error) {
+          console.error('request_leave_crew error', error || data?.error);
+          showToast('⚠️ Could not leave the crew — try again');
+          return;
+        }
+        crew.squadIds = (crew.squadIds || []).filter(id => String(id) !== String(me.id));
+        crew.members = crew.squadIds
+          .map(sid => squad.find(r2 => String(r2.id) === String(sid)))
+          .filter(Boolean)
+          .map(r2 => ({ i: initials(r2.name), c: r2.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)', t: '#fff', url: r2.avatarUrl || null }));
+        renderCrews();
         closeDetail();
-        showToast(leaveMsg);
+        showToast(`✌️ You left ${crew.name}`);
       }
     );
   }
@@ -15773,10 +15821,14 @@ async function doProfilePasswordChange() {
     showToast(`🗑️ ${name} deleted`);
     addNotification(`🗑️ ${name} has been dissolved. The memories live on in the frequencies — the energy never dies.`);
     if (currentUser) {
-      const membersResult = await softDeleteRow('crew_members', { crew_id: id }, reason);
-      if (!membersResult.ok) console.error('crew_members bulk soft delete error during crew delete');
+      // Soft-delete the crew BEFORE bulk-soft-deleting crew_members — the
+      // "you were removed" notification trigger checks crews.deleted_at to
+      // tell "the leader removed you" apart from "the whole crew dissolved"
+      // (which shouldn't spam every member with a removal notification).
       const { ok, rateLimited } = await softDeleteRow('crews', { id }, reason);
       if (!ok) { if (!rateLimited) showToast('⚠️ Could not fully delete crew — refresh and try again'); return; }
+      const membersResult = await softDeleteRow('crew_members', { crew_id: id }, reason);
+      if (!membersResult.ok) console.error('crew_members bulk soft delete error during crew delete');
       await logAudit({ action: 'crew.delete', entityType: 'crew', entityId: id, reason, metadata: { member_count: memberCount } });
     }
   }
@@ -18863,6 +18915,59 @@ async function doProfilePasswordChange() {
     showToast(`Took your RSVP off ${fest?.name || 'that rave'} — no stress, the dancefloor moves on.`);
   }
 
+  // "Add me back" from a "your RSVP was removed" notification — a self-RSVP,
+  // same as toggleGoingToFest, and it silently lifts any block on this rave.
+  function notifReAddSelfFestival(raverId, festId, btnEl) {
+    const you = squad.find(r => r.isYou);
+    if (!you || String(you.id) !== String(raverId)) { showToast("That's not your RSVP"); return; }
+    if (!you.festIds) you.festIds = [];
+    if (!you.festIds.some(fid => String(fid) === String(festId))) you.festIds.push(festId);
+    if (currentUser) dbAddRaverFestival(you.id, festId);
+    if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Added ✓'; }
+    renderEvents(); renderSquad(); renderCrews();
+    const fest = getFestival(festId);
+    showToast(`✅ You're back on the lineup for ${fest?.name || 'that rave'}!`);
+  }
+
+  // "Don't add me to this again" — blocks anyone else from re-adding this
+  // raver's RSVP for this one rave, until the raver RSVPs themselves.
+  async function notifBlockFestival(raverId, festId, btnEl) {
+    const you = squad.find(r => r.isYou);
+    if (!you || String(you.id) !== String(raverId) || !currentUser) { showToast("That's not your RSVP"); return; }
+    const { error } = await sb.from('festival_rsvp_blocks')
+      .upsert({ raver_id: raverId, festival_id: festId, blocked_by: currentUser.id }, { onConflict: 'raver_id,festival_id' });
+    if (error) { console.error('festival_rsvp_blocks insert error', error); showToast('⚠️ Could not save that — try again'); return; }
+    if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Blocked ✓'; }
+    showToast('🚫 No one can re-add you to this rave — unless you RSVP yourself.');
+  }
+
+  // "Don't add me to this crew again" — same idea, scoped to one crew.
+  async function notifBlockCrew(raverId, crewId, btnEl) {
+    const you = squad.find(r => r.isYou);
+    if (!you || String(you.id) !== String(raverId) || !currentUser) { showToast("That's not your membership"); return; }
+    const { error } = await sb.from('crew_membership_blocks')
+      .upsert({ raver_id: raverId, crew_id: crewId, blocked_by: currentUser.id }, { onConflict: 'raver_id,crew_id' });
+    if (error) { console.error('crew_membership_blocks insert error', error); showToast('⚠️ Could not save that — try again'); return; }
+    if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Blocked ✓'; }
+    showToast('🚫 No one can re-add you to this crew — unless you join yourself.');
+  }
+
+  // Leader resolving a "so-and-so left the crew" request from the
+  // notification: keep their spot as a placeholder, or remove them completely.
+  async function notifResolveLeaveRequest(crewId, raverId, keepPlaceholder, btnEl) {
+    if (!currentUser) return;
+    const { data, error } = await sb.rpc('resolve_crew_leave_request', {
+      p_crew_id: crewId, p_raver_id: raverId, p_keep_placeholder: keepPlaceholder
+    });
+    if (error || data?.error) { console.error('resolve_crew_leave_request error', error || data.error); showToast('⚠️ Could not save that — try again'); return; }
+    if (btnEl) {
+      const row = btnEl.closest('.notif-actions-row');
+      if (row) row.querySelectorAll('button').forEach(b => b.disabled = true);
+      btnEl.textContent = keepPlaceholder ? 'Kept ✓' : 'Removed ✓';
+    }
+    showToast(keepPlaceholder ? '✅ Their spot stays in the crew' : '🗑️ Removed from the crew');
+  }
+
   function toggleInterestedInFest(festId) {
     if (String(festId).startsWith('temp_')) { showToast('Still saving — try again in a moment'); return; }
     const you = squad.find(r => r.isYou);
@@ -18944,26 +19049,10 @@ async function doProfilePasswordChange() {
       showToast('Already linked'); return;
     }
     r.festIds = [...(r.festIds || []), editingFestivalId];
-    if (currentUser) {
-      dbAddRaverFestival(raverId, editingFestivalId);
-      // Notify the added person so they know they were linked, and give them a
-      // one-tap way to take their RSVP off. Only claimed users have an inbox, and
-      // never notify the actor about their own action.
-      const recipientUid = r.claimedBy || null;
-      if (recipientUid && recipientUid !== currentUser.id) {
-        const me = squad.find(x => x.isYou);
-        const meFirstName = (me?.name || 'Someone').split(' ')[0];
-        const fest = getFestival(editingFestivalId);
-        const festName = fest?.name || 'a rave';
-        dbAddNotification(
-          recipientUid,
-          null,
-          `🎪 ${meFirstName} added you to ${festName}! You're on the lineup — pack your kit and charge the glowsticks. Not feeling it? Tap to take your RSVP off.`,
-          'festival_add',
-          { festival_id: editingFestivalId, raver_id: raverId, festival_name: festName }
-        );
-      }
-    }
+    // "You were added" notifications are fired by a DB trigger on
+    // raver_festivals insert (see notify_raver_festival_change), not from
+    // here — that way every add path notifies the recipient, not just this one.
+    if (currentUser) dbAddRaverFestival(raverId, editingFestivalId);
     renderSquad(); renderEvents(); renderCrews();
     const goers = festivalGoers(editingFestivalId);
     const note = document.getElementById('re-goers-note');
@@ -20039,6 +20128,53 @@ async function doProfilePasswordChange() {
     badge.classList.toggle('has-unread', hasUnread);
   }
 
+  // Buttons per notification type. Each returns an array of
+  // {label, onclick, ghost} so renderNotifList can lay them out consistently
+  // instead of hand-building markup per type.
+  function notifActionButtons(n) {
+    const d = n.data || {};
+    if (n.type === 'festival_add' && d.festival_id && d.raver_id) {
+      return [
+        { label: 'Nah, take me off the lineup', onclick: `notifOptOutFestival('${escHtml(String(d.raver_id))}','${escHtml(String(d.festival_id))}',this)` },
+        { label: "\ud83d\udeab Don't add me to this again", ghost: true, onclick: `notifBlockFestival('${escHtml(String(d.raver_id))}','${escHtml(String(d.festival_id))}',this)` }
+      ];
+    }
+    if (n.type === 'festival_remove' && d.festival_id && d.raver_id) {
+      return [
+        { label: 'Add me back on', onclick: `notifReAddSelfFestival('${escHtml(String(d.raver_id))}','${escHtml(String(d.festival_id))}',this)` },
+        { label: "\ud83d\udeab Don't add me to this again", ghost: true, onclick: `notifBlockFestival('${escHtml(String(d.raver_id))}','${escHtml(String(d.festival_id))}',this)` }
+      ];
+    }
+    if (n.type === 'crew_add' && d.crew_id && d.raver_id) {
+      return [
+        { label: "\ud83d\udeab Don't add me to this crew again", ghost: true, onclick: `notifBlockCrew('${escHtml(String(d.raver_id))}','${escHtml(String(d.crew_id))}',this)` }
+      ];
+    }
+    if (n.type === 'crew_remove' && d.crew_id && d.raver_id) {
+      return [
+        { label: "\ud83d\udeab Don't add me to this crew again", ghost: true, onclick: `notifBlockCrew('${escHtml(String(d.raver_id))}','${escHtml(String(d.crew_id))}',this)` }
+      ];
+    }
+    if (n.type === 'crew_leave_request' && d.crew_id && d.raver_id) {
+      return [
+        { label: 'Keep their spot', onclick: `notifResolveLeaveRequest('${escHtml(String(d.crew_id))}','${escHtml(String(d.raver_id))}',true,this)` },
+        { label: 'Remove completely', ghost: true, onclick: `notifResolveLeaveRequest('${escHtml(String(d.crew_id))}','${escHtml(String(d.raver_id))}',false,this)` }
+      ];
+    }
+    if (n.type === 'vendor_spotted' && d.vendor_id) {
+      return [{ label: `👀 See ${escHtml(d.vendor_name || 'vendor')}`, onclick: `jumpToVendorVillage('${escHtml(String(d.vendor_id))}')` }];
+    }
+    return [];
+  }
+
+  // Tap the message itself to jump to the rave/crew it's about. Only wired
+  // up when the notification actually carries a navigable entity.
+  function notifNavigate(entityType, entityId) {
+    closeNotifDrawer();
+    if (entityType === 'rave') { switchTab('events'); openRaveEditor(entityId); }
+    else if (entityType === 'crew') { switchTab('crews'); openDetail(entityId); }
+  }
+
   function renderNotifList() {
     const list = loadNotifs();
     const el = document.getElementById('notif-list');
@@ -20048,18 +20184,20 @@ async function doProfilePasswordChange() {
       return;
     }
     el.innerHTML = list.map(n => {
-      let action = (n.type === 'festival_add' && n.data && n.data.festival_id && n.data.raver_id)
-        ? `<button class="notif-action-btn" onclick="notifOptOutFestival('${escHtml(String(n.data.raver_id))}','${escHtml(String(n.data.festival_id))}',this)">Nah, take me off the lineup</button>`
+      const buttons = notifActionButtons(n);
+      const actionsHtml = buttons.length
+        ? `<div class="notif-actions-row">${buttons.map(b => `<button class="notif-action-btn${b.ghost ? ' notif-ghost-btn' : ''}" onclick="${b.onclick}">${b.label}</button>`).join('')}</div>`
         : '';
-      if (n.type === 'vendor_spotted' && n.data?.vendor_id) {
-        action = `<button class="notif-action-btn" onclick="jumpToVendorVillage('${escHtml(String(n.data.vendor_id))}')">👀 See ${escHtml(n.data.vendor_name || 'vendor')}</button>`;
-      }
+      const navigable = n.entityType && n.entityId;
+      const textAttrs = navigable
+        ? ` style="cursor:pointer;" onclick="notifNavigate('${escHtml(String(n.entityType))}','${escHtml(String(n.entityId))}')"`
+        : '';
       return `
       <div class="notif-item ${n.read ? 'notif-read' : 'unread'}">
         <span class="notif-dot"></span>
-        <span class="notif-text">${escHtml(n.message)}</span>
+        <span class="notif-text"${textAttrs}>${escHtml(n.message)}</span>
         <span class="notif-time">${relativeTime(n.timestamp)}</span>
-        ${action}
+        ${actionsHtml}
       </div>`;
     }).join('');
   }

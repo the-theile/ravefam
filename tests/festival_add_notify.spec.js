@@ -2,42 +2,46 @@ const { test, expect } = require('@playwright/test');
 const { bootAuthedApp, seedData, TEST_UID } = require('./helpers');
 
 // When a crew member adds someone to a festival, the added person gets an
-// actionable notification and can take their RSVP off in one tap.
+// actionable notification and can take their RSVP off in one tap. The
+// "you were added"/"you were removed" notifications themselves are fired by
+// a Postgres trigger on raver_festivals (notify_raver_festival_change), not
+// from reAdd directly — same reasoning and same untestable-against-the-
+// offline-stub limitation as notify_saved_vendor_spotted in
+// vendor_village.spec.js. These tests cover the write reAdd is responsible
+// for; the notification rendering itself is covered by the seeded-data
+// tests below.
 test.describe('festival add → notify + opt-out', () => {
-  test('adding a CLAIMED member to a festival notifies them with an action payload', async ({ page }) => {
+  test('adding a CLAIMED member to a festival links their RSVP', async ({ page }) => {
     await bootAuthedApp(page);
     // r-kai is a claimed crew member not yet linked to f2.
     await page.evaluate(() => { openRaveEditor('f2'); reAdd('r-kai'); });
     await page.waitForTimeout(150);
 
-    const notif = await page.evaluate(() =>
-      (window.__store.notifications || []).find(n => n.type === 'festival_add' && n.user_id === 'kai-uid'));
-    expect(notif).toBeTruthy();
-    expect(notif.data.festival_id).toBe('f2');
-    expect(notif.data.raver_id).toBe('r-kai');
-    expect(notif.message).toContain('Awakenings');
+    const linked = await page.evaluate(() =>
+      (window.__store.raver_festivals || []).some(r => r.raver_id === 'r-kai' && r.festival_id === 'f2'));
+    expect(linked).toBe(true);
   });
 
-  test('adding an UNCLAIMED placeholder sends no notification (no inbox)', async ({ page }) => {
+  test('adding an UNCLAIMED placeholder still links their RSVP (no inbox to notify)', async ({ page }) => {
     await bootAuthedApp(page);
     // r-sam is unclaimed (claimed_by null).
     await page.evaluate(() => { openRaveEditor('f2'); reAdd('r-sam'); });
     await page.waitForTimeout(150);
 
-    const any = await page.evaluate(() =>
-      (window.__store.notifications || []).some(n => n.type === 'festival_add' && n.data && n.data.raver_id === 'r-sam'));
-    expect(any).toBe(false);
+    const linked = await page.evaluate(() =>
+      (window.__store.raver_festivals || []).some(r => r.raver_id === 'r-sam' && r.festival_id === 'f2'));
+    expect(linked).toBe(true);
   });
 
-  test('adding yourself sends no self-notification', async ({ page }) => {
+  test('adding yourself links your own RSVP', async ({ page }) => {
     await bootAuthedApp(page);
-    // r-you is the acting user; adding self to f2 should not notify TEST_UID.
+    // r-you is the acting user, adding self to f2.
     await page.evaluate(() => { openRaveEditor('f2'); reAdd('r-you'); });
     await page.waitForTimeout(150);
 
-    const selfNotif = await page.evaluate((uid) =>
-      (window.__store.notifications || []).some(n => n.type === 'festival_add' && n.user_id === uid), TEST_UID);
-    expect(selfNotif).toBe(false);
+    const linked = await page.evaluate(() =>
+      (window.__store.raver_festivals || []).some(r => r.raver_id === 'r-you' && r.festival_id === 'f2'));
+    expect(linked).toBe(true);
   });
 
   test('recipient can opt out straight from the notification', async ({ page }) => {
@@ -54,7 +58,10 @@ test.describe('festival add → notify + opt-out', () => {
     await bootAuthedApp(page, { data });
 
     await page.evaluate(() => openNotifDrawer());
-    const btn = page.locator('.notif-action-btn');
+    // A festival_add notification now renders two actions (opt out + block
+    // future re-adds) — target the opt-out button by class, not accessible
+    // name, since the click handler rewrites the button's text afterward.
+    const btn = page.locator('.notif-action-btn:not(.notif-ghost-btn)');
     await expect(btn).toBeVisible();
 
     // Sanity: the RSVP exists before opting out.
