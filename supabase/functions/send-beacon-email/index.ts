@@ -65,7 +65,14 @@ Deno.serve(async (req) => {
   }
 
   const { data: crew } = await sb.from("crews").select("name").eq("id", message.crew_id).maybeSingle();
-  const { data: senderRaver } = await sb.from("ravers").select("name").eq("claimed_by", message.sender_id).maybeSingle();
+  // A raver's own profile is identified by claimed_by = uid, except for
+  // profiles that predate claiming, which are is_you = true with
+  // claimed_by still null and only created_by = uid set (same fallback
+  // used by user_can_see_crew() and the app.html "safety net" comment).
+  let { data: senderRaver } = await sb.from("ravers").select("name").eq("claimed_by", message.sender_id).maybeSingle();
+  if (!senderRaver) {
+    ({ data: senderRaver } = await sb.from("ravers").select("name").eq("created_by", message.sender_id).eq("is_you", true).maybeSingle());
+  }
   const crewName = escapeHtml(crew?.name ?? "your crew");
   const senderFirstName = escapeHtml((senderRaver?.name ?? "Someone").split(" ")[0]);
   const beaconBody = escapeHtml(message.body ?? "");
