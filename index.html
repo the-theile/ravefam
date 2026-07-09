@@ -972,6 +972,8 @@
   .waitlist-success-title { font-family:'Urbanist',sans-serif; font-weight:800; font-size:1.5rem; margin-bottom:8px; color:#fff; }
   .waitlist-success-msg { font-size:0.9rem; color:var(--muted); line-height:1.55; }
   .waitlist-error { font-family:'Outfit',sans-serif; font-size:0.82rem; color:#ff6b6b; background:rgba(255,107,107,0.1); border:1px solid rgba(255,107,107,0.25); border-radius:8px; padding:9px 14px; display:none; margin-top:4px; }
+  .waitlist-hint { font-size:0.78rem; color:var(--muted); margin:-6px 0 0; line-height:1.4; }
+  .waitlist-privacy { font-size:0.76rem; color:var(--muted); text-align:center; margin:10px 0 0; line-height:1.4; }
 
   /* BETA badge */
   .beta-badge { display: inline-flex; align-items: center; gap: 6px; background: linear-gradient(135deg, #FF2D78, #BF00FF); color: #fff; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.72rem; letter-spacing: 1px; text-transform: uppercase; padding: 4px 14px; border-radius: 9999px; box-shadow: 0 0 20px rgba(255,45,120,0.6); animation: betaPulse 2s infinite alternate; white-space: nowrap; }
@@ -1926,15 +1928,17 @@
           <input class="waitlist-input" id="wl-name" type="text" placeholder="e.g. Zara" required autocomplete="given-name">
         </div>
         <div class="waitlist-field">
-          <label class="waitlist-label" for="wl-ig">INSTAGRAM HANDLE</label>
+          <label class="waitlist-label" for="wl-ig">INSTAGRAM HANDLE *</label>
           <input class="waitlist-input" id="wl-ig" type="text" placeholder="@yourusername">
         </div>
         <div class="waitlist-field">
-          <label class="waitlist-label" for="wl-email">EMAIL</label>
+          <label class="waitlist-label" for="wl-email">EMAIL *</label>
           <input class="waitlist-input" id="wl-email" type="email" placeholder="you@example.com" autocomplete="email">
         </div>
+        <p class="waitlist-hint">* Fill in Instagram or email so we can actually reach you.</p>
         <div class="waitlist-error" id="wl-error"></div>
         <button class="waitlist-submit" id="wl-submit" type="submit">Count me in →</button>
+        <p class="waitlist-privacy">We'll only use this to notify you when we launch — no spam, ever.</p>
       </form>
     </div>
     <div class="waitlist-success" id="waitlist-success">
@@ -1967,6 +1971,11 @@
     let   ig    = document.getElementById('wl-ig').value.trim();
     const email = document.getElementById('wl-email').value.trim();
     if (ig && !ig.startsWith('@')) ig = '@' + ig;
+    if (!ig && !email) {
+      errEl.textContent = 'Add your Instagram handle or email so we can reach you.';
+      errEl.style.display = 'block';
+      return;
+    }
     const source = new URLSearchParams(window.location.search).get('utm_source') || 'direct';
     errEl.style.display = 'none';
     btn.disabled = true; btn.textContent = 'Joining…';
