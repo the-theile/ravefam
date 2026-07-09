@@ -2950,6 +2950,7 @@
   }
   .huddle-inline-form-actions { display: flex; gap: 8px; justify-content: flex-end; }
   .huddle-beacon-send-btn { background: var(--neon-yellow); color: #000; }
+  .huddle-link { color: var(--neon-cyan, #00F5FF); text-decoration: underline; word-break: break-all; }
 
   .huddle-reaction-picker {
     display: flex;
@@ -11775,6 +11776,10 @@ async function doProfilePasswordChange() {
       </div>`;
   }
 
+  function linkifyHuddleText(escapedText) {
+    return escapedText.replace(/(https?:\/\/[^\s<]+)/g, url => `<a href="${url}" target="_blank" rel="noopener noreferrer" class="huddle-link">${url}</a>`);
+  }
+
   function huddleBubbleHTML(m, crew) {
     const isYou = currentUser && m.sender_id === currentUser.id;
     const senderName = huddleSenderName(m.sender_id);
@@ -11839,7 +11844,7 @@ async function doProfilePasswordChange() {
     } else if (m.kind === 'beacon') {
       bodyHtml = `<div class="huddle-bubble-beacon-text">📣 ${escHtml(m.body || '')}</div>`;
     } else {
-      bodyHtml = escHtml(m.body || '');
+      bodyHtml = linkifyHuddleText(escHtml(m.body || ''));
     }
 
     const reactions = m.reactions || {};
@@ -11887,7 +11892,6 @@ async function doProfilePasswordChange() {
   }
 
   function huddleComposerHTML() {
-    const pickerBtns = HUDDLE_REACTION_EMOJIS.map(e => `<button type="button" class="huddle-reaction-picker-btn" data-emoji="${e}" onclick="quickReactToLastHuddleMessage(this.dataset.emoji)">${e}</button>`).join('');
     const currentRoom = huddleRooms.find(r => r.id === _huddleActiveRoomId);
     const roomFestival = currentRoom && currentRoom.festival_id
       ? festivals.find(f => String(f.id) === String(currentRoom.festival_id)) : null;
@@ -11915,7 +11919,13 @@ async function doProfilePasswordChange() {
             <button type="button" class="btn huddle-beacon-send-btn" onclick="submitHuddleBeacon()">📣 Send Beacon</button>
           </div>
         </div>
-        <div id="huddle-reaction-picker" class="huddle-reaction-picker" style="display:none;">${pickerBtns}</div>
+        <div id="huddle-link-form" class="huddle-inline-form" style="display:none;">
+          <input type="url" id="huddle-link-url" class="form-input" placeholder="Paste a link (tickets, event page…)" maxlength="500">
+          <div class="huddle-inline-form-actions">
+            <button type="button" class="btn btn-ghost" onclick="toggleHuddleLinkForm()">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="submitHuddleLinkShare()">🔗 Share Link</button>
+          </div>
+        </div>
         <form class="huddle-composer-input-row" onsubmit="event.preventDefault(); submitHuddleTextMessage();">
           <textarea id="huddle-text-input" class="form-input huddle-textarea" placeholder="Say something to the crew…" maxlength="500" rows="1" oninput="autoGrowHuddleTextarea(this)" onkeydown="handleHuddleComposerKeydown(event)"></textarea>
           <input type="file" id="huddle-photo-input" accept="image/*" style="display:none" onchange="handleHuddlePhotoInput(event)">
@@ -11924,7 +11934,7 @@ async function doProfilePasswordChange() {
               <button type="button" class="huddle-quick-btn" title="Photo" onclick="document.getElementById('huddle-photo-input').click()">📸</button>
               <button type="button" class="huddle-quick-btn" title="Voice note" onclick="startHuddleVoiceRecording()">🎤</button>
               <button type="button" class="huddle-quick-btn" title="Meetup pin" onclick="toggleHuddleMeetupForm()">📍</button>
-              <button type="button" class="huddle-quick-btn" title="Set reaction" onclick="toggleHuddleReactionPicker()">🔥</button>
+              <button type="button" class="huddle-quick-btn" title="Share a link" onclick="toggleHuddleLinkForm()">🔗</button>
             </div>
             <button type="submit" class="btn btn-primary huddle-send-btn">Send</button>
           </div>
@@ -12125,11 +12135,16 @@ async function doProfilePasswordChange() {
     if (error) showToast('⚠️ Could not save reaction');
   }
 
-  function quickReactToLastHuddleMessage(emoji) {
-    toggleHuddleReactionPicker();
-    const real = [...huddleMessages].reverse().find(m => !m._pending && !m._failed);
-    if (!real) { showToast('Send a message first to react to it'); return; }
-    toggleHuddleReaction(real.id, emoji);
+  function submitHuddleLinkShare() {
+    const input = document.getElementById('huddle-link-url');
+    if (!input) return;
+    let url = input.value.trim();
+    if (!url) { showToast('Paste a link first'); return; }
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    try { new URL(url); } catch { showToast("That doesn't look like a valid link"); return; }
+    input.value = '';
+    toggleHuddleLinkForm();
+    sendHuddleMessage({ kind: 'text', body: url });
   }
 
   function toggleHuddleRoomMenu() {
@@ -12140,9 +12155,9 @@ async function doProfilePasswordChange() {
     const el = document.getElementById('huddle-room-menu'); if (el) el.style.display = 'none';
   }
 
-  // ── Inline composer forms (meetup / beacon / reaction-picker) — mutually exclusive ──
+  // ── Inline composer forms (meetup / beacon / link-share) — mutually exclusive ──
   function huddleHideAllInlineForms() {
-    ['huddle-meetup-form', 'huddle-beacon-form', 'huddle-reaction-picker'].forEach(elId => {
+    ['huddle-meetup-form', 'huddle-beacon-form', 'huddle-link-form'].forEach(elId => {
       const el = document.getElementById(elId);
       if (el) el.style.display = 'none';
     });
@@ -12288,11 +12303,12 @@ async function doProfilePasswordChange() {
     huddleHideAllInlineForms();
     el.style.display = opening ? '' : 'none';
   }
-  function toggleHuddleReactionPicker() {
-    const el = document.getElementById('huddle-reaction-picker'); if (!el) return;
+  function toggleHuddleLinkForm() {
+    const el = document.getElementById('huddle-link-form'); if (!el) return;
     const opening = el.style.display === 'none';
     huddleHideAllInlineForms();
     el.style.display = opening ? '' : 'none';
+    if (opening) { const input = document.getElementById('huddle-link-url'); if (input) input.focus(); }
   }
   function toggleHuddleBubbleReactionPicker(messageId) {
     const el = document.getElementById('huddle-bubble-picker-' + messageId); if (!el) return;
