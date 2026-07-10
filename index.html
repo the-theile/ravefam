@@ -49,6 +49,8 @@
 }
 </script>
 
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@800;900&family=Outfit:wght@400;500;600;700;800;900&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -1356,9 +1358,9 @@
 
       <!-- Tab bar -->
       <div class="phone-tabs">
-        <button class="phone-tab active" data-tab="crews"   onclick="switchTab('crews')">👑 Crews</button>
-        <button class="phone-tab"        data-tab="raves"   onclick="switchTab('raves')">🎟️ Raves</button>
-        <button class="phone-tab"        data-tab="members" onclick="switchTab('members')">👥 Ravers</button>
+        <button class="phone-tab active" data-tab="crews"   onclick="selectTab('crews')">👑 Crews</button>
+        <button class="phone-tab"        data-tab="raves"   onclick="selectTab('raves')">🎟️ Raves</button>
+        <button class="phone-tab"        data-tab="members" onclick="selectTab('members')">👥 Ravers</button>
       </div>
 
       <!-- CREWS panel -->
@@ -1918,8 +1920,8 @@
 
 <!-- WAITLIST MODAL -->
 <div class="waitlist-overlay" id="waitlist-overlay" onclick="if(event.target===this)closeWaitlist()">
-  <div class="waitlist-modal">
-    <button class="waitlist-close" onclick="closeWaitlist()">✕</button>
+  <div class="waitlist-modal" role="dialog" aria-modal="true" aria-labelledby="waitlist-title">
+    <button class="waitlist-close" onclick="closeWaitlist()" aria-label="Close">✕</button>
     <div id="waitlist-form-state">
       <div class="waitlist-banner" aria-hidden="true">
         <svg viewBox="0 0 400 108" preserveAspectRatio="xMidYMid slice">
@@ -1965,7 +1967,7 @@
           <text x="200" y="74.5" text-anchor="middle" font-family="Outfit, sans-serif" font-weight="800" font-size="9.5" fill="#fff" letter-spacing="0.3">ON THE LIST</text>
         </svg>
       </div>
-      <div class="waitlist-title">Join the waitlist</div>
+      <div class="waitlist-title" id="waitlist-title">Join the waitlist</div>
       <p class="waitlist-sub">RaveFAM is nearly ready to rage. Drop your name and Instagram or email — we'll hit you up when the full app drops.</p>
       <form class="waitlist-form" id="waitlist-form" onsubmit="submitWaitlist(event)">
         <div class="waitlist-field">
@@ -1998,13 +2000,17 @@
   const SUPABASE_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
   const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2cGdvcGNpaW9xYnFtampqaWdoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3NTY2OTUsImV4cCI6MjA5NjMzMjY5NX0.DAgcx2UsGV1gUCQzHdGmv1Pu0rXlJdQxhn-bf1wGsiI';
 
+  let waitlistLastFocus = null;
   function openWaitlist() {
+    waitlistLastFocus = document.activeElement;
     document.getElementById('waitlist-overlay').classList.add('open');
     document.body.style.overflow = 'hidden';
+    document.getElementById('wl-name').focus();
   }
   function closeWaitlist() {
     document.getElementById('waitlist-overlay').classList.remove('open');
     document.body.style.overflow = '';
+    if (waitlistLastFocus) waitlistLastFocus.focus();
   }
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeWaitlist(); });
 
@@ -2053,10 +2059,23 @@
     document.querySelectorAll('.phone-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
     document.querySelectorAll('.phone-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + tab));
   }
-  // Auto-cycle tabs every 4s
+  // Auto-cycle tabs every 4s, restarting from whatever the visitor last picked
   let tabIndex = 0;
   const tabNames = ['crews', 'raves', 'members'];
-  setInterval(() => { tabIndex = (tabIndex + 1) % tabNames.length; switchTab(tabNames[tabIndex]); }, 4000);
+  let autoCycleTimer = null;
+  function restartAutoCycle() {
+    clearInterval(autoCycleTimer);
+    autoCycleTimer = setInterval(() => {
+      tabIndex = (tabIndex + 1) % tabNames.length;
+      switchTab(tabNames[tabIndex]);
+    }, 4000);
+  }
+  function selectTab(tab) {
+    tabIndex = tabNames.indexOf(tab);
+    switchTab(tab);
+    restartAutoCycle();
+  }
+  restartAutoCycle();
 
   // Build QR grid pattern
   (function buildQrGrid() {
@@ -2111,7 +2130,7 @@
   toggle.addEventListener('click',function(){if(fadeTimer){clearInterval(fadeTimer);fadeTimer=null;}if(playing){audio.pause();audio.volume=0;playing=false;toggle.innerHTML='&#127925;';toggle.style.boxShadow=glowOff;}else{audio.volume=0;var p=audio.play();if(p!==undefined){p.then(startFade).catch(function(){});}else{startFade();}}hideCredit();});
   function startFade(){playing=true;toggle.innerHTML='&#128266;';toggle.style.boxShadow=glowOn;if(isTouchDevice){showCredit();setTimeout(hideCredit,3000);}var v=0;fadeTimer=setInterval(function(){v=Math.min(v+0.04,0.55);audio.volume=v;if(v>=0.55){clearInterval(fadeTimer);fadeTimer=null;}},60);}
   var holdTimer=null,isTouchDevice=('ontouchstart' in window);
-  function showCredit(){credit.style.opacity='1';credit.style.transform='translateY(0) scale(1)';credit.style.pointer-events='auto';}
+  function showCredit(){credit.style.opacity='1';credit.style.transform='translateY(0) scale(1)';credit.style.pointerEvents='auto';}
   function hideCredit(){credit.style.opacity='0';credit.style.transform='translateY(4px) scale(0.97)';credit.style.pointerEvents='none';if(holdTimer){clearTimeout(holdTimer);holdTimer=null;}}
   if(!isTouchDevice){toggle.addEventListener('mouseenter',showCredit);toggle.addEventListener('mouseleave',hideCredit);}
   else{toggle.addEventListener('touchstart',function(e){holdTimer=setTimeout(function(){showCredit();setTimeout(hideCredit,3000);},400);},{passive:true});toggle.addEventListener('touchend',function(){clearTimeout(holdTimer);holdTimer=null;});toggle.addEventListener('touchmove',function(){clearTimeout(holdTimer);holdTimer=null;});document.addEventListener('touchstart',function(e){if(!btn.contains(e.target))hideCredit();},{passive:true});}
