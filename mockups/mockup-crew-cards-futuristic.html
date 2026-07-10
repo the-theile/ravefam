@@ -189,9 +189,10 @@
   .radar-sweep { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(from 0deg, rgba(var(--rgb),0.55), transparent 55deg, transparent 360deg); animation: radarSpin 4.5s linear infinite; mix-blend-mode: screen; }
   @keyframes radarSpin { to { transform: rotate(360deg); } }
   .radar-home { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 54px; height: 54px; border-radius: 50%; background: linear-gradient(135deg, var(--c1), var(--c2)); display: flex; align-items: center; justify-content: center; font-size: 1.3rem; box-shadow: 0 0 20px -1px rgba(var(--rgb),0.8); z-index: 2; }
+  .radar-home-photo { background: conic-gradient(from 210deg, var(--c1), var(--c2), var(--c1)); position: relative; overflow: hidden; }
+  .radar-home-photo::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 34% 28%, rgba(255,255,255,0.4), transparent 55%); }
+  .radar-home-mono { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.05rem; color: #fff; }
   .radar-blip { position: absolute; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.52rem; font-weight: 700; font-family: 'Outfit', sans-serif; color: #0b0b12; border: 1.5px solid rgba(0,0,0,0.5); transform: translate(-50%,-50%); z-index: 2; }
-  .radar-blip.count { background: rgba(255,255,255,0.2) !important; color: #fff !important; }
-  .radar-label-ring { position: absolute; bottom: -2px; left: 50%; transform: translateX(-50%); font-family: 'Outfit', sans-serif; font-size: 0.6rem; letter-spacing: 1.5px; text-transform: uppercase; color: var(--scolor); background: rgba(5,5,9,0.85); padding: 3px 10px; border-radius: 100px; border: 1px solid rgba(var(--srgb),0.5); box-shadow: 0 0 10px -2px rgba(var(--srgb),0.5); z-index: 3; white-space: nowrap; }
   .radar-panel .dp-fest-label { font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; }
 
   /* ===================================================================== */
@@ -271,7 +272,7 @@ const CREWS = [
   {
     name: 'Neon Nomads',
     c1: '#FF2D78', c2: '#BF00FF', rgb: '255,45,120',
-    status: 'recruiting', isLead: true, totem: '🌈', visible: true,
+    status: 'recruiting', isLead: true, totem: '🌈', totemPhoto: true, visible: true,
     members: [
       { i:'JX', c:'#FF2D78' }, { i:'KM', c:'#00F5FF' }, { i:'RV', c:'#39FF14' },
       { i:'TS', c:'#BF00FF' }, { i:'AL', c:'#FFE600' }, { i:'+2', c:'#8585A5', count:true }
@@ -312,7 +313,7 @@ const VARIANTS = [
   { id: 'v1', label: '1 · Orbital Beacon', desc: 'A circular porthole: the crew totem glows as a beacon at its core, status reads as a HUD arc around it, and members orbit along the base. A data dock beneath carries the rest — Next Up, tribe, visibility.' },
   { id: 'v2', label: '2 · Vinyl Transmission', desc: 'The crew as a spinning record — grooved disc, center label, members as track markers on the rim, tips into a spin on hover. A sleeve panel peeks out below with the full readout.' },
   { id: 'v3', label: '3 · Hex Cell', desc: 'A faceted hexagonal badge houses the identity; a angle-cut glass cell below holds everything else — built to feel like it could tessellate into a hive of crews.' },
-  { id: 'v4', label: '4 · Radar Array', desc: 'A live radar sweep with members as tracked contacts and the crew as home base. Next Up renders as a locked target readout — mission-control energy.' },
+  { id: 'v4', label: '4 · Radar Array', desc: 'A live radar sweep with every member tracked as its own contact and the crew as home base — the center shows a totem photo if set, or a generated initials mark if not. Next Up renders as a locked target readout below.' },
   { id: 'v5', label: '5 · Terminal Shard', desc: 'An angular cyberpunk panel with clipped corners and a monospace data readout — no circles here, pure HUD terminal, for contrast against the other four.' }
 ];
 
@@ -330,7 +331,8 @@ function memberCount(members) {
   return members.filter(m => !m.count).length + (overflow ? parseInt(overflow.i.replace('+','')) : 0);
 }
 
-function dataPanelHTML(crew) {
+function dataPanelHTML(crew, opts) {
+  const showAvatars = !opts || opts.showAvatars !== false;
   const s = STATUS[crew.status];
   const leadBadge = crew.isLead ? ' · <span class="lead-badge">👑 You lead</span>' : '';
   let fest;
@@ -355,7 +357,7 @@ function dataPanelHTML(crew) {
       <div class="dp-fullname">${esc(crew.name)}</div>
       ${fest}
       <div class="dp-tribe-label">👥 The Tribe · ${memberCount(crew.members)} members${leadBadge}</div>
-      <div class="dp-avatars">${avatarsRow(crew.members, 'avatar-sm')}</div>
+      ${showAvatars ? `<div class="dp-avatars">${avatarsRow(crew.members, 'avatar-sm')}</div>` : ''}
       ${huddle}
     </div>`;
 }
@@ -456,25 +458,43 @@ function cardHex(crew) {
 }
 
 /* ===== 4. Radar Array ===== */
+const RADAR_FILLER_POOL = [
+  { i:'NX', c:'#FF2D78' }, { i:'ZQ', c:'#00F5FF' }, { i:'VR', c:'#39FF14' }, { i:'KY', c:'#BF00FF' },
+  { i:'WU', c:'#FFE600' }, { i:'EP', c:'#5B6EFF' }, { i:'TM', c:'#FF2D78' }, { i:'OC', c:'#00F5FF' }
+];
+function expandAllMembers(members) {
+  const named = members.filter(m => !m.count);
+  const overflow = members.find(m => m.count);
+  const extra = overflow ? parseInt(overflow.i.replace('+', '')) : 0;
+  const filled = [];
+  for (let i = 0; i < extra; i++) filled.push(RADAR_FILLER_POOL[i % RADAR_FILLER_POOL.length]);
+  return named.concat(filled);
+}
+function radarTotemHTML(crew) {
+  if (crew.totemPhoto) return `<div class="radar-home radar-home-photo"></div>`;
+  if (crew.totem) return `<div class="radar-home">${crew.totem}</div>`;
+  const initials = crew.name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
+  return `<div class="radar-home radar-home-mono">${esc(initials)}</div>`;
+}
 function cardRadar(crew) {
   const s = STATUS[crew.status];
   const cx = 110, cy = 110;
-  const angles = crew.members.map((_, i) => (360 / crew.members.length) * i - 90);
-  const blips = crew.members.map((m, i) => {
-    const radius = i % 2 === 0 ? 60 : 84;
+  const allMembers = expandAllMembers(crew.members);
+  const angles = allMembers.map((_, i) => (360 / allMembers.length) * i - 90);
+  const blips = allMembers.map((m, i) => {
+    const radius = i % 2 === 0 ? 60 : 86;
     const p = polar(cx, cy, radius, angles[i]);
-    return `<div class="radar-blip${m.count ? ' count' : ''}" style="left:${p.x}px; top:${p.y}px; ${m.count ? '' : `background:${m.c}`}">${esc(m.i)}</div>`;
+    return `<div class="radar-blip" style="left:${p.x}px; top:${p.y}px; background:${m.c}">${esc(m.i)}</div>`;
   }).join('');
   return `
     <div class="radar-card" style="--c1:${crew.c1}; --c2:${crew.c2}; --rgb:${crew.rgb}; --scolor:${s.color}; --srgb:${s.rgb};">
       <div class="radar-disc">
         <div class="radar-grid"></div>
         <div class="radar-sweep"></div>
-        <div class="radar-home">${crew.totem || '✦'}</div>
+        ${radarTotemHTML(crew)}
         ${blips}
-        <div class="radar-label-ring">${s.label.replace(/^\S+\s/, '')}</div>
       </div>
-      <div class="radar-panel">${dataPanelHTML(crew)}</div>
+      <div class="radar-panel">${dataPanelHTML(crew, { showAvatars: false })}</div>
     </div>`;
 }
 
