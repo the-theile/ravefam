@@ -2137,6 +2137,62 @@
   }
   .toast.show { transform: translateX(-50%) translateY(0); }
 
+  /* Coachmark — first-encounter feature tip, one shown at a time via queue */
+  .coachmark {
+    position: fixed;
+    z-index: 1200;
+    max-width: min(300px, calc(100vw - 32px));
+    background: var(--surface2);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 14px;
+    padding: 14px 16px;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.45);
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    pointer-events: none;
+  }
+  .coachmark.show { opacity: 1; transform: translateY(0); }
+  .coachmark::after {
+    content: '';
+    position: absolute;
+    width: 12px; height: 12px;
+    background: var(--surface2);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-right: none; border-bottom: none;
+  }
+  .coachmark.placement-below::after { top: -7px; left: 24px; transform: rotate(45deg); }
+  .coachmark.placement-above::after { bottom: -7px; left: 24px; transform: rotate(225deg); }
+  .coachmark-title {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .coachmark-body {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  .coachmark-dismiss {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.78rem;
+    letter-spacing: 0.3px;
+    padding: 7px 16px;
+    border-radius: 100px;
+    border: none;
+    cursor: pointer;
+    background: var(--neon-pink);
+    color: #fff;
+    transition: transform 0.15s ease;
+    pointer-events: auto;
+  }
+  .coachmark-dismiss:hover { transform: translateY(-1px); }
+
   /* Offline banner */
   #offline-banner {
     position: fixed;
@@ -6405,6 +6461,11 @@
 
 <!-- Toast -->
 <div class="toast" id="toast"></div>
+<div class="coachmark" id="coachmark">
+  <div class="coachmark-title" id="coachmark-title"></div>
+  <div class="coachmark-body" id="coachmark-body"></div>
+  <button type="button" class="coachmark-dismiss" onclick="dismissCoachmark()">Got it</button>
+</div>
 
 <!-- Ko-fi progress modal -->
 <div id="sptProgressModal" class="spt-modal">
@@ -6758,6 +6819,7 @@
   sb.rpc('log_pageview', { p_path: location.pathname, p_referrer: document.referrer });
 
   let currentUser = null;  // holds the logged-in Supabase user object
+  let _seenTips = {};  // local mirror of user_metadata.seen_tips — coachmarks already shown
   let moderatorIds = new Set();  // auth user ids present in the moderators table
   async function dbLoadModerators() {
     if (!currentUser) return;
@@ -7229,6 +7291,7 @@ async function doProfilePasswordChange() {
 
   function showApp(user) {
     currentUser = user;
+    _seenTips = { ...(user?.user_metadata?.seen_tips || {}) };
     maybeInitEruda();
     document.getElementById('claim-intercept').classList.remove('open');
     document.getElementById('app-loading').classList.add('hidden');
@@ -8633,6 +8696,11 @@ async function doProfilePasswordChange() {
       }
     }
     banner.style.display = '';
+    queueCoachmark('app_guide_nudge', {
+      targetEl: document.getElementById('app-guide-btn'),
+      title: '❔ Lost on the floor?',
+      body: "Tap here anytime — crews, Secret vs Recruiting, invites, it's all explained."
+    });
   }
 
   function dismissGuidanceBanner() {
@@ -11592,6 +11660,13 @@ async function doProfilePasswordChange() {
       </div>
       </div>
     `;
+    if (crew.isLead) {
+      queueCoachmark('crew_visibility', {
+        targetEl: document.querySelector('#page-crew-detail .crew-status-zone'),
+        title: '🔴🟢 Secret vs Recruiting',
+        body: "Secret keeps your crew invisible while you set it up — flip to Recruiting when you're ready to let the tribe in. No going back to Secret once you do."
+      });
+    }
   }
 
   // Toggle between the Overview / Roster / Huddle tabs on the crew detail page.
@@ -11606,7 +11681,13 @@ async function doProfilePasswordChange() {
     document.getElementById('crew-detail-panel-roster').style.display = tab === 'roster' ? '' : 'none';
     document.getElementById('crew-detail-panel-huddle').style.display = tab === 'huddle' ? '' : 'none';
     if (tab === 'huddle') {
-      openHuddle(activeDetailId);
+      openHuddle(activeDetailId).then(() => {
+        queueCoachmark('huddle_rooms', {
+          targetEl: document.querySelector('.huddle-room-selector-wrap'),
+          title: "🕊️ Huddle isn't just one room",
+          body: "Main Huddle's always open — plus a dedicated room auto-appears for every rave you and your crew are both going to. Tap the room name up top to switch."
+        });
+      });
     } else {
       teardownHuddleLive();
     }
@@ -19792,6 +19873,90 @@ async function doProfilePasswordChange() {
       t.classList.remove('show');
       setTimeout(_showNextToast, 150);
     }, 2500);
+  }
+
+  // ===== COACHMARKS =====
+  // Lightweight "first time you hit this feature" tips — distinct from the
+  // signup-time onboarding wizard and the reopenable App Guide. Each tip
+  // fires once ever per user (tracked in user_metadata.seen_tips, mirrored
+  // locally in _seenTips since currentUser is never refetched after an
+  // updateUser() call), one bubble visible at a time via a queue, same
+  // fire-and-forget persistence pattern as `onboarded`/`guidance_dismissed`.
+  let _coachmarkQueue = [];
+  let _coachmarkShowing = false;
+  let _coachmarkTipKey = null;
+  let _coachmarkTargetEl = null;
+  let _coachmarkResizeHandler = null;
+  const _coachmarkQueuedOrShown = new Set(); // this-session guard against duplicate enqueues before dismissal
+
+  function queueCoachmark(tipKey, { targetEl, title, body }) {
+    if (!targetEl || _seenTips[tipKey] || _coachmarkQueuedOrShown.has(tipKey)) return;
+    _coachmarkQueuedOrShown.add(tipKey);
+    _coachmarkQueue.push({ tipKey, targetEl, title, body });
+    if (!_coachmarkShowing) _showNextCoachmark();
+  }
+
+  function _showNextCoachmark() {
+    const next = _coachmarkQueue.shift();
+    if (!next) { _coachmarkShowing = false; return; }
+    if (_seenTips[next.tipKey] || !next.targetEl.isConnected || next.targetEl.offsetParent === null) {
+      _showNextCoachmark();
+      return;
+    }
+    _coachmarkShowing = true;
+    _coachmarkTipKey = next.tipKey;
+    _coachmarkTargetEl = next.targetEl;
+    const el = document.getElementById('coachmark');
+    document.getElementById('coachmark-title').textContent = next.title;
+    document.getElementById('coachmark-body').textContent = next.body;
+    next.targetEl.scrollIntoView({ behavior: 'auto', block: 'center' });
+    _positionCoachmark(next.targetEl);
+    el.classList.add('show');
+    _coachmarkResizeHandler = () => _positionCoachmark(_coachmarkTargetEl);
+    window.addEventListener('resize', _coachmarkResizeHandler);
+    window.addEventListener('orientationchange', _coachmarkResizeHandler);
+    // capture:true so scrolling inside any nested scroll container (page
+    // panels, modals) re-tracks the anchor too, not just window scroll.
+    window.addEventListener('scroll', _coachmarkResizeHandler, true);
+  }
+
+  function _positionCoachmark(targetEl) {
+    const el = document.getElementById('coachmark');
+    if (!el || !targetEl) return;
+    const margin = 8;
+    el.classList.remove('placement-above', 'placement-below');
+    el.style.left = '0px'; el.style.top = '0px';
+    const targetRect = targetEl.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    let placement = 'below';
+    let top = targetRect.bottom + 12;
+    if (top + elRect.height > window.innerHeight - margin) {
+      placement = 'above';
+      top = targetRect.top - elRect.height - 12;
+    }
+    const left = Math.min(Math.max(targetRect.left, margin), window.innerWidth - elRect.width - margin);
+    top = Math.min(Math.max(top, margin), window.innerHeight - elRect.height - margin);
+    el.classList.add('placement-' + placement);
+    el.style.left = `${left}px`;
+    el.style.top = `${top}px`;
+  }
+
+  function dismissCoachmark() {
+    const el = document.getElementById('coachmark');
+    if (el) el.classList.remove('show');
+    if (_coachmarkResizeHandler) {
+      window.removeEventListener('resize', _coachmarkResizeHandler);
+      window.removeEventListener('orientationchange', _coachmarkResizeHandler);
+      window.removeEventListener('scroll', _coachmarkResizeHandler, true);
+      _coachmarkResizeHandler = null;
+    }
+    if (_coachmarkTipKey) {
+      _seenTips[_coachmarkTipKey] = true;
+      if (currentUser) sb.auth.updateUser({ data: { seen_tips: _seenTips } }).catch(() => {});
+    }
+    _coachmarkTipKey = null;
+    _coachmarkTargetEl = null;
+    setTimeout(_showNextCoachmark, 150);
   }
 
   // ===== HANDLE PICKER =====
