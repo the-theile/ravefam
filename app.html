@@ -24,7 +24,7 @@
 <meta name="twitter:title" content="RaveFAM — Your Crew. Your Raves. Your Tribe.">
 <meta name="twitter:description" content="Build private crews, track festivals & local shows together, QR + 6-digit claim codes, profile claiming, shared memories. One home for your tribe.">
 <meta name="twitter:image" content="https://myravefam.com/og-image.png">
-<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@800;900&family=Outfit:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,700;9..144,800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@800;900&family=Outfit:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,700;9..144,800&family=DM+Sans:wght@300;400;500&family=Orbitron:wght@600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="jsQR.min.js"></script>
 <script src="qrcode.min.js"></script>
@@ -5182,7 +5182,37 @@
     }
   }
 
-  /* ===== Stats Page ===== */
+  /* ===== Stats Page — Rave Vitals HUD ===== */
+  #page-stats { position: relative; }
+
+  .stats-vitals-strip {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 16px;
+  }
+  .stats-vitals-dot {
+    width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+    background: var(--neon-green);
+    box-shadow: 0 0 6px var(--neon-green), 0 0 14px rgba(57,255,20,0.6);
+    animation: statsVitalsPulse 1.7s ease-in-out infinite;
+  }
+  @keyframes statsVitalsPulse { 0%,100%{ opacity:1; transform:scale(1); } 50%{ opacity:0.35; transform:scale(0.7); } }
+  .stats-vitals-label {
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 700;
+    font-size: 0.6rem;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: var(--neon-green);
+    white-space: nowrap;
+  }
+  .stats-vitals-line {
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(57,255,20,0.45), transparent);
+  }
+
   .stats-subtabs {
     display: flex;
     gap: 6px;
@@ -5194,18 +5224,24 @@
   }
   .stats-subtab {
     flex: 1;
-    padding: 8px 12px;
+    padding: 9px 12px;
     border: none;
     background: transparent;
     color: var(--muted);
-    font-family: 'Outfit', sans-serif;
-    font-weight: 600;
-    font-size: 0.82rem;
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 700;
+    font-size: 0.68rem;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
     border-radius: 8px;
     cursor: pointer;
     transition: all 0.2s;
   }
-  .stats-subtab.active { background: var(--neon-pink); color: #fff; }
+  .stats-subtab.active {
+    background: var(--neon-pink);
+    color: #fff;
+    box-shadow: 0 0 18px -3px rgba(255,45,120,0.75), 0 0 0 1px rgba(255,45,120,0.4);
+  }
 
   .stats-hero-grid {
     display: grid;
@@ -5214,99 +5250,167 @@
     margin-bottom: 16px;
   }
   .stats-hero-card {
+    position: relative;
     background: var(--surface);
-    border: 1px solid rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.08);
     border-radius: 14px;
-    padding: 16px 12px;
+    padding: 18px 12px 14px;
     text-align: center;
+    overflow: hidden;
+    isolation: isolate;
   }
+  .stats-hero-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: var(--vital-c, var(--neon-pink));
+    box-shadow: 0 0 10px var(--vital-c, var(--neon-pink));
+  }
+  .stats-hero-card::after {
+    content: '';
+    position: absolute; inset: 0; z-index: -1; opacity: 0.5;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px);
+    background-size: 10px 10px;
+    mask-image: radial-gradient(80% 80% at 50% 0%, #000 0%, transparent 80%);
+  }
+  .stats-hero-card:nth-child(1) { --vital-c: var(--neon-pink); }
+  .stats-hero-card:nth-child(2) { --vital-c: var(--neon-cyan); }
+  .stats-hero-card:nth-child(3) { --vital-c: var(--neon-green); }
+  .stats-hero-card:nth-child(4) { --vital-c: var(--neon-yellow); }
   .stats-hero-number {
-    font-family: 'Urbanist', sans-serif;
+    font-family: 'Orbitron', sans-serif;
     font-weight: 900;
-    font-size: 2.2rem;
-    color: var(--neon-pink);
+    font-size: 2.1rem;
+    color: var(--vital-c, var(--neon-pink));
+    text-shadow: 0 0 18px var(--vital-c, rgba(255,45,120,0.5));
     line-height: 1;
-    margin-bottom: 4px;
+    margin-bottom: 6px;
   }
   .stats-hero-label {
-    font-size: 0.68rem;
+    font-size: 0.6rem;
     color: var(--muted);
     font-family: 'Outfit', sans-serif;
-    font-weight: 600;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 1.2px;
   }
 
   .stats-section-card {
+    position: relative;
     background: var(--surface);
     border: 1px solid rgba(255,255,255,0.07);
     border-radius: 16px;
-    padding: 16px;
+    padding: 18px 16px 16px;
     margin-bottom: 14px;
+    overflow: hidden;
+  }
+  .stats-section-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--neon-pink), var(--neon-purple), var(--neon-cyan));
   }
   .stats-section-title {
-    font-family: 'Outfit', sans-serif;
+    font-family: 'Orbitron', sans-serif;
     font-weight: 700;
-    font-size: 0.88rem;
+    font-size: 0.76rem;
+    letter-spacing: 0.6px;
     color: var(--text);
-    margin-bottom: 12px;
+    margin-bottom: 14px;
     display: flex;
     align-items: center;
     gap: 8px;
   }
   .stats-pill {
     display: inline-block;
-    background: rgba(255,45,120,0.12);
-    border: 1px solid rgba(255,45,120,0.22);
+    background: rgba(255,45,120,0.1);
+    border: 1px solid rgba(255,45,120,0.3);
     color: var(--neon-pink);
-    border-radius: 100px;
+    border-radius: 6px;
     padding: 3px 10px;
-    font-size: 0.73rem;
+    font-size: 0.7rem;
     font-family: 'Outfit', sans-serif;
-    font-weight: 600;
+    font-weight: 700;
+    letter-spacing: 0.3px;
     margin: 3px 2px;
   }
   .stats-pill.cyan {
     background: rgba(0,245,255,0.08);
-    border-color: rgba(0,245,255,0.18);
+    border-color: rgba(0,245,255,0.3);
     color: var(--neon-cyan);
   }
 
   .stats-personality {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 12px;
-    background: linear-gradient(135deg,rgba(255,45,120,0.1),rgba(191,0,255,0.1));
-    border: 1px solid rgba(255,45,120,0.18);
+    gap: 14px;
+    background: linear-gradient(135deg, rgba(255,45,120,0.12), rgba(191,0,255,0.12) 55%, rgba(0,245,255,0.08));
+    border: 1px solid rgba(255,45,120,0.28);
     border-radius: 12px;
-    padding: 14px;
+    padding: 16px;
     margin-bottom: 4px;
+    overflow: hidden;
   }
-  .stats-personality-emoji { font-size: 2rem; flex-shrink: 0; }
+  .stats-personality::before {
+    content: '';
+    position: absolute; inset: 0; opacity: 0.4; pointer-events: none;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+    background-size: 12px 12px;
+    mask-image: radial-gradient(100% 100% at 0% 0%, #000 0%, transparent 75%);
+  }
+  .stats-personality-emoji {
+    font-size: 2.1rem; flex-shrink: 0; position: relative; z-index: 1;
+    filter: drop-shadow(0 0 10px rgba(255,45,120,0.5));
+  }
   .stats-personality-label {
     font-family: 'Fraunces', sans-serif;
     font-weight: 800;
-    font-size: 1.05rem;
-    color: #fff;
+    font-size: 1.08rem;
+    background: linear-gradient(90deg, #fff, var(--neon-cyan));
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;
     line-height: 1.2;
+    position: relative; z-index: 1;
   }
-  .stats-personality-sub { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+  .stats-personality-sub { font-size: 0.72rem; color: var(--muted); margin-top: 3px; position: relative; z-index: 1; }
 
   .stats-passport-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 7px;
+    gap: 8px;
   }
   .stats-stamp {
-    background: var(--surface2);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 10px;
-    padding: 10px 6px;
-    text-align: center;
     position: relative;
+    background: var(--surface2);
+    border: 1px solid rgba(0,245,255,0.18);
+    border-radius: 10px;
+    padding: 12px 6px 10px;
+    text-align: center;
     overflow: hidden;
+    transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
   }
-  .stats-stamp-icon { font-size: 1.2rem; margin-bottom: 3px; }
+  .stats-stamp:not(.empty):hover {
+    transform: translateY(-2px);
+    border-color: rgba(0,245,255,0.5);
+    box-shadow: 0 6px 18px -6px rgba(0,245,255,0.4);
+  }
+  .stats-stamp::before {
+    content: '';
+    position: absolute; top: 0; left: 0; width: 9px; height: 9px;
+    border-top: 1.5px solid rgba(0,245,255,0.5);
+    border-left: 1.5px solid rgba(0,245,255,0.5);
+    border-radius: 3px 0 0 0;
+  }
+  .stats-stamp::after {
+    content: '';
+    position: absolute; bottom: 0; right: 0; width: 9px; height: 9px;
+    border-bottom: 1.5px solid rgba(0,245,255,0.5);
+    border-right: 1.5px solid rgba(0,245,255,0.5);
+    border-radius: 0 0 3px 0;
+  }
+  .stats-stamp-icon { font-size: 1.2rem; margin-bottom: 4px; filter: drop-shadow(0 0 6px rgba(0,245,255,0.4)); }
   .stats-stamp-name {
     font-family: 'Outfit', sans-serif;
     font-weight: 700;
@@ -5317,90 +5421,124 @@
     text-overflow: ellipsis;
     margin-bottom: 1px;
   }
-  .stats-stamp-year { font-size: 0.58rem; color: var(--muted); }
+  .stats-stamp-year { font-size: 0.56rem; color: var(--neon-cyan); font-family: 'Outfit', sans-serif; font-weight: 600; letter-spacing: 0.4px; }
   .stats-stamp.empty {
     border-style: dashed;
-    border-color: rgba(255,255,255,0.08);
+    border-color: rgba(255,255,255,0.1);
     opacity: 0.4;
   }
+  .stats-stamp.empty::before, .stats-stamp.empty::after { display: none; }
   .stats-stamp.empty .stats-stamp-name { color: var(--muted); }
+  .stats-stamp.empty .stats-stamp-year { color: var(--muted); }
 
   .stats-locked {
+    position: relative;
     background: var(--surface);
-    border: 1px solid rgba(255,255,255,0.06);
+    border: 1px dashed rgba(255,255,255,0.15);
     border-radius: 14px;
-    padding: 18px;
+    padding: 22px 18px;
     margin-bottom: 14px;
     text-align: center;
+    overflow: hidden;
   }
-  .stats-locked-icon { font-size: 1.6rem; margin-bottom: 6px; }
+  .stats-locked::before {
+    content: '';
+    position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(45deg, rgba(255,255,255,0.015) 0 10px, transparent 10px 20px);
+  }
+  .stats-locked-icon {
+    font-size: 1.5rem; margin-bottom: 8px;
+    animation: statsLockedPulse 2.4s ease-in-out infinite;
+  }
+  @keyframes statsLockedPulse { 0%,100%{ opacity:0.55; } 50%{ opacity:1; } }
   .stats-locked-title {
-    font-family: 'Outfit', sans-serif;
+    font-family: 'Orbitron', sans-serif;
     font-weight: 700;
-    font-size: 0.85rem;
+    font-size: 0.7rem;
+    letter-spacing: 1.6px;
+    text-transform: uppercase;
     color: var(--muted);
-    margin-bottom: 4px;
+    margin-bottom: 6px;
   }
-  .stats-locked-sub { font-size: 0.75rem; color: var(--muted); opacity: 0.7; margin-bottom: 10px; }
+  .stats-locked-sub { font-size: 0.75rem; color: var(--muted); opacity: 0.7; margin-bottom: 12px; line-height: 1.5; }
   .stats-progress-bar {
-    height: 3px;
+    height: 4px;
     background: rgba(255,255,255,0.07);
     border-radius: 100px;
     overflow: hidden;
     margin: 0 auto;
-    max-width: 180px;
+    max-width: 200px;
+    position: relative;
   }
   .stats-progress-fill {
     height: 100%;
-    background: var(--neon-pink);
+    background: linear-gradient(90deg, var(--neon-pink), var(--neon-purple));
     border-radius: 100px;
+    box-shadow: 0 0 10px rgba(255,45,120,0.6);
+    position: relative;
+    overflow: hidden;
   }
+  .stats-progress-fill::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent);
+    animation: statsProgressShimmer 1.8s ease-in-out infinite;
+  }
+  @keyframes statsProgressShimmer { 0%{ transform: translateX(-100%); } 100%{ transform: translateX(100%); } }
 
   .stats-wrapped-btn {
     width: 100%;
-    padding: 15px;
+    padding: 16px;
     background: linear-gradient(135deg,#FF2D78,#BF00FF);
     border: none;
     border-radius: 14px;
     color: #fff;
-    font-family: 'Outfit', sans-serif;
+    font-family: 'Orbitron', sans-serif;
     font-weight: 800;
-    font-size: 0.95rem;
+    font-size: 0.82rem;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
     cursor: pointer;
-    letter-spacing: 0.3px;
     margin-bottom: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    transition: opacity 0.2s;
+    transition: opacity 0.2s, transform 0.15s;
+    animation: statsWrappedGlow 2.6s ease-in-out infinite;
   }
-  .stats-wrapped-btn:hover { opacity: 0.88; }
+  @keyframes statsWrappedGlow {
+    0%,100% { box-shadow: 0 0 18px -4px rgba(255,45,120,0.55); }
+    50%     { box-shadow: 0 0 30px -2px rgba(191,0,255,0.7); }
+  }
+  .stats-wrapped-btn:hover { opacity: 0.92; transform: translateY(-1px); }
 
   .stats-leaderboard-row {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 9px 0;
+    padding: 10px 0;
     border-bottom: 1px solid rgba(255,255,255,0.05);
   }
   .stats-leaderboard-row:last-child { border-bottom: none; }
   .stats-lb-rank {
-    font-family: 'Outfit', sans-serif;
+    font-family: 'Orbitron', sans-serif;
     font-weight: 800;
-    font-size: 0.88rem;
+    font-size: 0.85rem;
     color: var(--muted);
-    width: 22px;
+    width: 24px;
     text-align: center;
     flex-shrink: 0;
   }
   .stats-lb-avatar {
-    width: 32px; height: 32px;
+    width: 34px; height: 34px;
     border-radius: 50%;
     background: var(--neon-pink);
     display: flex; align-items: center; justify-content: center;
     font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.7rem;
     color: #fff; flex-shrink: 0; overflow: hidden;
+    border: 1.5px solid rgba(255,255,255,0.12);
+    box-shadow: 0 0 0 3px rgba(255,45,120,0.08);
   }
   .stats-lb-avatar img { width: 100%; height: 100%; object-fit: cover; }
   .stats-lb-name {
@@ -5410,30 +5548,33 @@
     font-size: 0.82rem;
     color: var(--text);
   }
-  .stats-lb-name.you { color: var(--neon-pink); }
+  .stats-lb-name.you { color: var(--neon-pink); text-shadow: 0 0 10px rgba(255,45,120,0.35); }
   .stats-lb-val {
-    font-family: 'Outfit', sans-serif;
+    font-family: 'Orbitron', sans-serif;
     font-weight: 700;
-    font-size: 0.78rem;
+    font-size: 0.68rem;
+    letter-spacing: 0.3px;
     color: var(--muted);
   }
   .stats-lb-og {
-    font-size: 0.58rem;
+    font-size: 0.56rem;
     background: rgba(255,230,0,0.12);
-    border: 1px solid rgba(255,230,0,0.22);
+    border: 1px solid rgba(255,230,0,0.35);
     color: #FFE600;
-    border-radius: 100px;
+    border-radius: 6px;
     padding: 2px 6px;
-    font-family: 'Outfit', sans-serif;
+    font-family: 'Orbitron', sans-serif;
     font-weight: 700;
+    letter-spacing: 0.4px;
     margin-left: 4px;
+    box-shadow: 0 0 8px rgba(255,230,0,0.25);
   }
 
   .stats-empty-state {
     text-align: center;
     padding: 48px 20px;
   }
-  .stats-empty-icon { font-size: 3rem; margin-bottom: 14px; }
+  .stats-empty-icon { font-size: 3rem; margin-bottom: 14px; filter: drop-shadow(0 0 16px rgba(255,45,120,0.3)); }
   .stats-empty-title {
     font-family: 'Fraunces', sans-serif;
     font-weight: 800;
@@ -6026,6 +6167,11 @@
     <div class="page" id="page-stats">
       <div class="section-header" style="margin-bottom:16px;">
         <div class="section-title">Rave Life 📊</div>
+      </div>
+      <div class="stats-vitals-strip">
+        <span class="stats-vitals-dot"></span>
+        <span class="stats-vitals-label">Live Rave Vitals</span>
+        <span class="stats-vitals-line"></span>
       </div>
       <div class="stats-subtabs">
         <button class="stats-subtab active" onclick="switchStatTab('my', this)">My Stats</button>
