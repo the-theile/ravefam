@@ -10618,6 +10618,13 @@ async function doProfilePasswordChange() {
     document.getElementById('page-' + page).classList.add('active');
     if (el) el.classList.add('active');
     else document.querySelector(`.nav-tab[onclick*="'${page}'"]`)?.classList.add('active');
+    if (page === 'members') {
+      queueCoachmark('unclaimed_badge', {
+        targetEl: document.querySelector('#members-grid .claim-badge-unclaimed'),
+        title: '◌ Not claimed yet',
+        body: "This profile's a placeholder until they scan their QR and claim it. Open their profile to grab it and share."
+      });
+    }
   }
 
   // Modal
@@ -11686,6 +11693,11 @@ async function doProfilePasswordChange() {
           targetEl: document.querySelector('.huddle-room-selector-wrap'),
           title: "🕊️ Huddle isn't just one room",
           body: "Main Huddle's always open — plus a dedicated room auto-appears for every rave you and your crew are both going to. Tap the room name up top to switch."
+        });
+        queueCoachmark('beacon', {
+          targetEl: document.querySelector('.huddle-beacon-fab-inline'),
+          title: '📡 Beacon your crew',
+          body: "Send an urgent ping that cuts through the chat when it actually matters — lost at the fest, meetup change, whatever."
         });
       });
     } else {
@@ -17345,6 +17357,13 @@ async function doProfilePasswordChange() {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     profilePage.classList.add('active');
     window.scrollTo(0,0);
+    if (!editMode && r.isYou) {
+      queueCoachmark('privacy_controls', {
+        targetEl: document.querySelector('#page-profile button[title="Privacy & Permissions"]'),
+        title: '🕶️ Show only what you want',
+        body: 'Base location, RSVPs, vibe tags — you control what your crew (and randoms) can see.'
+      });
+    }
 
     // Async-load How We Met stories and Our Photos, refresh sections once loaded
     if (!editMode && !r.isYou && currentUser) {
