@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { bootAuthedApp, collectPageErrors } = require('./helpers');
+const { bootAuthedApp, collectPageErrors, seedData } = require('./helpers');
 
 // Open the Bass Syndicate (c1) detail page — its leader_id matches TEST_UID,
 // so crew.isLead is true and the crew_visibility coachmark is eligible to fire.
@@ -94,5 +94,80 @@ test.describe('coachmarks · one at a time', () => {
     await page.waitForTimeout(400);
     await expect(coachmark).toHaveClass(/show/);
     await expect(coachmark).toContainText("Huddle isn't just one room");
+  });
+});
+
+test.describe('coachmarks · privacy controls tip', () => {
+  test('shows once on your own profile, anchored to the privacy button', async ({ page }) => {
+    await bootAuthedApp(page, { sessionOver: { user_metadata: { guidance_dismissed: true } } });
+    await page.evaluate(() => openProfile('r-you'));
+    await expect(page.locator('#page-profile')).toHaveClass(/active/);
+
+    const coachmark = page.locator('#coachmark');
+    await expect(coachmark).toHaveClass(/show/);
+    await expect(coachmark).toContainText('Show only what you want');
+  });
+
+  test('does not fire on someone else\'s profile', async ({ page }) => {
+    await bootAuthedApp(page, { sessionOver: { user_metadata: { guidance_dismissed: true } } });
+    await page.evaluate(() => openProfile('r-sam'));
+    await page.waitForTimeout(400);
+    await expect(page.locator('#coachmark')).not.toHaveClass(/show/);
+  });
+});
+
+test.describe('coachmarks · unclaimed badge tip', () => {
+  test('shows once on the Ravers grid when an unclaimed profile is present', async ({ page }) => {
+    // seedData()'s r-sam is unclaimed (claimed_by: null, status: 'unclaimed'). The
+    // tip queues from switchTab('members', ...) — the grid itself is pre-rendered
+    // during boot regardless of active tab, so the hook has to live on tab switch,
+    // not on renderSquad(), or the anchor would still be hidden when queued.
+    await bootAuthedApp(page, { sessionOver: { user_metadata: { guidance_dismissed: true } } });
+    await page.evaluate(() => switchTab('members'));
+
+    const coachmark = page.locator('#coachmark');
+    await expect(coachmark).toHaveClass(/show/);
+    await expect(coachmark).toContainText('Not claimed yet');
+  });
+
+  test('does not fire when every raver is already claimed', async ({ page }) => {
+    const data = seedData();
+    data.ravers = data.ravers.map(r => r.id === 'r-sam' ? { ...r, claimed_by: 'sam-uid', status: 'claimed' } : r);
+    await bootAuthedApp(page, { sessionOver: { user_metadata: { guidance_dismissed: true } }, data });
+    await page.evaluate(() => switchTab('members'));
+    await page.waitForTimeout(400);
+    await expect(page.locator('#coachmark')).not.toHaveClass(/show/);
+  });
+});
+
+test.describe('coachmarks · beacon tip', () => {
+  test('shows once, right after huddle_rooms is dismissed (both queue from the same Huddle-tab open)', async ({ page }) => {
+    await bootAuthedApp(page, {
+      sessionOver: { user_metadata: { guidance_dismissed: true, seen_tips: { crew_visibility: true } } },
+    });
+    await openC1(page, { tab: 'huddle' });
+    await page.waitForTimeout(400);
+
+    const coachmark = page.locator('#coachmark');
+    await expect(coachmark).toContainText("Huddle isn't just one room");
+
+    await page.click('.coachmark-dismiss');
+    await page.waitForTimeout(400);
+    await expect(coachmark).toHaveClass(/show/);
+    await expect(coachmark).toContainText('Beacon your crew');
+  });
+
+  test('does not show again cross-session once seen_tips.beacon is set', async ({ page }) => {
+    await bootAuthedApp(page, {
+      sessionOver: {
+        user_metadata: {
+          guidance_dismissed: true,
+          seen_tips: { crew_visibility: true, huddle_rooms: true, beacon: true },
+        },
+      },
+    });
+    await openC1(page, { tab: 'huddle' });
+    await page.waitForTimeout(400);
+    await expect(page.locator('#coachmark')).not.toHaveClass(/show/);
   });
 });
