@@ -10018,7 +10018,31 @@ async function doProfilePasswordChange() {
     showToast('Totem icon removed');
   }
 
-  // Which of "photo" / "icon" the crew lead is currently viewing in the Crew Totem section.
+  async function clearCrewTotem(crewId) {
+    const crew = getCrew(crewId);
+    if (!crew) return;
+    const clear = async () => {
+      if (crew.totemPhotoUrl) { try { await sb.storage.from('photos').remove([`crews/${crewId}.jpg`]); } catch(_) {} }
+      crew.totemPhotoUrl = null;
+      crew.totemIcon = null;
+      if (currentUser) await sb.from('crews').update({ totem_photo_url: null, totem_icon: null }).eq('id', String(crewId));
+      renderCrews();
+      renderDetail(crewId);
+      showToast('Totem cleared');
+    };
+    if (crew.totemPhotoUrl) {
+      showPhotoConfirm({
+        icon: '🪩',
+        title: 'Clear crew totem?',
+        body: "The totem will vanish into the mist. Your crew name will hold it down until you set a new one.",
+        onConfirm: clear
+      });
+      return;
+    }
+    await clear();
+  }
+
+  // Which of "photo" / "icon" / "none" the crew lead is currently viewing in the Crew Totem section.
   const _totemTabByCrewId = {};
   function setCrewTotemTab(crewId, tab) {
     _totemTabByCrewId[crewId] = tab;
@@ -11811,14 +11835,21 @@ async function doProfilePasswordChange() {
     // Crew Totem block (photo or icon)
     let totemBlock;
     if (crew.isLead) {
-      const totemTab = _totemTabByCrewId[crew.id] || (crew.totemPhotoUrl ? 'photo' : 'icon');
+      const totemTab = _totemTabByCrewId[crew.id] || (crew.totemPhotoUrl ? 'photo' : crew.totemIcon ? 'icon' : 'none');
       const totemToggle = `
         <div class="totem-mode-toggle">
           <button class="totem-mode-btn ${totemTab==='photo'?'active':''}" onclick="setCrewTotemTab('${crew.id}','photo')">📸 Photo</button>
           <button class="totem-mode-btn ${totemTab==='icon'?'active':''}" onclick="setCrewTotemTab('${crew.id}','icon')">✦ Icon</button>
+          <button class="totem-mode-btn ${totemTab==='none'?'active':''}" onclick="setCrewTotemTab('${crew.id}','none')">🚫 None</button>
         </div>`;
       let totemBody;
-      if (totemTab === 'photo') {
+      if (totemTab === 'none') {
+        const hasTotem = !!(crew.totemPhotoUrl || crew.totemIcon);
+        totemBody = hasTotem ? `
+            <div style="font-size:0.85rem;color:var(--muted);margin-bottom:10px;line-height:1.5;">Your crew currently has a totem set. Clear it to show no totem at all — your crew name will hold it down instead.</div>
+            <button class="btn btn-ghost" style="width:100%;padding:9px;font-size:0.78rem;color:var(--neon-pink);" onclick="clearCrewTotem('${crew.id}')">🚫 Clear totem</button>` : `
+            <div style="font-size:0.85rem;color:var(--muted);line-height:1.5;">No totem set — your crew name is holding it down. Pick Photo or Icon anytime to add one.</div>`;
+      } else if (totemTab === 'photo') {
         totemBody = crew.totemPhotoUrl ? `
             <div class="totem-photo-wrap">
               <img src="${escHtml(crew.totemPhotoUrl)}" alt="Crew totem">
