@@ -310,6 +310,29 @@ async function installSupabaseStub(page, opts = {}) {
             return row;
           }
           function exec() {
+            if (fn === 'get_claim_preview') {
+              const raver = (store.ravers || []).find(r => r.qr_token === args.p_token);
+              if (!raver) return { data: { error: 'invalid_token' }, error: null };
+              if (raver.claimed_by || raver.status !== 'unclaimed') {
+                const claimer = (store.ravers || []).find(r => r.claimed_by === raver.claimed_by);
+                return { data: { error: 'already_claimed', raver_name: raver.name, claimer_name: claimer?.name || 'a crew member' }, error: null };
+              }
+              const cm = (store.crew_members || []).find(c => c.raver_id === raver.id);
+              const crew = cm ? (store.crews || []).find(c => c.id === cm.crew_id) : null;
+              return {
+                data: {
+                  raver: { id: raver.id, name: raver.name, handle: raver.handle, gradient: raver.gradient, avatar_url: raver.avatar_url },
+                  crew: crew ? { id: crew.id, name: crew.name, color: crew.color, gradient: crew.gradient, status: crew.status } : null,
+                },
+                error: null,
+              };
+            }
+            if (fn === 'get_crew_by_invite_token') {
+              const crew = (store.crews || []).find(c => c.invite_token === args.p_token);
+              if (!crew) return { data: { error: 'invalid_token' }, error: null };
+              if (crew.status !== 'recruiting') return { data: { error: 'not_recruiting', crew_name: crew.name, status: crew.status }, error: null };
+              return { data: { id: crew.id, name: crew.name, color: crew.color, gradient: crew.gradient, status: crew.status }, error: null };
+            }
             if (fn === 'get_festival_history') return { data: historyRows('festival', args.p_festival_id, args.p_limit), error: null };
             if (fn === 'get_crew_history') return { data: historyRows('crew', args.p_crew_id, args.p_limit), error: null };
             if (fn === 'get_raver_history') return { data: historyRows('raver', args.p_raver_id, args.p_limit), error: null };
