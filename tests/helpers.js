@@ -72,7 +72,7 @@ function seedData() {
       {
         id: 'c1', name: 'Bass Syndicate', color: '#FF2D78',
         gradient: 'linear-gradient(90deg,#FF2D78,#BF00FF)', status: 'recruiting',
-        leader_id: TEST_UID, totem_photo_url: null, invite_token: 'inv-c1', created_at: added,
+        leader_id: TEST_UID, totem_photo_url: null, totem_icon: null, invite_token: 'inv-c1', created_at: added,
         deleted_at: null,
       },
     ],
