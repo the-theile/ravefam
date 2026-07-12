@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#050509">
+<title>RaveFAM — Enhanced Crew Card Mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --neon-pink: #FF2D78;
+    --neon-cyan: #00F5FF;
+    --neon-yellow: #FFE600;
+    --neon-purple: #BF00FF;
+    --neon-green: #39FF14;
+    --neon-indigo: #5B6EFF;
+    --bg: #050509;
+    --surface: #0E0E16;
+    --surface2: #16161F;
+    --text: #F0EEFF;
+    --muted: #8585A5;
+    color-scheme: dark;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  /* ambient glow blobs, same idea as app.html's bg-blobs */
+  .bg-blobs { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+  .blob { position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.16; }
+  .blob-1 { width: 340px; height: 340px; background: var(--neon-purple); top: -120px; left: -80px; }
+  .blob-2 { width: 300px; height: 300px; background: var(--neon-green); bottom: -100px; right: -60px; }
+  .blob-3 { width: 260px; height: 260px; background: var(--neon-cyan); top: 40%; right: -120px; }
+
+  .page {
+    position: relative;
+    z-index: 1;
+    max-width: 460px;
+    margin: 0 auto;
+    padding: 28px 16px 60px;
+  }
+
+  .page-header { text-align: center; margin-bottom: 22px; }
+  .page-eyebrow {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.68rem;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    color: var(--neon-cyan);
+    margin-bottom: 6px;
+  }
+  .page-title {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 800;
+    font-size: 1.3rem;
+    color: #fff;
+    margin-bottom: 6px;
+  }
+  .page-sub { font-size: 0.82rem; color: var(--muted); line-height: 1.5; max-width: 360px; margin: 0 auto; }
+
+  /* ===== Crew card — base structure ported from app.html's live cardCurrent() ===== */
+  .crew-card {
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 18px;
+    padding: 22px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 20px 50px -20px rgba(0,0,0,0.6);
+  }
+  .crew-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, var(--neon-purple) 0%, transparent 70%);
+    opacity: 0.06;
+    pointer-events: none;
+  }
+  .crew-card > * { position: relative; z-index: 1; }
+
+  .crew-color-bar {
+    height: 4px;
+    border-radius: 100px;
+    margin-bottom: 16px;
+    background: linear-gradient(90deg, var(--neon-purple), var(--neon-indigo));
+  }
+
+  .crew-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .crew-head-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .crew-totem {
+    width: 38px; height: 38px;
+    border-radius: 12px;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.1rem;
+    background: linear-gradient(135deg, var(--neon-purple), var(--neon-indigo));
+    box-shadow: 0 0 16px rgba(191,0,255,0.35);
+  }
+  .crew-name {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 800;
+    font-size: 1.15rem;
+    color: #FFFFFF;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .crew-status {
+    font-size: 0.72rem;
+    padding: 4px 10px;
+    border-radius: 100px;
+    font-weight: 600;
+    font-family: 'Outfit', sans-serif;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .status-recruiting { background: rgba(57,255,20,0.12); color: var(--neon-green); }
+
+  .crew-fest {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-left: 3px solid var(--neon-purple);
+    border-radius: 10px;
+    padding: 11px 13px;
+    margin-bottom: 16px;
+  }
+  .crew-fest-label {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--neon-green);
+    margin-bottom: 4px;
+  }
+  .crew-fest-name { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.95rem; color: #fff; }
+  .crew-fest-date { font-size: 0.74rem; color: var(--muted); margin-top: 1px; }
+  .crew-fest-going {
+    font-size: 0.74rem;
+    color: var(--text);
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .crew-tribe { border-top: 1px solid rgba(255,255,255,0.06); padding-top: 13px; margin-bottom: 18px; }
+  .section-label {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin-bottom: 9px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .crown { color: var(--neon-yellow); }
+
+  .crew-members { display: flex; align-items: center; }
+  .avatar {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    border: 2px solid var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+    margin-left: -6px;
+    font-family: 'Outfit', sans-serif;
+    color: #0a0a10;
+  }
+  .avatar:first-child { margin-left: 0; }
+  .avatar-count {
+    background: rgba(255,255,255,0.1);
+    color: var(--muted);
+    font-size: 0.65rem;
+  }
+
+  /* ===== Divider between the additive sections ===== */
+  .crew-section {
+    border-top: 1px solid rgba(255,255,255,0.06);
+    padding-top: 16px;
+    margin-bottom: 16px;
+  }
+  .crew-section:last-of-type { margin-bottom: 0; }
+
+  /* Crew Vibe / Bio */
+  .vibe-text {
+    font-size: 0.86rem;
+    line-height: 1.55;
+    color: var(--text);
+  }
+  .vibe-edit-hint {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 0.62rem; color: var(--muted);
+    margin-left: auto;
+    font-weight: 500;
+  }
+
+  /* Crew Energy */
+  .energy-readout {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 9px;
+  }
+  .energy-pct {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 800;
+    font-size: 0.95rem;
+    color: #fff;
+  }
+  .energy-status { font-size: 0.76rem; color: var(--muted); }
+  .energy-bar {
+    height: 8px;
+    background: rgba(255,255,255,0.07);
+    border-radius: 100px;
+    overflow: hidden;
+    position: relative;
+  }
+  .energy-fill {
+    height: 100%;
+    width: 87%;
+    border-radius: 100px;
+    background: linear-gradient(90deg, var(--neon-green), var(--neon-cyan));
+    box-shadow: 0 0 12px rgba(57,255,20,0.55), 0 0 22px rgba(0,245,255,0.3);
+    position: relative;
+    overflow: hidden;
+    animation: energyPulse 2.6s ease-in-out infinite;
+  }
+  .energy-fill::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent);
+    animation: energyShimmer 2s ease-in-out infinite;
+  }
+  @keyframes energyShimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+  @keyframes energyPulse {
+    0%, 100% { filter: brightness(1); }
+    50% { filter: brightness(1.18); }
+  }
+
+  /* Crew Badges */
+  .badge-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .badge-pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 6px 12px;
+    font-family: 'Outfit', sans-serif; font-size: 0.7rem; font-weight: 700;
+    border-radius: 999px;
+    white-space: nowrap;
+    border: 1px solid transparent;
+    transition: transform 0.15s ease, filter 0.15s ease;
+  }
+  .badge-pill:hover { transform: translateY(-1px); filter: brightness(1.15); }
+  .badge-plur { background: rgba(191,0,255,0.14); color: #E6A8FF; border-color: rgba(191,0,255,0.35); }
+  .badge-streak { background: rgba(255,153,0,0.14); color: #FFB74D; border-color: rgba(255,153,0,0.35); }
+  .badge-recruit { background: rgba(57,255,20,0.14); color: var(--neon-green); border-color: rgba(57,255,20,0.35); }
+  .badge-bass { background: rgba(91,110,255,0.16); color: #A9B4FF; border-color: rgba(91,110,255,0.4); }
+
+  /* Crew Memories */
+  .memories-row {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+  .memories-row::-webkit-scrollbar { display: none; }
+  .memory-thumb {
+    flex-shrink: 0;
+    width: 76px; height: 76px;
+    border-radius: 14px;
+    scroll-snap-align: start;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.3rem;
+    border: 1px solid rgba(255,255,255,0.08);
+    cursor: pointer;
+    transition: transform 0.15s ease;
+  }
+  .memory-thumb:hover { transform: scale(1.04); }
+  .memory-thumb:active { transform: scale(0.97); }
+  .memory-1 { background: linear-gradient(135deg, #FF2D78, #BF00FF); }
+  .memory-2 { background: linear-gradient(135deg, #00F5FF, #5B6EFF); }
+  .memory-3 { background: linear-gradient(135deg, #39FF14, #00F5FF); }
+  .memory-more {
+    flex-shrink: 0;
+    width: 76px; height: 76px;
+    border-radius: 14px;
+    scroll-snap-align: start;
+    background: rgba(255,255,255,0.05);
+    border: 1px dashed rgba(255,255,255,0.2);
+    color: var(--text);
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.72rem;
+    display: flex; align-items: center; justify-content: center;
+    text-align: center;
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+  .memory-more:hover { background: rgba(255,255,255,0.09); transform: scale(1.04); }
+  .memory-more:active { transform: scale(0.97); }
+
+  /* Quick Actions */
+  .actions-row { display: flex; gap: 6px; }
+  .action-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.72rem;
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    padding: 13px 8px;
+    white-space: nowrap;
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    transition: transform 0.12s ease, filter 0.15s ease, box-shadow 0.15s ease;
+  }
+  .action-btn:hover { filter: brightness(1.1); }
+  .action-btn:active { transform: scale(0.96); }
+  .action-btn:focus-visible { outline: 2px solid var(--neon-cyan); outline-offset: 2px; }
+  .action-view {
+    background: linear-gradient(135deg, var(--neon-indigo), var(--neon-purple));
+    box-shadow: 0 6px 20px -8px rgba(91,110,255,0.6);
+  }
+  .action-chat {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.14);
+  }
+  .action-invite {
+    background: linear-gradient(135deg, var(--neon-green), #1FCC6B);
+    box-shadow: 0 6px 20px -8px rgba(57,255,20,0.5);
+    color: #06210f;
+  }
+
+  .page-footer {
+    text-align: center;
+    font-size: 0.72rem;
+    color: var(--muted);
+    margin-top: 22px;
+    line-height: 1.5;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: 26px;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--surface2);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: var(--text);
+    padding: 11px 18px;
+    border-radius: 100px;
+    font-size: 0.82rem;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    z-index: 10;
+    white-space: nowrap;
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  @media (max-width: 380px) {
+    .crew-card { padding: 18px; }
+    .actions-row { flex-direction: column; }
+    .action-btn { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-blobs"><div class="blob blob-1"></div><div class="blob blob-2"></div><div class="blob blob-3"></div></div>
+
+<div class="page">
+  <div class="page-header">
+    <div class="page-eyebrow">RaveFAM · Mockup</div>
+    <div class="page-title">Enhanced Vibe Tribe Card</div>
+    <div class="page-sub">A design preview only — nothing here is wired to live data. Scroll the memories row, tap a badge, or press a Quick Action to try the interactions.</div>
+  </div>
+
+  <div class="crew-card" role="region" aria-label="Vibe Tribe crew card">
+    <div class="crew-color-bar"></div>
+
+    <div class="crew-card-head">
+      <div class="crew-head-left">
+        <div class="crew-totem" aria-hidden="true">⚡</div>
+        <div class="crew-name">Vibe Tribe</div>
+      </div>
+      <span class="crew-status status-recruiting">🟢 Recruiting</span>
+    </div>
+
+    <div class="crew-fest">
+      <div class="crew-fest-label">⏳ Next up · 3 weeks</div>
+      <div class="crew-fest-name">Zeds Dead — Factory Town</div>
+      <div class="crew-fest-date">📅 1 Aug</div>
+      <div class="crew-fest-going">🎟️ 3 going: Destiny, Theile, Brandon</div>
+    </div>
+
+    <div class="crew-tribe">
+      <div class="section-label">👥 The Tribe · 9 members <span class="crown">👑 You lead</span></div>
+      <div class="crew-members">
+        <div class="avatar" style="background:#FF2D78">AA</div>
+        <div class="avatar" style="background:#FFE600">JW</div>
+        <div class="avatar" style="background:#00F5FF">D</div>
+        <div class="avatar" style="background:#39FF14">🙂</div>
+        <div class="avatar avatar-count">+5</div>
+      </div>
+    </div>
+
+    <div class="crew-section">
+      <div class="section-label">✏️ Crew Vibe</div>
+      <div class="vibe-text">High-energy PLUR bass fam from Tampa Bay. United by heavy drops, good vibes, and legendary afters. Always recruiting kind souls who bring the energy.</div>
+    </div>
+
+    <div class="crew-section">
+      <div class="section-label">🔋 Crew Energy</div>
+      <div class="energy-readout">
+        <span class="energy-pct">87% HYPE</span>
+        <span class="energy-status">Ready for the next drop 🔥</span>
+      </div>
+      <div class="energy-bar" role="progressbar" aria-valuenow="87" aria-valuemin="0" aria-valuemax="100" aria-label="Crew energy level">
+        <div class="energy-fill"></div>
+      </div>
+    </div>
+
+    <div class="crew-section">
+      <div class="section-label">🏅 Crew Badges</div>
+      <div class="badge-row">
+        <span class="badge-pill badge-plur">💜 PLUR Champion</span>
+        <span class="badge-pill badge-streak">🔥 Festival Streak 5</span>
+        <span class="badge-pill badge-recruit">🧲 Recruitment Pro</span>
+        <span class="badge-pill badge-bass">🎧 Bass Legends</span>
+      </div>
+    </div>
+
+    <div class="crew-section">
+      <div class="section-label">📸 Crew Memories</div>
+      <div class="memories-row" id="memoriesRow">
+        <div class="memory-thumb memory-1" tabindex="0" role="button" aria-label="Crew memory photo 1">🎆</div>
+        <div class="memory-thumb memory-2" tabindex="0" role="button" aria-label="Crew memory photo 2">🙌</div>
+        <div class="memory-thumb memory-3" tabindex="0" role="button" aria-label="Crew memory photo 3">✨</div>
+        <div class="memory-more" tabindex="0" role="button" id="moreMemories">+14<br>more</div>
+      </div>
+    </div>
+
+    <div class="crew-section" style="border-top: none; padding-top: 4px;">
+      <div class="actions-row">
+        <button class="action-btn action-view" id="btnView">View Full Crew →</button>
+        <button class="action-btn action-chat" id="btnChat">Open Crew Chat 💬</button>
+        <button class="action-btn action-invite" id="btnInvite">Invite More +</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-footer">Mockup — suggested extra info &amp; fun elements for crew profiles.<br>Not connected to real crew data yet.</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const toast = document.getElementById('toast');
+  let toastTimer;
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove('show'), 1800);
+  }
+
+  document.getElementById('moreMemories').addEventListener('click', () => showToast('📸 Full gallery — coming soon'));
+  document.getElementById('btnView').addEventListener('click', () => showToast('→ Opening full crew profile…'));
+  document.getElementById('btnChat').addEventListener('click', () => showToast('💬 Opening Crew Chat…'));
+  document.getElementById('btnInvite').addEventListener('click', () => showToast('+ Invite flow coming soon'));
+
+  document.querySelectorAll('.memory-thumb').forEach((el, i) => {
+    el.addEventListener('click', () => showToast(`📸 Memory ${i + 1} of 17`));
+    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); } });
+  });
+  document.getElementById('moreMemories').addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); document.getElementById('moreMemories').click(); }
+  });
+</script>
+
+</body>
+</html>
