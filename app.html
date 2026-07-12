@@ -3099,7 +3099,7 @@
   .avatar-photo-btn-remove { color: rgba(255,45,120,0.7); }
   .avatar-photo-btn-remove:hover { color: var(--neon-pink); background: rgba(255,45,120,0.08); }
 
-  /* Crew Totem Photo */
+  /* Crew Totem (photo or icon) */
   .crew-totem-thumb {
     width: 38px; height: 38px;
     border-radius: 9px;
@@ -3107,6 +3107,16 @@
     flex-shrink: 0;
     border: 2px solid rgba(255,255,255,0.12);
   }
+  .crew-totem-icon-mark {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.4rem;
+  }
+  .totem-mark-lg {
+    width: 100%; height: 130px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .crew-totem-icon-mark.totem-mark-lg { font-size: 3rem; }
   .totem-upload-area {
     display: flex; align-items: center; justify-content: center;
     border: 2px dashed rgba(255,255,255,0.12);
@@ -3129,6 +3139,38 @@
   }
   .totem-photo-actions {
     display: flex; gap: 8px; margin-top: 8px;
+  }
+  .totem-mode-toggle { display: flex; gap: 8px; margin-bottom: 10px; }
+  .totem-mode-btn {
+    flex: 1; padding: 8px;
+    border-radius: 9px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.04);
+    color: var(--muted);
+    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.78rem;
+    cursor: pointer;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+  }
+  .totem-mode-btn.active {
+    border-color: var(--neon-pink);
+    color: var(--text);
+    background: rgba(255,45,120,0.08);
+  }
+  .totem-icon-grid { display: flex; gap: 10px; flex-wrap: wrap; }
+  .totem-icon-swatch {
+    width: 44px; height: 44px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.3rem;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: transform 0.15s;
+  }
+  .totem-icon-swatch:hover { transform: scale(1.08); }
+  .totem-icon-swatch.selected {
+    border-color: #fff;
+    transform: scale(1.08);
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.15);
   }
 
   /* Our Photo — Polaroid style */
@@ -6222,6 +6264,10 @@
         <div class="color-swatch" style="background:#FF00CC" onclick="selectSwatch(this)"></div>
       </div>
     </div>
+    <div class="form-group">
+      <label class="form-label">Crew Totem <span style="font-weight:400;color:var(--muted);font-size:0.8rem;">optional</span></label>
+      <div class="totem-icon-grid" id="create-totem-icon-grid"></div>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="createCrew()">Create Crew 🔥</button>
@@ -8639,6 +8685,7 @@ async function doProfilePasswordChange() {
           isLead: c.leader_id === uid,
           leader_id: leaderRaver?.id ?? null,
           totemPhotoUrl: c.totem_photo_url || null,
+          totemIcon: c.totem_icon || null,
           invite_token: c.invite_token || null,
           createdAt: c.created_at || null,
           squadIds,
@@ -9417,7 +9464,7 @@ async function doProfilePasswordChange() {
   async function dbSaveCrew(data, id) {
     const uid = currentUser?.id;
     if (!uid) return null;
-    const row = { name: data.name, color: data.color, gradient: data.gradient, status: data.status, totem_photo_url: data.totemPhotoUrl ?? undefined, description: data.description ?? undefined };
+    const row = { name: data.name, color: data.color, gradient: data.gradient, status: data.status, totem_photo_url: data.totemPhotoUrl ?? undefined, totem_icon: data.totemIcon ?? undefined, description: data.description ?? undefined };
     if (id) {
       const { error } = await sb.from('crews').update(row).eq('id', id);
       if (error) { console.error('crew update error', error); showToast('⚠️ Could not update crew — try again'); }
@@ -9881,7 +9928,7 @@ async function doProfilePasswordChange() {
     });
   }
 
-  // ── Totem Photo ────────────────────────────────────────────────────────────
+  // ── Crew Totem (photo or icon) ──────────────────────────────────────────────
 
   async function handleTotemPhotoUpload(event, crewId) {
     const file = event.target.files[0];
@@ -9908,7 +9955,8 @@ async function doProfilePasswordChange() {
     try {
       const url = await uploadPhotoToStorage(file, `crews/${crewId}.jpg`);
       crew.totemPhotoUrl = url;
-      if (currentUser) await sb.from('crews').update({ totem_photo_url: url }).eq('id', String(crewId));
+      crew.totemIcon = null;
+      if (currentUser) await sb.from('crews').update({ totem_photo_url: url, totem_icon: null }).eq('id', String(crewId));
       renderCrews();
       renderDetail(crewId);
       showToast('✅ Totem photo set!');
@@ -9934,6 +9982,47 @@ async function doProfilePasswordChange() {
         showToast('Totem photo removed');
       }
     });
+  }
+
+  async function setCrewTotemIcon(crewId, iconKey) {
+    const crew = getCrew(crewId);
+    if (!crew) return;
+    const apply = async () => {
+      try { await sb.storage.from('photos').remove([`crews/${crewId}.jpg`]); } catch(_) {}
+      crew.totemIcon = iconKey;
+      crew.totemPhotoUrl = null;
+      if (currentUser) await sb.from('crews').update({ totem_icon: iconKey, totem_photo_url: null }).eq('id', String(crewId));
+      renderCrews();
+      renderDetail(crewId);
+      showToast('✅ Totem icon set!');
+    };
+    if (crew.totemPhotoUrl) {
+      showPhotoConfirm({
+        icon: '🔄',
+        title: 'Switch to an icon totem?',
+        body: 'Your current totem photo will be removed and replaced with this icon.',
+        onConfirm: apply
+      });
+      return;
+    }
+    await apply();
+  }
+
+  async function removeCrewTotemIcon(crewId) {
+    const crew = getCrew(crewId);
+    if (!crew) return;
+    crew.totemIcon = null;
+    if (currentUser) await sb.from('crews').update({ totem_icon: null }).eq('id', String(crewId));
+    renderCrews();
+    renderDetail(crewId);
+    showToast('Totem icon removed');
+  }
+
+  // Which of "photo" / "icon" the crew lead is currently viewing in the Crew Totem section.
+  const _totemTabByCrewId = {};
+  function setCrewTotemTab(crewId, tab) {
+    _totemTabByCrewId[crewId] = tab;
+    renderDetail(crewId);
   }
 
   // ── Our Photos (Supabase Storage + DB) ────────────────────────────────────
@@ -10777,7 +10866,18 @@ async function doProfilePasswordChange() {
   function openModal() {
     const el = document.getElementById('crew-desc-input');
     if (el && !el.value) el.placeholder = CREW_VIBE_PLACEHOLDERS[Math.floor(Math.random() * CREW_VIBE_PLACEHOLDERS.length)];
+    const grid = document.getElementById('create-totem-icon-grid');
+    if (grid) {
+      grid.innerHTML = TOTEM_ICONS.map(({key, glyph, label}) => `
+        <div class="totem-icon-swatch" data-icon-key="${key}" style="background:${CREW_GRADIENTS['#FF2D78']}" title="${label}" onclick="selectCreateTotemIcon(this)">${glyph}</div>
+      `).join('');
+    }
     document.getElementById('modal-overlay').classList.add('open');
+  }
+  function selectCreateTotemIcon(el) {
+    const wasSelected = el.classList.contains('selected');
+    document.querySelectorAll('#create-totem-icon-grid .totem-icon-swatch').forEach(s => s.classList.remove('selected'));
+    if (!wasSelected) el.classList.add('selected');
   }
   function closeModal() {
     document.getElementById('modal-overlay').classList.remove('open');
@@ -11143,7 +11243,7 @@ async function doProfilePasswordChange() {
           ? `<div class="secret-eye-badge eye-secret" title="Secret — only you can see this crew"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg></div>`
           : `<div class="secret-eye-badge eye-open" title="Crew is visible to members"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>`}
         <div class="crew-card-head">
-          ${crew.totemPhotoUrl ? `<img class="crew-totem-thumb" src="${escHtml(crew.totemPhotoUrl)}" alt="Crew totem">` : ''}
+          ${crewTotemMarkHTML(crew)}
           <div class="crew-name">${escHtml(crew.name)}</div>
           <span class="crew-status ${s.cls}${crew.isLead ? ' tappable' : ''}"
                 onclick="event.stopPropagation(); toggleStatus('${crew.id}')"
@@ -11708,13 +11808,18 @@ async function doProfilePasswordChange() {
         </button>` : ''}`;
     }
 
-    // Totem photo block
+    // Crew Totem block (photo or icon)
     let totemBlock;
     if (crew.isLead) {
-      if (crew.totemPhotoUrl) {
-        totemBlock = `
-          <div class="form-group crew-totem-section">
-            <div class="section-banner"><span class="banner-inner">📸 Crew Totem</span></div>
+      const totemTab = _totemTabByCrewId[crew.id] || (crew.totemPhotoUrl ? 'photo' : 'icon');
+      const totemToggle = `
+        <div class="totem-mode-toggle">
+          <button class="totem-mode-btn ${totemTab==='photo'?'active':''}" onclick="setCrewTotemTab('${crew.id}','photo')">📸 Photo</button>
+          <button class="totem-mode-btn ${totemTab==='icon'?'active':''}" onclick="setCrewTotemTab('${crew.id}','icon')">✦ Icon</button>
+        </div>`;
+      let totemBody;
+      if (totemTab === 'photo') {
+        totemBody = crew.totemPhotoUrl ? `
             <div class="totem-photo-wrap">
               <img src="${escHtml(crew.totemPhotoUrl)}" alt="Crew totem">
               <div class="totem-photo-actions">
@@ -11725,25 +11830,31 @@ async function doProfilePasswordChange() {
                 <button class="btn btn-ghost" style="flex:1;padding:9px;font-size:0.78rem;color:var(--neon-pink);"
                   data-crew-id="${crew.id}" onclick="removeTotemPhoto(this.dataset.crewId)">🗑️ Remove</button>
               </div>
-            </div>
-          </div>`;
-      } else {
-        totemBlock = `
-          <div class="form-group crew-totem-section">
-            <div class="section-banner"><span class="banner-inner">📸 Crew Totem</span></div>
+            </div>` : `
             <label class="totem-upload-area">
               📸 <span>Upload a totem photo</span>
               <input type="file" accept="image/*" style="display:none" data-crew-id="${crew.id}" onchange="handleTotemPhotoUpload(event,this.dataset.crewId)">
-            </label>
-          </div>`;
+            </label>`;
+      } else {
+        const iconGrid = TOTEM_ICONS.map(({key, glyph, label}) => `
+          <div class="totem-icon-swatch${crew.totemIcon===key?' selected':''}"
+               style="background:${crew.gradient}" title="${label}"
+               onclick="setCrewTotemIcon('${crew.id}','${key}')">${glyph}</div>
+        `).join('');
+        totemBody = `
+          <div class="totem-icon-grid">${iconGrid}</div>
+          ${crew.totemIcon ? `<button class="btn btn-ghost" style="width:100%;padding:9px;font-size:0.78rem;color:var(--neon-pink);margin-top:8px;"
+            onclick="removeCrewTotemIcon('${crew.id}')">🗑️ Remove</button>` : ''}`;
       }
-    } else if (crew.totemPhotoUrl) {
       totemBlock = `
-        <div style="margin-bottom:16px;">
-          <img src="${escHtml(crew.totemPhotoUrl)}" alt="Crew totem" style="width:100%;max-height:150px;object-fit:cover;border-radius:12px;display:block;">
+        <div class="form-group crew-totem-section">
+          <div class="section-banner"><span class="banner-inner">📸 Crew Totem</span></div>
+          ${totemToggle}
+          ${totemBody}
         </div>`;
     } else {
-      totemBlock = '';
+      const mark = crewTotemMarkHTML(crew, 'totem-mark-lg');
+      totemBlock = mark ? `<div style="margin-bottom:16px;">${mark}</div>` : '';
     }
 
     // Everything except the roster + Huddle — the Overview tab.
@@ -16167,6 +16278,8 @@ async function doProfilePasswordChange() {
     const description = (document.getElementById('crew-desc-input')?.value.trim() || '').slice(0, 120);
     const selected = document.querySelector('.color-swatch.selected');
     const color = selected ? rgbToHex(selected.style.background) : '#FF2D78';
+    const selectedIcon = document.querySelector('#create-totem-icon-grid .totem-icon-swatch.selected');
+    const totemIcon = selectedIcon ? selectedIcon.dataset.iconKey : null;
     const you = squad.find(r => r.isYou);
 
     const gradient = CREW_GRADIENTS[color] || `linear-gradient(135deg,${color},${color})`;
@@ -16174,6 +16287,7 @@ async function doProfilePasswordChange() {
       id: 'temp_' + Date.now(), name, color, description,
       gradient,
       status: 'secret', isLead: true,
+      totemIcon,
       leader_id: you?.id ?? null,
       squadIds: you ? [you.id] : [],
       members: [{ i: you ? initials(you.name) : 'ME', c: you?.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)', t: '#000' }]
@@ -16194,7 +16308,7 @@ async function doProfilePasswordChange() {
     // Persist async
     if (currentUser) {
       const tempId = newCrew.id;
-      dbSaveCrew({ name, color, gradient, status: 'secret', description }, null).then(dbId => {
+      dbSaveCrew({ name, color, gradient, status: 'secret', description, totemIcon }, null).then(dbId => {
         if (dbId) {
           newCrew.id = dbId;
           // Keep activeDetailId (and any pending-add reference) in sync so that
@@ -16474,7 +16588,7 @@ async function doProfilePasswordChange() {
     renderDetail(id);
     showToast('✅ Crew updated');
     if (currentUser) {
-      dbSaveCrew({ name: newName, color: newColor, gradient: newGradient, status: crew.status, totemPhotoUrl: crew.totemPhotoUrl, description: newDesc }, id);
+      dbSaveCrew({ name: newName, color: newColor, gradient: newGradient, status: crew.status, totemPhotoUrl: crew.totemPhotoUrl, totemIcon: crew.totemIcon, description: newDesc }, id);
       if (changedFields.length) {
         logAudit({ action: 'crew.update', entityType: 'crew', entityId: id, metadata: { fields: changedFields } });
       }
@@ -16604,6 +16718,36 @@ async function doProfilePasswordChange() {
     '#BF00FF': 'linear-gradient(135deg,#BF00FF,#FF2D78)',
     '#FF00CC': 'linear-gradient(135deg,#FF00CC,#BF00FF)',
   };
+
+  // Curated rave/EDM totem icons — rendered on the crew's own gradient, a peer option to a totem photo.
+  // Not tied 1:1 to CREW_GRADIENTS colors; any icon can pair with any crew color.
+  const TOTEM_ICONS = [
+    { key: 'disco',      glyph: '🪩', label: 'Disco Ball' },
+    { key: 'lightning',  glyph: '⚡', label: 'Lightning' },
+    { key: 'flame',      glyph: '🔥', label: 'Flame' },
+    { key: 'speaker',    glyph: '🔊', label: 'Speaker' },
+    { key: 'headphones', glyph: '🎧', label: 'Headphones' },
+    { key: 'skull',      glyph: '💀', label: 'Skull' },
+    { key: 'peace',      glyph: '✌️', label: 'Peace' },
+    { key: 'alien',      glyph: '👽', label: 'Alien' },
+    { key: 'ufo',        glyph: '🛸', label: 'UFO' },
+    { key: 'rainbow',    glyph: '🌈', label: 'Rainbow' },
+    { key: 'star',       glyph: '⭐', label: 'Star' },
+    { key: 'moon',       glyph: '🌙', label: 'Moon' },
+    { key: 'butterfly',  glyph: '🦋', label: 'Butterfly' },
+    { key: 'crystal',    glyph: '🔮', label: 'Crystal Ball' },
+  ];
+  const TOTEM_ICON_MAP = Object.fromEntries(TOTEM_ICONS.map(i => [i.key, i.glyph]));
+
+  // Renders the crew's totem mark: photo if set, else icon-on-gradient if set, else ''.
+  function crewTotemMarkHTML(crew, extraClass = '') {
+    if (crew.totemPhotoUrl) return `<img class="crew-totem-thumb ${extraClass}" src="${escHtml(crew.totemPhotoUrl)}" alt="Crew totem">`;
+    if (crew.totemIcon) {
+      const glyph = TOTEM_ICON_MAP[crew.totemIcon] || '✦';
+      return `<div class="crew-totem-thumb crew-totem-icon-mark ${extraClass}" style="background:${crew.gradient}">${glyph}</div>`;
+    }
+    return '';
+  }
 
   // Convert "rgb(...)" from style.background to hex; pass through if already hex
   function rgbToHex(c) {
