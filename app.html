@@ -544,21 +544,6 @@
     padding: 16px 16px 12px;
   }
 
-  .event-date { text-align: center; min-width: 38px; flex-shrink: 0; padding-top: 2px; }
-  .event-day {
-    font-family: 'Outfit', sans-serif;
-    font-weight: 800;
-    font-size: 1.6rem;
-    line-height: 1;
-  }
-  .event-month {
-    font-size: 0.58rem;
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    color: var(--muted);
-    margin-top: 2px;
-  }
-
   .event-divider { display: none; }
 
   .event-info { flex: 1; min-width: 0; }
@@ -582,6 +567,65 @@
     transition: all 0.15s;
   }
   .lineup-explorer-btn:hover { background: rgba(255,45,120,0.16); border-color: rgba(255,45,120,0.5); }
+
+  /* Neon Marquee treatment — scoped to the rave card (.event-item-clickable is rave-only) */
+  .event-item-clickable {
+    cursor: pointer;
+    background: linear-gradient(160deg, rgba(22,18,10,0.92), rgba(10,9,6,0.95));
+  }
+  .marquee-bulb-row { display: flex; justify-content: space-between; padding: 10px 16px 0; flex-shrink: 0; }
+  .marquee-bulb-row.bottom { padding: 0 16px 10px; }
+  .marquee-bulb {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #FFC96B;
+    box-shadow: 0 0 6px 1px #FFC96B, 0 0 2px #fff;
+    animation: bulbTwinkle 1.6s ease-in-out infinite;
+  }
+  @keyframes bulbTwinkle { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+  .marquee-body { padding: 6px 16px 4px; }
+  .marquee-eyebrow {
+    text-align: center;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.64rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .marquee-name {
+    text-align: center;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 900;
+    font-size: 1.12rem;
+    letter-spacing: 0.2px;
+    margin-bottom: 6px;
+    text-wrap: balance;
+  }
+  .marquee-meta {
+    display: flex; align-items: center; justify-content: center; gap: 7px;
+    flex-wrap: wrap;
+    text-align: center;
+    font-size: 0.76rem; color: var(--muted);
+    margin-bottom: 14px;
+  }
+  .marquee-weather {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-size: 0.74rem; color: var(--text);
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 100px; padding: 2px 8px 2px 6px;
+  }
+  .pill-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 12px; }
+  .map-pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 11px;
+    font-family: 'Outfit', sans-serif; font-size: 0.68rem; font-weight: 700;
+    letter-spacing: 0.02em; color: var(--neon-cyan);
+    background: rgba(0,245,255,0.08); border: 1px solid rgba(0,245,255,0.3);
+    border-radius: 999px; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .map-pill:hover { background: rgba(0,245,255,0.16); border-color: rgba(0,245,255,0.5); }
 
   .attendee-section { margin-bottom: 8px; }
   .attendee-section:last-child { margin-bottom: 0; }
@@ -11069,6 +11113,12 @@ async function doProfilePasswordChange() {
     return `${Math.round(n/30)} months`;
   }
 
+  // "3-DAY FEST" / "1-DAY EVENT" label for a festival's duration, if known.
+  function raveDurationLabel(f) {
+    if (!f.days) return '';
+    return f.days === 1 ? '1-DAY EVENT' : `${f.days}-DAY FEST`;
+  }
+
   // Ravers banner countdown — always raw days, never weeks or months.
   function countdownDays(d) {
     const n = daysUntil(d);
@@ -18998,6 +19048,87 @@ async function doProfilePasswordChange() {
     return squad.filter(p => (p.interestedFestIds || []).some(fid => String(fid) === String(festId)));
   }
 
+  // ===== Rave weather (Open-Meteo — free, keyless) =====
+  // Forecasts are only meteorologically meaningful ~15 days out, so we only
+  // fetch/render for upcoming events inside that horizon.
+  const WEATHER_FORECAST_HORIZON_DAYS = 15;
+  const WEATHER_TTL_MS = 6 * 60 * 60 * 1000;
+  const WEATHER_CACHE_KEY = 'rf_weather_cache_v1';
+
+  function loadWeatherCache() {
+    try { return JSON.parse(localStorage.getItem(WEATHER_CACHE_KEY)) || {}; } catch(e) { return {}; }
+  }
+  function saveWeatherCache(cache) {
+    try { localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify(cache)); } catch(e) {}
+  }
+  function weatherCacheKey(f) {
+    return `${(f.location || '').toLowerCase().trim()}|${f._d.toISOString().slice(0,10)}`;
+  }
+  function weatherEligible(f) {
+    if (!f._d || !f.location) return false;
+    const n = daysUntil(f._d);
+    return n !== null && n >= 0 && n <= WEATHER_FORECAST_HORIZON_DAYS;
+  }
+  function weatherIconFor(code) {
+    if (code === 0) return '☀️';
+    if (code === 1 || code === 2) return '🌤️';
+    if (code === 3) return '☁️';
+    if (code === 45 || code === 48) return '🌫️';
+    if ([51,53,55,56,57,80,81,82].includes(code)) return '🌦️';
+    if ([61,63,65,66,67].includes(code)) return '🌧️';
+    if ([71,73,75,77,85,86].includes(code)) return '🌨️';
+    if ([95,96,99].includes(code)) return '⛈️';
+    return '🌡️';
+  }
+  // Cached-or-placeholder markup for a card's weather slot, decided synchronously at render time.
+  function weatherChipHTML(f, cache) {
+    if (!weatherEligible(f)) return '';
+    const cached = cache[weatherCacheKey(f)];
+    if (cached && (Date.now() - cached.ts) < WEATHER_TTL_MS) {
+      return cached.data ? `<span class="marquee-weather">${cached.data.icon} ${escHtml(cached.data.temp)}</span>` : '';
+    }
+    return `<span class="marquee-weather-slot" data-fest-id="${f.id}"></span>`;
+  }
+  async function fetchFestWeather(f) {
+    const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(f.location)}&count=1`);
+    const geo = await geoRes.json();
+    const loc = geo.results && geo.results[0];
+    if (!loc) return null;
+    const dateStr = f._d.toISOString().slice(0,10);
+    const fcRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&daily=weathercode,temperature_2m_max&temperature_unit=fahrenheit&timezone=auto&start_date=${dateStr}&end_date=${dateStr}`);
+    const fc = await fcRes.json();
+    const code = fc.daily?.weathercode?.[0];
+    const temp = fc.daily?.temperature_2m_max?.[0];
+    if (code === undefined || temp === undefined) return null;
+    return { icon: weatherIconFor(code), temp: `${Math.round(temp)}°F` };
+  }
+  function patchWeatherChip(festId, data) {
+    if (!data) return;
+    const slot = document.querySelector(`.event-item[data-fest-id="${CSS.escape(String(festId))}"] .marquee-weather-slot`);
+    if (!slot) return;
+    slot.outerHTML = `<span class="marquee-weather">${data.icon} ${escHtml(data.temp)}</span>`;
+  }
+  // Async fetch-then-patch — renderEvents() is synchronous so eligible cards render
+  // with a cached chip or an empty placeholder slot, patched in once the fetch resolves.
+  async function fetchMissingWeather(list, cache) {
+    const targets = list.filter(f => {
+      if (!weatherEligible(f)) return false;
+      const cached = cache[weatherCacheKey(f)];
+      return !(cached && (Date.now() - cached.ts) < WEATHER_TTL_MS);
+    });
+    if (!targets.length) return;
+    let changed = false;
+    for (const f of targets) {
+      try {
+        const data = await fetchFestWeather(f);
+        cache[weatherCacheKey(f)] = { ts: Date.now(), data };
+        changed = true;
+        if (data) patchWeatherChip(f.id, data);
+      } catch(e) { /* weather is decorative — fail silently */ }
+    }
+    if (changed) saveWeatherCache(cache);
+  }
+
   // Active festival being edited (UUID-safe global, same pattern as activeDetailId)
   let activeFestId = null;
 
@@ -19038,17 +19169,29 @@ async function doProfilePasswordChange() {
     const up = filtered.filter(f => f._d && f._d >= TODAY).sort((a,b) => a._d - b._d);
     const past = filtered.filter(f => !f._d || f._d < TODAY).sort((a,b) => (b._d||0) - (a._d||0));
 
+    const weatherCache = loadWeatherCache();
+    const BULB_ROW_HTML = Array.from({ length: 11 }, (_, i) => `<div class="marquee-bulb" style="animation-delay:${(i * 0.12).toFixed(2)}s"></div>`).join('');
+
     const card = (f) => {
       const lineupUrl = getLineupExplorerUrl(f);
       const lineupBtn = lineupUrl
         ? `<a class="lineup-explorer-btn" href="${lineupUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation()">🔭 Lineup Explorer</a>`
         : '';
       const color = festColor(f);
-      const day = f._d ? f._d.getDate() : '—';
-      const mon = f._d ? MON_SHORT[f._d.getMonth()].toUpperCase() : '';
       const goers = festivalGoers(f.id);
       const isUpcoming = f._d && f._d >= TODAY;
-      const metaLine = `📍 ${escHtml(f.location || 'Location TBD')}` + (isUpcoming ? ` · ⏳ ${countdownLabel(f._d)}` : (f._d ? ` · ${f._d.getFullYear()}` : ''));
+      const durLabel = raveDurationLabel(f);
+      const eyebrow = isUpcoming
+        ? `${durLabel ? durLabel + ' · ' : ''}${countdownLabel(f._d)}`
+        : `📼 ${durLabel ? durLabel + ' · ' : ''}${f._d ? 'Happened in ' + f._d.getFullYear() : 'Past'}`;
+      const dateBit = f._d ? `${f._d.getDate()} ${MON_SHORT[f._d.getMonth()]}${!isUpcoming ? ' ' + f._d.getFullYear() : ''}` : '';
+      const metaLine = `📍 ${escHtml(f.location || 'Location TBD')}` + (dateBit ? ` · ${dateBit}` : '');
+      const weatherChip = weatherChipHTML(f, weatherCache);
+      const mapUrlJs = String(f.mapUrl || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      const mapBtn = f.mapUrl
+        ? `<button class="map-pill" onclick="event.stopPropagation(); openMapPinLightbox('${mapUrlJs}', null, null, null, null, null, null, null, null)">🗺️ View Map</button>`
+        : '';
+      const pillRow = (lineupBtn || mapBtn) ? `<div class="pill-row">${lineupBtn}${mapBtn}</div>` : '';
       const you = squad.find(r => r.isYou);
       const youGoing = you && (you.festIds || []).some(fid => String(fid) === String(f.id));
       const youInterested = you && (you.interestedFestIds || []).some(fid => String(fid) === String(f.id));
@@ -19108,18 +19251,14 @@ async function doProfilePasswordChange() {
 
       return `
         <div class="event-item event-item-clickable${stateClass}" data-fest-id="${f.id}" style="${cardStyle}" onclick="activeFestId=this.dataset.festId; openRaveEditor(this.dataset.festId)" title="Tap to edit ${escHtml(f.name)}">
-          <div class="event-item-body">
-            <div class="event-date">
-              <div class="event-day" style="color:${color}">${day}</div>
-              <div class="event-month">${mon}</div>
-            </div>
-            <div class="event-info">
-              <div class="event-name">${escHtml(f.name)} <span class="fest-edit-hint">✏️</span></div>
-              ${lineupBtn}
-              <div class="event-meta">${metaLine}</div>
-              ${goingSection}
-              ${interestedSection}
-            </div>
+          <div class="marquee-bulb-row top">${BULB_ROW_HTML}</div>
+          <div class="marquee-body">
+            <div class="marquee-eyebrow" style="color:${color}">${eyebrow}</div>
+            <div class="marquee-name">${escHtml(f.name)} <span class="fest-edit-hint">✏️</span></div>
+            <div class="marquee-meta"><span>${metaLine}</span>${weatherChip}</div>
+            ${pillRow}
+            ${goingSection}
+            ${interestedSection}
           </div>
           ${vibeSection}
           <div class="event-action-bar">
@@ -19127,6 +19266,7 @@ async function doProfilePasswordChange() {
             <button class="event-action-btn going-action${youGoing ? ' active' : ''}" onclick="event.stopPropagation(); toggleGoingToFest('${f.id}')">${isUpcoming ? (youGoing ? '🎟️ Going' : '＋ Going') : (youGoing ? '🎟️ Sent It' : '＋ Sent It')}</button>
             <button class="event-action-btn interested-action${youInterested ? ' active' : ''}" onclick="event.stopPropagation(); toggleInterestedInFest('${f.id}')">👀 Interested</button>
           </div>
+          <div class="marquee-bulb-row bottom">${BULB_ROW_HTML}</div>
         </div>`;
     };
 
@@ -19144,6 +19284,7 @@ async function doProfilePasswordChange() {
           : `<div class="fest-empty es-block" style="padding:32px 20px"><div class="es-icon">🎟️</div><div class="es-headline">Your calendar is looking too clean</div><div class="es-sub">Add a festival, club night, or that warehouse party on Saturday.</div></div>`;
     }
     list.innerHTML = html;
+    if (showUp) fetchMissingWeather(up, weatherCache);
     } catch(err) { console.error('[renderEvents]', err); const el = document.getElementById('events-list'); if (el) el.innerHTML = sectionErrorHTML('events'); }
   }
 
