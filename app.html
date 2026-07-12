@@ -2161,8 +2161,8 @@
     border: 1px solid rgba(255,255,255,0.14);
     border-right: none; border-bottom: none;
   }
-  .coachmark.placement-below::after { top: -7px; left: 24px; transform: rotate(45deg); }
-  .coachmark.placement-above::after { bottom: -7px; left: 24px; transform: rotate(225deg); }
+  .coachmark.placement-below::after { top: -7px; left: var(--arrow-left, 24px); transform: rotate(45deg); }
+  .coachmark.placement-above::after { bottom: -7px; left: var(--arrow-left, 24px); transform: rotate(225deg); }
   .coachmark-title {
     font-family: 'Outfit', sans-serif;
     font-weight: 700;
@@ -20245,6 +20245,13 @@ async function doProfilePasswordChange() {
     }
     const left = Math.min(Math.max(targetRect.left, margin), window.innerWidth - elRect.width - margin);
     top = Math.min(Math.max(top, margin), window.innerHeight - elRect.height - margin);
+    // Arrow tip must track the target's actual center, not the bubble's own
+    // left edge — otherwise clamping the bubble to stay on-screen leaves the
+    // arrow pointing at empty space instead of the target.
+    const arrowMargin = 16;
+    const targetCenter = targetRect.left + targetRect.width / 2;
+    const arrowLeft = Math.min(Math.max(targetCenter - left - 6, arrowMargin), elRect.width - arrowMargin - 12);
+    el.style.setProperty('--arrow-left', `${arrowLeft}px`);
     el.classList.add('placement-' + placement);
     el.style.left = `${left}px`;
     el.style.top = `${top}px`;

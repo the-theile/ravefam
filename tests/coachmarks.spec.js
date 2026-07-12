@@ -71,6 +71,30 @@ test.describe('coachmarks · app guide nudge', () => {
     await expect(coachmark).toHaveClass(/show/);
     await expect(coachmark).toContainText('Lost on the floor');
   });
+
+  // app-guide-btn sits in the top-right corner, so the bubble's left edge
+  // gets clamped away from targetRect.left to stay on-screen. The arrow
+  // must still track the button's true center, not a fixed offset from the
+  // bubble's (now-shifted) own box — regression test for that misalignment.
+  test('the arrow tip stays aligned with the header button even when the bubble is edge-clamped', async ({ page }) => {
+    await bootAuthedApp(page);
+
+    const coachmark = page.locator('#coachmark');
+    await expect(coachmark).toHaveClass(/show/);
+
+    const alignment = await page.evaluate(() => {
+      const target = document.getElementById('app-guide-btn').getBoundingClientRect();
+      const bubble = document.getElementById('coachmark').getBoundingClientRect();
+      const arrowLeftPx = parseFloat(
+        getComputedStyle(document.getElementById('coachmark')).getPropertyValue('--arrow-left')
+      );
+      const arrowTipX = bubble.left + arrowLeftPx + 6; // +6 = half the 12px arrow box
+      const targetCenterX = target.left + target.width / 2;
+      return { arrowTipX, targetCenterX };
+    });
+
+    expect(Math.abs(alignment.arrowTipX - alignment.targetCenterX)).toBeLessThan(2);
+  });
 });
 
 test.describe('coachmarks · one at a time', () => {
