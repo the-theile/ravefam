@@ -8600,7 +8600,13 @@ async function doProfilePasswordChange() {
   // existing claimed raver in place (see obStep2Next), so it's safe post-claim.
   function runFirstTimeSetup({ allowWelcome = false } = {}) {
     const me = squad.find(r => r.isYou);
-    if (!currentUser?.user_metadata?.onboarded) {
+    // A raver record with both genres and a handle is proof onboarding already
+    // happened, independent of the "onboarded" auth flag below — that flag is
+    // set by a best-effort call at the end of onboarding (see completeOnboarding)
+    // and can fail to persist, which would otherwise re-trigger the full wizard
+    // for someone who already has a complete profile.
+    const profileComplete = !!(me && me.genres?.length && me.handle);
+    if (!profileComplete && !currentUser?.user_metadata?.onboarded) {
       setTimeout(showOnboarding, 400);
     } else if (me && !me.handle) {
       setTimeout(showHandlePicker, 400);
@@ -20776,11 +20782,15 @@ async function doProfilePasswordChange() {
     obGoToStep(3);
   }
 
-  function completeOnboarding() {
+  async function completeOnboarding() {
     isOnboarding = false;
     document.getElementById('onboarding-screen').classList.remove('show');
     renderSquad(); renderCrews(); renderEvents();
-    if (currentUser) sb.auth.updateUser({ data: { onboarded: true } });
+    if (currentUser) {
+      const { data, error } = await sb.auth.updateUser({ data: { onboarded: true } });
+      if (error) console.error('completeOnboarding: failed to persist onboarded flag', error);
+      else if (data?.user) currentUser = data.user;
+    }
   }
 
   function obFinishExploring() {
