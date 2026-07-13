@@ -26,11 +26,13 @@
 <meta name="twitter:image" content="https://myravefam.com/og-image.png">
 <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@800;900&family=Outfit:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,700;9..144,800&family=DM+Sans:wght@300;400;500&family=Orbitron:wght@600;700;800;900&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="jsQR.min.js"></script>
 <script src="qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   :root {
     --neon-pink: #FF2D78;
@@ -5415,6 +5417,25 @@
   .stats-hero-card:nth-child(2) { --vital-c: var(--neon-cyan); }
   .stats-hero-card:nth-child(3) { --vital-c: var(--neon-green); }
   .stats-hero-card:nth-child(4) { --vital-c: var(--neon-yellow); }
+  /* Tappable stat tiles match the Stats nav icon's cyan accent, regardless of grid position. */
+  .stats-hero-card.tappable {
+    --vital-c: var(--neon-cyan);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+  }
+  .stats-hero-card.tappable:hover, .stats-hero-card.tappable:focus-visible {
+    outline: none;
+    transform: translateY(-2px);
+    border-color: rgba(0,245,255,0.5);
+    box-shadow: 0 8px 22px -8px rgba(0,245,255,0.45);
+  }
+  .stats-hero-card.tappable:active { transform: translateY(0); }
+  .stats-hero-chevron {
+    position: absolute; top: 8px; right: 10px;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.85rem;
+    color: rgba(0,245,255,0.55);
+  }
   .stats-hero-number {
     font-family: 'Orbitron', sans-serif;
     font-weight: 900;
@@ -5567,6 +5588,57 @@
   .stats-stamp.empty::before, .stats-stamp.empty::after { display: none; }
   .stats-stamp.empty .stats-stamp-name { color: var(--muted); }
   .stats-stamp.empty .stats-stamp-year { color: var(--muted); }
+
+  /* ===== Stats sub-pages (Raves Logged / Days Raved / Cities Hit detail views) ===== */
+  .profile-back.cyan:hover { color: var(--neon-cyan); }
+
+  .rlog-list { display: flex; flex-direction: column; gap: 8px; }
+  .rlog-item {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--surface); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px; padding: 12px 14px; cursor: pointer;
+    transition: border-color 0.15s, transform 0.15s;
+  }
+  .rlog-item:hover { border-color: rgba(0,245,255,0.4); transform: translateX(2px); }
+  .rlog-item-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .rlog-item-main { flex: 1; min-width: 0; }
+  .rlog-item-name {
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.88rem; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .rlog-item-sub { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
+  .rlog-item-chevron { color: var(--neon-cyan); font-size: 1.1rem; flex-shrink: 0; }
+
+  .daystat-row { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
+  .daystat-row:last-child { margin-bottom: 0; }
+  .daystat-row-label {
+    width: 84px; flex-shrink: 0; font-size: 0.72rem;
+    font-family: 'Outfit', sans-serif; font-weight: 600; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .daystat-row-bar-track { flex: 1; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.06); overflow: hidden; }
+  .daystat-row-bar-fill {
+    height: 100%; border-radius: 4px;
+    background: linear-gradient(90deg, var(--neon-cyan), color-mix(in srgb, var(--neon-cyan) 40%, white));
+    box-shadow: 0 0 8px rgba(0,245,255,0.5);
+  }
+  .daystat-row-count {
+    width: 24px; text-align: right; flex-shrink: 0;
+    font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: 0.75rem; color: var(--neon-cyan);
+  }
+
+  .citymap {
+    position: relative; width: 100%; height: 280px;
+    border-radius: 16px; overflow: hidden;
+    border: 1px solid rgba(0,245,255,0.2);
+    margin-bottom: 14px; background: var(--surface);
+  }
+  .citymap-loading {
+    display: flex; align-items: center; justify-content: center; height: 100%;
+    color: var(--muted); font-size: 0.78rem; font-family: 'Outfit', sans-serif; text-align: center; padding: 0 24px;
+  }
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #14141f; color: var(--text); }
+  .leaflet-popup-content { font-family: 'Outfit', sans-serif; font-size: 0.78rem; }
 
   .stats-locked {
     position: relative;
@@ -6297,6 +6369,15 @@
         <div id="stats-crew-content"><!-- rendered by JS --></div>
       </div>
     </div>
+
+    <!-- RAVES LOGGED PAGE (dedicated, full-view) -->
+    <div class="page" id="page-raves-logged"><!-- rendered by JS --></div>
+
+    <!-- DAYS RAVED STATS PAGE (dedicated, full-view) -->
+    <div class="page" id="page-days-stats"><!-- rendered by JS --></div>
+
+    <!-- CITIES HIT MAP PAGE (dedicated, full-view) -->
+    <div class="page" id="page-cities-map"><!-- rendered by JS --></div>
 
 </main>
 </div>
@@ -21250,6 +21331,15 @@ async function doProfilePasswordChange() {
     renderCrewStats();
   }
 
+  // Raves the signed-in user has actually attended (future RSVPs excluded). Shared by
+  // the stats hero tiles and their tap-through detail pages so the numbers always agree.
+  function myAchievedFests() {
+    const you = squad.find(r => r.isYou);
+    if (!you) return [];
+    const myFestIds = you.festIds || [];
+    return festivals.filter(f => myFestIds.some(id => String(id) === String(f.id)) && isFestAchieved(f));
+  }
+
   function loadStatsPage() {
     const you = squad.find(r => r.isYou);
     if (!you) {
@@ -21262,9 +21352,7 @@ async function doProfilePasswordChange() {
       return;
     }
 
-    const myFestIds = you.festIds || [];
-    // Stats reflect only raves that have actually happened — future RSVPs are excluded.
-    const myFests = festivals.filter(f => myFestIds.some(id => String(id) === String(f.id)) && isFestAchieved(f));
+    const myFests = myAchievedFests();
     const now = new Date();
     const thisYear = now.getFullYear();
     const totalRaves = myFests.length;
@@ -21295,15 +21383,18 @@ async function doProfilePasswordChange() {
 
     // Hero numbers
     html += `<div class="stats-hero-grid">
-      <div class="stats-hero-card">
+      <div class="stats-hero-card tappable" onclick="openRavesLoggedPage()" role="button" tabindex="0" aria-label="View your logged raves">
+        <span class="stats-hero-chevron">›</span>
         <div class="stats-hero-number">${totalRaves}</div>
         <div class="stats-hero-label">Raves Logged</div>
       </div>
-      <div class="stats-hero-card">
+      <div class="stats-hero-card tappable" onclick="openDaysStatsPage()" role="button" tabindex="0" aria-label="View your day and month rave stats">
+        <span class="stats-hero-chevron">›</span>
         <div class="stats-hero-number">${totalDays}</div>
         <div class="stats-hero-label">Days Raved</div>
       </div>
-      <div class="stats-hero-card">
+      <div class="stats-hero-card tappable" onclick="openCitiesMapPage()" role="button" tabindex="0" aria-label="View a map of cities you've raved in">
+        <span class="stats-hero-chevron">›</span>
         <div class="stats-hero-number">${cityCount || '—'}</div>
         <div class="stats-hero-label">Cities Hit</div>
       </div>
@@ -21592,6 +21683,264 @@ async function doProfilePasswordChange() {
       if (actions) actions.style.display = '';
       showToast('📋 Screenshot this card to share!');
     }
+  }
+
+  // ===== Stats sub-pages: Raves Logged / Days Raved / Cities Hit =====
+
+  function backToStats() {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-stats').classList.add('active');
+    window.scrollTo(0, 0);
+  }
+
+  function openRavesLoggedPage() {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-raves-logged').classList.add('active');
+    window.scrollTo(0, 0);
+    renderRavesLoggedPage();
+  }
+
+  function renderRavesLoggedPage() {
+    const myFests = myAchievedFests().filter(f => f.date);
+    const sorted = [...myFests].sort((a, b) => festDate(b) - festDate(a));
+
+    const body = sorted.length
+      ? `<div class="rlog-list">${sorted.map(f => {
+          const d = festDate(f);
+          const dateLabel = d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+          return `<div class="rlog-item" data-fest-id="${escHtml(String(f.id))}" onclick="openRaveEditor(this.dataset.festId)" role="button" tabindex="0">
+            <span class="rlog-item-dot" style="background:${festColor(f)};"></span>
+            <div class="rlog-item-main">
+              <div class="rlog-item-name">${escHtml(f.name)}</div>
+              <div class="rlog-item-sub">${escHtml(dateLabel)}${f.location ? ' · ' + escHtml(f.location) : ''}</div>
+            </div>
+            <span class="rlog-item-chevron">›</span>
+          </div>`;
+        }).join('')}</div>`
+      : `<div class="stats-empty-state">
+          <div class="stats-empty-icon">🎧</div>
+          <div class="stats-empty-title">No raves logged yet</div>
+          <div class="stats-empty-sub">Add a rave with a date to start building your rave history.</div>
+        </div>`;
+
+    document.getElementById('page-raves-logged').innerHTML = `
+      <button class="profile-back cyan" onclick="backToStats()">← Rave Life</button>
+      <div class="section-header" style="margin-bottom:14px;">
+        <div class="section-title">Raves Logged 🎟️</div>
+      </div>
+      ${body}
+    `;
+  }
+
+  const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  function openDaysStatsPage() {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-days-stats').classList.add('active');
+    window.scrollTo(0, 0);
+    renderDaysStatsPage();
+  }
+
+  function statBarRows(rows, maxCount) {
+    return rows.map(r => `
+      <div class="daystat-row">
+        <span class="daystat-row-label">${escHtml(r.label)}</span>
+        <div class="daystat-row-bar-track"><div class="daystat-row-bar-fill" style="width:${Math.round(r.count / maxCount * 100)}%;"></div></div>
+        <span class="daystat-row-count">${r.count}</span>
+      </div>`).join('');
+  }
+
+  function renderDaysStatsPage() {
+    const myFests = myAchievedFests().filter(f => f.date);
+    const page = document.getElementById('page-days-stats');
+
+    if (!myFests.length) {
+      page.innerHTML = `
+        <button class="profile-back cyan" onclick="backToStats()">← Rave Life</button>
+        <div class="section-header" style="margin-bottom:14px;"><div class="section-title">Days Raved 📅</div></div>
+        <div class="stats-empty-state">
+          <div class="stats-empty-icon">📅</div>
+          <div class="stats-empty-title">No dated raves yet</div>
+          <div class="stats-empty-sub">Log a rave with a date to see your day & month breakdown.</div>
+        </div>`;
+      return;
+    }
+
+    const totalDays = myFests.reduce((sum, f) => sum + (Number(f.days) || 1), 0);
+    const dayCounts = Array(7).fill(0);
+    const monthNameCounts = Array(12).fill(0);
+    const monthKeyCounts = {};
+    myFests.forEach(f => {
+      const d = festDate(f);
+      if (!d) return;
+      dayCounts[d.getDay()]++;
+      monthNameCounts[d.getMonth()]++;
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      if (!monthKeyCounts[key]) monthKeyCounts[key] = { count: 0, label: `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}` };
+      monthKeyCounts[key].count++;
+    });
+
+    const topDayIdx = dayCounts.indexOf(Math.max(...dayCounts));
+    const topMonthNameIdx = monthNameCounts.indexOf(Math.max(...monthNameCounts));
+    const bestMonthEntry = Object.values(monthKeyCounts).sort((a, b) => b.count - a.count)[0];
+
+    const dayRows = dayCounts.map((c, i) => ({ label: DAY_NAMES[i], count: c })).filter(r => r.count > 0).sort((a, b) => b.count - a.count);
+    const monthRows = monthNameCounts.map((c, i) => ({ label: MONTH_NAMES[i], count: c })).filter(r => r.count > 0).sort((a, b) => b.count - a.count);
+
+    page.innerHTML = `
+      <button class="profile-back cyan" onclick="backToStats()">← Rave Life</button>
+      <div class="section-header" style="margin-bottom:14px;"><div class="section-title">Days Raved 📅</div></div>
+
+      <div class="stats-hero-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:18px;">
+        <div class="stats-hero-card"><div class="stats-hero-number" style="font-size:1.4rem;">${escHtml(DAY_NAMES[topDayIdx].slice(0, 3))}</div><div class="stats-hero-label">Top Day</div></div>
+        <div class="stats-hero-card"><div class="stats-hero-number" style="font-size:1.4rem;">${escHtml(MONTH_NAMES[topMonthNameIdx].slice(0, 3))}</div><div class="stats-hero-label">Top Month</div></div>
+        <div class="stats-hero-card"><div class="stats-hero-number">${totalDays}</div><div class="stats-hero-label">Total Days</div></div>
+      </div>
+
+      <div class="stats-section-card">
+        <div class="stats-section-title">📆 Most Popular Day to Rave</div>
+        ${statBarRows(dayRows, dayCounts[topDayIdx])}
+      </div>
+
+      <div class="stats-section-card">
+        <div class="stats-section-title">🗓️ Most Popular Month</div>
+        ${statBarRows(monthRows, monthNameCounts[topMonthNameIdx])}
+      </div>
+
+      ${bestMonthEntry ? `
+      <div class="stats-section-card">
+        <div class="stats-section-title">🔥 Biggest Month Ever</div>
+        <div class="stats-personality" style="background:linear-gradient(135deg, rgba(0,245,255,0.14), rgba(0,245,255,0.04));border-color:rgba(0,245,255,0.3);">
+          <div class="stats-personality-emoji">🔥</div>
+          <div>
+            <div class="stats-personality-label">${escHtml(bestMonthEntry.label)}</div>
+            <div class="stats-personality-sub">${bestMonthEntry.count} rave${bestMonthEntry.count !== 1 ? 's' : ''} that month</div>
+          </div>
+        </div>
+      </div>` : ''}
+    `;
+  }
+
+  function openCitiesMapPage() {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-cities-map').classList.add('active');
+    window.scrollTo(0, 0);
+    renderCitiesMapPage();
+  }
+
+  function renderCitiesMapPage() {
+    const myFests = myAchievedFests();
+    const cityCounts = {};
+    myFests.forEach(f => {
+      if (!f.location) return;
+      const city = f.location.split(',')[0].trim();
+      if (!city) return;
+      if (!cityCounts[city]) cityCounts[city] = 0;
+      cityCounts[city]++;
+    });
+    const cityList = Object.entries(cityCounts).map(([city, count]) => ({ city, count })).sort((a, b) => b.count - a.count);
+    const page = document.getElementById('page-cities-map');
+
+    if (!cityList.length) {
+      page.innerHTML = `
+        <button class="profile-back cyan" onclick="backToStats()">← Rave Life</button>
+        <div class="section-header" style="margin-bottom:14px;"><div class="section-title">Cities Hit 🗺️</div></div>
+        <div class="stats-empty-state">
+          <div class="stats-empty-icon">🗺️</div>
+          <div class="stats-empty-title">No cities yet</div>
+          <div class="stats-empty-sub">Log a rave with a location to start filling in your map.</div>
+        </div>`;
+      return;
+    }
+
+    const topCity = cityList[0];
+    page.innerHTML = `
+      <button class="profile-back cyan" onclick="backToStats()">← Rave Life</button>
+      <div class="section-header" style="margin-bottom:14px;"><div class="section-title">Cities Hit 🗺️</div></div>
+      <div class="stats-section-card">
+        <div class="stats-personality" style="margin-bottom:0;background:linear-gradient(135deg, rgba(0,245,255,0.14), rgba(0,245,255,0.04));border-color:rgba(0,245,255,0.3);">
+          <div class="stats-personality-emoji">🏆</div>
+          <div>
+            <div class="stats-personality-label">${escHtml(topCity.city)}</div>
+            <div class="stats-personality-sub">Your most-raved city — ${topCity.count} rave${topCity.count !== 1 ? 's' : ''}</div>
+          </div>
+        </div>
+      </div>
+      <div id="citymap" class="citymap"><div class="citymap-loading">📍 Mapping your cities…</div></div>
+      <div class="stats-section-card">
+        <div class="stats-section-title">🌆 City Breakdown</div>
+        ${statBarRows(cityList.map(c => ({ label: c.city, count: c.count })), topCity.count)}
+      </div>
+    `;
+
+    geocodeAndRenderCityMap(cityList);
+  }
+
+  const CITY_GEOCODE_CACHE_KEY = 'rf_city_geocode_cache';
+
+  function loadGeocodeCache() {
+    try { return JSON.parse(localStorage.getItem(CITY_GEOCODE_CACHE_KEY) || '{}'); } catch { return {}; }
+  }
+  function saveGeocodeCache(cache) {
+    try { localStorage.setItem(CITY_GEOCODE_CACHE_KEY, JSON.stringify(cache)); } catch {}
+  }
+
+  // Same Nominatim/OpenStreetMap endpoint already used for the rave-location autocomplete.
+  async function geocodeCity(city) {
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1&featuretype=city&accept-language=en`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const hit = data && data[0];
+      return hit ? { lat: parseFloat(hit.lat), lng: parseFloat(hit.lon) } : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function geocodeAndRenderCityMap(cityList) {
+    const cache = loadGeocodeCache();
+    const points = [];
+    for (const c of cityList) {
+      const key = c.city.toLowerCase();
+      let coords = cache[key];
+      if (coords === undefined) {
+        coords = await geocodeCity(c.city);
+        cache[key] = coords;
+        saveGeocodeCache(cache);
+        // Nominatim's usage policy caps public requests at ~1/sec.
+        await new Promise(r => setTimeout(r, 1100));
+      }
+      if (coords) points.push({ ...c, ...coords });
+    }
+
+    // Bail if the user navigated away while we were geocoding.
+    if (!document.getElementById('page-cities-map').classList.contains('active')) return;
+    const mapEl = document.getElementById('citymap');
+    if (!mapEl) return;
+
+    if (!points.length || typeof L === 'undefined') {
+      mapEl.innerHTML = `<div class="citymap-loading">Couldn't place any pins right now — see the breakdown below.</div>`;
+      return;
+    }
+
+    mapEl.innerHTML = '';
+    const map = L.map(mapEl, { scrollWheelZoom: false }).setView([points[0].lat, points[0].lng], 3);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      maxZoom: 19
+    }).addTo(map);
+
+    const bounds = [];
+    points.forEach(p => {
+      const radius = 8 + Math.min(p.count, 6) * 3;
+      L.circleMarker([p.lat, p.lng], { radius, color: '#00F5FF', weight: 2, fillColor: '#00F5FF', fillOpacity: 0.35 })
+        .addTo(map)
+        .bindPopup(`<strong>${escHtml(p.city)}</strong><br>${p.count} rave${p.count !== 1 ? 's' : ''}`);
+      bounds.push([p.lat, p.lng]);
+    });
+    if (bounds.length > 1) map.fitBounds(bounds, { padding: [30, 30] });
   }
 
 </script>
