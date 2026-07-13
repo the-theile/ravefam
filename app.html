@@ -25,10 +25,12 @@
 <meta name="twitter:description" content="Build private crews, track festivals & local shows together, QR + 6-digit claim codes, profile claiming, shared memories. One home for your tribe.">
 <meta name="twitter:image" content="https://myravefam.com/og-image.png">
 <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@800;900&family=Outfit:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,700;9..144,800&family=DM+Sans:wght@300;400;500&family=Orbitron:wght@600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="jsQR.min.js"></script>
 <script src="qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
 <style>
   :root {
     --neon-pink: #FF2D78;
@@ -3217,6 +3219,23 @@
     box-shadow: 0 0 0 2px rgba(255,255,255,0.15);
   }
 
+  /* Totem photo crop/zoom modal */
+  .totem-crop-frame {
+    width: 100%; height: min(320px, 42vh);
+    overflow: hidden;
+    border-radius: 12px;
+    background: #000;
+  }
+  .totem-crop-frame img { display: block; max-width: 100%; }
+  .totem-crop-zoom-row {
+    display: flex; align-items: center; gap: 10px;
+    margin-top: 16px;
+  }
+  .totem-crop-zoom-row input[type=range] {
+    flex: 1;
+    accent-color: var(--neon-pink);
+  }
+
   /* Our Photo — Polaroid style */
   .our-photo-countdown-row {
     display: flex; gap: 10px; align-items: stretch; margin-bottom: 16px;
@@ -6394,6 +6413,24 @@
     <div style="display:flex;gap:10px;">
       <button class="btn btn-ghost" style="flex:1;" onclick="closePhotoConfirm()">Cancel</button>
       <button class="btn" id="photo-confirm-ok" style="flex:1;background:var(--neon-pink);color:#000;font-weight:700;border:none;">Yes, do it 🔥</button>
+    </div>
+  </div>
+</div>
+
+<!-- Totem Photo Crop/Zoom Modal -->
+<div class="modal-overlay" id="totem-crop-overlay">
+  <div class="modal" id="totem-crop-modal" style="max-width:420px;max-height:88vh;overflow-y:auto;">
+    <div class="modal-title" style="font-size:1.05rem;margin-bottom:14px;">✂️ Crop your totem</div>
+    <div class="totem-crop-frame">
+      <img id="totem-crop-img" alt="Totem photo to crop">
+    </div>
+    <div class="totem-crop-zoom-row">
+      <span style="font-size:0.9rem;">🔍</span>
+      <input type="range" id="totem-crop-zoom" min="0" max="2" step="0.01" value="0" oninput="totemCropZoom(this.value)">
+    </div>
+    <div style="display:flex;gap:10px;margin-top:18px;">
+      <button class="btn btn-ghost" style="flex:1;" onclick="closeTotemCropper()">Cancel</button>
+      <button class="btn" style="flex:1;background:var(--neon-pink);color:#000;font-weight:700;border:none;" onclick="confirmTotemCrop()">Save crop</button>
     </div>
   </div>
 </div>
@@ -9973,18 +10010,85 @@ async function doProfilePasswordChange() {
     event.target.value = '';
     if (!file.type.startsWith('image/')) { showToast('⚠️ Please select an image file'); return; }
     if (file.size > 10 * 1024 * 1024) { showToast('⚠️ Photo must be under 10 MB'); return; }
+    openTotemCropper(file, crewId, { isEdit: false });
+  }
+
+  // Re-crop the totem photo that's already set, without re-uploading a new file.
+  async function editTotemPhoto(crewId) {
+    const crew = getCrew(crewId);
+    if (!crew || !crew.totemPhotoUrl) return;
+    showToast('📸 Loading photo…');
+    try {
+      const resp = await fetch(crew.totemPhotoUrl);
+      const blob = await resp.blob();
+      openTotemCropper(blob, crewId, { isEdit: true });
+    } catch(e) {
+      console.error('Load totem for edit failed', e);
+      showToast('⚠️ Could not load photo for editing');
+    }
+  }
+
+  // ── Totem photo crop/zoom modal (Cropper.js) ────────────────────────────────
+  let _totemCropper = null;
+  let _totemCropContext = null; // { crewId, crew, isEdit, objectUrl }
+
+  function openTotemCropper(blobOrFile, crewId, { isEdit = false } = {}) {
     const crew = getCrew(crewId);
     if (!crew) return;
-    if (crew.totemPhotoUrl) {
-      showPhotoConfirm({
-        icon: '🔄',
-        title: 'Replace crew totem?',
-        body: 'The current totem photo will be replaced. Your crew identity will thank you.',
-        onConfirm: () => doTotemPhotoUpload(file, crewId, crew)
+    const objectUrl = URL.createObjectURL(blobOrFile);
+    _totemCropContext = { crewId, crew, isEdit, objectUrl };
+    const img = document.getElementById('totem-crop-img');
+    const startCropper = () => {
+      if (_totemCropper) { _totemCropper.destroy(); _totemCropper = null; }
+      document.getElementById('totem-crop-zoom').value = 0;
+      _totemCropper = new Cropper(img, {
+        aspectRatio: 1,
+        viewMode: 1,
+        dragMode: 'move',
+        autoCropArea: 1,
+        background: false,
+        responsive: true,
+        zoomOnWheel: true,
+        minCropBoxWidth: 100,
+        minCropBoxHeight: 100,
       });
-      return;
-    }
-    doTotemPhotoUpload(file, crewId, crew);
+    };
+    img.onload = startCropper;
+    img.src = objectUrl;
+    document.getElementById('totem-crop-overlay').classList.add('open');
+  }
+
+  function totemCropZoom(value) {
+    if (!_totemCropper) return;
+    _totemCropper.zoomTo(1 + parseFloat(value));
+  }
+
+  function closeTotemCropper() {
+    document.getElementById('totem-crop-overlay').classList.remove('open');
+    if (_totemCropper) { _totemCropper.destroy(); _totemCropper = null; }
+    if (_totemCropContext && _totemCropContext.objectUrl) URL.revokeObjectURL(_totemCropContext.objectUrl);
+    _totemCropContext = null;
+  }
+
+  function confirmTotemCrop() {
+    if (!_totemCropper || !_totemCropContext) return;
+    const { crewId, crew, isEdit } = _totemCropContext;
+    const canvas = _totemCropper.getCroppedCanvas({ width: 800, height: 800, imageSmoothingQuality: 'high' });
+    if (!canvas) { showToast('⚠️ Crop failed — try again'); return; }
+    canvas.toBlob(blob => {
+      if (!blob) { showToast('⚠️ Crop failed — try again'); return; }
+      closeTotemCropper();
+      if (crew.totemPhotoUrl && !isEdit) {
+        showPhotoConfirm({
+          icon: '🔄',
+          title: 'Replace crew totem?',
+          body: 'The current totem photo will be replaced. Your crew identity will thank you.',
+          onConfirm: () => doTotemPhotoUpload(blob, crewId, crew)
+        });
+      } else {
+        doTotemPhotoUpload(blob, crewId, crew);
+      }
+    }, 'image/jpeg', 0.9);
   }
 
   async function doTotemPhotoUpload(file, crewId, crew) {
@@ -11897,6 +12001,8 @@ async function doProfilePasswordChange() {
             <div class="totem-photo-wrap">
               <img src="${escHtml(crew.totemPhotoUrl)}" alt="Crew totem">
               <div class="totem-photo-actions">
+                <button class="btn btn-ghost" style="flex:1;padding:9px;font-size:0.78rem;"
+                  data-crew-id="${crew.id}" onclick="editTotemPhoto(this.dataset.crewId)">✂️ Edit</button>
                 <label class="btn btn-ghost" style="flex:1;padding:9px;font-size:0.78rem;text-align:center;cursor:pointer;">
                   🔄 Replace
                   <input type="file" accept="image/*" style="display:none" data-crew-id="${crew.id}" onchange="handleTotemPhotoUpload(event,this.dataset.crewId)">
