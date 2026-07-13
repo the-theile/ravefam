@@ -10187,8 +10187,13 @@ async function doProfilePasswordChange() {
 
   // Which of "photo" / "icon" / "none" the crew lead is currently viewing in the Crew Totem section.
   const _totemTabByCrewId = {};
+  // Whether the Edit/Replace/Remove buttons show under an already-set totem photo.
+  // Stays hidden until the lead explicitly taps the "Photo" tab, so opening the
+  // crew page doesn't dump edit controls under a totem that's already set.
+  const _totemPhotoActionsRevealed = {};
   function setCrewTotemTab(crewId, tab) {
     _totemTabByCrewId[crewId] = tab;
+    if (tab === 'photo') _totemPhotoActionsRevealed[crewId] = true;
     renderDetail(crewId);
   }
 
@@ -11999,9 +12004,11 @@ async function doProfilePasswordChange() {
             <button class="btn btn-ghost" style="width:100%;padding:9px;font-size:0.78rem;color:var(--neon-pink);" onclick="clearCrewTotem('${crew.id}')">🚫 Clear totem</button>` : `
             <div style="font-size:0.85rem;color:var(--muted);line-height:1.5;">No totem set — your crew name is holding it down. Pick Photo or Icon anytime to add one.</div>`;
       } else if (totemTab === 'photo') {
+        const actionsRevealed = !!_totemPhotoActionsRevealed[crew.id];
         totemBody = crew.totemPhotoUrl ? `
             <div class="totem-photo-wrap">
               <img src="${escHtml(crew.totemPhotoUrl)}" alt="Crew totem">
+              ${actionsRevealed ? `
               <div class="totem-photo-actions">
                 <button class="btn btn-ghost" style="flex:1;padding:9px;font-size:0.78rem;"
                   data-crew-id="${crew.id}" onclick="editTotemPhoto(this.dataset.crewId)">✂️ Edit</button>
@@ -12011,7 +12018,7 @@ async function doProfilePasswordChange() {
                 </label>
                 <button class="btn btn-ghost" style="flex:1;padding:9px;font-size:0.78rem;color:var(--neon-pink);"
                   data-crew-id="${crew.id}" onclick="removeTotemPhoto(this.dataset.crewId)">🗑️ Remove</button>
-              </div>
+              </div>` : ''}
             </div>` : `
             <label class="totem-upload-area">
               📸 <span>Upload a totem photo</span>
