@@ -21838,15 +21838,30 @@ async function doProfilePasswordChange() {
 
   function renderCitiesMapPage() {
     const myFests = myAchievedFests();
-    const cityCounts = {};
+    // Key by the full "City, State/Country" string, not just the city name — otherwise
+    // e.g. "St Petersburg, FL" and "St Petersburg, Russia" would collapse into one bucket
+    // and geocode ambiguously.
+    const locCounts = {};
     myFests.forEach(f => {
       if (!f.location) return;
-      const city = f.location.split(',')[0].trim();
-      if (!city) return;
-      if (!cityCounts[city]) cityCounts[city] = 0;
-      cityCounts[city]++;
+      const loc = f.location.trim();
+      if (!loc) return;
+      const key = loc.toLowerCase();
+      if (!locCounts[key]) locCounts[key] = { location: loc, count: 0 };
+      locCounts[key].count++;
     });
-    const cityList = Object.entries(cityCounts).map(([city, count]) => ({ city, count })).sort((a, b) => b.count - a.count);
+    // Only show the state/country suffix in the label when it's needed to tell two
+    // same-named cities apart; otherwise just "City" reads cleaner.
+    const cityNameOccurrences = {};
+    Object.values(locCounts).forEach(v => {
+      const cityName = v.location.split(',')[0].trim();
+      cityNameOccurrences[cityName] = (cityNameOccurrences[cityName] || 0) + 1;
+    });
+    const cityList = Object.values(locCounts).map(v => {
+      const cityName = v.location.split(',')[0].trim();
+      const city = cityNameOccurrences[cityName] > 1 ? v.location : cityName;
+      return { city, location: v.location, count: v.count };
+    }).sort((a, b) => b.count - a.count);
     const page = document.getElementById('page-cities-map');
 
     if (!cityList.length) {
@@ -21894,9 +21909,12 @@ async function doProfilePasswordChange() {
   }
 
   // Same Nominatim/OpenStreetMap endpoint already used for the rave-location autocomplete.
-  async function geocodeCity(city) {
+  // Geocode the full "City, State/Country" string, not just the bare city name — otherwise
+  // ambiguous city names (St Petersburg, FL vs St Petersburg, Russia) resolve to whichever
+  // Nominatim ranks higher globally.
+  async function geocodeCity(location) {
     try {
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1&featuretype=city&accept-language=en`;
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(location)}&format=json&limit=1&featuretype=city&accept-language=en`;
       const res = await fetch(url);
       const data = await res.json();
       const hit = data && data[0];
@@ -21910,10 +21928,10 @@ async function doProfilePasswordChange() {
     const cache = loadGeocodeCache();
     const points = [];
     for (const c of cityList) {
-      const key = c.city.toLowerCase();
+      const key = c.location.toLowerCase();
       let coords = cache[key];
       if (coords === undefined) {
-        coords = await geocodeCity(c.city);
+        coords = await geocodeCity(c.location);
         cache[key] = coords;
         saveGeocodeCache(cache);
         // Nominatim's usage policy caps public requests at ~1/sec.
