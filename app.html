@@ -6614,6 +6614,20 @@
         </div>
         <button class="poll-anon-toggle" id="push-settings-toggle" onclick="toggleBeaconPush(this)"></button>
       </div>
+      <div class="poll-setting-row">
+        <div>
+          <div class="poll-setting-label">Tips &amp; hints</div>
+          <div class="poll-setting-hint">Show coachmark tips as you discover new features</div>
+        </div>
+        <button class="poll-anon-toggle" id="tips-settings-toggle" onclick="toggleTipsEnabled(this)"></button>
+      </div>
+      <div class="poll-setting-row">
+        <div>
+          <div class="poll-setting-label">Reset tips</div>
+          <div class="poll-setting-hint">See all tips again, including ones already dismissed</div>
+        </div>
+        <button type="button" class="btn btn-ghost" id="reset-tips-btn" style="padding:6px 14px;font-size:0.72rem;" onclick="resetTips()">Reset</button>
+      </div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-primary" style="flex:1;" onclick="closePrivacySettingsModal()">Done</button>
@@ -7187,6 +7201,7 @@
 
   let currentUser = null;  // holds the logged-in Supabase user object
   let _seenTips = {};  // local mirror of user_metadata.seen_tips — coachmarks already shown
+  let _tipsEnabled = true;  // local mirror of user_metadata.tips_enabled — master on/off for coachmarks
   let moderatorIds = new Set();  // auth user ids present in the moderators table
   async function dbLoadModerators() {
     if (!currentUser) return;
@@ -7659,6 +7674,7 @@ async function doProfilePasswordChange() {
   function showApp(user) {
     currentUser = user;
     _seenTips = { ...(user?.user_metadata?.seen_tips || {}) };
+    _tipsEnabled = user?.user_metadata?.tips_enabled !== false;
     maybeInitEruda();
     document.getElementById('claim-intercept').classList.remove('open');
     document.getElementById('app-loading').classList.add('hidden');
@@ -20418,6 +20434,7 @@ async function doProfilePasswordChange() {
       </div>`).join('');
     const pushToggle = document.getElementById('push-settings-toggle');
     pushToggle.classList.remove('on');
+    document.getElementById('tips-settings-toggle').classList.toggle('on', _tipsEnabled);
     document.getElementById('privacy-settings-overlay').classList.add('open');
     if ('serviceWorker' in navigator && 'PushManager' in window) {
       try {
@@ -20588,7 +20605,7 @@ async function doProfilePasswordChange() {
   const _coachmarkQueuedOrShown = new Set(); // this-session guard against duplicate enqueues before dismissal
 
   function queueCoachmark(tipKey, { targetEl, title, body }) {
-    if (!targetEl || _seenTips[tipKey] || _coachmarkQueuedOrShown.has(tipKey)) return;
+    if (!_tipsEnabled || !targetEl || _seenTips[tipKey] || _coachmarkQueuedOrShown.has(tipKey)) return;
     _coachmarkQueuedOrShown.add(tipKey);
     _coachmarkQueue.push({ tipKey, targetEl, title, body });
     if (!_coachmarkShowing) _showNextCoachmark();
@@ -20662,6 +20679,21 @@ async function doProfilePasswordChange() {
     _coachmarkTipKey = null;
     _coachmarkTargetEl = null;
     setTimeout(_showNextCoachmark, 150);
+  }
+
+  function toggleTipsEnabled(btn) {
+    const on = !btn.classList.contains('on');
+    btn.classList.toggle('on', on);
+    _tipsEnabled = on;
+    if (currentUser) sb.auth.updateUser({ data: { tips_enabled: on } }).catch(() => {});
+    showToast(on ? 'Tips turned on' : 'Tips turned off');
+  }
+
+  function resetTips() {
+    _seenTips = {};
+    _coachmarkQueuedOrShown.clear();
+    if (currentUser) sb.auth.updateUser({ data: { seen_tips: {} } }).catch(() => {});
+    showToast('✅ Tips reset — they\'ll pop up again as you go');
   }
 
   // ===== HANDLE PICKER =====

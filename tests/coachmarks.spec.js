@@ -195,3 +195,36 @@ test.describe('coachmarks · beacon tip', () => {
     await expect(page.locator('#coachmark')).not.toHaveClass(/show/);
   });
 });
+
+test.describe('coachmarks · settings toggle and reset', () => {
+  test('turning tips off in Privacy & Notifications suppresses new coachmarks', async ({ page }) => {
+    await bootAuthedApp(page, { sessionOver: { user_metadata: { guidance_dismissed: true } } });
+    await page.evaluate(() => openPrivacySettingsModal('r-you'));
+    await page.click('#tips-settings-toggle');
+    await page.evaluate(() => closePrivacySettingsModal());
+
+    await openC1(page);
+    await page.waitForTimeout(400);
+    await expect(page.locator('#coachmark')).not.toHaveClass(/show/);
+  });
+
+  test('tips-settings-toggle reflects persisted tips_enabled state on open', async ({ page }) => {
+    await bootAuthedApp(page, { sessionOver: { user_metadata: { guidance_dismissed: true, tips_enabled: false } } });
+    await page.evaluate(() => openPrivacySettingsModal('r-you'));
+    const hasOnClass = await page.locator('#tips-settings-toggle').evaluate(el => el.classList.contains('on'));
+    expect(hasOnClass).toBe(false);
+  });
+
+  test('reset tips clears seen_tips so a previously-dismissed tip can queue again', async ({ page }) => {
+    await bootAuthedApp(page, {
+      sessionOver: { user_metadata: { guidance_dismissed: true, seen_tips: { crew_visibility: true } } },
+    });
+    await page.evaluate(() => openPrivacySettingsModal('r-you'));
+    await page.click('#reset-tips-btn');
+    await page.evaluate(() => closePrivacySettingsModal());
+
+    await openC1(page);
+    await expect(page.locator('#coachmark')).toHaveClass(/show/);
+    await expect(page.locator('#coachmark')).toContainText('Secret vs Recruiting');
+  });
+});
