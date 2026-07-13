@@ -6467,24 +6467,13 @@
   </div>
 </div>
 
-<!-- Privacy & Permissions Modal -->
+<!-- Privacy & Notifications Modal -->
 <div class="modal-overlay" id="privacy-settings-overlay" onclick="if(event.target===this)closePrivacySettingsModal()">
   <div class="modal" style="max-width:420px;text-align:left;">
-    <div class="modal-title">🔒 Privacy &amp; Permissions</div>
-    <p style="font-size:0.8rem;color:var(--muted);margin-bottom:16px;line-height:1.5;">Control what your crew can do on your profile, and what other ravers can see.</p>
+    <div class="modal-title">⚙️ Privacy &amp; Notifications</div>
+    <p style="font-size:0.8rem;color:var(--muted);margin-bottom:16px;line-height:1.5;">Control what your crew can do on your profile, what other ravers can see, and how you get notified.</p>
     <div class="poll-modal-settings" id="privacy-settings-rows"><!-- filled by JS --></div>
-    <div class="modal-actions">
-      <button class="btn btn-primary" style="flex:1;" onclick="closePrivacySettingsModal()">Done</button>
-    </div>
-  </div>
-</div>
-
-<!-- Beacon Push Notifications Modal -->
-<div class="modal-overlay" id="push-settings-overlay" onclick="if(event.target===this)closePushSettingsModal()">
-  <div class="modal" style="max-width:420px;text-align:left;">
-    <div class="modal-title">🔔 Push Notifications</div>
-    <p style="font-size:0.8rem;color:var(--muted);margin-bottom:16px;line-height:1.5;">Get a native notification the instant a crewmate sends a Beacon, even with the app closed.</p>
-    <div class="poll-modal-settings">
+    <div class="poll-modal-settings" style="margin-top:12px;">
       <div class="poll-setting-row">
         <div>
           <div class="poll-setting-label">Beacon push notifications</div>
@@ -6494,7 +6483,7 @@
       </div>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-primary" style="flex:1;" onclick="closePushSettingsModal()">Done</button>
+      <button class="btn btn-primary" style="flex:1;" onclick="closePrivacySettingsModal()">Done</button>
     </div>
   </div>
 </div>
@@ -6636,9 +6625,7 @@
     <div class="notif-drawer-footer">
       <button class="notif-footer-btn edit-btn" onclick="notifDrawerEditProfile()">✏️ Edit Profile</button>
       <button class="notif-footer-btn pw-btn" onclick="notifDrawerChangePassword()">🔑 Password</button>
-      <button class="notif-footer-btn privacy-btn" onclick="notifDrawerPrivacySettings()">🔒 Privacy</button>
-      <button class="notif-footer-btn push-btn" onclick="notifDrawerPushSettings()">🔔 Push</button>
-      <button class="notif-footer-btn guide-btn" onclick="notifDrawerAppGuide()">📖 Guide</button>
+      <button class="notif-footer-btn privacy-btn" onclick="notifDrawerSettings()">⚙️ Settings</button>
     </div>
   </div>
 </div>
@@ -20186,7 +20173,7 @@ async function doProfilePasswordChange() {
   // Settings modal — owner-only (mirrors the entry-point gating on r.isYou),
   // each toggle saves immediately on tap via savePrivacySettings(), matching
   // the immediate-save convention already used by togglePollAnon().
-  function openPrivacySettingsModal(raverId) {
+  async function openPrivacySettingsModal(raverId) {
     const r = getRaver(raverId);
     if (!r || !r.isYou) return;
     const rows = [
@@ -20204,7 +20191,16 @@ async function doProfilePasswordChange() {
         </div>
         <button class="poll-anon-toggle${r[row.key] ? ' on' : ''}" data-key="${row.key}" onclick="togglePrivacySetting('${r.id}', this)"></button>
       </div>`).join('');
+    const pushToggle = document.getElementById('push-settings-toggle');
+    pushToggle.classList.remove('on');
     document.getElementById('privacy-settings-overlay').classList.add('open');
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        pushToggle.classList.toggle('on', !!sub);
+      } catch (_) {}
+    }
   }
 
   function togglePrivacySetting(raverId, btn) {
@@ -20216,23 +20212,6 @@ async function doProfilePasswordChange() {
 
   function closePrivacySettingsModal() {
     document.getElementById('privacy-settings-overlay').classList.remove('open');
-  }
-
-  // ── Beacon push notifications ─────────────────────────
-  async function openPushSettingsModal() {
-    const toggle = document.getElementById('push-settings-toggle');
-    toggle.classList.remove('on');
-    document.getElementById('push-settings-overlay').classList.add('open');
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-    try {
-      const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.getSubscription();
-      toggle.classList.toggle('on', !!sub);
-    } catch (_) {}
-  }
-
-  function closePushSettingsModal() {
-    document.getElementById('push-settings-overlay').classList.remove('open');
   }
 
   async function toggleBeaconPush(btn) {
@@ -20977,20 +20956,10 @@ async function doProfilePasswordChange() {
     openChangePwModal();
   }
 
-  function notifDrawerPrivacySettings() {
+  function notifDrawerSettings() {
     closeNotifDrawer();
     const me = squad.find(r => r.isYou);
     if (me) openPrivacySettingsModal(me.id);
-  }
-
-  function notifDrawerPushSettings() {
-    closeNotifDrawer();
-    openPushSettingsModal();
-  }
-
-  function notifDrawerAppGuide() {
-    closeNotifDrawer();
-    openAppGuide();
   }
 
   function openChangePwModal() {
