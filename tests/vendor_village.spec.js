@@ -1,10 +1,10 @@
 const { test, expect } = require('@playwright/test');
 const { bootAuthedApp, seedData, TEST_UID } = require('./helpers');
 
-// Vendor Village: the community vendor directory behind the Coming Soon tab's
-// 4-tap reveal gate. See dbAddVendor/dbLoadVendors/dbDeleteVendor,
+// Vendor Village: the community vendor directory, open to all users from the
+// Village nav tab. See dbAddVendor/dbLoadVendors/dbDeleteVendor,
 // dbToggleSaveVendor, dbUpsertVendorReview, dbSetVendorSponsored, and
-// vendorVillageTap/renderVendorVillage in app.html.
+// renderVendorVillage in app.html.
 
 function seedWithMod() {
   const data = seedData();
@@ -12,34 +12,14 @@ function seedWithMod() {
   return data;
 }
 
-// Taps the gate open and waits for the resulting data load to settle, so
-// callers don't race the fire-and-forget load kicked off by the 4th tap.
+// Opens the tab and waits for the resulting data load to settle, so callers
+// don't race the fire-and-forget load kicked off by renderVendorVillage().
 async function openVendorVillage(page) {
   await page.evaluate(() => switchTab('checklist'));
-  await page.evaluate(() => {
-    vendorVillageTap(); vendorVillageTap(); vendorVillageTap(); vendorVillageTap();
-  });
+  await page.evaluate(() => renderVendorVillage());
   await page.evaluate(async () => { await loadVendorVillageData(); });
   await expect(page.locator('#vendor-village-root')).toContainText('Browse');
 }
-
-test.describe('Vendor Village reveal gate', () => {
-  test('4 taps unlocks it, 3 taps does not, and a reload resets it', async ({ page }) => {
-    await bootAuthedApp(page);
-    await page.evaluate(() => switchTab('checklist'));
-
-    await page.evaluate(() => { vendorVillageTap(); vendorVillageTap(); vendorVillageTap(); });
-    expect(await page.evaluate(() => document.getElementById('vendor-village-root').innerHTML.trim())).toBe('');
-
-    await page.evaluate(() => vendorVillageTap());
-    await expect(page.locator('#vendor-village-root')).toContainText('Browse');
-
-    await page.reload();
-    await page.locator('#main-app').waitFor({ state: 'visible' });
-    await page.evaluate(() => switchTab('checklist'));
-    expect(await page.evaluate(() => document.getElementById('vendor-village-root').innerHTML.trim())).toBe('');
-  });
-});
 
 test.describe('Vendor Village · browse + save', () => {
   test('adding a vendor shows it in Browse and persists', async ({ page }) => {
