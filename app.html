@@ -1761,6 +1761,36 @@
   .vv-save-btn.saved { color: var(--neon-cyan); opacity: 1; }
   .vv-card { cursor: pointer; }
 
+  /* Village's own Browse/Saved/Add Vendor subtabs — yellow instead of the
+     shared .stats-subtab.active pink, without touching that class's other
+     users (Stats page, Crew Detail tabs). */
+  .vv-subtabs .stats-subtab.active {
+    background: var(--neon-yellow);
+    color: #000;
+    box-shadow: 0 0 18px -3px rgba(255,230,0,0.75), 0 0 0 1px rgba(255,230,0,0.4);
+  }
+
+  .vendor-search-wrap { position: relative; margin: 16px 0; }
+  .vendor-search {
+    width: 100%; box-sizing: border-box;
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 10px 14px 10px 38px;
+    color: var(--text);
+    font-size: 0.9rem;
+    font-family: 'Outfit', sans-serif;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .vendor-search:focus { border-color: rgba(255,230,0,0.5); }
+  .vendor-search::placeholder { color: var(--muted); }
+  .vendor-search-icon {
+    position: absolute; left: 13px; top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.85rem; pointer-events: none;
+  }
+
   /* Crew cosigns (Feature 1) — cyan accent, ties it visually to crew identity. */
   .vv-cosign-line { color: var(--neon-cyan); opacity: 0.85; }
 
@@ -6264,7 +6294,7 @@
       </div>
 
       <div id="vv-live-header" class="section-header" style="display:none;margin-bottom:16px;">
-        <div class="section-title">Vendor Village 🏪</div>
+        <div class="section-title">Village 🏪</div>
       </div>
 
       <div id="vendor-village-root" style="width:100%;"></div>
@@ -14912,7 +14942,7 @@ async function doProfilePasswordChange() {
       const labelFull = tab.querySelector('.tab-label-full');
       const labelShort = tab.querySelector('.tab-label-short');
       if (icon) icon.textContent = '🏪';
-      if (labelFull) labelFull.textContent = 'Vendor Village';
+      if (labelFull) labelFull.textContent = 'Village';
       if (labelShort) labelShort.textContent = 'Village';
     }
   }
@@ -14928,7 +14958,7 @@ async function doProfilePasswordChange() {
 
   function vendorVillageShellHTML() {
     return `
-      <div class="stats-subtabs">
+      <div class="stats-subtabs vv-subtabs">
         <button class="stats-subtab${vendorVillageTab === 'browse' ? ' active' : ''}" onclick="switchVendorTab('browse', this)">🏪 Browse</button>
         <button class="stats-subtab${vendorVillageTab === 'saved' ? ' active' : ''}" onclick="switchVendorTab('saved', this)">💾 Saved</button>
         <button class="stats-subtab${vendorVillageTab === 'submit' ? ' active' : ''}" onclick="switchVendorTab('submit', this)">➕ Add Vendor</button>
@@ -15035,6 +15065,7 @@ async function doProfilePasswordChange() {
 
   // ===== VENDOR VILLAGE — Browse panel =====
   let _vendorCategoryFilter = null;
+  let _vendorSearchQuery = '';
 
   function renderVendorBrowsePanel() {
     const panel = document.getElementById('vv-browse-panel');
@@ -15043,18 +15074,41 @@ async function doProfilePasswordChange() {
   }
 
   function vendorBrowsePanelHTML() {
+    return `
+      <div class="vendor-search-wrap">
+        <span class="vendor-search-icon">🔍</span>
+        <input class="vendor-search" id="vendor-search" type="text" placeholder="Search vendors…"
+          value="${escHtml(_vendorSearchQuery)}" oninput="onVendorSearchInput(this.value)" autocomplete="off">
+      </div>
+      <div id="vv-browse-list">${vendorBrowseListHTML()}</div>`;
+  }
+
+  // Matches on name, category, and review text (Feature: vendor search) —
+  // lets "hydration" or "friendly" surface vendors even when the query
+  // isn't in the vendor's own name.
+  function vendorMatchesSearch(v, query) {
+    if (!query) return true;
+    const catLabel = (VENDOR_CATEGORY_LABELS[v.category] || v.category || '').toLowerCase();
+    if (v.name.toLowerCase().includes(query) || catLabel.includes(query)) return true;
+    return (vendorReviewsCache[v.id] || []).some(r => (r.body || '').toLowerCase().includes(query));
+  }
+
+  function vendorBrowseListHTML() {
     const cats = [...new Set(vendors.map(v => v.category))];
     const filterPills = cats.map(cat => {
       const active = _vendorCategoryFilter === cat;
       return `<button class="jam-filter-pill${active ? ' active' : ''}"
         onclick="toggleVendorCategoryFilter('${escHtml(cat)}')">${VENDOR_CATEGORY_LABELS[cat] || escHtml(cat)}</button>`;
     }).join('');
-    const visible = _vendorCategoryFilter ? vendors.filter(v => v.category === _vendorCategoryFilter) : vendors;
+    const query = _vendorSearchQuery.trim().toLowerCase();
+    const visible = vendors
+      .filter(v => !_vendorCategoryFilter || v.category === _vendorCategoryFilter)
+      .filter(v => vendorMatchesSearch(v, query));
     const cards = visible.map(v => vendorCardHTML(v)).join('');
     const emptyMsg = vendors.length === 0
       ? `<div class="jam-empty es-block"><div class="es-icon">🏪</div><div class="es-headline">No vendors yet</div><div class="es-sub">Be the first to post a vendor you love — merch, kandi, glass, gear, whatever keeps the fam supplied.</div></div>`
       : visible.length === 0
-      ? `<div class="jam-empty" style="text-align:center;padding:20px 0;color:var(--muted);font-size:0.82rem;">No vendors in this category yet</div>`
+      ? `<div class="jam-empty" style="text-align:center;padding:20px 0;color:var(--muted);font-size:0.82rem;">${query ? `No vendors match “${escHtml(_vendorSearchQuery.trim())}”` : 'No vendors in this category yet'}</div>`
       : '';
     return `
       ${filterPills ? `<div class="jam-filter-bar" style="margin-top:16px;">${filterPills}</div>` : ''}
@@ -15064,9 +15118,19 @@ async function doProfilePasswordChange() {
       </div>`;
   }
 
+  function renderVendorBrowseList() {
+    const list = document.getElementById('vv-browse-list');
+    if (list) list.innerHTML = vendorBrowseListHTML();
+  }
+
+  function onVendorSearchInput(val) {
+    _vendorSearchQuery = val;
+    renderVendorBrowseList();
+  }
+
   function toggleVendorCategoryFilter(cat) {
     _vendorCategoryFilter = _vendorCategoryFilter === cat ? null : cat;
-    renderVendorBrowsePanel();
+    renderVendorBrowseList();
   }
 
   function vendorPlaceholderEmoji(category) {
