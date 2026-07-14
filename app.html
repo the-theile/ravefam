@@ -4751,7 +4751,7 @@
     margin: 0 0 20px;
     font-family: 'Outfit', sans-serif;
     font-weight: 700;
-    font-size: 0.85rem;
+    font-size: 0.98rem;
     text-transform: uppercase;
     letter-spacing: 2px;
   }
@@ -4777,6 +4777,12 @@
     opacity: 0.65;
     text-shadow: none;
     letter-spacing: 1px;
+  }
+  .section-desc {
+    margin: -12px 0 16px;
+    font-size: 0.78rem;
+    color: var(--muted);
+    line-height: 1.5;
   }
 
   .claim-slot-card {
@@ -5237,7 +5243,7 @@
 
   /* ===== FAM PINS — Crew Achievements ===== */
   .fam-pins-header {
-    font-family:'Outfit',sans-serif; font-weight:800; font-size:0.85rem;
+    font-family:'Outfit',sans-serif; font-weight:800; font-size:0.98rem;
     letter-spacing:1px; color:var(--neon-cyan);
     text-shadow:0 0 14px rgba(0,245,255,0.6);
   }
@@ -6614,6 +6620,20 @@
         </div>
         <button class="poll-anon-toggle" id="push-settings-toggle" onclick="toggleBeaconPush(this)"></button>
       </div>
+      <div class="poll-setting-row">
+        <div>
+          <div class="poll-setting-label">Tips &amp; hints</div>
+          <div class="poll-setting-hint">Show coachmark tips as you discover new features</div>
+        </div>
+        <button class="poll-anon-toggle" id="tips-settings-toggle" onclick="toggleTipsEnabled(this)"></button>
+      </div>
+      <div class="poll-setting-row">
+        <div>
+          <div class="poll-setting-label">Reset tips</div>
+          <div class="poll-setting-hint">See all tips again, including ones already dismissed</div>
+        </div>
+        <button type="button" class="btn btn-ghost" id="reset-tips-btn" style="padding:6px 14px;font-size:0.72rem;" onclick="resetTips()">Reset</button>
+      </div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-primary" style="flex:1;" onclick="closePrivacySettingsModal()">Done</button>
@@ -7187,6 +7207,7 @@
 
   let currentUser = null;  // holds the logged-in Supabase user object
   let _seenTips = {};  // local mirror of user_metadata.seen_tips — coachmarks already shown
+  let _tipsEnabled = true;  // local mirror of user_metadata.tips_enabled — master on/off for coachmarks
   let moderatorIds = new Set();  // auth user ids present in the moderators table
   async function dbLoadModerators() {
     if (!currentUser) return;
@@ -7659,6 +7680,7 @@ async function doProfilePasswordChange() {
   function showApp(user) {
     currentUser = user;
     _seenTips = { ...(user?.user_metadata?.seen_tips || {}) };
+    _tipsEnabled = user?.user_metadata?.tips_enabled !== false;
     maybeInitEruda();
     document.getElementById('claim-intercept').classList.remove('open');
     document.getElementById('app-loading').classList.add('hidden');
@@ -11689,6 +11711,9 @@ async function doProfilePasswordChange() {
     if (opts && opts.tab === 'huddle') {
       const huddleTabBtn = document.querySelector('#page-crew-detail .stats-subtab:nth-child(3)');
       if (huddleTabBtn) switchCrewDetailTab('huddle', huddleTabBtn);
+    } else if (opts && opts.tab === 'roster') {
+      const rosterTabBtn = document.querySelector('#page-crew-detail .stats-subtab:nth-child(2)');
+      if (rosterTabBtn) switchCrewDetailTab('roster', rosterTabBtn);
     }
   }
   function closeDetail() {
@@ -12155,6 +12180,23 @@ async function doProfilePasswordChange() {
       ${totemBlock}
       ${crewNextFestBlock(crew)}
       ${buildCrewFeatureTilesHTML(crew, isSecret)}
+      <div style="margin-top:24px;">
+        <button class="btn btn-ghost" style="width:100%;padding:12px;font-size:0.88rem;" onclick="closeDetail()">← Back to My Crews</button>
+      </div>`;
+
+    // Member list + add-member control, plus crew status and leave/report/
+    // edit/delete actions — the Roster tab.
+    const rosterPanelHTML = `
+      ${crew.isLead && isRecruiting ? `
+      <div class="crew-invite-row">
+        <button class="btn btn-ghost crew-invite-link-btn" onclick="generateAndShareCrewInvite('${crew.id}')">🔗 Copy Invite Link</button>
+        <span class="crew-invite-hint">Share with anyone — they can join straight from the link</span>
+      </div>` : ''}
+      ${addMemberControl}
+      <div class="form-group crew-members-section">
+        <div class="section-banner"><span class="banner-inner">Crew Members</span></div>
+        <div class="detail-members">${memberList}</div>
+      </div>
       <div class="crew-status-zone">
         <div class="crew-status-zone-header">
           <span class="crew-status-zone-label">Status</span>
@@ -12177,23 +12219,7 @@ async function doProfilePasswordChange() {
           const reportBtn = currentUser
             ? `<button class="btn btn-ghost" style="width:100%;padding:10px;font-size:0.8rem;margin-top:${leaveBtn ? '8px' : '0'};" onclick="showReportModal('crew', '${crew.id}')">🚩 Report Crew</button>` : '';
           return (leaveBtn || reportBtn) ? `<div class="danger-zone">${leaveBtn}${reportBtn}</div>` : '';
-        })()}
-      <div style="margin-top:24px;">
-        <button class="btn btn-ghost" style="width:100%;padding:12px;font-size:0.88rem;" onclick="closeDetail()">← Back to My Crews</button>
-      </div>`;
-
-    // Member list + add-member control — the Roster tab.
-    const rosterPanelHTML = `
-      ${crew.isLead && isRecruiting ? `
-      <div class="crew-invite-row">
-        <button class="btn btn-ghost crew-invite-link-btn" onclick="generateAndShareCrewInvite('${crew.id}')">🔗 Copy Invite Link</button>
-        <span class="crew-invite-hint">Share with anyone — they can join straight from the link</span>
-      </div>` : ''}
-      ${addMemberControl}
-      <div class="form-group crew-members-section">
-        <div class="section-banner"><span class="banner-inner">Crew Members</span></div>
-        <div class="detail-members">${memberList}</div>
-      </div>`;
+        })()}`;
 
     document.getElementById('page-crew-detail').innerHTML = `
       <button class="profile-back" onclick="closeDetail()">← My Crews</button>
@@ -12216,13 +12242,6 @@ async function doProfilePasswordChange() {
       </div>
       </div>
     `;
-    if (crew.isLead) {
-      queueCoachmark('crew_visibility', {
-        targetEl: document.querySelector('#page-crew-detail .crew-status-zone'),
-        title: '🔴🟢 Secret vs Recruiting',
-        body: "Secret keeps your crew invisible while you set it up — flip to Recruiting when you're ready to let the tribe in. No going back to Secret once you do."
-      });
-    }
   }
 
   // Toggle between the Overview / Roster / Huddle tabs on the crew detail page.
@@ -12236,6 +12255,16 @@ async function doProfilePasswordChange() {
     document.getElementById('crew-detail-panel-overview').style.display = tab === 'overview' ? '' : 'none';
     document.getElementById('crew-detail-panel-roster').style.display = tab === 'roster' ? '' : 'none';
     document.getElementById('crew-detail-panel-huddle').style.display = tab === 'huddle' ? '' : 'none';
+    if (tab === 'roster') {
+      const crew = getCrew(activeDetailId);
+      if (crew && crew.isLead) {
+        queueCoachmark('crew_visibility', {
+          targetEl: document.querySelector('#page-crew-detail .crew-status-zone'),
+          title: '🔴🟢 Secret vs Recruiting',
+          body: "Secret keeps your crew invisible while you set it up — flip to Recruiting when you're ready to let the tribe in. No going back to Secret once you do."
+        });
+      }
+    }
     if (tab === 'huddle') {
       openHuddle(activeDetailId).then(() => {
         queueCoachmark('huddle_rooms', {
@@ -13257,6 +13286,7 @@ async function doProfilePasswordChange() {
     return `
       <div class="form-group dream-board-section" id="dream-board-section">
         <div class="section-banner"><span class="banner-inner">✨ Dream Board <span class="banner-subtitle">· crew wish list</span></span></div>
+        <p class="section-desc">Pin the festivals and shows your crew wants to hit next — a shared wish list anyone can add to, no invite required.</p>
         ${uid ? `
         <div class="dream-add-row">
           <input class="form-input dream-pin-input" id="dream-pin-input"
@@ -13399,6 +13429,7 @@ async function doProfilePasswordChange() {
     return `
       <div class="form-group archive-section" id="archive-section">
         <div class="section-banner"><span class="banner-inner">📸 The Archive <span class="banner-subtitle">· crew photo drops</span></span></div>
+        <p class="section-desc">Drop links to your crew's photo albums and videos so everyone can relive the chaos in one place.</p>
         ${uid ? `
         <div class="archive-add-area">
           <div class="archive-add-row">
@@ -13451,6 +13482,7 @@ async function doProfilePasswordChange() {
     return `
       <div class="form-group crew-history-section" id="crew-history-section">
         <div class="section-banner"><span class="banner-inner">📜 Crew History <span class="banner-subtitle">· who did what, when</span></span></div>
+        <p class="section-desc">A running log of joins, leaves, and status changes — the story of how your crew came together.</p>
         ${buildHistoryListHTML(rows, { showReason: mod, emptyMessage: "It'll fill in as the crew makes moves." })}
         ${showMoreBtn}
       </div>`;
@@ -13602,6 +13634,7 @@ async function doProfilePasswordChange() {
     return `
       <div class="form-group fam-poll-section" id="fam-poll-section">
         <div class="section-banner"><span class="banner-inner">🗳️ FAM Poll <span class="banner-subtitle">· crew decisions</span></span></div>
+        <p class="section-desc">Put a decision to a vote — which stage, what time, camp or crash — and let the crew steer it.</p>
         ${uid ? `<button class="btn btn-ghost poll-drop-btn"
           data-crew-id="${escHtml(crewId)}"
           onclick="openCreatePollModal(this.dataset.crewId)">+ Drop a poll</button>` : ''}
@@ -14252,6 +14285,7 @@ async function doProfilePasswordChange() {
     return `
       <div class="form-group jam-section" id="jam-section">
         <div class="section-banner"><span class="banner-inner">🎵 FAM Jams <span class="banner-subtitle">· crew playlist drops</span></span></div>
+        <p class="section-desc">Share playlists with the crew so everyone's hyped for the same sets before you're even there.</p>
         ${uid ? `<button class="btn btn-ghost jam-drop-btn" onclick="openAddJamModal('${escHtml(crewId)}')">+ Drop a playlist</button>` : ''}
         ${filterBar}
         <div class="jam-cards-list">
@@ -16095,6 +16129,7 @@ async function doProfilePasswordChange() {
     return `
       <div class="form-group" id="fam-pins-section" style="margin-bottom:8px;">
         <label class="form-label fam-pins-header">✨ FAM Pins <span style="font-weight:400;color:var(--muted);font-size:0.75rem;">· crew achievements</span></label>
+        <p class="section-desc" style="margin-top:2px;">Badges and achievements your crew and its members earn along the way.</p>
         ${crewFeedEvents.length ? `<div class="achievement-feed-list">${feedCards}</div>` : ''}
         <div class="fam-pins-subsection-label">🎪 Crew Badges</div>
         <div class="fam-pin-grid">${crewPins}</div>
@@ -20418,6 +20453,7 @@ async function doProfilePasswordChange() {
       </div>`).join('');
     const pushToggle = document.getElementById('push-settings-toggle');
     pushToggle.classList.remove('on');
+    document.getElementById('tips-settings-toggle').classList.toggle('on', _tipsEnabled);
     document.getElementById('privacy-settings-overlay').classList.add('open');
     if ('serviceWorker' in navigator && 'PushManager' in window) {
       try {
@@ -20588,7 +20624,7 @@ async function doProfilePasswordChange() {
   const _coachmarkQueuedOrShown = new Set(); // this-session guard against duplicate enqueues before dismissal
 
   function queueCoachmark(tipKey, { targetEl, title, body }) {
-    if (!targetEl || _seenTips[tipKey] || _coachmarkQueuedOrShown.has(tipKey)) return;
+    if (!_tipsEnabled || !targetEl || _seenTips[tipKey] || _coachmarkQueuedOrShown.has(tipKey)) return;
     _coachmarkQueuedOrShown.add(tipKey);
     _coachmarkQueue.push({ tipKey, targetEl, title, body });
     if (!_coachmarkShowing) _showNextCoachmark();
@@ -20662,6 +20698,21 @@ async function doProfilePasswordChange() {
     _coachmarkTipKey = null;
     _coachmarkTargetEl = null;
     setTimeout(_showNextCoachmark, 150);
+  }
+
+  function toggleTipsEnabled(btn) {
+    const on = !btn.classList.contains('on');
+    btn.classList.toggle('on', on);
+    _tipsEnabled = on;
+    if (currentUser) sb.auth.updateUser({ data: { tips_enabled: on } }).catch(() => {});
+    showToast(on ? 'Tips turned on' : 'Tips turned off');
+  }
+
+  function resetTips() {
+    _seenTips = {};
+    _coachmarkQueuedOrShown.clear();
+    if (currentUser) sb.auth.updateUser({ data: { seen_tips: {} } }).catch(() => {});
+    showToast('✅ Tips reset — they\'ll pop up again as you go');
   }
 
   // ===== HANDLE PICKER =====

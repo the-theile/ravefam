@@ -9,10 +9,10 @@ async function openC1(page, opts) {
 }
 
 test.describe('coachmarks · crew visibility tip', () => {
-  test('shows once on a crew lead\'s own crew detail page, anchored to the status zone', async ({ page }) => {
+  test('shows once when a crew lead opens the Roster tab, anchored to the status zone', async ({ page }) => {
     const errors = collectPageErrors(page);
     await bootAuthedApp(page, { sessionOver: { user_metadata: { guidance_dismissed: true } } });
-    await openC1(page);
+    await openC1(page, { tab: 'roster' });
 
     const coachmark = page.locator('#coachmark');
     await expect(coachmark).toHaveClass(/show/);
@@ -22,7 +22,7 @@ test.describe('coachmarks · crew visibility tip', () => {
 
   test('dismissing persists — does not re-show later in the same session', async ({ page }) => {
     await bootAuthedApp(page, { sessionOver: { user_metadata: { guidance_dismissed: true } } });
-    await openC1(page);
+    await openC1(page, { tab: 'roster' });
 
     const coachmark = page.locator('#coachmark');
     await expect(coachmark).toHaveClass(/show/);
@@ -31,7 +31,7 @@ test.describe('coachmarks · crew visibility tip', () => {
 
     // Leave and come back — should not reappear.
     await page.evaluate(() => closeDetail());
-    await openC1(page);
+    await openC1(page, { tab: 'roster' });
     await page.waitForTimeout(400);
     await expect(coachmark).not.toHaveClass(/show/);
   });
@@ -40,7 +40,7 @@ test.describe('coachmarks · crew visibility tip', () => {
     await bootAuthedApp(page, {
       sessionOver: { user_metadata: { guidance_dismissed: true, seen_tips: { crew_visibility: true } } },
     });
-    await openC1(page);
+    await openC1(page, { tab: 'roster' });
     await page.waitForTimeout(400);
     await expect(page.locator('#coachmark')).not.toHaveClass(/show/);
   });
@@ -101,10 +101,12 @@ test.describe('coachmarks · one at a time', () => {
   test('a second queued tip only appears after the first is dismissed', async ({ page }) => {
     await bootAuthedApp(page, { sessionOver: { user_metadata: { guidance_dismissed: true } } });
 
-    // Opening c1 queues+shows crew_visibility; switching to Huddle right after
-    // queues huddle_rooms behind it while crew_visibility is still showing.
+    // Opening the Roster tab queues+shows crew_visibility; switching to Huddle
+    // right after queues huddle_rooms behind it while crew_visibility still shows.
     await page.evaluate(async () => {
       await openDetail('c1');
+      const rosterBtn = document.querySelector('#page-crew-detail .stats-subtab:nth-child(2)');
+      switchCrewDetailTab('roster', rosterBtn);
       const huddleBtn = document.querySelector('#page-crew-detail .stats-subtab:nth-child(3)');
       switchCrewDetailTab('huddle', huddleBtn);
     });
@@ -193,5 +195,38 @@ test.describe('coachmarks · beacon tip', () => {
     await openC1(page, { tab: 'huddle' });
     await page.waitForTimeout(400);
     await expect(page.locator('#coachmark')).not.toHaveClass(/show/);
+  });
+});
+
+test.describe('coachmarks · settings toggle and reset', () => {
+  test('turning tips off in Privacy & Notifications suppresses new coachmarks', async ({ page }) => {
+    await bootAuthedApp(page, { sessionOver: { user_metadata: { guidance_dismissed: true } } });
+    await page.evaluate(() => openPrivacySettingsModal('r-you'));
+    await page.click('#tips-settings-toggle');
+    await page.evaluate(() => closePrivacySettingsModal());
+
+    await openC1(page);
+    await page.waitForTimeout(400);
+    await expect(page.locator('#coachmark')).not.toHaveClass(/show/);
+  });
+
+  test('tips-settings-toggle reflects persisted tips_enabled state on open', async ({ page }) => {
+    await bootAuthedApp(page, { sessionOver: { user_metadata: { guidance_dismissed: true, tips_enabled: false } } });
+    await page.evaluate(() => openPrivacySettingsModal('r-you'));
+    const hasOnClass = await page.locator('#tips-settings-toggle').evaluate(el => el.classList.contains('on'));
+    expect(hasOnClass).toBe(false);
+  });
+
+  test('reset tips clears seen_tips so a previously-dismissed tip can queue again', async ({ page }) => {
+    await bootAuthedApp(page, {
+      sessionOver: { user_metadata: { guidance_dismissed: true, seen_tips: { crew_visibility: true } } },
+    });
+    await page.evaluate(() => openPrivacySettingsModal('r-you'));
+    await page.click('#reset-tips-btn');
+    await page.evaluate(() => closePrivacySettingsModal());
+
+    await openC1(page, { tab: 'roster' });
+    await expect(page.locator('#coachmark')).toHaveClass(/show/);
+    await expect(page.locator('#coachmark')).toContainText('Secret vs Recruiting');
   });
 });
