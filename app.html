@@ -3252,6 +3252,18 @@
     transform: scale(1.08);
     box-shadow: 0 0 0 2px rgba(255,255,255,0.15);
   }
+  .totem-icon-current {
+    cursor: pointer;
+    max-width: 240px;
+    margin: 0 auto;
+  }
+  .totem-icon-current .totem-mark-lg { height: 130px; }
+  .totem-icon-current-hint {
+    text-align: center;
+    margin-top: 8px;
+    color: var(--muted);
+    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.78rem;
+  }
 
   /* Totem photo crop/zoom modal */
   .totem-crop-frame {
@@ -10240,6 +10252,7 @@ async function doProfilePasswordChange() {
       crew.totemIcon = iconKey;
       crew.totemPhotoUrl = null;
       if (currentUser) await sb.from('crews').update({ totem_icon: iconKey, totem_photo_url: null }).eq('id', String(crewId));
+      _totemIconGridRevealed[crewId] = false;
       renderCrews();
       renderDetail(crewId);
       showToast('✅ Totem icon set!');
@@ -10296,9 +10309,18 @@ async function doProfilePasswordChange() {
   // Stays hidden until the lead explicitly taps the "Photo" tab, so opening the
   // crew page doesn't dump edit controls under a totem that's already set.
   const _totemPhotoActionsRevealed = {};
+  // Same idea for the icon picker grid: once an icon is set, the grid stays
+  // hidden behind the current icon until the lead taps it (or the tab) again.
+  const _totemIconGridRevealed = {};
   function setCrewTotemTab(crewId, tab) {
     _totemTabByCrewId[crewId] = tab;
     if (tab === 'photo') _totemPhotoActionsRevealed[crewId] = true;
+    if (tab === 'icon') _totemIconGridRevealed[crewId] = true;
+    renderDetail(crewId);
+  }
+
+  function revealTotemIconGrid(crewId) {
+    _totemIconGridRevealed[crewId] = true;
     renderDetail(crewId);
   }
 
@@ -12128,15 +12150,25 @@ async function doProfilePasswordChange() {
               <input type="file" accept="image/*" style="display:none" data-crew-id="${crew.id}" onchange="handleTotemPhotoUpload(event,this.dataset.crewId)">
             </label>`;
       } else {
-        const iconGrid = TOTEM_ICONS.map(({key, glyph, label}) => `
-          <div class="totem-icon-swatch${crew.totemIcon===key?' selected':''}"
-               style="background:${crew.gradient}" title="${label}"
-               onclick="setCrewTotemIcon('${crew.id}','${key}')">${glyph}</div>
-        `).join('');
-        totemBody = `
-          <div class="totem-icon-grid">${iconGrid}</div>
-          ${crew.totemIcon ? `<button class="btn btn-ghost" style="width:100%;padding:9px;font-size:0.78rem;color:var(--neon-pink);margin-top:8px;"
-            onclick="removeCrewTotemIcon('${crew.id}')">🗑️ Remove</button>` : ''}`;
+        const iconGridRevealed = !!_totemIconGridRevealed[crew.id];
+        if (crew.totemIcon && !iconGridRevealed) {
+          const glyph = TOTEM_ICON_MAP[crew.totemIcon] || '✦';
+          totemBody = `
+            <div class="totem-icon-current" data-crew-id="${crew.id}" onclick="revealTotemIconGrid(this.dataset.crewId)">
+              <div class="crew-totem-icon-mark totem-mark-lg" style="background:${crew.gradient}">${glyph}</div>
+              <div class="totem-icon-current-hint">Tap to change icon</div>
+            </div>`;
+        } else {
+          const iconGrid = TOTEM_ICONS.map(({key, glyph, label}) => `
+            <div class="totem-icon-swatch${crew.totemIcon===key?' selected':''}"
+                 style="background:${crew.gradient}" title="${label}"
+                 onclick="setCrewTotemIcon('${crew.id}','${key}')">${glyph}</div>
+          `).join('');
+          totemBody = `
+            <div class="totem-icon-grid">${iconGrid}</div>
+            ${crew.totemIcon ? `<button class="btn btn-ghost" style="width:100%;padding:9px;font-size:0.78rem;color:var(--neon-pink);margin-top:8px;"
+              onclick="removeCrewTotemIcon('${crew.id}')">🗑️ Remove</button>` : ''}`;
+        }
       }
       totemBlock = `
         <div class="form-group crew-totem-section">
