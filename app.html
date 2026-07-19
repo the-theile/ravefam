@@ -342,6 +342,12 @@
     gap: 10px;
     margin-bottom: 14px;
   }
+  .crew-card-head-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
   .crew-name {
     font-family: 'Outfit', sans-serif;
     font-weight: 800;
@@ -6485,9 +6491,9 @@
   </div>
 </div>
 
-<!-- Crew Edit Modal (rename + recolour) -->
+<!-- Crew Edit Modal (rename, recolour + totem) -->
 <div class="modal-overlay" id="crew-edit-overlay" onclick="if(event.target===this)closeCrewEditModal()">
-  <div class="modal" id="crew-edit-modal-content">
+  <div class="modal" id="crew-edit-modal-content" style="max-height:88vh;overflow-y:auto;">
     <!-- filled by JS -->
   </div>
 </div>
@@ -10253,6 +10259,7 @@ async function doProfilePasswordChange() {
       if (currentUser) await sb.from('crews').update({ totem_photo_url: url, totem_icon: null }).eq('id', String(crewId));
       renderCrews();
       renderDetail(crewId);
+      refreshCrewEditTotemSection(crewId);
       showToast('✅ Totem photo set!');
     } catch(e) {
       console.error('Totem upload error', e);
@@ -10273,6 +10280,7 @@ async function doProfilePasswordChange() {
         if (currentUser) await sb.from('crews').update({ totem_photo_url: null }).eq('id', String(crewId));
         renderCrews();
         renderDetail(crewId);
+        refreshCrewEditTotemSection(crewId);
         showToast('Totem photo removed');
       }
     });
@@ -10289,6 +10297,7 @@ async function doProfilePasswordChange() {
       _totemIconGridRevealed[crewId] = false;
       renderCrews();
       renderDetail(crewId);
+      refreshCrewEditTotemSection(crewId);
       showToast('✅ Totem icon set!');
     };
     if (crew.totemPhotoUrl) {
@@ -10310,6 +10319,7 @@ async function doProfilePasswordChange() {
     if (currentUser) await sb.from('crews').update({ totem_icon: null }).eq('id', String(crewId));
     renderCrews();
     renderDetail(crewId);
+    refreshCrewEditTotemSection(crewId);
     showToast('Totem icon removed');
   }
 
@@ -10323,6 +10333,7 @@ async function doProfilePasswordChange() {
       if (currentUser) await sb.from('crews').update({ totem_photo_url: null, totem_icon: null }).eq('id', String(crewId));
       renderCrews();
       renderDetail(crewId);
+      refreshCrewEditTotemSection(crewId);
       showToast('Totem cleared');
     };
     if (crew.totemPhotoUrl) {
@@ -10350,12 +10361,86 @@ async function doProfilePasswordChange() {
     _totemTabByCrewId[crewId] = tab;
     if (tab === 'photo') _totemPhotoActionsRevealed[crewId] = true;
     if (tab === 'icon') _totemIconGridRevealed[crewId] = true;
-    renderDetail(crewId);
+    refreshCrewEditTotemSection(crewId);
   }
 
   function revealTotemIconGrid(crewId) {
     _totemIconGridRevealed[crewId] = true;
-    renderDetail(crewId);
+    refreshCrewEditTotemSection(crewId);
+  }
+
+  // Builds the Crew Totem editor (mode toggle + whichever body is active).
+  // Lives only inside the Edit Crew modal — refreshed in place via
+  // refreshCrewEditTotemSection() after every change instead of re-rendering
+  // the whole modal, so in-progress name/vibe/colour edits aren't lost.
+  function crewTotemEditorHTML(crew) {
+    const totemTab = _totemTabByCrewId[crew.id] || (crew.totemPhotoUrl ? 'photo' : crew.totemIcon ? 'icon' : 'none');
+    const totemToggle = `
+      <div class="totem-mode-toggle">
+        <button class="totem-mode-btn ${totemTab==='photo'?'active':''}" onclick="setCrewTotemTab('${crew.id}','photo')">📸 Photo</button>
+        <button class="totem-mode-btn ${totemTab==='icon'?'active':''}" onclick="setCrewTotemTab('${crew.id}','icon')">✦ Icon</button>
+        <button class="totem-mode-btn ${totemTab==='none'?'active':''}" onclick="setCrewTotemTab('${crew.id}','none')">🚫 None</button>
+      </div>`;
+    let totemBody;
+    if (totemTab === 'none') {
+      const hasTotem = !!(crew.totemPhotoUrl || crew.totemIcon);
+      totemBody = hasTotem ? `
+          <div style="font-size:0.85rem;color:var(--muted);margin-bottom:10px;line-height:1.5;">Your crew currently has a totem set. Clear it to show no totem at all — your crew name will hold it down instead.</div>
+          <button class="btn btn-ghost" style="width:100%;padding:9px;font-size:0.78rem;color:var(--neon-pink);" onclick="clearCrewTotem('${crew.id}')">🚫 Clear totem</button>` : `
+          <div style="font-size:0.85rem;color:var(--muted);line-height:1.5;">No totem set — your crew name is holding it down. Pick Photo or Icon anytime to add one.</div>`;
+    } else if (totemTab === 'photo') {
+      const actionsRevealed = !!_totemPhotoActionsRevealed[crew.id];
+      totemBody = crew.totemPhotoUrl ? `
+          <div class="totem-photo-wrap">
+            <img src="${escHtml(crew.totemPhotoUrl)}" alt="Crew totem">
+            ${actionsRevealed ? `
+            <div class="totem-photo-actions">
+              <button class="btn btn-ghost" style="flex:1;padding:9px;font-size:0.78rem;"
+                data-crew-id="${crew.id}" onclick="editTotemPhoto(this.dataset.crewId)">✂️ Edit</button>
+              <label class="btn btn-ghost" style="flex:1;padding:9px;font-size:0.78rem;text-align:center;cursor:pointer;">
+                🔄 Replace
+                <input type="file" accept="image/*" style="display:none" data-crew-id="${crew.id}" onchange="handleTotemPhotoUpload(event,this.dataset.crewId)">
+              </label>
+              <button class="btn btn-ghost" style="flex:1;padding:9px;font-size:0.78rem;color:var(--neon-pink);"
+                data-crew-id="${crew.id}" onclick="removeTotemPhoto(this.dataset.crewId)">🗑️ Remove</button>
+            </div>` : ''}
+          </div>` : `
+          <label class="totem-upload-area">
+            📸 <span>Upload a totem photo</span>
+            <input type="file" accept="image/*" style="display:none" data-crew-id="${crew.id}" onchange="handleTotemPhotoUpload(event,this.dataset.crewId)">
+          </label>`;
+    } else {
+      const iconGridRevealed = !!_totemIconGridRevealed[crew.id];
+      if (crew.totemIcon && !iconGridRevealed) {
+        const glyph = TOTEM_ICON_MAP[crew.totemIcon] || '✦';
+        totemBody = `
+          <div class="totem-icon-current" data-crew-id="${crew.id}" onclick="revealTotemIconGrid(this.dataset.crewId)">
+            <div class="crew-totem-icon-mark totem-mark-lg" style="background:${crew.gradient}">${glyph}</div>
+            <div class="totem-icon-current-hint">Tap to change icon</div>
+          </div>`;
+      } else {
+        const iconGrid = TOTEM_ICONS.map(({key, glyph, label}) => `
+          <div class="totem-icon-swatch${crew.totemIcon===key?' selected':''}"
+               style="background:${crew.gradient}" title="${label}"
+               onclick="setCrewTotemIcon('${crew.id}','${key}')">${glyph}</div>
+        `).join('');
+        totemBody = `
+          <div class="totem-icon-grid">${iconGrid}</div>
+          ${crew.totemIcon ? `<button class="btn btn-ghost" style="width:100%;padding:9px;font-size:0.78rem;color:var(--neon-pink);margin-top:8px;"
+            onclick="removeCrewTotemIcon('${crew.id}')">🗑️ Remove</button>` : ''}`;
+      }
+    }
+    return `
+      <div class="section-banner"><span class="banner-inner">📸 Crew Totem</span></div>
+      ${totemToggle}
+      ${totemBody}`;
+  }
+
+  function refreshCrewEditTotemSection(crewId) {
+    const crew = getCrew(crewId);
+    const el = document.getElementById('crew-edit-totem-section');
+    if (!crew || !el) return;
+    el.innerHTML = crewTotemEditorHTML(crew);
   }
 
   // ── Our Photos (Supabase Storage + DB) ────────────────────────────────────
@@ -11582,8 +11667,10 @@ async function doProfilePasswordChange() {
           ? `<div class="secret-eye-badge eye-secret" title="Secret — only you can see this crew"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg></div>`
           : `<div class="secret-eye-badge eye-open" title="Crew is visible to members"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>`}
         <div class="crew-card-head">
-          ${crewTotemMarkHTML(crew)}
-          <div class="crew-name">${escHtml(crew.name)}</div>
+          <div class="crew-card-head-left">
+            ${crewTotemMarkHTML(crew)}
+            <div class="crew-name">${escHtml(crew.name)}</div>
+          </div>
           <span class="crew-status ${s.cls}${crew.isLead ? ' tappable' : ''}"
                 onclick="event.stopPropagation(); toggleStatus('${crew.id}')"
                 title="${crew.isLead ? 'Tap to change status' : 'Only the Crew Lead can change status'}">${s.label}</span>
@@ -12148,75 +12235,11 @@ async function doProfilePasswordChange() {
         </button>` : ''}`;
     }
 
-    // Crew Totem block (photo or icon)
-    let totemBlock;
-    if (crew.isLead) {
-      const totemTab = _totemTabByCrewId[crew.id] || (crew.totemPhotoUrl ? 'photo' : crew.totemIcon ? 'icon' : 'none');
-      const totemToggle = `
-        <div class="totem-mode-toggle">
-          <button class="totem-mode-btn ${totemTab==='photo'?'active':''}" onclick="setCrewTotemTab('${crew.id}','photo')">📸 Photo</button>
-          <button class="totem-mode-btn ${totemTab==='icon'?'active':''}" onclick="setCrewTotemTab('${crew.id}','icon')">✦ Icon</button>
-          <button class="totem-mode-btn ${totemTab==='none'?'active':''}" onclick="setCrewTotemTab('${crew.id}','none')">🚫 None</button>
-        </div>`;
-      let totemBody;
-      if (totemTab === 'none') {
-        const hasTotem = !!(crew.totemPhotoUrl || crew.totemIcon);
-        totemBody = hasTotem ? `
-            <div style="font-size:0.85rem;color:var(--muted);margin-bottom:10px;line-height:1.5;">Your crew currently has a totem set. Clear it to show no totem at all — your crew name will hold it down instead.</div>
-            <button class="btn btn-ghost" style="width:100%;padding:9px;font-size:0.78rem;color:var(--neon-pink);" onclick="clearCrewTotem('${crew.id}')">🚫 Clear totem</button>` : `
-            <div style="font-size:0.85rem;color:var(--muted);line-height:1.5;">No totem set — your crew name is holding it down. Pick Photo or Icon anytime to add one.</div>`;
-      } else if (totemTab === 'photo') {
-        const actionsRevealed = !!_totemPhotoActionsRevealed[crew.id];
-        totemBody = crew.totemPhotoUrl ? `
-            <div class="totem-photo-wrap">
-              <img src="${escHtml(crew.totemPhotoUrl)}" alt="Crew totem">
-              ${actionsRevealed ? `
-              <div class="totem-photo-actions">
-                <button class="btn btn-ghost" style="flex:1;padding:9px;font-size:0.78rem;"
-                  data-crew-id="${crew.id}" onclick="editTotemPhoto(this.dataset.crewId)">✂️ Edit</button>
-                <label class="btn btn-ghost" style="flex:1;padding:9px;font-size:0.78rem;text-align:center;cursor:pointer;">
-                  🔄 Replace
-                  <input type="file" accept="image/*" style="display:none" data-crew-id="${crew.id}" onchange="handleTotemPhotoUpload(event,this.dataset.crewId)">
-                </label>
-                <button class="btn btn-ghost" style="flex:1;padding:9px;font-size:0.78rem;color:var(--neon-pink);"
-                  data-crew-id="${crew.id}" onclick="removeTotemPhoto(this.dataset.crewId)">🗑️ Remove</button>
-              </div>` : ''}
-            </div>` : `
-            <label class="totem-upload-area">
-              📸 <span>Upload a totem photo</span>
-              <input type="file" accept="image/*" style="display:none" data-crew-id="${crew.id}" onchange="handleTotemPhotoUpload(event,this.dataset.crewId)">
-            </label>`;
-      } else {
-        const iconGridRevealed = !!_totemIconGridRevealed[crew.id];
-        if (crew.totemIcon && !iconGridRevealed) {
-          const glyph = TOTEM_ICON_MAP[crew.totemIcon] || '✦';
-          totemBody = `
-            <div class="totem-icon-current" data-crew-id="${crew.id}" onclick="revealTotemIconGrid(this.dataset.crewId)">
-              <div class="crew-totem-icon-mark totem-mark-lg" style="background:${crew.gradient}">${glyph}</div>
-              <div class="totem-icon-current-hint">Tap to change icon</div>
-            </div>`;
-        } else {
-          const iconGrid = TOTEM_ICONS.map(({key, glyph, label}) => `
-            <div class="totem-icon-swatch${crew.totemIcon===key?' selected':''}"
-                 style="background:${crew.gradient}" title="${label}"
-                 onclick="setCrewTotemIcon('${crew.id}','${key}')">${glyph}</div>
-          `).join('');
-          totemBody = `
-            <div class="totem-icon-grid">${iconGrid}</div>
-            ${crew.totemIcon ? `<button class="btn btn-ghost" style="width:100%;padding:9px;font-size:0.78rem;color:var(--neon-pink);margin-top:8px;"
-              onclick="removeCrewTotemIcon('${crew.id}')">🗑️ Remove</button>` : ''}`;
-        }
-      }
-      totemBlock = `
-        <div class="form-group crew-totem-section">
-          <div class="section-banner"><span class="banner-inner">📸 Crew Totem</span></div>
-          ${totemToggle}
-          ${totemBody}
-        </div>`;
-    } else {
-      const mark = crewTotemMarkHTML(crew, 'totem-mark-lg');
-      totemBlock = mark ? `<div style="margin-bottom:16px;">${mark}</div>` : '';
-    }
+    // Crew Totem — just the mark, shown only when one is set. Editing (Photo/
+    // Icon/None tabs, upload, crop, etc.) lives in the Edit Crew modal now
+    // rather than cluttering the Overview tab on every visit.
+    const totemMark = crewTotemMarkHTML(crew, 'totem-mark-lg');
+    const totemBlock = totemMark ? `<div style="margin-bottom:16px;">${totemMark}</div>` : '';
 
     // Everything except the roster + Huddle — the Overview tab.
     const overviewPanelHTML = `
@@ -16923,6 +16946,9 @@ async function doProfilePasswordChange() {
       <div class="form-group">
         <label class="form-label">Crew Colour</label>
         <div class="color-swatches">${swatches}</div>
+      </div>
+      <div class="form-group crew-totem-section" id="crew-edit-totem-section">
+        ${crewTotemEditorHTML(crew)}
       </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeCrewEditModal()">Cancel</button>
