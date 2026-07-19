@@ -46,18 +46,20 @@ test.describe('coachmarks · crew visibility tip', () => {
   });
 });
 
-test.describe('coachmarks · huddle rooms tip', () => {
-  test('shows once when the Huddle tab is first opened, anchored to the room selector', async ({ page }) => {
+test.describe('coachmarks · game plan rooms tip', () => {
+  test('shows once when the Game Plan tab is first opened, anchored to the rave picker', async ({ page }) => {
     // Pre-seen the crew-visibility tip so it doesn't queue ahead of this one.
+    // Default seedData() already has r-you and r-sam both RSVP'd to f1, so
+    // crew c1 qualifies for a Game Plan (deriveCrewFestivalRooms).
     await bootAuthedApp(page, {
       sessionOver: { user_metadata: { guidance_dismissed: true, seen_tips: { crew_visibility: true } } },
     });
-    await openC1(page, { tab: 'huddle' });
+    await openC1(page, { tab: 'gameplan' });
     await page.waitForTimeout(400);
 
     const coachmark = page.locator('#coachmark');
     await expect(coachmark).toHaveClass(/show/);
-    await expect(coachmark).toContainText("Huddle isn't just one room");
+    await expect(coachmark).toContainText('A Game Plan for every shared rave');
   });
 });
 
@@ -101,14 +103,15 @@ test.describe('coachmarks · one at a time', () => {
   test('a second queued tip only appears after the first is dismissed', async ({ page }) => {
     await bootAuthedApp(page, { sessionOver: { user_metadata: { guidance_dismissed: true } } });
 
-    // Opening the Roster tab queues+shows crew_visibility; switching to Huddle
-    // right after queues huddle_rooms behind it while crew_visibility still shows.
+    // Opening the Roster tab queues+shows crew_visibility; switching to Game
+    // Plan right after queues game_plan_rooms behind it while crew_visibility
+    // still shows.
     await page.evaluate(async () => {
       await openDetail('c1');
       const rosterBtn = document.querySelector('#page-crew-detail .stats-subtab:nth-child(2)');
       switchCrewDetailTab('roster', rosterBtn);
-      const huddleBtn = document.querySelector('#page-crew-detail .stats-subtab:nth-child(3)');
-      switchCrewDetailTab('huddle', huddleBtn);
+      const gamePlanBtn = document.querySelector('#page-crew-detail .stats-subtab[data-tab="gameplan"]');
+      switchCrewDetailTab('gameplan', gamePlanBtn);
     });
     await page.waitForTimeout(400);
 
@@ -119,7 +122,7 @@ test.describe('coachmarks · one at a time', () => {
     await page.click('.coachmark-dismiss');
     await page.waitForTimeout(400);
     await expect(coachmark).toHaveClass(/show/);
-    await expect(coachmark).toContainText("Huddle isn't just one room");
+    await expect(coachmark).toContainText('A Game Plan for every shared rave');
   });
 });
 
@@ -167,7 +170,7 @@ test.describe('coachmarks · unclaimed badge tip', () => {
 });
 
 test.describe('coachmarks · beacon tip', () => {
-  test('shows once, right after huddle_rooms is dismissed (both queue from the same Huddle-tab open)', async ({ page }) => {
+  test('shows once when the Huddle tab is first opened', async ({ page }) => {
     await bootAuthedApp(page, {
       sessionOver: { user_metadata: { guidance_dismissed: true, seen_tips: { crew_visibility: true } } },
     });
@@ -175,10 +178,6 @@ test.describe('coachmarks · beacon tip', () => {
     await page.waitForTimeout(400);
 
     const coachmark = page.locator('#coachmark');
-    await expect(coachmark).toContainText("Huddle isn't just one room");
-
-    await page.click('.coachmark-dismiss');
-    await page.waitForTimeout(400);
     await expect(coachmark).toHaveClass(/show/);
     await expect(coachmark).toContainText('Beacon your crew');
   });
