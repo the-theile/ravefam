@@ -1536,10 +1536,25 @@
   .archive-empty { font-size: 0.82rem; color: var(--muted); text-align: center; padding: 20px 0; }
 
   /* Game Plan */
-  .game-plan-rave-picker { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
-  .game-plan-shortcuts { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
-  .game-plan-shortcuts .btn { flex: 1; min-width: 140px; padding: 8px 12px; font-size: 0.78rem; }
-  .game-plan-section-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .game-plan-rave-picker {
+    display: flex; gap: 8px; margin-bottom: 14px;
+    overflow-x: auto; padding-bottom: 2px; scrollbar-width: none;
+  }
+  .game-plan-rave-picker::-webkit-scrollbar { display: none; }
+  .game-plan-rave-picker .huddle-room-pill { flex-shrink: 0; }
+  .game-plan-section-tabs {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px;
+    background: var(--surface); border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 12px; padding: 4px; margin-bottom: 14px;
+  }
+  .game-plan-section-tab {
+    background: none; border: none; border-radius: 9px; cursor: pointer;
+    padding: 8px 2px; font-size: 0.68rem; line-height: 1.3; text-align: center;
+    color: var(--muted); transition: all 0.15s;
+  }
+  .game-plan-section-tab.active { background: rgba(255,45,120,0.14); color: #fff; }
+  .game-plan-shortcuts { display: flex; gap: 8px; margin-bottom: 16px; }
+  .game-plan-shortcuts .btn { flex: 1; padding: 7px 8px; font-size: 0.72rem; }
   .game-plan-section { margin-bottom: 8px; }
   .game-plan-task-done .archive-link-label { color: var(--muted); }
 
@@ -2857,7 +2872,7 @@
   .crew-feature-panel { margin-bottom: 16px; }
 
   /* ── Huddle: crew chat ── */
-  #crew-detail-panel-huddle { position: relative; }
+  #crew-feature-panel-huddle { position: relative; }
   #huddle-root, #gameplan-huddle-root { position: relative; display: flex; flex-direction: column; gap: 12px; min-height: 320px; }
   .huddle-header {
     display: flex;
@@ -5426,7 +5441,7 @@
     box-shadow: 0 0 18px -3px rgba(255,45,120,0.75), 0 0 0 1px rgba(255,45,120,0.4);
   }
   /* My Stats / Crew Stats toggle matches the Stats nav icon's cyan accent. Scoped to the
-     Rave Life page so Crew Detail's Overview/Roster/Huddle tabs (same shared class) stay pink. */
+     Rave Life page so Crew Detail's Overview/Roster/Game Plan tabs (same shared class) stay pink. */
   #page-stats .stats-subtab.active {
     background: var(--neon-cyan);
     color: #000;
@@ -11855,8 +11870,10 @@ async function doProfilePasswordChange() {
     dbLoadAchievements(id).then(() => { rerenderFamPins(id); checkAndAwardBadges(id); }).catch(console.warn);
     dbLoadCrewHistory(id).then(rows => { crewHistoryRows = rows; rerenderCrewHistory(id); }).catch(console.warn);
     if (opts && opts.tab === 'huddle') {
-      const huddleTabBtn = document.querySelector('#page-crew-detail .stats-subtab:nth-child(3)');
-      if (huddleTabBtn) switchCrewDetailTab('huddle', huddleTabBtn);
+      // Main Huddle lives as a tile under Overview (already the active tab) —
+      // just open it, no top-level tab switch needed.
+      const huddleTile = document.querySelector('.crew-feature-tile[data-feature="huddle"]');
+      if (huddleTile) toggleCrewFeatureTile('huddle', huddleTile);
     } else if (opts && opts.tab === 'roster') {
       const rosterTabBtn = document.querySelector('#page-crew-detail .stats-subtab:nth-child(2)');
       if (rosterTabBtn) switchCrewDetailTab('roster', rosterTabBtn);
@@ -12334,32 +12351,34 @@ async function doProfilePasswordChange() {
       <div class="stats-subtabs">
         <button class="stats-subtab active" onclick="switchCrewDetailTab('overview', this)">Overview</button>
         <button class="stats-subtab" onclick="switchCrewDetailTab('roster', this)">Roster</button>
-        <button class="stats-subtab" onclick="switchCrewDetailTab('huddle', this)">Huddle</button>
         ${hasGamePlan ? `<button class="stats-subtab" data-tab="gameplan" onclick="switchCrewDetailTab('gameplan', this)">Game Plan</button>` : ''}
       </div>
       <div id="crew-detail-panel-overview">${overviewPanelHTML}</div>
       <div id="crew-detail-panel-roster" style="display:none;">${rosterPanelHTML}</div>
-      <div id="crew-detail-panel-huddle" style="display:none;">
-        <div id="huddle-root"></div>
-      </div>
       ${hasGamePlan ? `<div id="crew-detail-panel-gameplan" style="display:none;"></div>` : ''}
       </div>
     `;
   }
 
-  // Toggle between the Overview / Roster / Huddle tabs on the crew detail page.
-  // Panels are hidden via display:none, never removed — the existing
+  // Toggle between the Overview / Roster / Game Plan tabs on the crew detail
+  // page. Panels are hidden via display:none, never removed — the existing
   // rerenderDreamBoard/Archive/Polls/Jams/FamPins/CrewHistory functions patch
   // ids nested inside the Overview panel directly and must keep working
-  // whether or not that panel is currently visible.
+  // whether or not that panel is currently visible. Main Huddle now lives as
+  // a tile inside Overview (see buildCrewFeatureTilesHTML/toggleCrewFeatureTile)
+  // rather than its own top-level tab.
   function switchCrewDetailTab(tab, el) {
     document.querySelectorAll('#page-crew-detail .stats-subtab').forEach(t => t.classList.remove('active'));
     el.classList.add('active');
     document.getElementById('crew-detail-panel-overview').style.display = tab === 'overview' ? '' : 'none';
     document.getElementById('crew-detail-panel-roster').style.display = tab === 'roster' ? '' : 'none';
-    document.getElementById('crew-detail-panel-huddle').style.display = tab === 'huddle' ? '' : 'none';
     const gamePlanPanel = document.getElementById('crew-detail-panel-gameplan');
     if (gamePlanPanel) gamePlanPanel.style.display = tab === 'gameplan' ? '' : 'none';
+    // Whatever huddle chat was live (Main, under Overview's tile, or a rave's
+    // under Game Plan) only matters while its panel is actually visible —
+    // tear it down on every tab switch; openGamePlanTab re-subscribes below
+    // if the Game Plan's active section happens to be Huddle.
+    teardownHuddleLive();
     if (tab === 'roster') {
       const crew = getCrew(activeDetailId);
       if (crew && crew.isLead) {
@@ -12370,15 +12389,7 @@ async function doProfilePasswordChange() {
         });
       }
     }
-    if (tab === 'huddle') {
-      openHuddle(activeDetailId).then(() => {
-        queueCoachmark('beacon', {
-          targetEl: document.querySelector('.huddle-beacon-fab-inline'),
-          title: '📡 Beacon your crew',
-          body: "Send an urgent ping that cuts through the chat when it actually matters — lost at the fest, meetup change, whatever."
-        });
-      });
-    } else if (tab === 'gameplan') {
+    if (tab === 'gameplan') {
       openGamePlanTab(activeDetailId).then(() => {
         queueCoachmark('game_plan_rooms', {
           targetEl: document.querySelector('.game-plan-rave-picker'),
@@ -12386,8 +12397,11 @@ async function doProfilePasswordChange() {
           body: "Tap between raves you and your crew are both going to — each one gets its own Huddle, Checklist, Roles, Logistics, and Outfit board."
         });
       });
-    } else {
-      teardownHuddleLive();
+    } else if (tab === 'overview') {
+      // The Huddle tile may have been left open under Overview before the
+      // teardown above ran — re-subscribe rather than leaving it stale.
+      const huddlePanel = document.getElementById('crew-feature-panel-huddle');
+      if (huddlePanel && huddlePanel.style.display !== 'none') openHuddle(activeDetailId);
     }
   }
 
@@ -12397,19 +12411,35 @@ async function doProfilePasswordChange() {
     const panel = document.getElementById('crew-feature-panel-' + feature);
     if (!panel) return;
     const wasOpen = panel.style.display !== 'none';
+    const huddlePanel = document.getElementById('crew-feature-panel-huddle');
+    const huddleWasOpen = huddlePanel && huddlePanel.style.display !== 'none';
     document.querySelectorAll('.crew-feature-panel').forEach(p => p.style.display = 'none');
     document.querySelectorAll('.crew-feature-tile').forEach(t => t.classList.remove('active'));
+    // Huddle's chat subscription only matters while its tile is actually
+    // showing — tear it down whenever it stops being the visible panel
+    // (closed outright, or another tile takes its place).
+    if (huddleWasOpen) teardownHuddleLive();
     if (!wasOpen) {
       panel.style.display = '';
       btnEl.classList.add('active');
       panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      if (feature === 'huddle') {
+        openHuddle(activeDetailId).then(() => {
+          queueCoachmark('beacon', {
+            targetEl: document.querySelector('.huddle-beacon-fab-inline'),
+            title: '📡 Beacon your crew',
+            body: "Send an urgent ping that cuts through the chat when it actually matters — lost at the fest, meetup change, whatever."
+          });
+        });
+      }
     }
   }
 
   // ===== HUDDLE =====
-  // Real-time crew chat. The top-level Huddle tab only ever materializes/
-  // shows the "Main" room plus optional leader-created custom rooms — the
-  // per-rave room (one per festival the crew's members are jointly attending,
+  // Real-time crew chat. The Huddle tile under Overview only ever
+  // materializes/shows the "Main" room plus optional leader-created custom
+  // rooms — the per-rave room (one per festival the crew's members are
+  // jointly attending,
   // derived the same way crewNextUp() derives a crew's next festival, but
   // returning every shared upcoming festival instead of just the nearest
   // one) now lives inside that rave's Game Plan tab instead (see
@@ -12422,8 +12452,8 @@ async function doProfilePasswordChange() {
   let _huddleActiveCrewId = null;
   let _huddleActiveRoomId = null;
   // Which DOM root the shared render/subscribe machinery below targets —
-  // 'huddle-root' for the top-level Huddle tab (Main + custom rooms only),
-  // 'gameplan-huddle-root' when a Game Plan's embedded per-rave room is open.
+  // 'huddle-root' for the Huddle tile under Overview (Main + custom rooms
+  // only), 'gameplan-huddle-root' when a Game Plan's embedded per-rave room is open.
   let _huddleActiveRootId = 'huddle-root';
   let _huddleActiveBeacon = null;
   let _pendingMeetupPin = null; // {x,y} normalized 0-1 coords tapped on the room's festival map
@@ -13502,25 +13532,25 @@ async function doProfilePasswordChange() {
     }).join('');
 
     const sections = [
-      { key: 'huddle', label: '🕊️ Huddle' },
-      { key: 'checklist', label: '✅ Checklist' },
-      { key: 'roles', label: '🎭 Roles' },
-      { key: 'logistics', label: '🚗 Logistics' },
-      { key: 'outfit', label: '✨ Outfit' }
+      { key: 'huddle', emoji: '🕊️', label: 'Huddle' },
+      { key: 'checklist', emoji: '✅', label: 'Tasks' },
+      { key: 'roles', emoji: '🎭', label: 'Roles' },
+      { key: 'logistics', emoji: '🚗', label: 'Rides' },
+      { key: 'outfit', emoji: '✨', label: 'Outfit' }
     ];
     const activeSection = _gamePlanActiveSection || 'huddle';
     const sectionTabs = sections.map(s => `
-      <button type="button" class="jam-filter-pill game-plan-section-tab${s.key === activeSection ? ' active' : ''}"
-        data-section="${s.key}" onclick="switchGamePlanSection(this.dataset.section, this)">${s.label}</button>`
+      <button type="button" class="game-plan-section-tab${s.key === activeSection ? ' active' : ''}"
+        data-section="${s.key}" onclick="switchGamePlanSection(this.dataset.section, this)">${s.emoji}<br>${s.label}</button>`
     ).join('');
 
     return `
       <div class="game-plan-rave-picker">${picker}</div>
-      <div class="game-plan-shortcuts">
-        <button class="btn btn-ghost" onclick="jumpToGamePlanJams('${escCrewId}','${escHtml(activeFestId)}')">🎧 This rave's Jams</button>
-        <button class="btn btn-ghost" onclick="jumpToGamePlanArchive('${escCrewId}','${escHtml(activeFestId)}')">📸 This rave's Archive</button>
-      </div>
       <div class="game-plan-section-tabs">${sectionTabs}</div>
+      <div class="game-plan-shortcuts">
+        <button class="btn btn-ghost" onclick="jumpToGamePlanJams('${escCrewId}','${escHtml(activeFestId)}')">🎧 Jams</button>
+        <button class="btn btn-ghost" onclick="jumpToGamePlanArchive('${escCrewId}','${escHtml(activeFestId)}')">📸 Archive</button>
+      </div>
       <div id="game-plan-section-huddle" class="game-plan-section" style="${activeSection === 'huddle' ? '' : 'display:none;'}">
         <div id="gameplan-huddle-root"></div>
       </div>
@@ -16805,6 +16835,7 @@ async function doProfilePasswordChange() {
   // the same style as the app's other inline SVGs (logout/QR/eye), each glyph
   // distinct so Pins and Dream Board no longer share an emoji.
   const CREW_FEATURE_GLYPHS = {
+    huddle: '<path d="M4 4h16v12H8l-4 4V4z"/>',
     pins: '<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>',
     dreamboard: '<rect x="2" y="4" width="16" height="16" rx="3"/><circle cx="7.2" cy="9.4" r="1.6"/><path d="m18 15-3.2-3.2a2 2 0 0 0-2.8 0L4 20"/><path d="M19 1.2 19.9 3.1 21.8 4 19.9 4.9 19 6.8 18.1 4.9 16.2 4 18.1 3.1Z"/>',
     poll: '<path d="M9 12l2 2 4-4"/><path d="M5 7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v12H5V7z"/><path d="M22 19H2"/>',
@@ -16825,6 +16856,7 @@ async function doProfilePasswordChange() {
   // display:none/'' by toggleCrewFeatureTile — same pattern as the tab panels.
   function buildCrewFeatureTilesHTML(crew, isSecret) {
     const tiles = [
+      { key: 'huddle', ac: '--neon-cyan', label: 'Huddle' },
       { key: 'pins', ac: '--neon-pink', label: 'Pins' },
       { key: 'dreamboard', ac: '--neon-purple', label: 'Dream Board' },
       !isSecret ? { key: 'poll', ac: '--neon-cyan', label: 'Poll' } : null,
@@ -16839,6 +16871,7 @@ async function doProfilePasswordChange() {
       </button>`).join('');
     return `
       <div class="crew-feature-tile-grid">${tileGrid}</div>
+      <div class="crew-feature-panel" id="crew-feature-panel-huddle" style="display:none;"><div id="huddle-root"></div></div>
       <div class="crew-feature-panel" id="crew-feature-panel-pins" style="display:none;">${buildFamPinsHTML(crew.id)}</div>
       <div class="crew-feature-panel" id="crew-feature-panel-dreamboard" style="display:none;">${buildDreamBoardHTML(crew.id)}</div>
       ${!isSecret ? `<div class="crew-feature-panel" id="crew-feature-panel-poll" style="display:none;">${buildPollsHTML(crew.id)}</div>` : ''}

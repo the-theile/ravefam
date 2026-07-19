@@ -170,7 +170,7 @@ test.describe('coachmarks · unclaimed badge tip', () => {
 });
 
 test.describe('coachmarks · beacon tip', () => {
-  test('shows once when the Huddle tab is first opened', async ({ page }) => {
+  test('shows once when the Huddle tile is first opened', async ({ page }) => {
     await bootAuthedApp(page, {
       sessionOver: { user_metadata: { guidance_dismissed: true, seen_tips: { crew_visibility: true } } },
     });
