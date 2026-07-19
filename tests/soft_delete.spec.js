@@ -75,4 +75,25 @@ test.describe('soft delete + audit log', () => {
     expect(memberAudit.length).toBe(1);
     expect(memberAudit[0].metadata.crew_ids).toContain('c1');
   });
+
+  test('dbDeleteGamePlanItem soft-deletes the row and logs an audit entry', async ({ page }) => {
+    await bootAuthedApp(page);
+
+    const itemId = await page.evaluate(async () => {
+      const gp = await dbGetOrCreateGamePlan('c1', 'f1');
+      const task = await dbAddGamePlanTask(gp.id, 'c1', 'Pack glow sticks', null);
+      return task.id;
+    });
+    await page.evaluate(async (id) => { await dbDeleteGamePlanItem(id, 'c1'); }, itemId);
+
+    const item = await page.evaluate((id) => window.__store.game_plan_items.find(it => it.id === id), itemId);
+    expect(item).toBeTruthy();
+    expect(item.deleted_at).toBeTruthy();
+    expect(item.deleted_by).toBe(TEST_UID);
+
+    const audit = await page.evaluate((id) =>
+      window.__store.audit_logs.filter(a => a.action === 'game_plan_item.remove' && a.entity_id === id), itemId);
+    expect(audit.length).toBe(1);
+    expect(audit[0].actor_id).toBe(TEST_UID);
+  });
 });

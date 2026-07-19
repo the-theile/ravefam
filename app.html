@@ -1535,6 +1535,14 @@
   .archive-link-del:hover { color: var(--neon-pink); opacity: 1; }
   .archive-empty { font-size: 0.82rem; color: var(--muted); text-align: center; padding: 20px 0; }
 
+  /* Game Plan */
+  .game-plan-rave-picker { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .game-plan-shortcuts { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .game-plan-shortcuts .btn { flex: 1; min-width: 140px; padding: 8px 12px; font-size: 0.78rem; }
+  .game-plan-section-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .game-plan-section { margin-bottom: 8px; }
+  .game-plan-task-done .archive-link-label { color: var(--muted); }
+
   /* FAM Poll */
   .fam-poll-section { margin-bottom: 0; }
   .poll-drop-btn { width: 100%; padding: 10px 16px; font-size: 0.84rem; margin-bottom: 12px; }
@@ -2850,7 +2858,7 @@
 
   /* ── Huddle: crew chat ── */
   #crew-detail-panel-huddle { position: relative; }
-  #huddle-root { position: relative; display: flex; flex-direction: column; gap: 12px; min-height: 320px; }
+  #huddle-root, #gameplan-huddle-root { position: relative; display: flex; flex-direction: column; gap: 12px; min-height: 320px; }
   .huddle-header {
     display: flex;
     align-items: center;
@@ -11765,6 +11773,16 @@ async function doProfilePasswordChange() {
   let crewPollVotes = {};
   let crewJams = [];
   let crewJamVibes = [];
+  // Game Plan: per-(crew, rave) hub folding in the per-rave Huddle plus
+  // Checklist/Roles/Logistics/Outfit. gamePlans holds every game_plans row
+  // seen for the active crew (one per eligible rave); gamePlanItems holds
+  // the items for whichever rave is currently selected.
+  let gamePlans = [];
+  let gamePlanItems = [];
+  let _gamePlanActiveCrewId = null;
+  let _gamePlanActiveFestivalId = null;
+  let _gamePlanActiveSection = 'huddle';
+  let _archiveFilters = { festivalId: null };
   // Vendor Village — lazy-loaded the first time the Village nav tab is
   // tapped (see renderVendorVillage()), so sessions that never open it pay
   // no extra load cost.
@@ -11815,6 +11833,11 @@ async function doProfilePasswordChange() {
     crewJams = [];
     crewJamVibes = [];
     _jamFilters = { tag: null, festivalId: null };
+    _archiveFilters = { festivalId: null };
+    gamePlans = [];
+    gamePlanItems = [];
+    _gamePlanActiveFestivalId = null;
+    _gamePlanActiveSection = 'huddle';
     crewAchievements = [];
     raverAchievements = [];
     crewFeedEvents = [];
@@ -11837,6 +11860,9 @@ async function doProfilePasswordChange() {
     } else if (opts && opts.tab === 'roster') {
       const rosterTabBtn = document.querySelector('#page-crew-detail .stats-subtab:nth-child(2)');
       if (rosterTabBtn) switchCrewDetailTab('roster', rosterTabBtn);
+    } else if (opts && opts.tab === 'gameplan') {
+      const gamePlanTabBtn = document.querySelector('#page-crew-detail .stats-subtab[data-tab="gameplan"]');
+      if (gamePlanTabBtn) switchCrewDetailTab('gameplan', gamePlanTabBtn);
     }
   }
   function closeDetail() {
@@ -12290,6 +12316,12 @@ async function doProfilePasswordChange() {
           return (leaveBtn || reportBtn) ? `<div class="danger-zone">${leaveBtn}${reportBtn}</div>` : '';
         })()}`;
 
+    // Game Plan tab only appears once at least one rave qualifies for a
+    // shared huddle room (deriveCrewFestivalRooms — you + ≥1 other crew
+    // member both RSVP'd/upcoming). Same gate the per-rave huddle room
+    // already used before Game Plan absorbed it.
+    const hasGamePlan = deriveCrewFestivalRooms(crew).length > 0;
+
     document.getElementById('page-crew-detail').innerHTML = `
       <button class="profile-back" onclick="closeDetail()">← My Crews</button>
       <div class="crew-detail-page-wrap">
@@ -12303,12 +12335,14 @@ async function doProfilePasswordChange() {
         <button class="stats-subtab active" onclick="switchCrewDetailTab('overview', this)">Overview</button>
         <button class="stats-subtab" onclick="switchCrewDetailTab('roster', this)">Roster</button>
         <button class="stats-subtab" onclick="switchCrewDetailTab('huddle', this)">Huddle</button>
+        ${hasGamePlan ? `<button class="stats-subtab" data-tab="gameplan" onclick="switchCrewDetailTab('gameplan', this)">Game Plan</button>` : ''}
       </div>
       <div id="crew-detail-panel-overview">${overviewPanelHTML}</div>
       <div id="crew-detail-panel-roster" style="display:none;">${rosterPanelHTML}</div>
       <div id="crew-detail-panel-huddle" style="display:none;">
         <div id="huddle-root"></div>
       </div>
+      ${hasGamePlan ? `<div id="crew-detail-panel-gameplan" style="display:none;"></div>` : ''}
       </div>
     `;
   }
@@ -12324,6 +12358,8 @@ async function doProfilePasswordChange() {
     document.getElementById('crew-detail-panel-overview').style.display = tab === 'overview' ? '' : 'none';
     document.getElementById('crew-detail-panel-roster').style.display = tab === 'roster' ? '' : 'none';
     document.getElementById('crew-detail-panel-huddle').style.display = tab === 'huddle' ? '' : 'none';
+    const gamePlanPanel = document.getElementById('crew-detail-panel-gameplan');
+    if (gamePlanPanel) gamePlanPanel.style.display = tab === 'gameplan' ? '' : 'none';
     if (tab === 'roster') {
       const crew = getCrew(activeDetailId);
       if (crew && crew.isLead) {
@@ -12336,15 +12372,18 @@ async function doProfilePasswordChange() {
     }
     if (tab === 'huddle') {
       openHuddle(activeDetailId).then(() => {
-        queueCoachmark('huddle_rooms', {
-          targetEl: document.querySelector('.huddle-room-selector-wrap'),
-          title: "🕊️ Huddle isn't just one room",
-          body: "Main Huddle's always open — plus a dedicated room auto-appears for every rave you and your crew are both going to. Tap the room name up top to switch."
-        });
         queueCoachmark('beacon', {
           targetEl: document.querySelector('.huddle-beacon-fab-inline'),
           title: '📡 Beacon your crew',
           body: "Send an urgent ping that cuts through the chat when it actually matters — lost at the fest, meetup change, whatever."
+        });
+      });
+    } else if (tab === 'gameplan') {
+      openGamePlanTab(activeDetailId).then(() => {
+        queueCoachmark('game_plan_rooms', {
+          targetEl: document.querySelector('.game-plan-rave-picker'),
+          title: '🗺️ A Game Plan for every shared rave',
+          body: "Tap between raves you and your crew are both going to — each one gets its own Huddle, Checklist, Roles, Logistics, and Outfit board."
         });
       });
     } else {
@@ -12368,17 +12407,24 @@ async function doProfilePasswordChange() {
   }
 
   // ===== HUDDLE =====
-  // Real-time crew chat: a "Main" room plus one room per festival the crew's
-  // members are jointly attending (derived the same way crewNextUp() derives
-  // a crew's next festival, but returning every shared upcoming festival
-  // instead of just the nearest one), plus optional leader-created custom
-  // rooms. Rooms are materialized lazily in huddle_rooms the first time
-  // someone opens the Huddle tab.
+  // Real-time crew chat. The top-level Huddle tab only ever materializes/
+  // shows the "Main" room plus optional leader-created custom rooms — the
+  // per-rave room (one per festival the crew's members are jointly attending,
+  // derived the same way crewNextUp() derives a crew's next festival, but
+  // returning every shared upcoming festival instead of just the nearest
+  // one) now lives inside that rave's Game Plan tab instead (see
+  // openGamePlanHuddle below deriveCrewFestivalRooms, and the ===== GAME
+  // PLAN ===== section further down). All the render/subscribe/composer
+  // machinery here is shared by both entry points via _huddleActiveRootId.
   const HUDDLE_REACTION_EMOJIS = ['🕊️','❤️','🔗','🙌','🔥'];
   let huddleRooms = [];
   let huddleMessages = [];
   let _huddleActiveCrewId = null;
   let _huddleActiveRoomId = null;
+  // Which DOM root the shared render/subscribe machinery below targets —
+  // 'huddle-root' for the top-level Huddle tab (Main + custom rooms only),
+  // 'gameplan-huddle-root' when a Game Plan's embedded per-rave room is open.
+  let _huddleActiveRootId = 'huddle-root';
   let _huddleActiveBeacon = null;
   let _pendingMeetupPin = null; // {x,y} normalized 0-1 coords tapped on the room's festival map
   let _huddleChannel = null;
@@ -12425,8 +12471,15 @@ async function doProfilePasswordChange() {
   }
 
   async function openHuddle(crewId) {
-    const root = document.getElementById('huddle-root');
+    _huddleActiveRootId = 'huddle-root';
+    const root = document.getElementById(_huddleActiveRootId);
     if (!root) return;
+    // Only one huddle root is ever "live" at a time — the render/composer
+    // templates use singleton ids (huddle-messages-list, huddle-room-menu,
+    // …), so the inactive root must be emptied to avoid duplicate-id clashes
+    // if a Game Plan's embedded huddle was open just before this.
+    const otherRoot = document.getElementById('gameplan-huddle-root');
+    if (otherRoot) otherRoot.innerHTML = '';
     const crew = getCrew(crewId);
     if (!crew || !currentUser) {
       root.innerHTML = `<div class="es-block"><div class="es-icon">🔒</div><div class="es-headline">Sign in to join the Huddle</div><div class="es-sub">You'll need an account to chat with your crew.</div></div>`;
@@ -12436,27 +12489,20 @@ async function doProfilePasswordChange() {
     localStorage.setItem('huddleLastRead_' + crewId, new Date().toISOString());
     root.innerHTML = `<div class="es-block"><div class="es-icon">🕊️</div><div class="es-headline">Tuning in…</div></div>`;
 
-    const festRooms = deriveCrewFestivalRooms(crew);
-    const wanted = [{ room_key: 'main', kind: 'main', name: 'Main Huddle', festival_id: null }]
-      .concat(festRooms.map(fr => ({
-        room_key: `festival:${fr.festival.id}`, kind: 'festival',
-        name: `${fr.festival.name} Huddle`, festival_id: fr.festival.id
-      })));
+    // Only Main + any leader-created custom rooms belong on this tab now —
+    // per-rave festival rooms are materialized/opened from Game Plan instead
+    // (openGamePlanHuddle), so they're deliberately left out of `wanted` here.
+    const wanted = [{ room_key: 'main', kind: 'main', name: 'Main Huddle', festival_id: null }];
     const rows = wanted.map(w => ({ crew_id: crewId, created_by: currentUser.id, ...w }));
     await sb.from('huddle_rooms').upsert(rows, { onConflict: 'crew_id,room_key', ignoreDuplicates: true });
 
     const { data: rooms, error } = await sb.from('huddle_rooms')
-      .select('*').eq('crew_id', crewId).order('created_at', { ascending: true });
+      .select('*').eq('crew_id', crewId).neq('kind', 'festival').order('created_at', { ascending: true });
     if (error || !rooms || !rooms.length) {
       root.innerHTML = `<div class="es-block"><div class="es-icon">⚠️</div><div class="es-headline">Couldn't load the Huddle</div><div class="es-sub">Try again in a moment.</div></div>`;
       return;
     }
-    // Hide any already-materialized festival room that no longer has a 2nd
-    // attendee (created before shared-attendance gating existed, or the
-    // other member since cancelled) — recomputed live on every open, so a
-    // room quietly reappears if attendance overlap returns.
-    const qualifyingFestIds = new Set(festRooms.map(fr => String(fr.festival.id)));
-    huddleRooms = rooms.filter(r => r.kind !== 'festival' || qualifyingFestIds.has(String(r.festival_id)));
+    huddleRooms = rooms;
     const stillValid = _huddleActiveRoomId && huddleRooms.some(r => r.id === _huddleActiveRoomId);
     const defaultRoom = huddleRooms.find(r => r.room_key === 'main') || huddleRooms[0];
     await switchHuddleRoom(stillValid ? _huddleActiveRoomId : defaultRoom.id);
@@ -12688,7 +12734,7 @@ async function doProfilePasswordChange() {
   }
 
   function renderHuddleUI() {
-    const root = document.getElementById('huddle-root');
+    const root = document.getElementById(_huddleActiveRootId);
     const crew = getCrew(_huddleActiveCrewId);
     if (!root || !crew) return;
     const currentRoom = huddleRooms.find(r => r.id === _huddleActiveRoomId);
@@ -13226,6 +13272,665 @@ async function doProfilePasswordChange() {
     _huddlePresenceState = {};
   }
 
+  // ===== GAME PLAN =====
+  // Per-(crew, rave) hub, available for exactly the raves in
+  // deriveCrewFestivalRooms(crew) — the same shared-attendance rule that
+  // already gated the per-rave Huddle room before Game Plan absorbed it.
+  // Container row (game_plans) holds the singleton theme/meetup fields;
+  // game_plan_items is one flat, kind-discriminated table for everything
+  // repeatable (task/role/outfit/carpool_driver/carpool_rider), mirroring
+  // how huddle_messages/crew_jams already prefer nullable type-specific
+  // columns over per-type tables.
+
+  const GAME_PLAN_ROLES = ['Driver / DD', 'Navigator', 'Snacks & Supplies', 'First Aid', 'Photographer', 'Vibe Curator', 'Hype Person'];
+
+  // ── Data layer ──
+
+  async function dbGetOrCreateGamePlan(crewId, festivalId) {
+    await sb.from('game_plans')
+      .upsert({ crew_id: crewId, festival_id: festivalId, created_by: currentUser.id },
+        { onConflict: 'crew_id,festival_id', ignoreDuplicates: true });
+    const { data, error } = await sb.from('game_plans')
+      .select('*').eq('crew_id', crewId).eq('festival_id', festivalId).single();
+    if (error || !data) { console.error('game plan load error', error); return null; }
+    const idx = gamePlans.findIndex(gp => gp.id === data.id);
+    if (idx >= 0) gamePlans[idx] = data; else gamePlans.push(data);
+    return data;
+  }
+
+  async function dbUpdateGamePlanHeader(gamePlanId, fields) {
+    const patch = {};
+    if ('themeText' in fields) patch.theme_text = fields.themeText;
+    if ('meetupAt' in fields) patch.meetup_at = fields.meetupAt;
+    if ('meetupLocation' in fields) patch.meetup_location = fields.meetupLocation;
+    const { data, error } = await sb.from('game_plans').update(patch).eq('id', gamePlanId).select().single();
+    if (error) { showToast('⚠️ Could not save — try again'); return null; }
+    const idx = gamePlans.findIndex(gp => gp.id === gamePlanId);
+    if (idx >= 0) gamePlans[idx] = data;
+    return data;
+  }
+
+  async function dbLoadGamePlanItems(gamePlanId) {
+    const { data, error } = await sb.from('game_plan_items')
+      .select('*').eq('game_plan_id', gamePlanId).is('deleted_at', null).order('created_at', { ascending: true });
+    if (error) { console.error('game plan items load error', error); gamePlanItems = []; return; }
+    gamePlanItems = data || [];
+  }
+
+  async function dbDeleteGamePlanItem(itemId, crewId, reason = null) {
+    const item = gamePlanItems.find(it => it.id === itemId);
+    const { ok, rateLimited } = await softDeleteRow('game_plan_items', { id: itemId }, reason);
+    if (!ok) { if (!rateLimited) showToast('⚠️ Could not remove — try again'); return false; }
+    await logAudit({ action: 'game_plan_item.remove', entityType: 'game_plan_item', entityId: itemId, reason, metadata: { crew_id: crewId } });
+    gamePlanItems = gamePlanItems.filter(it => it.id !== itemId);
+    // A deleted carpool driver takes their riders with them — soft-delete
+    // isn't a real DELETE, so the FK's own-delete-cascade never fires here.
+    if (item && item.kind === 'carpool_driver') {
+      const riders = gamePlanItems.filter(it => it.kind === 'carpool_rider' && it.driver_item_id === itemId);
+      for (const rider of riders) await softDeleteRow('game_plan_items', { id: rider.id }, 'driver removed');
+      gamePlanItems = gamePlanItems.filter(it => !(it.kind === 'carpool_rider' && it.driver_item_id === itemId));
+    }
+    return true;
+  }
+
+  // -- Checklist --
+  async function dbAddGamePlanTask(gamePlanId, crewId, text, assigneeRaverId) {
+    const { data, error } = await sb.from('game_plan_items').insert({
+      game_plan_id: gamePlanId, crew_id: crewId, kind: 'task', added_by: currentUser.id,
+      text: text.trim(), assignee_raver_id: assigneeRaverId || null, is_done: false
+    }).select().single();
+    if (error) { showToast('⚠️ Could not add task — try again'); return null; }
+    gamePlanItems.push(data);
+    return data;
+  }
+
+  async function dbToggleGamePlanTaskDone(itemId, done) {
+    const { data, error } = await sb.from('game_plan_items').update({ is_done: done }).eq('id', itemId).select().single();
+    if (error) { showToast('⚠️ Could not update task'); return; }
+    const idx = gamePlanItems.findIndex(it => it.id === itemId);
+    if (idx >= 0) gamePlanItems[idx] = data;
+  }
+
+  // -- Roles --
+  async function dbAddGamePlanRole(gamePlanId, crewId, roleName, assigneeRaverId) {
+    const { data, error } = await sb.from('game_plan_items').insert({
+      game_plan_id: gamePlanId, crew_id: crewId, kind: 'role', added_by: currentUser.id,
+      role_name: roleName.trim(), assignee_raver_id: assigneeRaverId
+    }).select().single();
+    if (error) {
+      showToast(error.code === '23505' ? 'They already have that role' : '⚠️ Could not assign role — try again');
+      return null;
+    }
+    gamePlanItems.push(data);
+    return data;
+  }
+
+  // -- Logistics / Carpool --
+  async function dbAddCarpoolDriver(gamePlanId, crewId, raverId, seats) {
+    const { data, error } = await sb.from('game_plan_items').insert({
+      game_plan_id: gamePlanId, crew_id: crewId, kind: 'carpool_driver', added_by: currentUser.id,
+      assignee_raver_id: raverId, seats: seats || null
+    }).select().single();
+    if (error) { showToast('⚠️ Could not add ride — try again'); return null; }
+    gamePlanItems.push(data);
+    return data;
+  }
+
+  async function dbAddCarpoolRider(gamePlanId, crewId, driverItemId, riderRaverId) {
+    const { data, error } = await sb.from('game_plan_items').insert({
+      game_plan_id: gamePlanId, crew_id: crewId, kind: 'carpool_rider', added_by: currentUser.id,
+      driver_item_id: driverItemId, assignee_raver_id: riderRaverId
+    }).select().single();
+    if (error) { showToast('⚠️ Could not join that ride — try again'); return null; }
+    gamePlanItems.push(data);
+    return data;
+  }
+
+  // -- Outfit / Theme --
+  async function dbAddOutfitIdea(gamePlanId, crewId, text, linkUrl) {
+    const { data, error } = await sb.from('game_plan_items').insert({
+      game_plan_id: gamePlanId, crew_id: crewId, kind: 'outfit', added_by: currentUser.id,
+      text: text ? text.trim() : null, link_url: linkUrl || null
+    }).select().single();
+    if (error) { showToast('⚠️ Could not add idea — try again'); return null; }
+    gamePlanItems.push(data);
+    return data;
+  }
+
+  function deleteGamePlanItem(itemId, crewId, label, onDone) {
+    showConfirmWithReason(
+      `Remove this ${label}?`,
+      'This removes it from the Game Plan for everyone.',
+      '🗑️ Remove',
+      async (reason) => {
+        const ok = await dbDeleteGamePlanItem(itemId, crewId, reason);
+        if (ok && onDone) onDone();
+      },
+      { label: 'Why are you removing this?', placeholder: 'e.g. added by mistake, out of date…' }
+    );
+  }
+
+  // ── Tab shell: rave picker + section switcher + the 5 panels ──
+
+  async function openGamePlanTab(crewId) {
+    const panel = document.getElementById('crew-detail-panel-gameplan');
+    if (!panel) return;
+    const crew = getCrew(crewId);
+    if (!crew || !currentUser) {
+      panel.innerHTML = `<div class="es-block"><div class="es-icon">🔒</div><div class="es-headline">Sign in for the Game Plan</div><div class="es-sub">You'll need an account to plan a rave with your crew.</div></div>`;
+      return;
+    }
+    const rooms = deriveCrewFestivalRooms(crew);
+    if (!rooms.length) {
+      panel.innerHTML = `<div class="es-block"><div class="es-icon">🗺️</div><div class="es-headline">No Game Plan yet</div><div class="es-sub">Once you and a crewmate are both going to the same rave, its Game Plan appears here.</div></div>`;
+      return;
+    }
+    const targetFestId = (_gamePlanActiveFestivalId && rooms.some(r => String(r.festival.id) === String(_gamePlanActiveFestivalId)))
+      ? _gamePlanActiveFestivalId : rooms[0].festival.id;
+    panel.innerHTML = `<div class="es-block"><div class="es-icon">🗺️</div><div class="es-headline">Loading Game Plan…</div></div>`;
+    await loadGamePlanForFestival(crewId, targetFestId);
+    panel.innerHTML = buildGamePlanTabHTML(crew);
+    if ((_gamePlanActiveSection || 'huddle') === 'huddle') await openGamePlanHuddle(crewId, targetFestId);
+  }
+
+  async function loadGamePlanForFestival(crewId, festivalId) {
+    _gamePlanActiveCrewId = crewId;
+    _gamePlanActiveFestivalId = festivalId;
+    const gp = await dbGetOrCreateGamePlan(crewId, festivalId);
+    gamePlanItems = [];
+    if (gp) await dbLoadGamePlanItems(gp.id);
+  }
+
+  async function switchGamePlanFestival(crewId, festivalId) {
+    const panel = document.getElementById('crew-detail-panel-gameplan');
+    if (!panel) return;
+    if (_gamePlanActiveSection === 'huddle') teardownHuddleLive();
+    await loadGamePlanForFestival(crewId, festivalId);
+    const crew = getCrew(crewId);
+    panel.innerHTML = buildGamePlanTabHTML(crew);
+    if ((_gamePlanActiveSection || 'huddle') === 'huddle') await openGamePlanHuddle(crewId, festivalId);
+  }
+
+  function switchGamePlanSection(section, btnEl) {
+    const leavingHuddle = _gamePlanActiveSection === 'huddle' && section !== 'huddle';
+    _gamePlanActiveSection = section;
+    document.querySelectorAll('#crew-detail-panel-gameplan .game-plan-section').forEach(p => p.style.display = 'none');
+    document.querySelectorAll('#crew-detail-panel-gameplan .game-plan-section-tab').forEach(t => t.classList.remove('active'));
+    const sectionPanel = document.getElementById('game-plan-section-' + section);
+    if (sectionPanel) sectionPanel.style.display = '';
+    if (btnEl) btnEl.classList.add('active');
+    if (leavingHuddle) teardownHuddleLive();
+    if (section === 'huddle') openGamePlanHuddle(_gamePlanActiveCrewId, _gamePlanActiveFestivalId);
+  }
+
+  async function openGamePlanHuddle(crewId, festivalId) {
+    _huddleActiveRootId = 'gameplan-huddle-root';
+    const root = document.getElementById(_huddleActiveRootId);
+    if (!root) return;
+    const otherRoot = document.getElementById('huddle-root');
+    if (otherRoot) otherRoot.innerHTML = '';
+    const crew = getCrew(crewId);
+    if (!crew || !currentUser) return;
+    root.innerHTML = `<div class="es-block"><div class="es-icon">🕊️</div><div class="es-headline">Tuning in…</div></div>`;
+    const fest = festivals.find(f => String(f.id) === String(festivalId));
+    const roomKey = `festival:${festivalId}`;
+    const row = { crew_id: crewId, created_by: currentUser.id, room_key: roomKey, kind: 'festival', name: `${fest ? fest.name : 'Rave'} Huddle`, festival_id: festivalId };
+    await sb.from('huddle_rooms').upsert([row], { onConflict: 'crew_id,room_key', ignoreDuplicates: true });
+    const { data: rooms, error } = await sb.from('huddle_rooms').select('*').eq('crew_id', crewId).eq('room_key', roomKey).limit(1);
+    if (error || !rooms || !rooms.length) {
+      root.innerHTML = `<div class="es-block"><div class="es-icon">⚠️</div><div class="es-headline">Couldn't load the Huddle</div><div class="es-sub">Try again in a moment.</div></div>`;
+      return;
+    }
+    huddleRooms = rooms;
+    _huddleActiveCrewId = crewId;
+    await switchHuddleRoom(rooms[0].id);
+  }
+
+  function buildGamePlanTabHTML(crew) {
+    const rooms = deriveCrewFestivalRooms(crew);
+    if (!rooms.length) {
+      return `<div class="es-block"><div class="es-icon">🗺️</div><div class="es-headline">No Game Plan yet</div><div class="es-sub">Once you and a crewmate are both going to the same rave, its Game Plan appears here.</div></div>`;
+    }
+    const activeFestId = String(_gamePlanActiveFestivalId);
+    const escCrewId = escHtml(String(crew.id));
+
+    const picker = rooms.map(r => {
+      const fid = String(r.festival.id);
+      return `<button type="button" class="huddle-room-pill${fid === activeFestId ? ' active' : ''}"
+        data-fest-id="${escHtml(fid)}"
+        onclick="switchGamePlanFestival('${escCrewId}', this.dataset.festId)">${escHtml(r.festival.name)}</button>`;
+    }).join('');
+
+    const sections = [
+      { key: 'huddle', label: '🕊️ Huddle' },
+      { key: 'checklist', label: '✅ Checklist' },
+      { key: 'roles', label: '🎭 Roles' },
+      { key: 'logistics', label: '🚗 Logistics' },
+      { key: 'outfit', label: '✨ Outfit' }
+    ];
+    const activeSection = _gamePlanActiveSection || 'huddle';
+    const sectionTabs = sections.map(s => `
+      <button type="button" class="jam-filter-pill game-plan-section-tab${s.key === activeSection ? ' active' : ''}"
+        data-section="${s.key}" onclick="switchGamePlanSection(this.dataset.section, this)">${s.label}</button>`
+    ).join('');
+
+    return `
+      <div class="game-plan-rave-picker">${picker}</div>
+      <div class="game-plan-shortcuts">
+        <button class="btn btn-ghost" onclick="jumpToGamePlanJams('${escCrewId}','${escHtml(activeFestId)}')">🎧 This rave's Jams</button>
+        <button class="btn btn-ghost" onclick="jumpToGamePlanArchive('${escCrewId}','${escHtml(activeFestId)}')">📸 This rave's Archive</button>
+      </div>
+      <div class="game-plan-section-tabs">${sectionTabs}</div>
+      <div id="game-plan-section-huddle" class="game-plan-section" style="${activeSection === 'huddle' ? '' : 'display:none;'}">
+        <div id="gameplan-huddle-root"></div>
+      </div>
+      <div id="game-plan-section-checklist" class="game-plan-section" style="${activeSection === 'checklist' ? '' : 'display:none;'}">${buildGamePlanChecklistHTML(crew.id)}</div>
+      <div id="game-plan-section-roles" class="game-plan-section" style="${activeSection === 'roles' ? '' : 'display:none;'}">${buildGamePlanRolesHTML(crew.id)}</div>
+      <div id="game-plan-section-logistics" class="game-plan-section" style="${activeSection === 'logistics' ? '' : 'display:none;'}">${buildGamePlanLogisticsHTML(crew.id)}</div>
+      <div id="game-plan-section-outfit" class="game-plan-section" style="${activeSection === 'outfit' ? '' : 'display:none;'}">${buildGamePlanOutfitHTML(crew.id)}</div>
+    `;
+  }
+
+  function jumpToGamePlanJams(crewId, festivalId) {
+    const overviewTabBtn = document.querySelector('#page-crew-detail .stats-subtab[onclick*="overview"]');
+    if (overviewTabBtn) switchCrewDetailTab('overview', overviewTabBtn);
+    _jamFilters = { tag: null, festivalId: String(festivalId) };
+    rerenderJams(crewId);
+    const jamsTile = document.querySelector('.crew-feature-tile[data-feature="jams"]');
+    if (jamsTile) toggleCrewFeatureTile('jams', jamsTile);
+    document.getElementById('crew-feature-panel-jams')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function jumpToGamePlanArchive(crewId, festivalId) {
+    const overviewTabBtn = document.querySelector('#page-crew-detail .stats-subtab[onclick*="overview"]');
+    if (overviewTabBtn) switchCrewDetailTab('overview', overviewTabBtn);
+    _archiveFilters = { festivalId: String(festivalId) };
+    rerenderArchive(crewId);
+    const archiveTile = document.querySelector('.crew-feature-tile[data-feature="archive"]');
+    if (archiveTile) toggleCrewFeatureTile('archive', archiveTile);
+    document.getElementById('crew-feature-panel-archive')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  // ── Checklist ──
+
+  function rerenderGamePlanChecklist(crewId) {
+    const el = document.getElementById('game-plan-section-checklist');
+    if (el) el.innerHTML = buildGamePlanChecklistHTML(crewId);
+  }
+
+  function buildGamePlanChecklistHTML(crewId) {
+    const crew = getCrew(crewId);
+    const uid = currentUser?.id;
+    const canManage = crewPerms(crew).canEdit;
+    const myRaver = squad.find(r => r.isYou);
+    const tasks = gamePlanItems.filter(it => it.kind === 'task');
+
+    const assigneeOptions = crewSquad(crew).map(p =>
+      `<option value="${escHtml(String(p.id))}">${escHtml(displayName(p).split(' ')[0])}</option>`
+    ).join('');
+
+    const rows = tasks.map(t => {
+      const assignee = t.assignee_raver_id ? crewSquad(crew).find(p => String(p.id) === String(t.assignee_raver_id)) : null;
+      const canToggle = !!uid && (canManage || t.added_by === uid || (myRaver && String(myRaver.id) === String(t.assignee_raver_id)) || !t.assignee_raver_id);
+      const canDelete = ownerOrManager(t.added_by, uid, canManage);
+      return `
+        <div class="archive-link-card game-plan-task-row${t.is_done ? ' game-plan-task-done' : ''}" id="game-plan-item-${escHtml(t.id)}">
+          <div class="archive-link-main">
+            <label style="display:flex;align-items:flex-start;gap:8px;cursor:${canToggle ? 'pointer' : 'default'};">
+              <input type="checkbox" ${t.is_done ? 'checked' : ''} ${canToggle ? '' : 'disabled'}
+                onchange="toggleGamePlanTask('${escHtml(t.id)}', this.checked)" style="margin-top:3px;">
+              <span class="archive-link-label" style="${t.is_done ? 'text-decoration:line-through;opacity:0.6;' : ''}">${escHtml(t.text || '')}</span>
+            </label>
+            ${assignee ? `<div class="archive-link-meta"><span>assigned to ${escHtml(displayName(assignee).split(' ')[0])}</span></div>` : ''}
+          </div>
+          <div class="archive-link-actions">
+            ${canDelete ? `<button class="archive-link-del" onclick="deleteGamePlanItem('${escHtml(t.id)}','${escHtml(crewId)}','task', () => rerenderGamePlanChecklist('${escHtml(crewId)}'))" title="Remove task" aria-label="Remove task">×</button>` : ''}
+          </div>
+        </div>`;
+    }).join('');
+
+    const emptyState = tasks.length === 0
+      ? `<div class="archive-empty es-block"><div class="es-icon">✅</div><div class="es-headline">No tasks yet</div><div class="es-sub">Add what needs to get done before this rave — tickets, packing, ride share, whatever.</div></div>`
+      : '';
+
+    return `
+      <div class="form-group">
+        <div class="section-banner"><span class="banner-inner">✅ Checklist <span class="banner-subtitle">· get it done before you go</span></span></div>
+        ${uid ? `
+        <div class="archive-add-area">
+          <div class="archive-add-row">
+            <input class="form-input archive-url-input" id="game-plan-task-input"
+              placeholder="Add a task…"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();addGamePlanTask('${escHtml(crewId)}');}">
+            <button class="btn btn-primary archive-drop-btn" onclick="addGamePlanTask('${escHtml(crewId)}')">Add</button>
+          </div>
+          <select class="archive-fest-select" id="game-plan-task-assignee">
+            <option value="">Assign to someone (optional)</option>
+            ${assigneeOptions}
+          </select>
+        </div>` : ''}
+        <div class="archive-links-list">
+          ${emptyState}
+          ${rows}
+        </div>
+      </div>`;
+  }
+
+  async function addGamePlanTask(crewId) {
+    const inputEl = document.getElementById('game-plan-task-input');
+    const assigneeEl = document.getElementById('game-plan-task-assignee');
+    const text = (inputEl?.value || '').trim();
+    if (!text) { showToast('⚠️ Type a task first'); return; }
+    const gp = gamePlans.find(g => String(g.crew_id) === String(crewId) && String(g.festival_id) === String(_gamePlanActiveFestivalId));
+    if (!gp) return;
+    const ok = await dbAddGamePlanTask(gp.id, crewId, text, assigneeEl?.value || null);
+    if (ok) {
+      if (inputEl) inputEl.value = '';
+      if (assigneeEl) assigneeEl.value = '';
+      rerenderGamePlanChecklist(crewId);
+    }
+  }
+
+  async function toggleGamePlanTask(itemId, done) {
+    await dbToggleGamePlanTaskDone(itemId, done);
+    rerenderGamePlanChecklist(_gamePlanActiveCrewId);
+  }
+
+  // ── Roles ──
+
+  let _gamePlanPendingRole = null;
+
+  function rerenderGamePlanRoles(crewId) {
+    const el = document.getElementById('game-plan-section-roles');
+    if (el) el.innerHTML = buildGamePlanRolesHTML(crewId);
+  }
+
+  function pickGamePlanRole(roleName, btnEl) {
+    _gamePlanPendingRole = roleName;
+    document.querySelectorAll('.game-plan-role-pill').forEach(p => p.classList.remove('active'));
+    if (btnEl) btnEl.classList.add('active');
+    const customEl = document.getElementById('game-plan-role-custom');
+    if (customEl) customEl.value = '';
+  }
+
+  function buildGamePlanRolesHTML(crewId) {
+    const crew = getCrew(crewId);
+    const uid = currentUser?.id;
+    const canManage = crewPerms(crew).canEdit;
+    const roles = gamePlanItems.filter(it => it.kind === 'role');
+    const people = crewSquad(crew);
+
+    const assigneeOptions = people.map(p =>
+      `<option value="${escHtml(String(p.id))}">${escHtml(displayName(p).split(' ')[0])}</option>`
+    ).join('');
+
+    const rolePills = GAME_PLAN_ROLES.map(r =>
+      `<button type="button" class="jam-filter-pill game-plan-role-pill${_gamePlanPendingRole === r ? ' active' : ''}"
+        onclick="pickGamePlanRole('${escHtml(r)}', this)">${escHtml(r)}</button>`
+    ).join('');
+
+    // Group assignments by role name so a role held by several people shows
+    // as one row with multiple avatars, per the "flexible many-to-many" rule.
+    const byRole = {};
+    roles.forEach(r => { (byRole[r.role_name] = byRole[r.role_name] || []).push(r); });
+
+    const rows = Object.entries(byRole).map(([roleName, grants]) => {
+      const holders = grants.map(g => {
+        const person = people.find(p => String(p.id) === String(g.assignee_raver_id));
+        const canDelete = ownerOrManager(g.added_by, uid, canManage) || (person && person.isYou);
+        return `<span class="jam-filter-pill" style="cursor:default;">
+          ${person ? escHtml(displayName(person).split(' ')[0]) : 'Someone'}
+          ${canDelete ? `<button class="archive-link-del" style="padding:0 0 0 4px;" onclick="deleteGamePlanItem('${escHtml(g.id)}','${escHtml(crewId)}','role assignment', () => rerenderGamePlanRoles('${escHtml(crewId)}'))" title="Remove" aria-label="Remove">×</button>` : ''}
+        </span>`;
+      }).join('');
+      return `
+        <div class="archive-link-card" style="flex-direction:column;align-items:stretch;">
+          <div class="archive-link-label">${escHtml(roleName)}</div>
+          <div class="archive-link-meta" style="flex-wrap:wrap;gap:6px;margin-top:4px;">${holders}</div>
+        </div>`;
+    }).join('');
+
+    const emptyState = roles.length === 0
+      ? `<div class="archive-empty es-block"><div class="es-icon">🎭</div><div class="es-headline">No roles assigned yet</div><div class="es-sub">Give people a job for this rave — driver, navigator, vibe curator, whatever your crew needs.</div></div>`
+      : '';
+
+    return `
+      <div class="form-group">
+        <div class="section-banner"><span class="banner-inner">🎭 Roles <span class="banner-subtitle">· who's doing what</span></span></div>
+        <p class="section-desc">One person can hold multiple roles, and a role can be shared by more than one person.</p>
+        ${uid ? `
+        <div class="archive-add-area">
+          <div class="jam-filter-bar">${rolePills}</div>
+          <input class="form-input" id="game-plan-role-custom" placeholder="…or type a custom role" maxlength="40"
+            oninput="_gamePlanPendingRole = this.value; document.querySelectorAll('.game-plan-role-pill').forEach(p => p.classList.remove('active'));">
+          <div class="archive-add-row">
+            <select class="archive-fest-select" id="game-plan-role-assignee" style="flex:1;">
+              <option value="">Assign to…</option>
+              ${assigneeOptions}
+            </select>
+            <button class="btn btn-primary archive-drop-btn" onclick="addGamePlanRole('${escHtml(crewId)}')">Assign</button>
+          </div>
+        </div>` : ''}
+        <div class="archive-links-list">
+          ${emptyState}
+          ${rows}
+        </div>
+      </div>`;
+  }
+
+  async function addGamePlanRole(crewId) {
+    const customEl = document.getElementById('game-plan-role-custom');
+    const assigneeEl = document.getElementById('game-plan-role-assignee');
+    const roleName = ((customEl?.value || '').trim()) || _gamePlanPendingRole;
+    const assigneeId = assigneeEl?.value || '';
+    if (!roleName) { showToast('⚠️ Pick or type a role first'); return; }
+    if (!assigneeId) { showToast('⚠️ Choose who to assign it to'); return; }
+    const gp = gamePlans.find(g => String(g.crew_id) === String(crewId) && String(g.festival_id) === String(_gamePlanActiveFestivalId));
+    if (!gp) return;
+    const ok = await dbAddGamePlanRole(gp.id, crewId, roleName, assigneeId);
+    if (ok) {
+      _gamePlanPendingRole = null;
+      rerenderGamePlanRoles(crewId);
+    }
+  }
+
+  // ── Logistics / Carpool ──
+
+  function rerenderGamePlanLogistics(crewId) {
+    const el = document.getElementById('game-plan-section-logistics');
+    if (el) el.innerHTML = buildGamePlanLogisticsHTML(crewId);
+  }
+
+  function buildGamePlanLogisticsHTML(crewId) {
+    const crew = getCrew(crewId);
+    const uid = currentUser?.id;
+    const canManage = crewPerms(crew).canEdit;
+    const myRaver = squad.find(r => r.isYou);
+    const people = crewSquad(crew);
+    const gp = gamePlans.find(g => String(g.crew_id) === String(crewId) && String(g.festival_id) === String(_gamePlanActiveFestivalId));
+
+    const drivers = gamePlanItems.filter(it => it.kind === 'carpool_driver');
+    const riders = gamePlanItems.filter(it => it.kind === 'carpool_rider');
+    const ridingRaverIds = new Set(riders.map(r => String(r.assignee_raver_id)));
+    const drivingRaverIds = new Set(drivers.map(d => String(d.assignee_raver_id)));
+    const uncarpooled = people.filter(p => !ridingRaverIds.has(String(p.id)) && !drivingRaverIds.has(String(p.id)));
+
+    const driverCards = drivers.map(d => {
+      const driver = people.find(p => String(p.id) === String(d.assignee_raver_id));
+      const driverRiders = riders.filter(r => r.driver_item_id === d.id);
+      const canDeleteDriver = ownerOrManager(d.added_by, uid, canManage) || (driver && driver.isYou);
+      const riderChips = driverRiders.map(r => {
+        const rider = people.find(p => String(p.id) === String(r.assignee_raver_id));
+        const canRemoveRider = ownerOrManager(r.added_by, uid, canManage) || (rider && rider.isYou);
+        return `<span class="jam-filter-pill" style="cursor:default;">
+          ${rider ? escHtml(displayName(rider).split(' ')[0]) : 'Someone'}
+          ${canRemoveRider ? `<button class="archive-link-del" style="padding:0 0 0 4px;" onclick="deleteGamePlanItem('${escHtml(r.id)}','${escHtml(crewId)}','rider', () => rerenderGamePlanLogistics('${escHtml(crewId)}'))" title="Remove" aria-label="Remove">×</button>` : ''}
+        </span>`;
+      }).join('');
+      const seatsLeft = d.seats != null ? Math.max(0, d.seats - driverRiders.length) : null;
+      const riderOptions = uncarpooled.map(p =>
+        `<option value="${escHtml(String(p.id))}">${escHtml(displayName(p).split(' ')[0])}</option>`
+      ).join('');
+      return `
+        <div class="archive-link-card" style="flex-direction:column;align-items:stretch;">
+          <div class="archive-link-main">
+            <span class="archive-link-label">🚗 ${driver ? escHtml(displayName(driver).split(' ')[0]) : 'Someone'} is driving${d.seats != null ? ` · ${escHtml(String(seatsLeft))} seat${seatsLeft === 1 ? '' : 's'} left` : ''}</span>
+            <div class="archive-link-meta" style="flex-wrap:wrap;gap:6px;margin-top:4px;">${riderChips}</div>
+          </div>
+          ${uid && uncarpooled.length && (seatsLeft == null || seatsLeft > 0) ? `
+          <div class="archive-add-row" style="margin-top:8px;">
+            <select class="archive-fest-select" id="game-plan-rider-select-${escHtml(d.id)}" style="flex:1;">${riderOptions}</select>
+            <button class="btn btn-ghost" style="flex-shrink:0;" onclick="addCarpoolRider('${escHtml(crewId)}','${escHtml(d.id)}')">Join ride</button>
+          </div>` : ''}
+          ${canDeleteDriver ? `<button class="btn btn-ghost" style="margin-top:8px;color:var(--neon-pink);border-color:rgba(255,45,120,0.25);" onclick="deleteGamePlanItem('${escHtml(d.id)}','${escHtml(crewId)}','ride', () => rerenderGamePlanLogistics('${escHtml(crewId)}'))">Remove this ride</button>` : ''}
+        </div>`;
+    }).join('');
+
+    const emptyDrivers = drivers.length === 0
+      ? `<div class="archive-empty" style="text-align:center;padding:12px 0;color:var(--muted);font-size:0.82rem;">No rides posted yet</div>`
+      : '';
+
+    return `
+      <div class="form-group">
+        <div class="section-banner"><span class="banner-inner">🚗 Logistics <span class="banner-subtitle">· meetup + carpool</span></span></div>
+        <div class="archive-add-area">
+          <label class="form-label">Meetup time &amp; place</label>
+          <input class="form-input" id="game-plan-meetup-at" type="datetime-local"
+            value="${gp && gp.meetup_at ? escHtml(new Date(gp.meetup_at).toISOString().slice(0, 16)) : ''}">
+          <input class="form-input" id="game-plan-meetup-location" placeholder="Where are you meeting?"
+            value="${gp && gp.meetup_location ? escHtml(gp.meetup_location) : ''}">
+          ${uid ? `<button class="btn btn-ghost" onclick="saveGamePlanMeetup('${escHtml(crewId)}')">Save meetup</button>` : ''}
+        </div>
+        <div class="section-desc" style="margin-top:14px;">🚗 Carpool</div>
+        ${uid && !drivingRaverIds.has(String(myRaver?.id)) ? `
+        <div class="archive-add-row">
+          <input class="form-input" id="game-plan-driver-seats" type="number" min="1" max="12" placeholder="Seats available" style="max-width:160px;">
+          <button class="btn btn-primary archive-drop-btn" onclick="addCarpoolDriver('${escHtml(crewId)}')">I'm driving</button>
+        </div>` : ''}
+        <div class="archive-links-list" style="margin-top:8px;">
+          ${emptyDrivers}
+          ${driverCards}
+        </div>
+      </div>`;
+  }
+
+  async function saveGamePlanMeetup(crewId) {
+    const atEl = document.getElementById('game-plan-meetup-at');
+    const locEl = document.getElementById('game-plan-meetup-location');
+    const gp = gamePlans.find(g => String(g.crew_id) === String(crewId) && String(g.festival_id) === String(_gamePlanActiveFestivalId));
+    if (!gp) return;
+    const meetupAt = atEl?.value ? new Date(atEl.value).toISOString() : null;
+    const meetupLocation = (locEl?.value || '').trim() || null;
+    const ok = await dbUpdateGamePlanHeader(gp.id, { meetupAt, meetupLocation });
+    if (ok) showToast('📍 Meetup saved');
+  }
+
+  async function addCarpoolDriver(crewId) {
+    const crew = getCrew(crewId);
+    const myRaver = squad.find(r => r.isYou);
+    if (!myRaver) return;
+    const seatsEl = document.getElementById('game-plan-driver-seats');
+    const seats = seatsEl?.value ? parseInt(seatsEl.value, 10) : null;
+    const gp = gamePlans.find(g => String(g.crew_id) === String(crewId) && String(g.festival_id) === String(_gamePlanActiveFestivalId));
+    if (!gp) return;
+    const ok = await dbAddCarpoolDriver(gp.id, crewId, myRaver.id, seats);
+    if (ok) rerenderGamePlanLogistics(crewId);
+  }
+
+  async function addCarpoolRider(crewId, driverItemId) {
+    const selectEl = document.getElementById('game-plan-rider-select-' + driverItemId);
+    const riderRaverId = selectEl?.value;
+    if (!riderRaverId) { showToast('⚠️ Pick who is riding along'); return; }
+    const gp = gamePlans.find(g => String(g.crew_id) === String(crewId) && String(g.festival_id) === String(_gamePlanActiveFestivalId));
+    if (!gp) return;
+    const ok = await dbAddCarpoolRider(gp.id, crewId, driverItemId, riderRaverId);
+    if (ok) rerenderGamePlanLogistics(crewId);
+  }
+
+  // ── Outfit / Theme ──
+
+  function rerenderGamePlanOutfit(crewId) {
+    const el = document.getElementById('game-plan-section-outfit');
+    if (el) el.innerHTML = buildGamePlanOutfitHTML(crewId);
+  }
+
+  function buildGamePlanOutfitHTML(crewId) {
+    const crew = getCrew(crewId);
+    const uid = currentUser?.id;
+    const canManage = crewPerms(crew).canEdit;
+    const gp = gamePlans.find(g => String(g.crew_id) === String(crewId) && String(g.festival_id) === String(_gamePlanActiveFestivalId));
+    const ideas = gamePlanItems.filter(it => it.kind === 'outfit');
+
+    const cards = ideas.map(idea => {
+      const canDelete = ownerOrManager(idea.added_by, uid, canManage);
+      let urlDisplay = '';
+      if (idea.link_url) { try { urlDisplay = new URL(idea.link_url).hostname; } catch { urlDisplay = idea.link_url; } }
+      return `
+        <div class="archive-link-card" id="game-plan-item-${escHtml(idea.id)}">
+          <div class="archive-link-main">
+            ${idea.text ? `<span class="archive-link-label">${escHtml(idea.text)}</span>` : ''}
+            ${urlDisplay ? `<span class="archive-link-url">${escHtml(urlDisplay)}</span>` : ''}
+          </div>
+          <div class="archive-link-actions">
+            ${idea.link_url ? `<a class="archive-link-open" href="${escHtml(idea.link_url)}" target="_blank" rel="noopener noreferrer" title="Open link">↗</a>` : ''}
+            ${canDelete ? `<button class="archive-link-del" onclick="deleteGamePlanItem('${escHtml(idea.id)}','${escHtml(crewId)}','idea', () => rerenderGamePlanOutfit('${escHtml(crewId)}'))" title="Remove idea" aria-label="Remove idea">×</button>` : ''}
+          </div>
+        </div>`;
+    }).join('');
+
+    const emptyState = ideas.length === 0
+      ? `<div class="archive-empty es-block"><div class="es-icon">✨</div><div class="es-headline">No outfit ideas yet</div><div class="es-sub">Set a theme and drop inspo links so the crew can coordinate looks.</div></div>`
+      : '';
+
+    return `
+      <div class="form-group">
+        <div class="section-banner"><span class="banner-inner">✨ Outfit &amp; Theme <span class="banner-subtitle">· coordinate the looks</span></span></div>
+        <div class="archive-add-area">
+          <label class="form-label">Theme</label>
+          <input class="form-input" id="game-plan-theme-input" placeholder="e.g. neon jungle, all-white, y2k rave" maxlength="120"
+            value="${gp && gp.theme_text ? escHtml(gp.theme_text) : ''}">
+          ${uid ? `<button class="btn btn-ghost" onclick="saveGamePlanTheme('${escHtml(crewId)}')">Save theme</button>` : ''}
+        </div>
+        ${uid ? `
+        <div class="archive-add-area">
+          <div class="archive-add-row">
+            <input class="form-input archive-url-input" id="game-plan-outfit-text" placeholder="Outfit idea or caption">
+            <button class="btn btn-primary archive-drop-btn" onclick="addGamePlanOutfitIdea('${escHtml(crewId)}')">Add</button>
+          </div>
+          <input class="form-input archive-label-input" id="game-plan-outfit-link" placeholder="Inspo link (optional)">
+        </div>` : ''}
+        <div class="archive-links-list">
+          ${emptyState}
+          ${cards}
+        </div>
+      </div>`;
+  }
+
+  async function saveGamePlanTheme(crewId) {
+    const themeEl = document.getElementById('game-plan-theme-input');
+    const gp = gamePlans.find(g => String(g.crew_id) === String(crewId) && String(g.festival_id) === String(_gamePlanActiveFestivalId));
+    if (!gp) return;
+    const ok = await dbUpdateGamePlanHeader(gp.id, { themeText: (themeEl?.value || '').trim() || null });
+    if (ok) showToast('✨ Theme saved');
+  }
+
+  async function addGamePlanOutfitIdea(crewId) {
+    const textEl = document.getElementById('game-plan-outfit-text');
+    const linkEl = document.getElementById('game-plan-outfit-link');
+    const text = (textEl?.value || '').trim();
+    const link = (linkEl?.value || '').trim();
+    if (!text && !link) { showToast('⚠️ Add a caption or a link first'); return; }
+    if (link && !/^https?:\/\//i.test(link)) { showToast('⚠️ Link must start with http:// or https://'); return; }
+    const gp = gamePlans.find(g => String(g.crew_id) === String(crewId) && String(g.festival_id) === String(_gamePlanActiveFestivalId));
+    if (!gp) return;
+    const ok = await dbAddOutfitIdea(gp.id, crewId, text, link || null);
+    if (ok) {
+      if (textEl) textEl.value = '';
+      if (linkEl) linkEl.value = '';
+      rerenderGamePlanOutfit(crewId);
+    }
+  }
+
   // ===== Dream Board =====
 
   async function dbLoadDreamPins(crewId) {
@@ -13442,6 +14147,11 @@ async function doProfilePasswordChange() {
     if (el) el.outerHTML = buildArchiveHTML(crewId);
   }
 
+  function toggleArchiveFilter(crewId, festivalId) {
+    _archiveFilters.festivalId = _archiveFilters.festivalId === festivalId ? null : festivalId;
+    rerenderArchive(crewId);
+  }
+
   function buildArchiveHTML(crewId) {
     const crew = getCrew(crewId);
     const uid = currentUser?.id;
@@ -13452,7 +14162,22 @@ async function doProfilePasswordChange() {
       `<option value="${escHtml(String(f.id))}">${escHtml(f.name)}</option>`
     ).join('');
 
-    const cards = archiveLinks.map(link => {
+    const allFests = archiveLinks
+      .map(l => l.festival_id ? festivals.find(f => String(f.id) === String(l.festival_id)) : null)
+      .filter(Boolean)
+      .filter((f, i, arr) => arr.findIndex(x => x.id === f.id) === i);
+    const visible = _archiveFilters.festivalId
+      ? archiveLinks.filter(l => String(l.festival_id) === String(_archiveFilters.festivalId))
+      : archiveLinks;
+    const festPills = allFests.map(f => {
+      const active = _archiveFilters.festivalId === String(f.id);
+      return `<button class="jam-filter-pill${active ? ' active' : ''}"
+        onclick="toggleArchiveFilter('${escHtml(crewId)}','${escHtml(String(f.id))}')"
+        >🎪 ${escHtml(f.name)}</button>`;
+    }).join('');
+    const filterBar = festPills ? `<div class="jam-filter-bar">${festPills}</div>` : '';
+
+    const cards = visible.map(link => {
       const canDelete = ownerOrManager(link.added_by, uid, canManage);
       let addedByLabel = '';
       if (link.added_by) {
@@ -13493,6 +14218,8 @@ async function doProfilePasswordChange() {
 
     const emptyState = archiveLinks.length === 0
       ? `<div class="archive-empty es-block"><div class="es-icon">📸</div><div class="es-headline">No memories dropped yet</div><div class="es-sub">Be the first to archive the chaos. Link your album and let the crew relive it.</div></div>`
+      : visible.length === 0
+      ? `<div class="archive-empty" style="text-align:center;padding:20px 0;color:var(--muted);font-size:0.82rem;">No links match this filter</div>`
       : '';
 
     return `
@@ -13516,6 +14243,7 @@ async function doProfilePasswordChange() {
             ${festOptions}
           </select>
         </div>` : ''}
+        ${filterBar}
         <div class="archive-links-list">
           ${emptyState}
           ${cards}

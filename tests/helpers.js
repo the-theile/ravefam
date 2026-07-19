@@ -205,7 +205,7 @@ async function installSupabaseStub(page, opts = {}) {
               arr.forEach(r => {
                 const ex = tbl.find(x => keys.every(k => String(x[k]) === String(r[k])));
                 if (ex) { if (!ignore) Object.assign(ex, r); res.push(clone(ex)); }
-                else { const row = clone(r); if (row.id == null && keys.length === 1 && keys[0] === 'id') row.id = table + '-' + (++idc); tbl.push(row); res.push(clone(row)); }
+                else { const row = clone(r); if (row.id == null) row.id = table + '-' + (++idc); tbl.push(row); res.push(clone(row)); }
               });
               return { data: res, error: null };
             }
@@ -249,7 +249,11 @@ async function installSupabaseStub(page, opts = {}) {
           return b;
         }
 
-        const channel = { on() { return channel; }, subscribe() { return channel; }, unsubscribe() { return Promise.resolve('ok'); } };
+        const channel = {
+          on() { return channel; }, subscribe() { return channel; }, unsubscribe() { return Promise.resolve('ok'); },
+          track() { return Promise.resolve('ok'); }, untrack() { return Promise.resolve('ok'); },
+          presenceState() { return {}; },
+        };
 
         // Re-implements the handful of security-definer RPCs the client
         // actually calls (get_{festival,crew,raver}_history,
