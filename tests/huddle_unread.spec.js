@@ -72,3 +72,71 @@ test.describe('huddle unread indicators', () => {
     await expect(page.locator('.huddle-cta-count')).toHaveText('1');
   });
 });
+
+test.describe('huddle unread entries in the notification drawer', () => {
+  test('shows a sender + snippet preview, one row per unread room', async ({ page }) => {
+    await bootAuthedApp(page, { data: seedWithHuddle() });
+    await page.evaluate(() => loadHuddleActivityCache());
+    await page.waitForTimeout(200);
+
+    await page.locator('#notif-bell').click();
+    await page.waitForTimeout(200);
+
+    const item = page.locator('.notif-huddle-item');
+    await expect(item).toHaveCount(1);
+    await expect(item.locator('.notif-huddle-title')).toContainText('Bass Syndicate');
+    await expect(item.locator('.notif-huddle-snippet')).toContainText('Kai');
+    await expect(item.locator('.notif-huddle-snippet')).toContainText('yo squad');
+    await expect(item.locator('.huddle-cta-count')).toHaveText('1');
+
+    // Opening the drawer itself must not clear huddle unread — only actually
+    // visiting the room does that.
+    await expect(page.locator('#notif-badge')).toHaveClass(/has-count/);
+  });
+
+  test('clicking a Main-room drawer entry opens that huddle and clears the badge', async ({ page }) => {
+    await bootAuthedApp(page, { data: seedWithHuddle() });
+    await page.evaluate(() => loadHuddleActivityCache());
+    await page.waitForTimeout(200);
+    await page.locator('#notif-bell').click();
+    await page.waitForTimeout(200);
+
+    await page.locator('.notif-huddle-item').click();
+    await page.waitForTimeout(400);
+
+    await expect(page.locator('#page-crew-detail')).toHaveClass(/active/);
+    await expect(page.locator('#notif-drawer-overlay')).not.toHaveClass(/open/);
+    await expect(page.locator('.huddle-cta-btn[data-crew-id="c1"]')).toHaveCount(0);
+
+    const read = await page.evaluate(() =>
+      (window.__store.huddle_room_reads || []).find(r => r.room_id === 'room-main' && String(r.user_id) === 'test-user-id'));
+    expect(read).toBeTruthy();
+  });
+
+  test('a festival-room drawer entry routes through that rave\'s Game Plan and clears the badge', async ({ page }) => {
+    const data = seedWithHuddle();
+    data.huddle_rooms = [
+      { id: 'room-fest', crew_id: 'c1', room_key: 'festival:f1', kind: 'festival', name: 'Tomorrowland Huddle', festival_id: 'f1', created_by: TEST_UID, created_at: '2024-01-01T00:00:00Z' },
+    ];
+    data.huddle_messages = [
+      { id: 'm3', room_id: 'room-fest', crew_id: 'c1', sender_id: 'kai-uid', kind: 'text', body: 'meet at the gate', reactions: {}, created_at: '2099-01-01T00:00:00Z', deleted_at: null },
+    ];
+    await bootAuthedApp(page, { data });
+    await page.evaluate(() => loadHuddleActivityCache());
+    await page.waitForTimeout(200);
+    await page.locator('#notif-bell').click();
+    await page.waitForTimeout(200);
+
+    const item = page.locator('.notif-huddle-item');
+    await expect(item.locator('.notif-huddle-title')).toContainText('Tomorrowland');
+    await item.click();
+    await page.waitForTimeout(400);
+
+    await expect(page.locator('#page-crew-detail .stats-subtab[data-tab="gameplan"]')).toHaveClass(/active/);
+    await expect(page.locator('.huddle-cta-btn[data-crew-id="c1"]')).toHaveCount(0);
+
+    const read = await page.evaluate(() =>
+      (window.__store.huddle_room_reads || []).find(r => r.room_id === 'room-fest' && String(r.user_id) === 'test-user-id'));
+    expect(read).toBeTruthy();
+  });
+});
