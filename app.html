@@ -1558,6 +1558,50 @@
   .game-plan-section { margin-bottom: 8px; }
   .game-plan-task-done .archive-link-label { color: var(--muted); }
 
+  /* Roles: cast card (hero) */
+  .game-plan-cast-wrap {
+    background: linear-gradient(135deg, rgba(255,45,120,0.1), rgba(0,245,255,0.08));
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 14px;
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+  .game-plan-cast-title { font-size: 0.78rem; font-weight: 700; color: #fff; letter-spacing: 0.3px; margin-bottom: 10px; }
+  .game-plan-cast-grid { display: flex; flex-wrap: wrap; gap: 12px; }
+  .game-plan-cast-card { display: flex; flex-direction: column; align-items: center; width: 84px; text-align: center; }
+  .game-plan-cast-avatar { width: 48px; height: 48px; font-size: 1rem; margin-bottom: 6px; }
+  .game-plan-cast-name { font-size: 0.72rem; font-weight: 700; color: #fff; margin-bottom: 4px; }
+  .game-plan-cast-badges { display: flex; flex-direction: column; gap: 2px; align-items: center; }
+  .game-plan-cast-badge { font-size: 0.62rem; color: var(--muted); line-height: 1.3; }
+
+  /* Tasks: progress bar + claim + phase badge */
+  .game-plan-progress-wrap { margin-bottom: 12px; }
+  .game-plan-progress-label { font-size: 0.72rem; color: var(--muted); margin-bottom: 5px; font-weight: 600; }
+  .game-plan-progress-track { height: 6px; border-radius: 4px; background: rgba(255,255,255,0.08); overflow: hidden; }
+  .game-plan-progress-fill { height: 100%; background: linear-gradient(90deg, var(--neon-pink), var(--neon-cyan)); border-radius: 4px; transition: width 0.3s ease; }
+  .game-plan-claim-btn {
+    background: rgba(0,245,255,0.1); border: 1px solid rgba(0,245,255,0.3); color: var(--neon-cyan);
+    border-radius: 8px; padding: 2px 8px; font-size: 0.68rem; font-weight: 700; cursor: pointer;
+  }
+  .game-plan-claim-btn:hover { background: rgba(0,245,255,0.18); }
+  .game-plan-phase-badge {
+    background: none; border: 1px dashed rgba(255,255,255,0.18); color: var(--muted);
+    border-radius: 8px; padding: 2px 8px; font-size: 0.68rem; cursor: pointer;
+  }
+  .game-plan-phase-badge.set { border-style: solid; border-color: rgba(255,255,255,0.14); background: rgba(255,255,255,0.06); color: #fff; }
+
+  /* Rides: countdown + seat badge */
+  .game-plan-countdown {
+    text-align: center; font-size: 0.9rem; font-weight: 700; color: #fff;
+    background: rgba(0,245,255,0.08); border: 1px solid rgba(0,245,255,0.25);
+    border-radius: 10px; padding: 8px; margin-bottom: 12px;
+  }
+  .game-plan-seat-badge { font-size: 0.68rem; font-weight: 700; color: var(--neon-cyan); background: rgba(0,245,255,0.1); border-radius: 6px; padding: 1px 6px; }
+  .game-plan-seat-badge.full { color: var(--neon-pink); background: rgba(255,45,120,0.12); }
+
+  /* Outfit: photo cards */
+  .game-plan-outfit-photo { width: 100%; max-height: 240px; object-fit: cover; border-radius: 8px; display: block; }
+
   /* FAM Poll */
   .fam-poll-section { margin-bottom: 0; }
   .poll-drop-btn { width: 100%; padding: 10px 16px; font-size: 0.84rem; margin-bottom: 12px; }
@@ -2939,6 +2983,30 @@
     transition: all 0.15s;
   }
   .huddle-room-pill.active { background: rgba(0,245,255,0.12); border-color: var(--neon-cyan); color: #fff; }
+
+  .huddle-pinned-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 12px;
+    padding: 9px 12px;
+    margin-bottom: 8px;
+  }
+  .huddle-pinned-icon { font-size: 1rem; }
+  .huddle-pinned-body { font-size: 0.82rem; color: #fff; line-height: 1.35; }
+
+  .huddle-system-row {
+    text-align: center;
+    font-size: 0.72rem;
+    color: var(--muted);
+    background: rgba(255,255,255,0.04);
+    border-radius: 8px;
+    padding: 5px 10px;
+    margin: 2px auto;
+    max-width: 90%;
+  }
 
   .huddle-beacon-banner {
     display: flex;
@@ -12584,6 +12652,16 @@ async function doProfilePasswordChange() {
       </div>`;
   }
 
+  function huddlePinnedBannerHTML() {
+    const pinned = huddleMessages.find(m => m.room_id === _huddleActiveRoomId && m.pinned_at);
+    if (!pinned) return '';
+    return `
+      <div class="huddle-pinned-banner">
+        <span class="huddle-pinned-icon">📌</span>
+        <div class="huddle-pinned-body">${escHtml(pinned.body || '')}</div>
+      </div>`;
+  }
+
   function huddleEmptyStateHTML() {
     return `
       <div class="es-block">
@@ -12598,6 +12676,13 @@ async function doProfilePasswordChange() {
   }
 
   function huddleBubbleHTML(m, crew) {
+    // Game Plan activity feed: a plain centered/muted line, not a chat bubble —
+    // the body text already reads as a complete sentence (names resolved at
+    // post time), so there's nothing else to render here.
+    if (m.kind === 'system') {
+      return `<div class="huddle-system-row">${escHtml(m.body || '')}</div>`;
+    }
+
     const isYou = currentUser && m.sender_id === currentUser.id;
     const senderName = huddleSenderName(m.sender_id);
     const senderRaver = raverByAuthUid(m.sender_id);
@@ -12607,6 +12692,8 @@ async function doProfilePasswordChange() {
       && (Date.now() - new Date(m.created_at).getTime()) < HUDDLE_EDIT_WINDOW_MS;
     const canDelete = ownerOrManager(m.sender_id, currentUser?.id, (crew && crew.leader_id === currentUser?.id) || isModerator());
     const canReport = !isYou && !m.deleted_at;
+    // Same posture as the enforce_huddle_pin_permission DB trigger: crew lead, moderator, or the sender.
+    const canPin = !m.deleted_at && ownerOrManager(m.sender_id, currentUser?.id, (crew && crew.leader_id === currentUser?.id) || isModerator());
 
     if (_huddleEditingIds.has(m.id)) {
       const escBody = escHtml(m.body || '');
@@ -12686,10 +12773,11 @@ async function doProfilePasswordChange() {
     const retryBtn = m._failed ? `<button type="button" class="huddle-bubble-retry" data-mid="${m.id}" onclick="retryHuddleMessage(this.dataset.mid)">Retry ↻</button>` : '';
     const editedLabel = m.updated_at ? `<span class="huddle-bubble-edited" title="Edited ${escHtml(formatModDate(m.updated_at))}">edited</span>` : '';
     const menuRows = `
+        ${canPin ? `<button type="button" class="huddle-bubble-menu-row" data-mid="${m.id}" onclick="toggleHuddleBubbleActionsMenu(this.dataset.mid); togglePinHuddleMessage('${m.id}', ${!!m.pinned_at})">${m.pinned_at ? '📌 Unpin' : '📌 Pin'}</button>` : ''}
         ${canEdit ? `<button type="button" class="huddle-bubble-menu-row" data-mid="${m.id}" onclick="toggleHuddleBubbleActionsMenu(this.dataset.mid); toggleHuddleMessageEditMode('${m.id}')">✏️ Edit</button>` : ''}
         ${canDelete ? `<button type="button" class="huddle-bubble-menu-row" data-mid="${m.id}" onclick="toggleHuddleBubbleActionsMenu(this.dataset.mid); deleteHuddleMessage('${m.id}')">🗑️ Delete</button>` : ''}
         ${canReport ? `<button type="button" class="huddle-bubble-menu-row" data-mid="${m.id}" onclick="toggleHuddleBubbleActionsMenu(this.dataset.mid); showReportModal('huddle_message','${m.id}',{metadata:{crew_id:'${crew.id}',room_id:'${m.room_id}'}})">🚩 Report</button>` : ''}`;
-    const actionsHTML = (canEdit || canDelete || canReport) ? `
+    const actionsHTML = (canPin || canEdit || canDelete || canReport) ? `
       <div class="huddle-bubble-menu-wrap">
         <button type="button" class="huddle-bubble-menu-btn" data-mid="${m.id}" onclick="toggleHuddleBubbleActionsMenu(this.dataset.mid)" title="More">⋯</button>
         <div id="huddle-bubble-menu-${m.id}" class="huddle-bubble-menu${isYou ? ' huddle-bubble-menu-right' : ''}" style="display:none;">${menuRows}</div>
@@ -12774,6 +12862,14 @@ async function doProfilePasswordChange() {
     ).join('');
     const messagesHTML = huddleMessages.length ? huddleMessages.map(m => huddleBubbleHTML(m, crew)).join('') : huddleEmptyStateHTML();
 
+    // Countdown banner only applies to a per-festival room with a Game Plan
+    // meetup time set — echoes the same countdown shown on the Rides section.
+    const roomGamePlan = currentRoom && currentRoom.festival_id
+      ? gamePlans.find(g => String(g.crew_id) === String(_huddleActiveCrewId) && String(g.festival_id) === String(currentRoom.festival_id))
+      : null;
+    const countdownBannerHTML = roomGamePlan && roomGamePlan.meetup_at
+      ? `<div id="huddle-countdown-banner" class="game-plan-countdown">${gamePlanCountdownText(roomGamePlan.meetup_at)}</div>` : '';
+
     root.innerHTML = `
       <div class="huddle-header">
         <div class="huddle-room-selector-wrap">
@@ -12788,6 +12884,8 @@ async function doProfilePasswordChange() {
           <button type="button" class="huddle-beacon-fab-inline" title="Send an urgent Beacon to your crew" onclick="toggleHuddleBeaconForm()">📡</button>
         </div>
       </div>
+      ${countdownBannerHTML}
+      ${huddlePinnedBannerHTML()}
       ${huddleBeaconBannerHTML()}
       <div class="huddle-messages-list" id="huddle-messages-list">${messagesHTML}</div>
       ${huddleComposerHTML()}
@@ -12950,6 +13048,28 @@ async function doProfilePasswordChange() {
     renderHuddleUI();
     const { error } = await sb.from('huddle_messages').update({ reactions }).eq('id', messageId);
     if (error) showToast('⚠️ Could not save reaction');
+  }
+
+  async function dbTogglePinHuddleMessage(messageId, pin) {
+    const { data, error } = await sb.from('huddle_messages')
+      .update({ pinned_at: pin ? new Date().toISOString() : null, pinned_by: pin ? currentUser.id : null })
+      .eq('id', messageId).select().single();
+    if (error) { showToast('⚠️ Could not update pin'); return null; }
+    const idx = huddleMessages.findIndex(m => m.id === messageId);
+    if (idx >= 0) huddleMessages[idx] = data;
+    return data;
+  }
+
+  // Only one pinned message per room (enforced by a partial unique index) —
+  // unpin whatever's currently pinned first so pinning a new one never races
+  // into that constraint.
+  async function togglePinHuddleMessage(messageId, isPinned) {
+    if (!isPinned) {
+      const currentlyPinned = huddleMessages.find(m => m.room_id === _huddleActiveRoomId && m.pinned_at && m.id !== messageId);
+      if (currentlyPinned) await dbTogglePinHuddleMessage(currentlyPinned.id, false);
+    }
+    await dbTogglePinHuddleMessage(messageId, !isPinned);
+    renderHuddleUI();
   }
 
   function submitHuddleLinkShare() {
@@ -13313,7 +13433,16 @@ async function doProfilePasswordChange() {
   // how huddle_messages/crew_jams already prefer nullable type-specific
   // columns over per-type tables.
 
-  const GAME_PLAN_ROLES = ['Driver / DD', 'Navigator', 'Snacks & Supplies', 'First Aid', 'Photographer', 'Vibe Curator', 'Hype Person'];
+  const GAME_PLAN_ROLES = [
+    'Driver / DD', 'Navigator', 'Snacks & Supplies', 'First Aid', 'Photographer', 'Vibe Curator', 'Hype Person',
+    'Playlist DJ', 'Water Sherpa', 'Glow-Up Artist', 'Merch Runner', 'Group Historian'
+  ];
+  const GAME_PLAN_ROLE_ICONS = {
+    'Driver / DD': '🚗', 'Navigator': '🗺️', 'Snacks & Supplies': '🍫', 'First Aid': '🩹',
+    'Photographer': '📸', 'Vibe Curator': '🎧', 'Hype Person': '📣', 'Playlist DJ': '🎵',
+    'Water Sherpa': '💧', 'Glow-Up Artist': '💄', 'Merch Runner': '👕', 'Group Historian': '📼'
+  };
+  function gamePlanRoleIcon(roleName) { return GAME_PLAN_ROLE_ICONS[roleName] || '🎪'; }
 
   // ── Data layer ──
 
@@ -13364,6 +13493,30 @@ async function doProfilePasswordChange() {
     return true;
   }
 
+  // -- Activity feed --
+  // Posts a system message into the per-festival Huddle whenever someone
+  // claims a role, offers/joins a ride, or completes a task — ties the other
+  // 4 sections into the Huddle so it reads as the live pulse of the plan.
+  // Mirrors openGamePlanHuddle's lazy room-materialization exactly (upsert
+  // on conflict do nothing, then look the room back up by its unique key).
+  async function postGamePlanActivity(crewId, festivalId, summaryText) {
+    if (!currentUser) return;
+    const fest = festivals.find(f => String(f.id) === String(festivalId));
+    const roomKey = `festival:${festivalId}`;
+    const row = { crew_id: crewId, created_by: currentUser.id, room_key: roomKey, kind: 'festival', name: `${fest ? fest.name : 'Rave'} Huddle`, festival_id: festivalId };
+    await sb.from('huddle_rooms').upsert([row], { onConflict: 'crew_id,room_key', ignoreDuplicates: true });
+    const { data: rooms } = await sb.from('huddle_rooms').select('id').eq('crew_id', crewId).eq('room_key', roomKey).limit(1);
+    const roomId = rooms && rooms[0] && rooms[0].id;
+    if (!roomId) return;
+    const { data, error } = await sb.from('huddle_messages').insert({
+      room_id: roomId, crew_id: crewId, sender_id: currentUser.id, kind: 'system', body: summaryText
+    }).select().single();
+    if (!error && data && _huddleActiveRoomId === roomId && !huddleMessages.some(m => m.id === data.id)) {
+      huddleMessages.push(data);
+      renderHuddleUI();
+    }
+  }
+
   // -- Checklist --
   async function dbAddGamePlanTask(gamePlanId, crewId, text, assigneeRaverId) {
     const { data, error } = await sb.from('game_plan_items').insert({
@@ -13382,6 +13535,22 @@ async function doProfilePasswordChange() {
     if (idx >= 0) gamePlanItems[idx] = data;
   }
 
+  async function dbClaimGamePlanTask(itemId, raverId) {
+    const { data, error } = await sb.from('game_plan_items').update({ assignee_raver_id: raverId }).eq('id', itemId).select().single();
+    if (error) { showToast('⚠️ Could not claim task — try again'); return null; }
+    const idx = gamePlanItems.findIndex(it => it.id === itemId);
+    if (idx >= 0) gamePlanItems[idx] = data;
+    return data;
+  }
+
+  async function dbSetGamePlanTaskPhase(itemId, phase) {
+    const { data, error } = await sb.from('game_plan_items').update({ phase }).eq('id', itemId).select().single();
+    if (error) { showToast('⚠️ Could not update task'); return null; }
+    const idx = gamePlanItems.findIndex(it => it.id === itemId);
+    if (idx >= 0) gamePlanItems[idx] = data;
+    return data;
+  }
+
   // -- Roles --
   async function dbAddGamePlanRole(gamePlanId, crewId, roleName, assigneeRaverId) {
     const { data, error } = await sb.from('game_plan_items').insert({
@@ -13397,10 +13566,10 @@ async function doProfilePasswordChange() {
   }
 
   // -- Logistics / Carpool --
-  async function dbAddCarpoolDriver(gamePlanId, crewId, raverId, seats) {
+  async function dbAddCarpoolDriver(gamePlanId, crewId, raverId, seats, vibeTag) {
     const { data, error } = await sb.from('game_plan_items').insert({
       game_plan_id: gamePlanId, crew_id: crewId, kind: 'carpool_driver', added_by: currentUser.id,
-      assignee_raver_id: raverId, seats: seats || null
+      assignee_raver_id: raverId, seats: seats || null, vibe_tag: vibeTag || null
     }).select().single();
     if (error) { showToast('⚠️ Could not add ride — try again'); return null; }
     gamePlanItems.push(data);
@@ -13412,7 +13581,11 @@ async function doProfilePasswordChange() {
       game_plan_id: gamePlanId, crew_id: crewId, kind: 'carpool_rider', added_by: currentUser.id,
       driver_item_id: driverItemId, assignee_raver_id: riderRaverId
     }).select().single();
-    if (error) { showToast('⚠️ Could not join that ride — try again'); return null; }
+    if (error) {
+      // The seat-capacity trigger rejects the insert once a driver's seats fill up.
+      showToast(error.message && error.message.includes('ride is full') ? '🚗 That ride just filled up' : '⚠️ Could not join that ride — try again');
+      return null;
+    }
     gamePlanItems.push(data);
     return data;
   }
@@ -13425,6 +13598,14 @@ async function doProfilePasswordChange() {
     }).select().single();
     if (error) { showToast('⚠️ Could not add idea — try again'); return null; }
     gamePlanItems.push(data);
+    return data;
+  }
+
+  async function dbSetOutfitIdeaImage(itemId, imageUrl) {
+    const { data, error } = await sb.from('game_plan_items').update({ image_url: imageUrl }).eq('id', itemId).select().single();
+    if (error) { showToast('⚠️ Idea saved, but the photo upload failed'); return null; }
+    const idx = gamePlanItems.findIndex(it => it.id === itemId);
+    if (idx >= 0) gamePlanItems[idx] = data;
     return data;
   }
 
@@ -13589,21 +13770,34 @@ async function doProfilePasswordChange() {
     if (el) el.innerHTML = buildGamePlanChecklistHTML(crewId);
   }
 
+  const GAME_PLAN_TASK_PHASES = [
+    { key: 'before_we_leave', icon: '🎒', label: 'Before we leave' },
+    { key: 'night_before', icon: '🌙', label: 'Night before' },
+    { key: 'at_the_rave', icon: '🎪', label: 'At the rave' }
+  ];
+  function gamePlanTaskPhaseInfo(phase) { return GAME_PLAN_TASK_PHASES.find(p => p.key === phase) || null; }
+
+  const GAME_PLAN_TASK_STARTER_PACK = ['Water', 'Sunscreen', 'Glowsticks', 'Earplugs', 'Portable charger', 'ID / wristband', 'Snacks'];
+
   function buildGamePlanChecklistHTML(crewId) {
     const crew = getCrew(crewId);
     const uid = currentUser?.id;
     const canManage = crewPerms(crew).canEdit;
     const myRaver = squad.find(r => r.isYou);
     const tasks = gamePlanItems.filter(it => it.kind === 'task');
-
-    const assigneeOptions = crewSquad(crew).map(p =>
-      `<option value="${escHtml(String(p.id))}">${escHtml(displayName(p).split(' ')[0])}</option>`
-    ).join('');
+    const doneCount = tasks.filter(t => t.is_done).length;
+    const progressPct = tasks.length ? Math.round(doneCount / tasks.length * 100) : 0;
 
     const rows = tasks.map(t => {
       const assignee = t.assignee_raver_id ? crewSquad(crew).find(p => String(p.id) === String(t.assignee_raver_id)) : null;
       const canToggle = !!uid && (canManage || t.added_by === uid || (myRaver && String(myRaver.id) === String(t.assignee_raver_id)) || !t.assignee_raver_id);
       const canDelete = ownerOrManager(t.added_by, uid, canManage);
+      const phaseInfo = gamePlanTaskPhaseInfo(t.phase);
+      const claimBtn = (!t.assignee_raver_id && !t.is_done && uid)
+        ? `<button type="button" class="game-plan-claim-btn" onclick="claimGamePlanTask('${escHtml(t.id)}')">🙋 I got this</button>` : '';
+      const phaseBadge = uid
+        ? `<button type="button" class="game-plan-phase-badge${phaseInfo ? ' set' : ''}" onclick="cycleGamePlanTaskPhase('${escHtml(t.id)}')" title="Tap to set when this needs doing">${phaseInfo ? `${phaseInfo.icon} ${phaseInfo.label}` : '+ when?'}</button>`
+        : (phaseInfo ? `<span class="game-plan-phase-badge set">${phaseInfo.icon} ${phaseInfo.label}</span>` : '');
       return `
         <div class="archive-link-card game-plan-task-row${t.is_done ? ' game-plan-task-done' : ''}" id="game-plan-item-${escHtml(t.id)}">
           <div class="archive-link-main">
@@ -13612,7 +13806,10 @@ async function doProfilePasswordChange() {
                 onchange="toggleGamePlanTask('${escHtml(t.id)}', this.checked)" style="margin-top:3px;">
               <span class="archive-link-label" style="${t.is_done ? 'text-decoration:line-through;opacity:0.6;' : ''}">${escHtml(t.text || '')}</span>
             </label>
-            ${assignee ? `<div class="archive-link-meta"><span>assigned to ${escHtml(displayName(assignee).split(' ')[0])}</span></div>` : ''}
+            <div class="archive-link-meta" style="flex-wrap:wrap;gap:6px;">
+              ${assignee ? `<span>assigned to ${escHtml(displayName(assignee).split(' ')[0])}</span>` : claimBtn}
+              ${phaseBadge}
+            </div>
           </div>
           <div class="archive-link-actions">
             ${canDelete ? `<button class="archive-link-del" onclick="deleteGamePlanItem('${escHtml(t.id)}','${escHtml(crewId)}','task', () => rerenderGamePlanChecklist('${escHtml(crewId)}'))" title="Remove task" aria-label="Remove task">×</button>` : ''}
@@ -13624,9 +13821,16 @@ async function doProfilePasswordChange() {
       ? `<div class="archive-empty es-block"><div class="es-icon">✅</div><div class="es-headline">No tasks yet</div><div class="es-sub">Add what needs to get done before this rave — tickets, packing, ride share, whatever.</div></div>`
       : '';
 
+    const progressHTML = tasks.length ? `
+      <div class="game-plan-progress-wrap">
+        <div class="game-plan-progress-label">${doneCount}/${tasks.length} packed 🎒</div>
+        <div class="game-plan-progress-track"><div class="game-plan-progress-fill" style="width:${progressPct}%;"></div></div>
+      </div>` : '';
+
     return `
       <div class="form-group">
         <div class="section-banner"><span class="banner-inner">✅ Checklist <span class="banner-subtitle">· get it done before you go</span></span></div>
+        ${progressHTML}
         ${uid ? `
         <div class="archive-add-area">
           <div class="archive-add-row">
@@ -13635,10 +13839,7 @@ async function doProfilePasswordChange() {
               onkeydown="if(event.key==='Enter'){event.preventDefault();addGamePlanTask('${escHtml(crewId)}');}">
             <button class="btn btn-primary archive-drop-btn" onclick="addGamePlanTask('${escHtml(crewId)}')">Add</button>
           </div>
-          <select class="archive-fest-select" id="game-plan-task-assignee">
-            <option value="">Assign to someone (optional)</option>
-            ${assigneeOptions}
-          </select>
+          <button class="btn btn-ghost" onclick="addGamePlanStarterPack('${escHtml(crewId)}')">✨ Add essentials (water, sunscreen, glowsticks…)</button>
         </div>` : ''}
         <div class="archive-links-list">
           ${emptyState}
@@ -13649,21 +13850,51 @@ async function doProfilePasswordChange() {
 
   async function addGamePlanTask(crewId) {
     const inputEl = document.getElementById('game-plan-task-input');
-    const assigneeEl = document.getElementById('game-plan-task-assignee');
     const text = (inputEl?.value || '').trim();
     if (!text) { showToast('⚠️ Type a task first'); return; }
     const gp = gamePlans.find(g => String(g.crew_id) === String(crewId) && String(g.festival_id) === String(_gamePlanActiveFestivalId));
     if (!gp) return;
-    const ok = await dbAddGamePlanTask(gp.id, crewId, text, assigneeEl?.value || null);
+    const ok = await dbAddGamePlanTask(gp.id, crewId, text, null);
     if (ok) {
       if (inputEl) inputEl.value = '';
-      if (assigneeEl) assigneeEl.value = '';
       rerenderGamePlanChecklist(crewId);
     }
   }
 
+  async function addGamePlanStarterPack(crewId) {
+    const gp = gamePlans.find(g => String(g.crew_id) === String(crewId) && String(g.festival_id) === String(_gamePlanActiveFestivalId));
+    if (!gp) return;
+    const existing = new Set(gamePlanItems.filter(it => it.kind === 'task').map(t => (t.text || '').toLowerCase()));
+    const toAdd = GAME_PLAN_TASK_STARTER_PACK.filter(t => !existing.has(t.toLowerCase()));
+    if (!toAdd.length) { showToast('Already on the list!'); return; }
+    await Promise.all(toAdd.map(t => dbAddGamePlanTask(gp.id, crewId, t, null)));
+    rerenderGamePlanChecklist(crewId);
+  }
+
   async function toggleGamePlanTask(itemId, done) {
     await dbToggleGamePlanTaskDone(itemId, done);
+    rerenderGamePlanChecklist(_gamePlanActiveCrewId);
+    if (done) {
+      const t = gamePlanItems.find(it => it.id === itemId);
+      if (t) postGamePlanActivity(_gamePlanActiveCrewId, _gamePlanActiveFestivalId, `✅ "${t.text}" got done`);
+    }
+  }
+
+  async function claimGamePlanTask(itemId) {
+    const myRaver = squad.find(r => r.isYou);
+    if (!myRaver) return;
+    const data = await dbClaimGamePlanTask(itemId, myRaver.id);
+    rerenderGamePlanChecklist(_gamePlanActiveCrewId);
+    if (data) postGamePlanActivity(_gamePlanActiveCrewId, _gamePlanActiveFestivalId, `🙋 ${displayName(myRaver).split(' ')[0]} claimed "${data.text}"`);
+  }
+
+  async function cycleGamePlanTaskPhase(itemId) {
+    const t = gamePlanItems.find(it => it.id === itemId);
+    if (!t) return;
+    const keys = GAME_PLAN_TASK_PHASES.map(p => p.key);
+    const curIdx = keys.indexOf(t.phase);
+    const nextPhase = curIdx === -1 ? keys[0] : (curIdx === keys.length - 1 ? null : keys[curIdx + 1]);
+    await dbSetGamePlanTaskPhase(itemId, nextPhase);
     rerenderGamePlanChecklist(_gamePlanActiveCrewId);
   }
 
@@ -13684,6 +13915,39 @@ async function doProfilePasswordChange() {
     if (customEl) customEl.value = '';
   }
 
+  // Hero visual: a "cast" roster (avatar + role badges per person) instead of
+  // only the role-grouped list below — the shareable, at-a-glance moment for
+  // who's covering what on this rave.
+  function buildGamePlanCastCardHTML(crewId) {
+    const crew = getCrew(crewId);
+    const roles = gamePlanItems.filter(it => it.kind === 'role');
+    if (!roles.length) return '';
+    const people = crewSquad(crew);
+    const byPerson = {};
+    roles.forEach(r => {
+      const key = String(r.assignee_raver_id);
+      (byPerson[key] = byPerson[key] || []).push(r.role_name);
+    });
+    const cards = Object.entries(byPerson).map(([raverId, roleNames]) => {
+      const person = people.find(p => String(p.id) === raverId);
+      if (!person) return '';
+      const avatarHtml = raverAvatarHTML(person.avatarUrl, person.gradient, person.name, 'avatar game-plan-cast-avatar', '');
+      const badges = roleNames.map(rn => `<span class="game-plan-cast-badge">${gamePlanRoleIcon(rn)} ${escHtml(rn)}</span>`).join('');
+      return `
+        <div class="game-plan-cast-card">
+          ${avatarHtml}
+          <div class="game-plan-cast-name">${escHtml(displayName(person).split(' ')[0])}</div>
+          <div class="game-plan-cast-badges">${badges}</div>
+        </div>`;
+    }).join('');
+    if (!cards) return '';
+    return `
+      <div class="game-plan-cast-wrap">
+        <div class="game-plan-cast-title">🎬 The Cast</div>
+        <div class="game-plan-cast-grid">${cards}</div>
+      </div>`;
+  }
+
   function buildGamePlanRolesHTML(crewId) {
     const crew = getCrew(crewId);
     const uid = currentUser?.id;
@@ -13697,7 +13961,7 @@ async function doProfilePasswordChange() {
 
     const rolePills = GAME_PLAN_ROLES.map(r =>
       `<button type="button" class="jam-filter-pill game-plan-role-pill${_gamePlanPendingRole === r ? ' active' : ''}"
-        onclick="pickGamePlanRole('${escHtml(r)}', this)">${escHtml(r)}</button>`
+        onclick="pickGamePlanRole('${escHtml(r)}', this)">${gamePlanRoleIcon(r)} ${escHtml(r)}</button>`
     ).join('');
 
     // Group assignments by role name so a role held by several people shows
@@ -13716,7 +13980,7 @@ async function doProfilePasswordChange() {
       }).join('');
       return `
         <div class="archive-link-card" style="flex-direction:column;align-items:stretch;">
-          <div class="archive-link-label">${escHtml(roleName)}</div>
+          <div class="archive-link-label">${gamePlanRoleIcon(roleName)} ${escHtml(roleName)}</div>
           <div class="archive-link-meta" style="flex-wrap:wrap;gap:6px;margin-top:4px;">${holders}</div>
         </div>`;
     }).join('');
@@ -13728,6 +13992,7 @@ async function doProfilePasswordChange() {
     return `
       <div class="form-group">
         <div class="section-banner"><span class="banner-inner">🎭 Roles <span class="banner-subtitle">· who's doing what</span></span></div>
+        ${buildGamePlanCastCardHTML(crewId)}
         <p class="section-desc">One person can hold multiple roles, and a role can be shared by more than one person.</p>
         ${uid ? `
         <div class="archive-add-area">
@@ -13762,10 +14027,43 @@ async function doProfilePasswordChange() {
     if (ok) {
       _gamePlanPendingRole = null;
       rerenderGamePlanRoles(crewId);
+      const assignee = crewSquad(getCrew(crewId)).find(p => String(p.id) === String(assigneeId));
+      const who = assignee ? displayName(assignee).split(' ')[0] : 'Someone';
+      postGamePlanActivity(crewId, _gamePlanActiveFestivalId, `${gamePlanRoleIcon(roleName)} ${who} claimed ${roleName}`);
     }
   }
 
   // ── Logistics / Carpool ──
+
+  // Live "time until meetup" text, shared by the Rides countdown and the
+  // Huddle countdown banner — a single 1s heartbeat (below) just checks
+  // whether either target element is currently on screen, same low-footprint
+  // shape as the existing app-update-check heartbeat.
+  function gamePlanCountdownText(meetupAtISO) {
+    const diff = new Date(meetupAtISO).getTime() - Date.now();
+    if (diff <= 0) return "🔥 It's meetup time!";
+    const totalMin = Math.floor(diff / 60000);
+    const days = Math.floor(totalMin / 1440);
+    const hours = Math.floor((totalMin % 1440) / 60);
+    const mins = totalMin % 60;
+    if (days > 0) return `🕐 Meetup in ${days}d ${hours}h`;
+    if (hours > 0) return `🕐 Meetup in ${hours}h ${mins}m`;
+    return `🕐 Meetup in ${mins}m`;
+  }
+  function tickGamePlanCountdowns() {
+    const ridesEl = document.getElementById('game-plan-countdown');
+    const huddleEl = document.getElementById('huddle-countdown-banner');
+    if (!ridesEl && !huddleEl) return;
+    const gp = gamePlans.find(g => String(g.crew_id) === String(_gamePlanActiveCrewId) && String(g.festival_id) === String(_gamePlanActiveFestivalId));
+    const text = gp && gp.meetup_at ? gamePlanCountdownText(gp.meetup_at) : '';
+    if (ridesEl) ridesEl.textContent = text;
+    if (huddleEl) huddleEl.textContent = text;
+  }
+  setInterval(tickGamePlanCountdowns, 1000);
+
+  function gamePlanMapLink(location) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
+  }
 
   function rerenderGamePlanLogistics(crewId) {
     const el = document.getElementById('game-plan-section-logistics');
@@ -13799,16 +14097,21 @@ async function doProfilePasswordChange() {
         </span>`;
       }).join('');
       const seatsLeft = d.seats != null ? Math.max(0, d.seats - driverRiders.length) : null;
+      const isFull = seatsLeft === 0;
+      const seatBadge = d.seats != null
+        ? (isFull ? `<span class="game-plan-seat-badge full">🚫 Full</span>` : `<span class="game-plan-seat-badge">${escHtml(String(seatsLeft))} seat${seatsLeft === 1 ? '' : 's'} left</span>`)
+        : '';
       const riderOptions = uncarpooled.map(p =>
         `<option value="${escHtml(String(p.id))}">${escHtml(displayName(p).split(' ')[0])}</option>`
       ).join('');
       return `
         <div class="archive-link-card" style="flex-direction:column;align-items:stretch;">
           <div class="archive-link-main">
-            <span class="archive-link-label">🚗 ${driver ? escHtml(displayName(driver).split(' ')[0]) : 'Someone'} is driving${d.seats != null ? ` · ${escHtml(String(seatsLeft))} seat${seatsLeft === 1 ? '' : 's'} left` : ''}</span>
-            <div class="archive-link-meta" style="flex-wrap:wrap;gap:6px;margin-top:4px;">${riderChips}</div>
+            <span class="archive-link-label">🚗 ${driver ? escHtml(displayName(driver).split(' ')[0]) : 'Someone'} is driving</span>
+            ${d.vibe_tag ? `<div class="archive-link-meta"><span>🎶 "${escHtml(d.vibe_tag)}"</span></div>` : ''}
+            <div class="archive-link-meta" style="flex-wrap:wrap;gap:6px;margin-top:4px;">${seatBadge}${riderChips}</div>
           </div>
-          ${uid && uncarpooled.length && (seatsLeft == null || seatsLeft > 0) ? `
+          ${uid && uncarpooled.length && !isFull ? `
           <div class="archive-add-row" style="margin-top:8px;">
             <select class="archive-fest-select" id="game-plan-rider-select-${escHtml(d.id)}" style="flex:1;">${riderOptions}</select>
             <button class="btn btn-ghost" style="flex-shrink:0;" onclick="addCarpoolRider('${escHtml(crewId)}','${escHtml(d.id)}')">Join ride</button>
@@ -13821,21 +14124,31 @@ async function doProfilePasswordChange() {
       ? `<div class="archive-empty" style="text-align:center;padding:12px 0;color:var(--muted);font-size:0.82rem;">No rides posted yet</div>`
       : '';
 
+    const countdownHTML = gp && gp.meetup_at
+      ? `<div id="game-plan-countdown" class="game-plan-countdown">${gamePlanCountdownText(gp.meetup_at)}</div>` : '';
+    const mapLinkHTML = gp && gp.meetup_location
+      ? `<a class="btn btn-ghost" href="${escHtml(gamePlanMapLink(gp.meetup_location))}" target="_blank" rel="noopener noreferrer">🗺️ Open in Maps</a>` : '';
+
     return `
       <div class="form-group">
         <div class="section-banner"><span class="banner-inner">🚗 Logistics <span class="banner-subtitle">· meetup + carpool</span></span></div>
+        ${countdownHTML}
         <div class="archive-add-area">
           <label class="form-label">Meetup time &amp; place</label>
           <input class="form-input" id="game-plan-meetup-at" type="datetime-local"
             value="${gp && gp.meetup_at ? escHtml(new Date(gp.meetup_at).toISOString().slice(0, 16)) : ''}">
           <input class="form-input" id="game-plan-meetup-location" placeholder="Where are you meeting?"
             value="${gp && gp.meetup_location ? escHtml(gp.meetup_location) : ''}">
-          ${uid ? `<button class="btn btn-ghost" onclick="saveGamePlanMeetup('${escHtml(crewId)}')">Save meetup</button>` : ''}
+          <div class="archive-add-row">
+            ${uid ? `<button class="btn btn-ghost" onclick="saveGamePlanMeetup('${escHtml(crewId)}')">Save meetup</button>` : ''}
+            ${mapLinkHTML}
+          </div>
         </div>
         <div class="section-desc" style="margin-top:14px;">🚗 Carpool</div>
         ${uid && !drivingRaverIds.has(String(myRaver?.id)) ? `
         <div class="archive-add-row">
           <input class="form-input" id="game-plan-driver-seats" type="number" min="1" max="12" placeholder="Seats available" style="max-width:160px;">
+          <input class="form-input" id="game-plan-driver-vibe" placeholder="Ride vibe (optional, e.g. aux cord open)" maxlength="60" style="flex:1;">
           <button class="btn btn-primary archive-drop-btn" onclick="addCarpoolDriver('${escHtml(crewId)}')">I'm driving</button>
         </div>` : ''}
         <div class="archive-links-list" style="margin-top:8px;">
@@ -13853,7 +14166,7 @@ async function doProfilePasswordChange() {
     const meetupAt = atEl?.value ? new Date(atEl.value).toISOString() : null;
     const meetupLocation = (locEl?.value || '').trim() || null;
     const ok = await dbUpdateGamePlanHeader(gp.id, { meetupAt, meetupLocation });
-    if (ok) showToast('📍 Meetup saved');
+    if (ok) { showToast('📍 Meetup saved'); rerenderGamePlanLogistics(crewId); }
   }
 
   async function addCarpoolDriver(crewId) {
@@ -13861,11 +14174,16 @@ async function doProfilePasswordChange() {
     const myRaver = squad.find(r => r.isYou);
     if (!myRaver) return;
     const seatsEl = document.getElementById('game-plan-driver-seats');
+    const vibeEl = document.getElementById('game-plan-driver-vibe');
     const seats = seatsEl?.value ? parseInt(seatsEl.value, 10) : null;
+    const vibeTag = (vibeEl?.value || '').trim() || null;
     const gp = gamePlans.find(g => String(g.crew_id) === String(crewId) && String(g.festival_id) === String(_gamePlanActiveFestivalId));
     if (!gp) return;
-    const ok = await dbAddCarpoolDriver(gp.id, crewId, myRaver.id, seats);
-    if (ok) rerenderGamePlanLogistics(crewId);
+    const ok = await dbAddCarpoolDriver(gp.id, crewId, myRaver.id, seats, vibeTag);
+    if (ok) {
+      rerenderGamePlanLogistics(crewId);
+      postGamePlanActivity(crewId, _gamePlanActiveFestivalId, `🚗 ${displayName(myRaver).split(' ')[0]} is driving${seats ? ` (${seats} seat${seats === 1 ? '' : 's'})` : ''}`);
+    }
   }
 
   async function addCarpoolRider(crewId, driverItemId) {
@@ -13875,10 +14193,18 @@ async function doProfilePasswordChange() {
     const gp = gamePlans.find(g => String(g.crew_id) === String(crewId) && String(g.festival_id) === String(_gamePlanActiveFestivalId));
     if (!gp) return;
     const ok = await dbAddCarpoolRider(gp.id, crewId, driverItemId, riderRaverId);
-    if (ok) rerenderGamePlanLogistics(crewId);
+    if (ok) {
+      rerenderGamePlanLogistics(crewId);
+      const rider = crewSquad(getCrew(crewId)).find(p => String(p.id) === String(riderRaverId));
+      const who = rider ? displayName(rider).split(' ')[0] : 'Someone';
+      postGamePlanActivity(crewId, _gamePlanActiveFestivalId, `🎟️ ${who} joined a ride`);
+    }
   }
 
   // ── Outfit / Theme ──
+
+  const OUTFIT_REACTION_EMOJIS = ['🔥', '👍', '😍'];
+  let _gamePlanPendingOutfitImageFile = null;
 
   function rerenderGamePlanOutfit(crewId) {
     const el = document.getElementById('game-plan-section-outfit');
@@ -13896,13 +14222,17 @@ async function doProfilePasswordChange() {
       const canDelete = ownerOrManager(idea.added_by, uid, canManage);
       let urlDisplay = '';
       if (idea.link_url) { try { urlDisplay = new URL(idea.link_url).hostname; } catch { urlDisplay = idea.link_url; } }
+      const reactionsHTML = renderReactionsHTML(idea.reactions, idea.id, OUTFIT_REACTION_EMOJIS, 'toggleGamePlanOutfitReaction', uid);
+      const hasImage = !!idea.image_url;
       return `
-        <div class="archive-link-card" id="game-plan-item-${escHtml(idea.id)}">
-          <div class="archive-link-main">
+        <div class="archive-link-card" id="game-plan-item-${escHtml(idea.id)}" ${hasImage ? 'style="flex-direction:column;align-items:stretch;"' : ''}>
+          ${hasImage ? `<img class="game-plan-outfit-photo" src="${escHtml(idea.image_url)}" alt="${escHtml(idea.text || 'Outfit idea')}" loading="lazy">` : ''}
+          <div class="archive-link-main" style="${hasImage ? 'margin-top:8px;' : ''}">
             ${idea.text ? `<span class="archive-link-label">${escHtml(idea.text)}</span>` : ''}
             ${urlDisplay ? `<span class="archive-link-url">${escHtml(urlDisplay)}</span>` : ''}
+            <div class="jam-reactions-row" style="margin-top:6px;">${reactionsHTML}</div>
           </div>
-          <div class="archive-link-actions">
+          <div class="archive-link-actions" style="${hasImage ? 'align-self:flex-end;margin-top:4px;' : ''}">
             ${idea.link_url ? `<a class="archive-link-open" href="${escHtml(idea.link_url)}" target="_blank" rel="noopener noreferrer" title="Open link">↗</a>` : ''}
             ${canDelete ? `<button class="archive-link-del" onclick="deleteGamePlanItem('${escHtml(idea.id)}','${escHtml(crewId)}','idea', () => rerenderGamePlanOutfit('${escHtml(crewId)}'))" title="Remove idea" aria-label="Remove idea">×</button>` : ''}
           </div>
@@ -13929,6 +14259,8 @@ async function doProfilePasswordChange() {
             <button class="btn btn-primary archive-drop-btn" onclick="addGamePlanOutfitIdea('${escHtml(crewId)}')">Add</button>
           </div>
           <input class="form-input archive-label-input" id="game-plan-outfit-link" placeholder="Inspo link (optional)">
+          <input type="file" id="game-plan-outfit-image-input" accept="image/*" style="display:none" onchange="handleGamePlanOutfitImagePick(event)">
+          <button type="button" class="btn btn-ghost" id="game-plan-outfit-image-label" onclick="document.getElementById('game-plan-outfit-image-input').click()">📷 Add a photo (optional)</button>
         </div>` : ''}
         <div class="archive-links-list">
           ${emptyState}
@@ -13945,21 +14277,49 @@ async function doProfilePasswordChange() {
     if (ok) showToast('✨ Theme saved');
   }
 
+  function handleGamePlanOutfitImagePick(event) {
+    const file = event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { showToast('⚠️ Please select an image file'); return; }
+    if (file.size > 10 * 1024 * 1024) { showToast('⚠️ Photo must be under 10 MB'); return; }
+    _gamePlanPendingOutfitImageFile = file;
+    const label = document.getElementById('game-plan-outfit-image-label');
+    if (label) label.textContent = `📷 ${file.name}`;
+  }
+
   async function addGamePlanOutfitIdea(crewId) {
     const textEl = document.getElementById('game-plan-outfit-text');
     const linkEl = document.getElementById('game-plan-outfit-link');
     const text = (textEl?.value || '').trim();
     const link = (linkEl?.value || '').trim();
-    if (!text && !link) { showToast('⚠️ Add a caption or a link first'); return; }
+    const imageFile = _gamePlanPendingOutfitImageFile;
+    if (!text && !link && !imageFile) { showToast('⚠️ Add a caption, link, or photo first'); return; }
     if (link && !/^https?:\/\//i.test(link)) { showToast('⚠️ Link must start with http:// or https://'); return; }
     const gp = gamePlans.find(g => String(g.crew_id) === String(crewId) && String(g.festival_id) === String(_gamePlanActiveFestivalId));
     if (!gp) return;
-    const ok = await dbAddOutfitIdea(gp.id, crewId, text, link || null);
-    if (ok) {
+    const idea = await dbAddOutfitIdea(gp.id, crewId, text, link || null);
+    if (idea) {
       if (textEl) textEl.value = '';
       if (linkEl) linkEl.value = '';
+      _gamePlanPendingOutfitImageFile = null;
       rerenderGamePlanOutfit(crewId);
+      if (imageFile) {
+        try {
+          const url = await uploadPhotoToStorage(imageFile, `game-plan/${gp.id}/${idea.id}.jpg`);
+          await dbSetOutfitIdeaImage(idea.id, url);
+        } catch (e) {
+          console.error('outfit image upload error', e);
+          showToast('⚠️ Idea saved, but the photo upload failed');
+        }
+        rerenderGamePlanOutfit(crewId);
+      }
     }
+  }
+
+  async function toggleGamePlanOutfitReaction(itemId, emoji) {
+    await dbToggleReaction('game_plan_items', gamePlanItems, itemId, emoji);
+    rerenderGamePlanOutfit(_gamePlanActiveCrewId);
   }
 
   // ===== Dream Board =====
@@ -15008,11 +15368,15 @@ async function doProfilePasswordChange() {
     crewJams.sort((a, b) => (b.is_pinned ? 1 : 0) - (a.is_pinned ? 1 : 0) || new Date(b.created_at) - new Date(a.created_at));
   }
 
-  async function dbToggleJamReaction(jamId, emoji) {
-    const jam = crewJams.find(j => j.id === jamId);
-    if (!jam || !currentUser) return;
+  // Generic jsonb-reactions read-modify-write toggle, shared by anything
+  // shaped like crew_jams.reactions / huddle_messages.reactions — the row
+  // must be a plain object with `.id` and `.reactions` sitting in a cached
+  // array the caller already keeps up to date (crewJams, gamePlanItems, …).
+  async function dbToggleReaction(tableName, cacheArray, rowId, emoji) {
+    const row = cacheArray.find(r => r.id === rowId);
+    if (!row || !currentUser) return;
     const uid = currentUser.id;
-    const reactions = { ...(jam.reactions || {}) };
+    const reactions = { ...(row.reactions || {}) };
     const existing = reactions[emoji] || [];
     if (existing.includes(uid)) {
       reactions[emoji] = existing.filter(id => id !== uid);
@@ -15020,9 +15384,26 @@ async function doProfilePasswordChange() {
     } else {
       reactions[emoji] = [...existing, uid];
     }
-    const { error } = await sb.from('crew_jams').update({ reactions }).eq('id', jamId);
+    const { error } = await sb.from(tableName).update({ reactions }).eq('id', rowId);
     if (error) { showToast('⚠️ Could not save reaction'); return; }
-    jam.reactions = reactions;
+    row.reactions = reactions;
+  }
+
+  // Renders a row of reaction buttons for the given emoji set — same visual
+  // pattern as the jam-reaction-btn pills (fixed set, count badge when > 0).
+  function renderReactionsHTML(reactions, rowId, emojiList, onclickFnName, uid) {
+    reactions = reactions || {};
+    return emojiList.map(emoji => {
+      const users = reactions[emoji] || [];
+      const reacted = !!uid && users.includes(uid);
+      const count = users.length;
+      return `<button type="button" class="jam-reaction-btn${reacted ? ' reacted' : ''}"
+        onclick="${onclickFnName}('${escHtml(String(rowId))}','${emoji}')">${emoji}${count > 0 ? `<span class="jam-reaction-count">${count}</span>` : ''}</button>`;
+    }).join('');
+  }
+
+  async function dbToggleJamReaction(jamId, emoji) {
+    return dbToggleReaction('crew_jams', crewJams, jamId, emoji);
   }
 
   async function dbSaveJamVibe(jamId, note, raverId) {
