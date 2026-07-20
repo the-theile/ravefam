@@ -1543,13 +1543,13 @@
   .game-plan-rave-picker::-webkit-scrollbar { display: none; }
   .game-plan-rave-picker .huddle-room-pill { flex-shrink: 0; }
   .game-plan-section-tabs {
-    display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px;
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px;
     background: var(--surface); border: 1px solid rgba(255,255,255,0.07);
     border-radius: 12px; padding: 4px; margin-bottom: 14px;
   }
   .game-plan-section-tab {
     background: none; border: none; border-radius: 9px; cursor: pointer;
-    padding: 8px 2px; font-size: 0.68rem; line-height: 1.3; text-align: center;
+    padding: 8px 1px; font-size: 0.62rem; line-height: 1.3; text-align: center;
     color: var(--muted); transition: all 0.15s;
   }
   .game-plan-section-tab.active { background: rgba(255,45,120,0.14); color: #fff; }
@@ -13483,28 +13483,28 @@ async function doProfilePasswordChange() {
     if (!ok) { if (!rateLimited) showToast('⚠️ Could not remove — try again'); return false; }
     await logAudit({ action: 'game_plan_item.remove', entityType: 'game_plan_item', entityId: itemId, reason, metadata: { crew_id: crewId } });
     gamePlanItems = gamePlanItems.filter(it => it.id !== itemId);
-    // A deleted carpool driver takes their riders with them — soft-delete
-    // isn't a real DELETE, so the FK's own-delete-cascade never fires here.
-    if (item && item.kind === 'carpool_driver') {
-      const riders = gamePlanItems.filter(it => it.kind === 'carpool_rider' && it.driver_item_id === itemId);
-      for (const rider of riders) await softDeleteRow('game_plan_items', { id: rider.id }, 'driver removed');
-      gamePlanItems = gamePlanItems.filter(it => !(it.kind === 'carpool_rider' && it.driver_item_id === itemId));
+    // A deleted carpool driver or lodging host takes their riders/guests with
+    // them — soft-delete isn't a real DELETE, so the FK's own-delete-cascade
+    // never fires here. driver_item_id only ever points back to the specific
+    // parent row it was created against, so filtering by it alone (without
+    // also checking the child's kind) is safe.
+    if (item && (item.kind === 'carpool_driver' || item.kind === 'lodging_host')) {
+      const children = gamePlanItems.filter(it => it.driver_item_id === itemId);
+      for (const child of children) await softDeleteRow('game_plan_items', { id: child.id }, item.kind === 'carpool_driver' ? 'driver removed' : 'host removed');
+      gamePlanItems = gamePlanItems.filter(it => it.driver_item_id !== itemId);
     }
     return true;
   }
 
   // -- Activity feed --
-  // Posts a system message into the per-festival Huddle whenever someone
-  // claims a role, offers/joins a ride, or completes a task — ties the other
-  // 4 sections into the Huddle so it reads as the live pulse of the plan.
-  // Mirrors openGamePlanHuddle's lazy room-materialization exactly (upsert
-  // on conflict do nothing, then look the room back up by its unique key).
-  async function postGamePlanActivity(crewId, festivalId, summaryText) {
+  // Posts a system message into a crew's Huddle room, lazily materializing
+  // that room first — the shared low-level step behind both the per-rave
+  // Game Plan activity feed and the crew-wide Main Huddle activity feed.
+  // Mirrors openGamePlanHuddle's room-materialization exactly (upsert on
+  // conflict do nothing, then look the room back up by its unique key).
+  async function postHuddleSystemMessage(crewId, roomKey, roomRow, summaryText) {
     if (!currentUser) return;
-    const fest = festivals.find(f => String(f.id) === String(festivalId));
-    const roomKey = `festival:${festivalId}`;
-    const row = { crew_id: crewId, created_by: currentUser.id, room_key: roomKey, kind: 'festival', name: `${fest ? fest.name : 'Rave'} Huddle`, festival_id: festivalId };
-    await sb.from('huddle_rooms').upsert([row], { onConflict: 'crew_id,room_key', ignoreDuplicates: true });
+    await sb.from('huddle_rooms').upsert([roomRow], { onConflict: 'crew_id,room_key', ignoreDuplicates: true });
     const { data: rooms } = await sb.from('huddle_rooms').select('id').eq('crew_id', crewId).eq('room_key', roomKey).limit(1);
     const roomId = rooms && rooms[0] && rooms[0].id;
     if (!roomId) return;
@@ -13515,6 +13515,25 @@ async function doProfilePasswordChange() {
       huddleMessages.push(data);
       renderHuddleUI();
     }
+  }
+
+  // Per-rave: claiming a role, offering/joining a ride or stay, or
+  // completing a task — ties the other Game Plan sections into that rave's
+  // Huddle so it reads as the live pulse of the plan.
+  async function postGamePlanActivity(crewId, festivalId, summaryText) {
+    if (!currentUser) return;
+    const fest = festivals.find(f => String(f.id) === String(festivalId));
+    const roomKey = `festival:${festivalId}`;
+    const row = { crew_id: crewId, created_by: currentUser.id, room_key: roomKey, kind: 'festival', name: `${fest ? fest.name : 'Rave'} Huddle`, festival_id: festivalId };
+    await postHuddleSystemMessage(crewId, roomKey, row, summaryText);
+  }
+
+  // Crew-wide: new members, festival RSVPs, badge unlocks — posted into the
+  // crew's Main Huddle room (not tied to any one rave).
+  async function postCrewActivity(crewId, summaryText) {
+    if (!currentUser) return;
+    const row = { crew_id: crewId, created_by: currentUser.id, room_key: 'main', kind: 'main', name: 'Main Huddle', festival_id: null };
+    await postHuddleSystemMessage(crewId, 'main', row, summaryText);
   }
 
   // -- Checklist --
@@ -13584,6 +13603,34 @@ async function doProfilePasswordChange() {
     if (error) {
       // The seat-capacity trigger rejects the insert once a driver's seats fill up.
       showToast(error.message && error.message.includes('ride is full') ? '🚗 That ride just filled up' : '⚠️ Could not join that ride — try again');
+      return null;
+    }
+    gamePlanItems.push(data);
+    return data;
+  }
+
+  // -- Stay (lodging) — mirrors carpool_driver/carpool_rider exactly, just
+  // for hotels/Airbnbs instead of cars: a host offers a place + spaces,
+  // others join. Reuses the same nullable columns (seats, text, link_url,
+  // driver_item_id) rather than adding lodging-specific ones.
+  async function dbAddLodgingHost(gamePlanId, crewId, raverId, spaces, place, linkUrl) {
+    const { data, error } = await sb.from('game_plan_items').insert({
+      game_plan_id: gamePlanId, crew_id: crewId, kind: 'lodging_host', added_by: currentUser.id,
+      assignee_raver_id: raverId, seats: spaces || null, text: place ? place.trim() : null, link_url: linkUrl || null
+    }).select().single();
+    if (error) { showToast('⚠️ Could not add stay — try again'); return null; }
+    gamePlanItems.push(data);
+    return data;
+  }
+
+  async function dbAddLodgingGuest(gamePlanId, crewId, hostItemId, guestRaverId) {
+    const { data, error } = await sb.from('game_plan_items').insert({
+      game_plan_id: gamePlanId, crew_id: crewId, kind: 'lodging_guest', added_by: currentUser.id,
+      driver_item_id: hostItemId, assignee_raver_id: guestRaverId
+    }).select().single();
+    if (error) {
+      // The seat-capacity trigger rejects the insert once a host's spaces fill up.
+      showToast(error.message && error.message.includes('stay is full') ? '🏠 That stay just filled up' : '⚠️ Could not join that stay — try again');
       return null;
     }
     gamePlanItems.push(data);
@@ -13718,6 +13765,7 @@ async function doProfilePasswordChange() {
       { key: 'checklist', emoji: '✅', label: 'Tasks' },
       { key: 'roles', emoji: '🎭', label: 'Roles' },
       { key: 'logistics', emoji: '🚗', label: 'Rides' },
+      { key: 'stay', emoji: '🏠', label: 'Stay' },
       { key: 'outfit', emoji: '✨', label: 'Outfit' }
     ];
     const activeSection = _gamePlanActiveSection || 'huddle';
@@ -13739,6 +13787,7 @@ async function doProfilePasswordChange() {
       <div id="game-plan-section-checklist" class="game-plan-section" style="${activeSection === 'checklist' ? '' : 'display:none;'}">${buildGamePlanChecklistHTML(crew.id)}</div>
       <div id="game-plan-section-roles" class="game-plan-section" style="${activeSection === 'roles' ? '' : 'display:none;'}">${buildGamePlanRolesHTML(crew.id)}</div>
       <div id="game-plan-section-logistics" class="game-plan-section" style="${activeSection === 'logistics' ? '' : 'display:none;'}">${buildGamePlanLogisticsHTML(crew.id)}</div>
+      <div id="game-plan-section-stay" class="game-plan-section" style="${activeSection === 'stay' ? '' : 'display:none;'}">${buildGamePlanStayHTML(crew.id)}</div>
       <div id="game-plan-section-outfit" class="game-plan-section" style="${activeSection === 'outfit' ? '' : 'display:none;'}">${buildGamePlanOutfitHTML(crew.id)}</div>
     `;
   }
@@ -14198,6 +14247,125 @@ async function doProfilePasswordChange() {
       const rider = crewSquad(getCrew(crewId)).find(p => String(p.id) === String(riderRaverId));
       const who = rider ? displayName(rider).split(' ')[0] : 'Someone';
       postGamePlanActivity(crewId, _gamePlanActiveFestivalId, `🎟️ ${who} joined a ride`);
+    }
+  }
+
+  // ── Stay (lodging) ── mirrors the Carpool block above almost exactly.
+
+  function rerenderGamePlanStay(crewId) {
+    const el = document.getElementById('game-plan-section-stay');
+    if (el) el.innerHTML = buildGamePlanStayHTML(crewId);
+  }
+
+  function buildGamePlanStayHTML(crewId) {
+    const crew = getCrew(crewId);
+    const uid = currentUser?.id;
+    const canManage = crewPerms(crew).canEdit;
+    const myRaver = squad.find(r => r.isYou);
+    const people = crewSquad(crew);
+
+    const hosts = gamePlanItems.filter(it => it.kind === 'lodging_host');
+    const guests = gamePlanItems.filter(it => it.kind === 'lodging_guest');
+    const guestingRaverIds = new Set(guests.map(g => String(g.assignee_raver_id)));
+    const hostingRaverIds = new Set(hosts.map(h => String(h.assignee_raver_id)));
+    const unstayed = people.filter(p => !guestingRaverIds.has(String(p.id)) && !hostingRaverIds.has(String(p.id)));
+
+    const hostCards = hosts.map(h => {
+      const host = people.find(p => String(p.id) === String(h.assignee_raver_id));
+      const hostGuests = guests.filter(g => g.driver_item_id === h.id);
+      const canDeleteHost = ownerOrManager(h.added_by, uid, canManage) || (host && host.isYou);
+      const guestChips = hostGuests.map(g => {
+        const guest = people.find(p => String(p.id) === String(g.assignee_raver_id));
+        const canRemoveGuest = ownerOrManager(g.added_by, uid, canManage) || (guest && guest.isYou);
+        return `<span class="jam-filter-pill" style="cursor:default;">
+          ${guest ? escHtml(displayName(guest).split(' ')[0]) : 'Someone'}
+          ${canRemoveGuest ? `<button class="archive-link-del" style="padding:0 0 0 4px;" onclick="deleteGamePlanItem('${escHtml(g.id)}','${escHtml(crewId)}','guest', () => rerenderGamePlanStay('${escHtml(crewId)}'))" title="Remove" aria-label="Remove">×</button>` : ''}
+        </span>`;
+      }).join('');
+      const spacesLeft = h.seats != null ? Math.max(0, h.seats - hostGuests.length) : null;
+      const isFull = spacesLeft === 0;
+      const spaceBadge = h.seats != null
+        ? (isFull ? `<span class="game-plan-seat-badge full">🚫 Full</span>` : `<span class="game-plan-seat-badge">${escHtml(String(spacesLeft))} space${spacesLeft === 1 ? '' : 's'} left</span>`)
+        : '';
+      const guestOptions = unstayed.map(p =>
+        `<option value="${escHtml(String(p.id))}">${escHtml(displayName(p).split(' ')[0])}</option>`
+      ).join('');
+      let urlDisplay = '';
+      if (h.link_url) { try { urlDisplay = new URL(h.link_url).hostname; } catch { urlDisplay = h.link_url; } }
+      return `
+        <div class="archive-link-card" style="flex-direction:column;align-items:stretch;">
+          <div class="archive-link-main">
+            <span class="archive-link-label">🏠 ${host ? escHtml(displayName(host).split(' ')[0]) : 'Someone'} is hosting${h.text ? ` — ${escHtml(h.text)}` : ''}</span>
+            ${urlDisplay ? `<a class="archive-link-url" href="${escHtml(h.link_url)}" target="_blank" rel="noopener noreferrer">${escHtml(urlDisplay)} ↗</a>` : ''}
+            <div class="archive-link-meta" style="flex-wrap:wrap;gap:6px;margin-top:4px;">${spaceBadge}${guestChips}</div>
+          </div>
+          ${uid && unstayed.length && !isFull ? `
+          <div class="archive-add-row" style="margin-top:8px;">
+            <select class="archive-fest-select" id="game-plan-stay-guest-select-${escHtml(h.id)}" style="flex:1;">${guestOptions}</select>
+            <button class="btn btn-ghost" style="flex-shrink:0;" onclick="joinLodgingStay('${escHtml(crewId)}','${escHtml(h.id)}')">Join stay</button>
+          </div>` : ''}
+          ${canDeleteHost ? `<button class="btn btn-ghost" style="margin-top:8px;color:var(--neon-pink);border-color:rgba(255,45,120,0.25);" onclick="deleteGamePlanItem('${escHtml(h.id)}','${escHtml(crewId)}','stay', () => rerenderGamePlanStay('${escHtml(crewId)}'))">Remove this stay</button>` : ''}
+        </div>`;
+    }).join('');
+
+    const emptyHosts = hosts.length === 0
+      ? `<div class="archive-empty" style="text-align:center;padding:12px 0;color:var(--muted);font-size:0.82rem;">No stays posted yet</div>`
+      : '';
+
+    return `
+      <div class="form-group">
+        <div class="section-banner"><span class="banner-inner">🏠 Stay <span class="banner-subtitle">· hotels &amp; airbnbs</span></span></div>
+        ${uid && !hostingRaverIds.has(String(myRaver?.id)) ? `
+        <div class="archive-add-area">
+          <input class="form-input" id="game-plan-stay-place" placeholder="Where are you staying? (hotel name, Airbnb address…)">
+          <div class="archive-add-row">
+            <input class="form-input" id="game-plan-stay-spaces" type="number" min="1" max="20" placeholder="Spaces available" style="max-width:160px;">
+            <input class="form-input" id="game-plan-stay-link" placeholder="Booking link (optional)" style="flex:1;">
+          </div>
+          <button class="btn btn-primary archive-drop-btn" onclick="addLodgingHost('${escHtml(crewId)}')">I'm hosting</button>
+        </div>` : ''}
+        <div class="archive-links-list" style="margin-top:8px;">
+          ${emptyHosts}
+          ${hostCards}
+        </div>
+      </div>`;
+  }
+
+  async function addLodgingHost(crewId) {
+    const crew = getCrew(crewId);
+    const myRaver = squad.find(r => r.isYou);
+    if (!myRaver) return;
+    const placeEl = document.getElementById('game-plan-stay-place');
+    const spacesEl = document.getElementById('game-plan-stay-spaces');
+    const linkEl = document.getElementById('game-plan-stay-link');
+    const place = (placeEl?.value || '').trim();
+    const spaces = spacesEl?.value ? parseInt(spacesEl.value, 10) : null;
+    const link = (linkEl?.value || '').trim();
+    if (link && !/^https?:\/\//i.test(link)) { showToast('⚠️ Booking link must start with http:// or https://'); return; }
+    const gp = gamePlans.find(g => String(g.crew_id) === String(crewId) && String(g.festival_id) === String(_gamePlanActiveFestivalId));
+    if (!gp) return;
+    const ok = await dbAddLodgingHost(gp.id, crewId, myRaver.id, spaces, place, link || null);
+    if (ok) {
+      rerenderGamePlanStay(crewId);
+      postGamePlanActivity(crewId, _gamePlanActiveFestivalId, `🏠 ${displayName(myRaver).split(' ')[0]} is hosting${spaces ? ` (${spaces} space${spaces === 1 ? '' : 's'})` : ''}`);
+    }
+  }
+
+  async function joinLodgingStay(crewId, hostItemId) {
+    const selectEl = document.getElementById('game-plan-stay-guest-select-' + hostItemId);
+    const guestRaverId = selectEl?.value;
+    if (!guestRaverId) { showToast('⚠️ Pick who is staying'); return; }
+    const gp = gamePlans.find(g => String(g.crew_id) === String(crewId) && String(g.festival_id) === String(_gamePlanActiveFestivalId));
+    if (!gp) return;
+    const ok = await dbAddLodgingGuest(gp.id, crewId, hostItemId, guestRaverId);
+    if (ok) {
+      rerenderGamePlanStay(crewId);
+      const squadNow = crewSquad(getCrew(crewId));
+      const guest = squadNow.find(p => String(p.id) === String(guestRaverId));
+      const who = guest ? displayName(guest).split(' ')[0] : 'Someone';
+      const hostItem = gamePlanItems.find(it => it.id === hostItemId);
+      const host = hostItem ? squadNow.find(p => String(p.id) === String(hostItem.assignee_raver_id)) : null;
+      postGamePlanActivity(crewId, _gamePlanActiveFestivalId, `🔑 ${who} is staying with ${host ? displayName(host).split(' ')[0] : 'the crew'}`);
     }
   }
 
@@ -17188,6 +17356,7 @@ async function doProfilePasswordChange() {
     const who = def.type === 'crew' ? 'The whole crew' : earnerName;
     const notifMsg = `${def.emoji} ${who} just unlocked "${def.name}" in ${crew.name}! 🥹`;
     await notifyCrewMembers(crew, notifMsg);
+    postCrewActivity(crewId, `${def.emoji} ${who} just unlocked "${def.name}"!`);
 
     rerenderFamPins(crewId);
     showToast(`${def.emoji} FAM Pin unlocked: ${def.name}!`);
@@ -17519,6 +17688,7 @@ async function doProfilePasswordChange() {
       const addMsg = `🎉 ${raver.name.split(' ')[0]} has been added to ${crew.name}! Share their QR code or invite link so they can claim their spot.`;
       showToast(`✅ ${raver.name.split(' ')[0]} added to ${crew.name}`);
       addNotification(addMsg);
+      if (currentUser) postCrewActivity(crew.id, `👋 ${raver.name.split(' ')[0]} joined the crew`);
     }
     if (currentUser) dbAddCrewMember(crew.id, raver.id);
   }
@@ -17536,7 +17706,10 @@ async function doProfilePasswordChange() {
     renderCrews();
     renderDetail(id);
     showToast(`🎉 You joined ${crew.name}!`);
-    if (currentUser) dbAddCrewMember(crew.id, me.id);
+    if (currentUser) {
+      dbAddCrewMember(crew.id, me.id);
+      postCrewActivity(crew.id, `👋 ${displayName(me).split(' ')[0]} joined the crew`);
+    }
   }
 
   function confirmRemoveMember(crewId, raverId) {
@@ -17959,7 +18132,10 @@ async function doProfilePasswordChange() {
         .filter(Boolean)
         .map(r => ({ i: initials(r.name), c: r.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)', t: '#fff', url: r.avatarUrl || null }));
       addedTo.push(crew.name);
-      if (currentUser) dbAddCrewMember(crew.id, raverId);
+      if (currentUser) {
+        dbAddCrewMember(crew.id, raverId);
+        if (crew.status !== 'secret' && raver) postCrewActivity(crew.id, `👋 ${raver.name.split(' ')[0]} joined the crew`);
+      }
     });
     closeCrewPick();
     renderCrews();
@@ -20995,6 +21171,13 @@ async function doProfilePasswordChange() {
       you.festIds.push(fest ? fest.id : festId);
       showToast(isPast ? `🎟️ Sent it at ${fest?.name || 'that rave'}!` : `✅ You're going to ${fest?.name || 'that rave'}!`);
       addNotification(isPast ? `🎟️ Logged! You sent it at ${fest?.name || 'that rave'}.` : `🎪 You're locked in for ${fest?.name || 'that rave'}! Pack your kit, charge the glowsticks, and get ready for the frequencies.`);
+      // Let each of your crews know — skip Secret crews, same posture as notifyCrewMembers.
+      if (currentUser && fest) {
+        const who = displayName(you).split(' ')[0];
+        const activityMsg = isPast ? `🎟️ ${who} sent it at ${fest.name}!` : `🎪 ${who} is going to ${fest.name}!`;
+        crews.filter(c => c.status !== 'secret' && (c.squadIds || []).some(id => String(id) === String(you.id)))
+          .forEach(c => postCrewActivity(c.id, activityMsg));
+      }
     }
     renderEvents();
     renderSquad();

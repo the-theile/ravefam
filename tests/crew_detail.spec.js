@@ -347,4 +347,76 @@ test.describe('crew detail · game plan', () => {
     expect(pinned.length).toBe(1);
     expect(pinned[0].id).toBe(m2);
   });
+
+  test('a lodging host can be joined by a guest, and shows spaces left', async ({ page }) => {
+    await bootAuthedApp(page);
+    await openGamePlan(page);
+    await page.evaluate(async () => switchGamePlanSection('stay', document.querySelector('.game-plan-section-tab[data-section="stay"]')));
+
+    const { hostId } = await page.evaluate(async () => {
+      const gp = await dbGetOrCreateGamePlan('c1', 'f1');
+      const host = await dbAddLodgingHost(gp.id, 'c1', 'r-you', 2, 'Sunset Airbnb', 'https://airbnb.com/rooms/1');
+      await dbAddLodgingGuest(gp.id, 'c1', host.id, 'r-sam');
+      rerenderGamePlanStay('c1');
+      return { hostId: host.id };
+    });
+    await expect(page.locator('#game-plan-section-stay')).toContainText('Sunset Airbnb');
+    await expect(page.locator('#game-plan-section-stay')).toContainText('1 space left');
+
+    const guest = await page.evaluate((hid) =>
+      (window.__store.game_plan_items || []).find(it => it.kind === 'lodging_guest' && it.driver_item_id === hid),
+      hostId);
+    expect(guest).toBeTruthy();
+    expect(guest.assignee_raver_id).toBe('r-sam');
+  });
+
+  test('deleting a lodging host also removes their guests', async ({ page }) => {
+    await bootAuthedApp(page);
+    await openGamePlan(page);
+
+    const hostId = await page.evaluate(async () => {
+      const gp = await dbGetOrCreateGamePlan('c1', 'f1');
+      const host = await dbAddLodgingHost(gp.id, 'c1', 'r-you', 2, 'Sunset Airbnb', null);
+      await dbAddLodgingGuest(gp.id, 'c1', host.id, 'r-sam');
+      return host.id;
+    });
+    await page.evaluate(async (id) => { await dbDeleteGamePlanItem(id, 'c1'); }, hostId);
+
+    const hostRow = await page.evaluate((id) => window.__store.game_plan_items.find(it => it.id === id), hostId);
+    expect(hostRow.deleted_at).toBeTruthy();
+    const guestRow = await page.evaluate((id) =>
+      window.__store.game_plan_items.find(it => it.kind === 'lodging_guest' && it.driver_item_id === id),
+      hostId);
+    expect(guestRow.deleted_at).toBeTruthy();
+  });
+});
+
+test.describe('crew-wide activity feed (main Huddle)', () => {
+  test('postCrewActivity posts a system message into the main Huddle room', async ({ page }) => {
+    await bootAuthedApp(page);
+    await page.evaluate(async () => { await postCrewActivity('c1', '🎉 Test crew event'); });
+
+    const room = await page.evaluate(() =>
+      (window.__store.huddle_rooms || []).find(r => r.crew_id === 'c1' && r.room_key === 'main'));
+    expect(room).toBeTruthy();
+    const msg = await page.evaluate((roomId) =>
+      (window.__store.huddle_messages || []).find(m => m.room_id === roomId && m.kind === 'system' && m.body === '🎉 Test crew event'),
+      room.id);
+    expect(msg).toBeTruthy();
+  });
+
+  test('RSVPing to a new festival posts an activity message into each shared crew\'s main Huddle', async ({ page }) => {
+    await bootAuthedApp(page); // c1 (status: recruiting) already has r-you as a member
+    await page.evaluate(async () => { await toggleGoingToFest('f2'); });
+    await page.waitForTimeout(50);
+
+    const room = await page.evaluate(() =>
+      (window.__store.huddle_rooms || []).find(r => r.crew_id === 'c1' && r.room_key === 'main'));
+    expect(room).toBeTruthy();
+    const msg = await page.evaluate((roomId) =>
+      (window.__store.huddle_messages || []).find(m => m.room_id === roomId && m.kind === 'system' && (m.body || '').includes('Awakenings')),
+      room.id);
+    expect(msg).toBeTruthy();
+    expect(msg.body).toContain('Theile');
+  });
 });
