@@ -1598,6 +1598,7 @@
   }
   .game-plan-seat-badge { font-size: 0.68rem; font-weight: 700; color: var(--neon-cyan); background: rgba(0,245,255,0.1); border-radius: 6px; padding: 1px 6px; }
   .game-plan-seat-badge.full { color: var(--neon-pink); background: rgba(255,45,120,0.12); }
+  .game-plan-seat-badge.muted { color: var(--muted); background: rgba(255,255,255,0.06); }
 
   /* Outfit: photo cards */
   .game-plan-outfit-photo { width: 100%; max-height: 240px; object-fit: cover; border-radius: 8px; display: block; }
@@ -11939,10 +11940,10 @@ async function doProfilePasswordChange() {
     dbLoadAchievements(id).then(() => { rerenderFamPins(id); checkAndAwardBadges(id); }).catch(console.warn);
     dbLoadCrewHistory(id).then(rows => { crewHistoryRows = rows; rerenderCrewHistory(id); }).catch(console.warn);
     if (opts && opts.tab === 'huddle') {
-      // Main Huddle lives as a tile under Overview (already the active tab) —
-      // just open it, no top-level tab switch needed.
-      const huddleTile = document.querySelector('.crew-feature-tile[data-feature="huddle"]');
-      if (huddleTile) toggleCrewFeatureTile('huddle', huddleTile);
+      // Main Huddle lives as a tile under Overview and now opens by default
+      // (renderDetail above) — just bring it into view. Don't toggle it:
+      // that would close an already-open tile instead of opening it.
+      document.getElementById('crew-feature-panel-huddle')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     } else if (opts && opts.tab === 'roster') {
       const rosterTabBtn = document.querySelector('#page-crew-detail .stats-subtab:nth-child(2)');
       if (rosterTabBtn) switchCrewDetailTab('roster', rosterTabBtn);
@@ -12427,6 +12428,17 @@ async function doProfilePasswordChange() {
       ${hasGamePlan ? `<div id="crew-detail-panel-gameplan" style="display:none;"></div>` : ''}
       </div>
     `;
+    // Huddle tile now starts expanded (see buildCrewFeatureTilesHTML) — load
+    // its messages immediately instead of waiting for a tap, and queue its
+    // coachmark the same way toggleCrewFeatureTile('huddle', …) used to
+    // (queueCoachmark itself is idempotent — safe to call on every render).
+    openHuddle(crew.id).then(() => {
+      queueCoachmark('beacon', {
+        targetEl: document.querySelector('.huddle-beacon-fab-inline'),
+        title: '📡 Beacon your crew',
+        body: "Send an urgent ping that cuts through the chat when it actually matters — lost at the fest, meetup change, whatever."
+      });
+    });
   }
 
   // Toggle between the Overview / Roster / Game Plan tabs on the crew detail
@@ -13776,11 +13788,11 @@ async function doProfilePasswordChange() {
 
     return `
       <div class="game-plan-rave-picker">${picker}</div>
-      <div class="game-plan-section-tabs">${sectionTabs}</div>
       <div class="game-plan-shortcuts">
         <button class="btn btn-ghost" onclick="jumpToGamePlanJams('${escCrewId}','${escHtml(activeFestId)}')">🎧 Jams</button>
         <button class="btn btn-ghost" onclick="jumpToGamePlanArchive('${escCrewId}','${escHtml(activeFestId)}')">📸 Archive</button>
       </div>
+      <div class="game-plan-section-tabs">${sectionTabs}</div>
       <div id="game-plan-section-huddle" class="game-plan-section" style="${activeSection === 'huddle' ? '' : 'display:none;'}">
         <div id="gameplan-huddle-root"></div>
       </div>
@@ -14195,10 +14207,12 @@ async function doProfilePasswordChange() {
         </div>
         <div class="section-desc" style="margin-top:14px;">🚗 Carpool</div>
         ${uid && !drivingRaverIds.has(String(myRaver?.id)) ? `
-        <div class="archive-add-row">
-          <input class="form-input" id="game-plan-driver-seats" type="number" min="1" max="12" placeholder="Seats available" style="max-width:160px;">
-          <input class="form-input" id="game-plan-driver-vibe" placeholder="Ride vibe (optional, e.g. aux cord open)" maxlength="60" style="flex:1;">
-          <button class="btn btn-primary archive-drop-btn" onclick="addCarpoolDriver('${escHtml(crewId)}')">I'm driving</button>
+        <div class="archive-add-area">
+          <div class="archive-add-row">
+            <input class="form-input" id="game-plan-driver-seats" type="number" min="1" max="12" placeholder="Seats available" style="flex:1;">
+            <input class="form-input" id="game-plan-driver-vibe" placeholder="Ride vibe (optional)" maxlength="60" style="flex:1;">
+          </div>
+          <button class="btn btn-primary archive-drop-btn" style="width:100%;" onclick="addCarpoolDriver('${escHtml(crewId)}')">I'm driving</button>
         </div>` : ''}
         <div class="archive-links-list" style="margin-top:8px;">
           ${emptyDrivers}
@@ -14282,11 +14296,15 @@ async function doProfilePasswordChange() {
           ${canRemoveGuest ? `<button class="archive-link-del" style="padding:0 0 0 4px;" onclick="deleteGamePlanItem('${escHtml(g.id)}','${escHtml(crewId)}','guest', () => rerenderGamePlanStay('${escHtml(crewId)}'))" title="Remove" aria-label="Remove">×</button>` : ''}
         </span>`;
       }).join('');
-      const spacesLeft = h.seats != null ? Math.max(0, h.seats - hostGuests.length) : null;
+      // No spaces entered = just sharing where they're staying, not offering
+      // a spot to anyone — treated as 0 spaces (not "unlimited") so the Join
+      // row stays hidden until the host explicitly opens up a spot.
+      const isOffering = h.seats != null;
+      const spacesLeft = isOffering ? Math.max(0, h.seats - hostGuests.length) : 0;
       const isFull = spacesLeft === 0;
-      const spaceBadge = h.seats != null
+      const spaceBadge = isOffering
         ? (isFull ? `<span class="game-plan-seat-badge full">🚫 Full</span>` : `<span class="game-plan-seat-badge">${escHtml(String(spacesLeft))} space${spacesLeft === 1 ? '' : 's'} left</span>`)
-        : '';
+        : `<span class="game-plan-seat-badge muted">📍 Just sharing</span>`;
       const guestOptions = unstayed.map(p =>
         `<option value="${escHtml(String(p.id))}">${escHtml(displayName(p).split(' ')[0])}</option>`
       ).join('');
@@ -14295,11 +14313,11 @@ async function doProfilePasswordChange() {
       return `
         <div class="archive-link-card" style="flex-direction:column;align-items:stretch;">
           <div class="archive-link-main">
-            <span class="archive-link-label">🏠 ${host ? escHtml(displayName(host).split(' ')[0]) : 'Someone'} is hosting${h.text ? ` — ${escHtml(h.text)}` : ''}</span>
+            <span class="archive-link-label">🏠 ${host ? escHtml(displayName(host).split(' ')[0]) : 'Someone'} is staying${h.text ? ` at ${escHtml(h.text)}` : ''}</span>
             ${urlDisplay ? `<a class="archive-link-url" href="${escHtml(h.link_url)}" target="_blank" rel="noopener noreferrer">${escHtml(urlDisplay)} ↗</a>` : ''}
             <div class="archive-link-meta" style="flex-wrap:wrap;gap:6px;margin-top:4px;">${spaceBadge}${guestChips}</div>
           </div>
-          ${uid && unstayed.length && !isFull ? `
+          ${uid && unstayed.length && isOffering && !isFull ? `
           <div class="archive-add-row" style="margin-top:8px;">
             <select class="archive-fest-select" id="game-plan-stay-guest-select-${escHtml(h.id)}" style="flex:1;">${guestOptions}</select>
             <button class="btn btn-ghost" style="flex-shrink:0;" onclick="joinLodgingStay('${escHtml(crewId)}','${escHtml(h.id)}')">Join stay</button>
@@ -14319,10 +14337,11 @@ async function doProfilePasswordChange() {
         <div class="archive-add-area">
           <input class="form-input" id="game-plan-stay-place" placeholder="Where are you staying? (hotel name, Airbnb address…)">
           <div class="archive-add-row">
-            <input class="form-input" id="game-plan-stay-spaces" type="number" min="1" max="20" placeholder="Spaces available" style="max-width:160px;">
+            <input class="form-input" id="game-plan-stay-spaces" type="number" min="1" max="20" placeholder="Spaces for guests (optional)" style="flex:1;">
             <input class="form-input" id="game-plan-stay-link" placeholder="Booking link (optional)" style="flex:1;">
           </div>
-          <button class="btn btn-primary archive-drop-btn" onclick="addLodgingHost('${escHtml(crewId)}')">I'm hosting</button>
+          <p class="section-desc" style="margin:0 0 2px;">Leave spaces blank if you're just sharing your plan, not offering a spot.</p>
+          <button class="btn btn-primary archive-drop-btn" style="width:100%;" onclick="addLodgingHost('${escHtml(crewId)}')">Post my stay</button>
         </div>` : ''}
         <div class="archive-links-list" style="margin-top:8px;">
           ${emptyHosts}
@@ -14347,7 +14366,7 @@ async function doProfilePasswordChange() {
     const ok = await dbAddLodgingHost(gp.id, crewId, myRaver.id, spaces, place, link || null);
     if (ok) {
       rerenderGamePlanStay(crewId);
-      postGamePlanActivity(crewId, _gamePlanActiveFestivalId, `🏠 ${displayName(myRaver).split(' ')[0]} is hosting${spaces ? ` (${spaces} space${spaces === 1 ? '' : 's'})` : ''}`);
+      postGamePlanActivity(crewId, _gamePlanActiveFestivalId, `🏠 ${displayName(myRaver).split(' ')[0]} posted their stay${spaces ? ` (${spaces} space${spaces === 1 ? '' : 's'} open)` : ''}`);
     }
   }
 
@@ -17415,14 +17434,15 @@ async function doProfilePasswordChange() {
       { key: 'archive', ac: '--neon-yellow', label: 'Archive' },
       { key: 'history', ac: '--neon-indigo', label: 'History' }
     ].filter(Boolean);
+    // Huddle defaults open — everything else stays collapsed until tapped.
     const tileGrid = tiles.map(t => `
-      <button type="button" class="crew-feature-tile" data-feature="${t.key}" onclick="toggleCrewFeatureTile('${t.key}', this)">
+      <button type="button" class="crew-feature-tile${t.key === 'huddle' ? ' active' : ''}" data-feature="${t.key}" onclick="toggleCrewFeatureTile('${t.key}', this)">
         <div class="crew-feature-tile-icon" style="--ac:var(${t.ac})">${crewFeatureIconSVG(t.key)}</div>
         <div class="crew-feature-tile-label">${t.label}</div>
       </button>`).join('');
     return `
       <div class="crew-feature-tile-grid">${tileGrid}</div>
-      <div class="crew-feature-panel" id="crew-feature-panel-huddle" style="display:none;"><div id="huddle-root"></div></div>
+      <div class="crew-feature-panel" id="crew-feature-panel-huddle"><div id="huddle-root"></div></div>
       <div class="crew-feature-panel" id="crew-feature-panel-pins" style="display:none;">${buildFamPinsHTML(crew.id)}</div>
       <div class="crew-feature-panel" id="crew-feature-panel-dreamboard" style="display:none;">${buildDreamBoardHTML(crew.id)}</div>
       ${!isSecret ? `<div class="crew-feature-panel" id="crew-feature-panel-poll" style="display:none;">${buildPollsHTML(crew.id)}</div>` : ''}
