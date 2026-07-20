@@ -258,6 +258,30 @@ test.describe('crew detail · game plan', () => {
     await expect(page.locator('#game-plan-section-checklist')).toContainText('assigned to Theile');
   });
 
+  test('any crew member can delete a task added by someone else, no reason required', async ({ page }) => {
+    await bootAuthedApp(page);
+    await openGamePlan(page);
+    await page.evaluate(async () => switchGamePlanSection('checklist', document.querySelector('.game-plan-section-tab[data-section="checklist"]')));
+
+    const taskId = await page.evaluate(async () => {
+      const gp = await dbGetOrCreateGamePlan('c1', 'f1');
+      // Simulate a task added by a different crew member than the signed-in test user.
+      const { data } = await sb.from('game_plan_items').insert({
+        game_plan_id: gp.id, crew_id: 'c1', kind: 'task', added_by: 'kai-uid', text: "Someone else's task", is_done: false
+      }).select().single();
+      gamePlanItems.push(data);
+      rerenderGamePlanChecklist('c1');
+      return data.id;
+    });
+    // Delete button shows even though this task wasn't added by the current user.
+    await expect(page.locator(`#game-plan-item-${taskId} .archive-link-del`)).toBeVisible();
+
+    const ok = await page.evaluate(async (id) => dbDeleteGamePlanItem(id, 'c1', null), taskId);
+    expect(ok).toBe(true);
+    const row = await page.evaluate((id) => window.__store.game_plan_items.find(it => it.id === id), taskId);
+    expect(row.deleted_at).toBeTruthy();
+  });
+
   test('the cast card shows a claimed role once assigned', async ({ page }) => {
     await bootAuthedApp(page);
     await openGamePlan(page);
@@ -368,6 +392,22 @@ test.describe('crew detail · game plan', () => {
       hostId);
     expect(guest).toBeTruthy();
     expect(guest.assignee_raver_id).toBe('r-sam');
+  });
+
+  test('posting a stay with a lodging type persists it and shows it on the card', async ({ page }) => {
+    await bootAuthedApp(page);
+    await openGamePlan(page);
+    await page.evaluate(async () => switchGamePlanSection('stay', document.querySelector('.game-plan-section-tab[data-section="stay"]')));
+
+    await page.evaluate(async () => {
+      document.getElementById('game-plan-stay-place').value = 'Campground row B';
+      document.getElementById('game-plan-stay-type').value = 'rv';
+      await addLodgingHost('c1');
+    });
+    await expect(page.locator('#game-plan-section-stay')).toContainText('an rv');
+    const host = await page.evaluate(() =>
+      (window.__store.game_plan_items || []).find(it => it.kind === 'lodging_host' && it.text === 'Campground row B'));
+    expect(host.lodging_type).toBe('rv');
   });
 
   test('deleting a lodging host also removes their guests', async ({ page }) => {

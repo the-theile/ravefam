@@ -13624,11 +13624,24 @@ async function doProfilePasswordChange() {
   // -- Stay (lodging) — mirrors carpool_driver/carpool_rider exactly, just
   // for hotels/Airbnbs instead of cars: a host offers a place + spaces,
   // others join. Reuses the same nullable columns (seats, text, link_url,
-  // driver_item_id) rather than adding lodging-specific ones.
-  async function dbAddLodgingHost(gamePlanId, crewId, raverId, spaces, place, linkUrl) {
+  // driver_item_id) rather than adding lodging-specific ones, except
+  // lodging_type — that needs its own closed set, and role_name (the other
+  // free column) is already reused as free text by kind='role'.
+  const LODGING_TYPES = [
+    { key: 'hotel', emoji: '🏨', label: 'Hotel', article: 'a' },
+    { key: 'house', emoji: '🏡', label: 'House', article: 'a' },
+    { key: 'rv', emoji: '🚐', label: 'RV', article: 'an' },
+    { key: 'tent', emoji: '⛺', label: 'Tent', article: 'a' },
+    { key: 'cabin', emoji: '🛖', label: 'Cabin', article: 'a' },
+    { key: 'car', emoji: '🚗', label: 'Car', article: 'a' }
+  ];
+  function lodgingTypeInfo(type) { return LODGING_TYPES.find(t => t.key === type) || null; }
+
+  async function dbAddLodgingHost(gamePlanId, crewId, raverId, spaces, place, linkUrl, lodgingType) {
     const { data, error } = await sb.from('game_plan_items').insert({
       game_plan_id: gamePlanId, crew_id: crewId, kind: 'lodging_host', added_by: currentUser.id,
-      assignee_raver_id: raverId, seats: spaces || null, text: place ? place.trim() : null, link_url: linkUrl || null
+      assignee_raver_id: raverId, seats: spaces || null, text: place ? place.trim() : null, link_url: linkUrl || null,
+      lodging_type: lodgingType || null
     }).select().single();
     if (error) { showToast('⚠️ Could not add stay — try again'); return null; }
     gamePlanItems.push(data);
@@ -13678,6 +13691,22 @@ async function doProfilePasswordChange() {
         if (ok && onDone) onDone();
       },
       { label: 'Why are you removing this?', placeholder: 'e.g. added by mistake, out of date…' }
+    );
+  }
+
+  // Tasks get adjusted constantly as plans change, and any crew member can
+  // now remove one (see enforce_game_plan_item_soft_delete) — a one-tap
+  // confirm instead of requiring a typed reason, unlike every other Game
+  // Plan item kind above.
+  function deleteGamePlanTask(itemId, crewId, onDone) {
+    showConfirm(
+      'Remove this task?',
+      'Anyone in the crew can add it back if it\'s still needed.',
+      '🗑️ Remove',
+      async () => {
+        const ok = await dbDeleteGamePlanItem(itemId, crewId, null);
+        if (ok && onDone) onDone();
+      }
     );
   }
 
@@ -13852,7 +13881,10 @@ async function doProfilePasswordChange() {
     const rows = tasks.map(t => {
       const assignee = t.assignee_raver_id ? crewSquad(crew).find(p => String(p.id) === String(t.assignee_raver_id)) : null;
       const canToggle = !!uid && (canManage || t.added_by === uid || (myRaver && String(myRaver.id) === String(t.assignee_raver_id)) || !t.assignee_raver_id);
-      const canDelete = ownerOrManager(t.added_by, uid, canManage);
+      // Any signed-in crew member can remove a task, not just its creator or
+      // a manager — matches the loosened enforce_game_plan_item_soft_delete
+      // rule for kind='task' (see the game_plan_items_soft_delete trigger).
+      const canDelete = !!uid;
       const phaseInfo = gamePlanTaskPhaseInfo(t.phase);
       const claimBtn = (!t.assignee_raver_id && !t.is_done && uid)
         ? `<button type="button" class="game-plan-claim-btn" onclick="claimGamePlanTask('${escHtml(t.id)}')">🙋 I got this</button>` : '';
@@ -13873,7 +13905,7 @@ async function doProfilePasswordChange() {
             </div>
           </div>
           <div class="archive-link-actions">
-            ${canDelete ? `<button class="archive-link-del" onclick="deleteGamePlanItem('${escHtml(t.id)}','${escHtml(crewId)}','task', () => rerenderGamePlanChecklist('${escHtml(crewId)}'))" title="Remove task" aria-label="Remove task">×</button>` : ''}
+            ${canDelete ? `<button class="archive-link-del" onclick="deleteGamePlanTask('${escHtml(t.id)}','${escHtml(crewId)}', () => rerenderGamePlanChecklist('${escHtml(crewId)}'))" title="Remove task" aria-label="Remove task">×</button>` : ''}
           </div>
         </div>`;
     }).join('');
@@ -14310,10 +14342,11 @@ async function doProfilePasswordChange() {
       ).join('');
       let urlDisplay = '';
       if (h.link_url) { try { urlDisplay = new URL(h.link_url).hostname; } catch { urlDisplay = h.link_url; } }
+      const typeInfo = lodgingTypeInfo(h.lodging_type);
       return `
         <div class="archive-link-card" style="flex-direction:column;align-items:stretch;">
           <div class="archive-link-main">
-            <span class="archive-link-label">🏠 ${host ? escHtml(displayName(host).split(' ')[0]) : 'Someone'} is staying${h.text ? ` at ${escHtml(h.text)}` : ''}</span>
+            <span class="archive-link-label">${typeInfo ? typeInfo.emoji : '🏠'} ${host ? escHtml(displayName(host).split(' ')[0]) : 'Someone'} is staying${typeInfo ? ` in ${typeInfo.article} ${typeInfo.label.toLowerCase()}` : ''}${h.text ? ` at ${escHtml(h.text)}` : ''}</span>
             ${urlDisplay ? `<a class="archive-link-url" href="${escHtml(h.link_url)}" target="_blank" rel="noopener noreferrer">${escHtml(urlDisplay)} ↗</a>` : ''}
             <div class="archive-link-meta" style="flex-wrap:wrap;gap:6px;margin-top:4px;">${spaceBadge}${guestChips}</div>
           </div>
@@ -14336,6 +14369,10 @@ async function doProfilePasswordChange() {
         ${uid && !hostingRaverIds.has(String(myRaver?.id)) ? `
         <div class="archive-add-area">
           <input class="form-input" id="game-plan-stay-place" placeholder="Where are you staying? (hotel name, Airbnb address…)">
+          <select class="archive-fest-select" id="game-plan-stay-type">
+            <option value="">Type of place (optional)</option>
+            ${LODGING_TYPES.map(t => `<option value="${t.key}">${t.emoji} ${t.label}</option>`).join('')}
+          </select>
           <div class="archive-add-row">
             <input class="form-input" id="game-plan-stay-spaces" type="number" min="1" max="20" placeholder="Spaces for guests (optional)" style="flex:1;">
             <input class="form-input" id="game-plan-stay-link" placeholder="Booking link (optional)" style="flex:1;">
@@ -14355,18 +14392,21 @@ async function doProfilePasswordChange() {
     const myRaver = squad.find(r => r.isYou);
     if (!myRaver) return;
     const placeEl = document.getElementById('game-plan-stay-place');
+    const typeEl = document.getElementById('game-plan-stay-type');
     const spacesEl = document.getElementById('game-plan-stay-spaces');
     const linkEl = document.getElementById('game-plan-stay-link');
     const place = (placeEl?.value || '').trim();
+    const lodgingType = typeEl?.value || null;
     const spaces = spacesEl?.value ? parseInt(spacesEl.value, 10) : null;
     const link = (linkEl?.value || '').trim();
     if (link && !/^https?:\/\//i.test(link)) { showToast('⚠️ Booking link must start with http:// or https://'); return; }
     const gp = gamePlans.find(g => String(g.crew_id) === String(crewId) && String(g.festival_id) === String(_gamePlanActiveFestivalId));
     if (!gp) return;
-    const ok = await dbAddLodgingHost(gp.id, crewId, myRaver.id, spaces, place, link || null);
+    const ok = await dbAddLodgingHost(gp.id, crewId, myRaver.id, spaces, place, link || null, lodgingType);
     if (ok) {
       rerenderGamePlanStay(crewId);
-      postGamePlanActivity(crewId, _gamePlanActiveFestivalId, `🏠 ${displayName(myRaver).split(' ')[0]} posted their stay${spaces ? ` (${spaces} space${spaces === 1 ? '' : 's'} open)` : ''}`);
+      const typeInfo = lodgingTypeInfo(lodgingType);
+      postGamePlanActivity(crewId, _gamePlanActiveFestivalId, `${typeInfo ? typeInfo.emoji : '🏠'} ${displayName(myRaver).split(' ')[0]} posted their stay${spaces ? ` (${spaces} space${spaces === 1 ? '' : 's'} open)` : ''}`);
     }
   }
 
