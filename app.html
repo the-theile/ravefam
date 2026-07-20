@@ -2517,6 +2517,21 @@
     display: none;
   }
   .notif-badge.has-unread { display: block; }
+  .notif-badge.has-count {
+    top: 1px; right: -6px;
+    width: auto; height: 16px;
+    min-width: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.62rem;
+    font-weight: 800;
+    line-height: 1;
+    color: #fff;
+    font-family: 'Outfit', sans-serif;
+  }
 
   .notif-drawer-overlay {
     position: fixed;
@@ -3247,6 +3262,22 @@
   @keyframes huddleCtaPulse {
     0%,100% { box-shadow: 0 0 16px rgba(0,245,255,0.2); }
     50%     { box-shadow: 0 0 22px rgba(0,245,255,0.4); }
+  }
+  .huddle-cta-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    margin-left: 8px;
+    border-radius: 9px;
+    background: var(--neon-pink);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 800;
+    line-height: 1;
+    vertical-align: middle;
   }
 
   @media (max-width: 640px) {
@@ -8840,7 +8871,41 @@ async function doProfilePasswordChange() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'crews' }, scheduleReload)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'raver_festivals' }, scheduleReload)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => dbLoadNotifications())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'huddle_messages' }, handleHuddleMessageRealtimeInsert)
       .subscribe();
+  }
+
+  // Keeps crew-card / nav-bell unread badges live for Huddle rooms the user
+  // isn't currently looking at, without waiting for the next crew-grid
+  // reload. Unfiltered (RLS on huddle_messages already scopes delivery to
+  // the viewer's own crews) since postgres_changes filters only support a
+  // single eq(), not "crew_id in (...)".
+  function isHuddleRoomActivelyOpen(roomId) {
+    if (!roomId || _huddleActiveRoomId !== roomId) return false;
+    const root = document.getElementById(_huddleActiveRootId);
+    return !!(root && root.offsetParent !== null);
+  }
+
+  function handleHuddleMessageRealtimeInsert(payload) {
+    const row = payload && payload.new;
+    if (!row || !currentUser || row.sender_id === currentUser.id) return;
+    if (isHuddleRoomActivelyOpen(row.room_id)) {
+      markHuddleRoomRead(row.room_id, row.crew_id);
+      return;
+    }
+    if (!_huddleActivityCache) return; // crew grid hasn't prefetched unread state yet
+    _huddleRoomCrewMap = _huddleRoomCrewMap || {};
+    _huddleRoomUnreadCache = _huddleRoomUnreadCache || {};
+    _huddleRoomCrewMap[row.room_id] = row.crew_id;
+    _huddleRoomUnreadCache[row.room_id] = (_huddleRoomUnreadCache[row.room_id] || 0) + 1;
+    recomputeHuddleUnreadTotals();
+    const entry = _huddleActivityCache[row.crew_id];
+    if (entry) {
+      entry.lastMessageAt = row.created_at;
+      if (row.kind === 'beacon' && row.expires_at && row.expires_at > new Date().toISOString()) entry.hasBeacon = true;
+    }
+    renderCrews();
+    updateNotifBadge();
   }
 
   async function bootApp() {
@@ -11788,9 +11853,15 @@ async function doProfilePasswordChange() {
 
   // Batched "is there Huddle activity worth surfacing" prefetch for the crew
   // grid — one query for every visible crew rather than one per card. Read
-  // state (has the user seen the latest message) is tracked in localStorage
-  // per crew, so it doesn't need its own table/RLS surface for v1.
+  // state is tracked server-side in huddle_room_reads (per room, so opening
+  // one room in a crew doesn't falsely clear unread on another), letting the
+  // badge show a real cross-device unread count instead of a per-browser
+  // localStorage boolean.
   let _huddleActivityCache = null; // crewId -> { lastMessageAt, hasBeacon }
+  let _huddleRoomUnreadCache = null; // roomId -> unread count
+  let _huddleRoomCrewMap = null; // roomId -> crewId
+  let _huddleReadMap = null; // roomId -> last_read_at (ISO string)
+  let _huddleUnreadCache = null; // crewId -> unread count
   let _huddleActivityLoading = false;
   async function loadHuddleActivityCache() {
     if (_huddleActivityLoading || !currentUser || !crews.length) return;
@@ -11799,39 +11870,97 @@ async function doProfilePasswordChange() {
     const cache = {};
     ids.forEach(id => { cache[id] = { lastMessageAt: null, hasBeacon: false }; });
     try {
+      const { data: reads } = await sb.from('huddle_room_reads')
+        .select('room_id, last_read_at').eq('user_id', currentUser.id);
+      const readMap = {};
+      (reads || []).forEach(r => { readMap[r.room_id] = r.last_read_at; });
+      _huddleReadMap = readMap;
+
       const { data } = await sb.from('huddle_messages')
-        .select('crew_id, created_at, kind, expires_at')
+        .select('crew_id, room_id, sender_id, created_at, kind, expires_at')
         .in('crew_id', ids)
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
         .limit(500);
       const nowIso = new Date().toISOString();
+      const roomUnread = {};
+      const roomCrewMap = {};
       (data || []).forEach(row => {
         const c = cache[row.crew_id];
         if (!c) return;
         if (!c.lastMessageAt) c.lastMessageAt = row.created_at;
         if (row.kind === 'beacon' && row.expires_at && row.expires_at > nowIso) c.hasBeacon = true;
+        roomCrewMap[row.room_id] = row.crew_id;
+        if (row.sender_id === currentUser.id) return;
+        const lastRead = readMap[row.room_id];
+        if (!lastRead || new Date(row.created_at) > new Date(lastRead)) {
+          roomUnread[row.room_id] = (roomUnread[row.room_id] || 0) + 1;
+        }
       });
+      _huddleRoomUnreadCache = roomUnread;
+      _huddleRoomCrewMap = roomCrewMap;
+      recomputeHuddleUnreadTotals();
     } catch (err) { console.warn('huddle activity prefetch failed', err); }
     _huddleActivityCache = cache;
     _huddleActivityLoading = false;
     renderCrews();
+    updateNotifBadge();
+  }
+
+  // Rebuilds the per-crew unread total from the per-room counts — called both
+  // after the batched prefetch above and after any incremental realtime/mark-
+  // read update, so the two caches never drift apart.
+  function recomputeHuddleUnreadTotals() {
+    const crewUnread = {};
+    Object.keys(_huddleRoomUnreadCache || {}).forEach(roomId => {
+      const count = _huddleRoomUnreadCache[roomId];
+      const crewId = _huddleRoomCrewMap && _huddleRoomCrewMap[roomId];
+      if (!crewId || !count) return;
+      crewUnread[crewId] = (crewUnread[crewId] || 0) + count;
+    });
+    _huddleUnreadCache = crewUnread;
+  }
+
+  function totalHuddleUnreadCount() {
+    if (!_huddleUnreadCache) return 0;
+    return Object.values(_huddleUnreadCache).reduce((a, b) => a + b, 0);
+  }
+
+  // Marks a room read as of now: optimistically updates local caches (so the
+  // badge clears instantly) then persists the watermark server-side. Called
+  // whenever a room becomes the active one (see switchHuddleRoom), which
+  // covers both the Overview Huddle tab and Game Plan's embedded per-rave room.
+  async function markHuddleRoomRead(roomId, crewId) {
+    if (!currentUser || !roomId) return;
+    const nowIso = new Date().toISOString();
+    if (_huddleReadMap) _huddleReadMap[roomId] = nowIso;
+    if (_huddleRoomUnreadCache) _huddleRoomUnreadCache[roomId] = 0;
+    if (_huddleRoomCrewMap && crewId) _huddleRoomCrewMap[roomId] = crewId;
+    recomputeHuddleUnreadTotals();
+    renderCrews();
+    updateNotifBadge();
+    try {
+      await sb.from('huddle_room_reads').upsert(
+        { user_id: currentUser.id, room_id: roomId, last_read_at: nowIso },
+        { onConflict: 'user_id,room_id' }
+      );
+    } catch (err) { console.warn('mark huddle room read failed', err); }
   }
 
   function huddleActivityBadge(crewId) {
     const entry = _huddleActivityCache && _huddleActivityCache[crewId];
     if (!entry) return null;
-    const lastRead = localStorage.getItem('huddleLastRead_' + crewId);
-    const hasUnread = !!entry.lastMessageAt && (!lastRead || new Date(entry.lastMessageAt) > new Date(lastRead));
-    if (!entry.hasBeacon && !hasUnread) return null;
-    return { beacon: entry.hasBeacon, unread: hasUnread };
+    const unread = (_huddleUnreadCache && _huddleUnreadCache[crewId]) || 0;
+    if (!entry.hasBeacon && !unread) return null;
+    return { beacon: entry.hasBeacon, unread };
   }
 
   function huddleCtaHTML(crewId) {
     const badge = huddleActivityBadge(crewId);
     if (!badge) return '';
     const label = badge.beacon ? '📣 Beacon active — Join the Huddle' : '🕊️ Join the Huddle';
-    return `<button type="button" class="huddle-cta-btn" data-crew-id="${crewId}" onclick="event.stopPropagation(); openDetail(this.dataset.crewId, {tab:'huddle'})">${label}</button>`;
+    const countHTML = badge.unread ? `<span class="huddle-cta-count">${badge.unread > 99 ? '99+' : badge.unread}</span>` : '';
+    return `<button type="button" class="huddle-cta-btn" data-crew-id="${crewId}" onclick="event.stopPropagation(); openDetail(this.dataset.crewId, {tab:'huddle'})">${label}${countHTML}</button>`;
   }
 
   // Quick tap: change status (Lead only) — shows confirmation first
@@ -12597,7 +12726,6 @@ async function doProfilePasswordChange() {
       return;
     }
     _huddleActiveCrewId = crewId;
-    localStorage.setItem('huddleLastRead_' + crewId, new Date().toISOString());
     root.innerHTML = `<div class="es-block"><div class="es-icon">🕊️</div><div class="es-headline">Tuning in…</div></div>`;
 
     // Only Main + any leader-created custom rooms belong on this tab now —
@@ -12640,6 +12768,7 @@ async function doProfilePasswordChange() {
     renderHuddleUI();
     subscribeHuddleRealtime(roomId);
     trackHuddlePresence(roomId);
+    markHuddleRoomRead(roomId, _huddleActiveCrewId);
   }
 
   function huddlePresenceAvatarsHTML() {
@@ -22586,6 +22715,14 @@ async function doProfilePasswordChange() {
   function updateNotifBadge() {
     const badge = document.getElementById('notif-badge');
     if (!badge) return;
+    const huddleTotal = totalHuddleUnreadCount();
+    if (huddleTotal > 0) {
+      badge.textContent = huddleTotal > 99 ? '99+' : String(huddleTotal);
+      badge.classList.add('has-unread', 'has-count');
+      return;
+    }
+    badge.textContent = '';
+    badge.classList.remove('has-count');
     const hasUnread = loadNotifs().some(n => !n.read);
     badge.classList.toggle('has-unread', hasUnread);
   }
