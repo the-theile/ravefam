@@ -6934,7 +6934,7 @@
 <div id="photo-lightbox" class="photo-lightbox" onclick="closePhotoLightbox()">
   <div class="photo-lightbox-card" onclick="event.stopPropagation()">
     <img id="photo-lightbox-img" src="" alt="Memory photo" class="photo-lightbox-img">
-    <div class="photo-lightbox-label">✦ our memory ✦</div>
+    <div id="photo-lightbox-label" class="photo-lightbox-label">✦ our memory ✦</div>
     <button id="photo-lightbox-remove" class="photo-lightbox-remove" onclick="removeOurPhotoFromLightbox()" title="Remove photo">🗑️ Remove</button>
   </div>
 </div>
@@ -10938,8 +10938,9 @@ async function doProfilePasswordChange() {
   }
 
   let lightboxCtx = null;
-  function openPhotoLightbox(src, viewingRaverId, slot) {
+  function openPhotoLightbox(src, viewingRaverId, slot, label = '✦ our memory ✦') {
     document.getElementById('photo-lightbox-img').src = src;
+    document.getElementById('photo-lightbox-label').textContent = label;
     lightboxCtx = (viewingRaverId && slot === 'mine') ? { viewingRaverId, slot } : null;
     document.getElementById('photo-lightbox-remove').style.display = lightboxCtx ? '' : 'none';
     document.getElementById('photo-lightbox').classList.add('open');
@@ -17908,7 +17909,7 @@ async function doProfilePasswordChange() {
 
   // Renders the crew's totem mark: photo if set, else icon-on-gradient if set, else ''.
   function crewTotemMarkHTML(crew, extraClass = '') {
-    if (crew.totemPhotoUrl) return `<img class="crew-totem-thumb ${extraClass}" src="${escHtml(crew.totemPhotoUrl)}" alt="Crew totem">`;
+    if (crew.totemPhotoUrl) return `<img class="crew-totem-thumb ${extraClass}" src="${escHtml(crew.totemPhotoUrl)}" alt="Crew totem" style="cursor:zoom-in;" onclick="event.stopPropagation(); openPhotoLightbox('${escHtml(crew.totemPhotoUrl)}', null, null, '✦ crew totem ✦')">`;
     if (crew.totemIcon) {
       const glyph = TOTEM_ICON_MAP[crew.totemIcon] || '✦';
       return `<div class="crew-totem-thumb crew-totem-icon-mark ${extraClass}" style="background:${crew.gradient}">${glyph}</div>`;
