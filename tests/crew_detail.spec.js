@@ -239,4 +239,184 @@ test.describe('crew detail · game plan', () => {
     const idea = await page.evaluate(() => (window.__store.game_plan_items || []).find(it => it.kind === 'outfit'));
     expect(idea.link_url).toBe('https://pinterest.com/board/1');
   });
+
+  test('claiming an unclaimed task assigns it to the claimer', async ({ page }) => {
+    await bootAuthedApp(page);
+    await openGamePlan(page);
+    await page.evaluate(async () => switchGamePlanSection('checklist', document.querySelector('.game-plan-section-tab[data-section="checklist"]')));
+
+    const taskId = await page.evaluate(async () => {
+      document.getElementById('game-plan-task-input').value = 'Pack the tent';
+      await addGamePlanTask('c1');
+      return (window.__store.game_plan_items || []).find(it => it.kind === 'task' && it.text === 'Pack the tent').id;
+    });
+    await expect(page.locator('#game-plan-section-checklist')).toContainText('I got this');
+
+    await page.evaluate(async (id) => { await claimGamePlanTask(id); }, taskId);
+    const claimed = await page.evaluate((id) => window.__store.game_plan_items.find(it => it.id === id), taskId);
+    expect(claimed.assignee_raver_id).toBe('r-you');
+    await expect(page.locator('#game-plan-section-checklist')).toContainText('assigned to Theile');
+  });
+
+  test('the cast card shows a claimed role once assigned', async ({ page }) => {
+    await bootAuthedApp(page);
+    await openGamePlan(page);
+    await page.evaluate(async () => switchGamePlanSection('roles', document.querySelector('.game-plan-section-tab[data-section="roles"]')));
+
+    await page.evaluate(async () => {
+      const gp = await dbGetOrCreateGamePlan('c1', 'f1');
+      await dbAddGamePlanRole(gp.id, 'c1', 'Hype Person', 'r-you');
+      rerenderGamePlanRoles('c1');
+    });
+    await expect(page.locator('.game-plan-cast-wrap')).toContainText('The Cast');
+    await expect(page.locator('.game-plan-cast-wrap')).toContainText('Hype Person');
+  });
+
+  test('claiming a role posts an activity message into the festival Huddle', async ({ page }) => {
+    await bootAuthedApp(page);
+    await openGamePlan(page);
+    await page.evaluate(async () => switchGamePlanSection('roles', document.querySelector('.game-plan-section-tab[data-section="roles"]')));
+
+    await page.evaluate(async () => {
+      document.getElementById('game-plan-role-custom').value = 'Vibe Curator';
+      document.getElementById('game-plan-role-assignee').value = 'r-you';
+      await addGamePlanRole('c1');
+    });
+    await page.waitForTimeout(50);
+    const systemMsg = await page.evaluate(() =>
+      (window.__store.huddle_messages || []).find(m => m.kind === 'system' && (m.body || '').includes('Vibe Curator')));
+    expect(systemMsg).toBeTruthy();
+    expect(systemMsg.body).toContain('Theile');
+  });
+
+  test('adding an outfit idea with a photo persists the image url', async ({ page }) => {
+    await bootAuthedApp(page);
+    await openGamePlan(page);
+    await page.evaluate(async () => switchGamePlanSection('outfit', document.querySelector('.game-plan-section-tab[data-section="outfit"]')));
+
+    // Stub the upload pipeline (same technique vendor_village.spec.js uses) —
+    // compressImageToBlob needs a real decodable image and the offline
+    // storage stub always returns an empty publicUrl, neither of which is
+    // what this test cares about (that a picked file reaches the item row).
+    await page.evaluate(() => { window.uploadPhotoToStorage = async () => 'https://example.com/fit.jpg'; });
+    await page.locator('#game-plan-outfit-image-input').setInputFiles({ name: 'fit.png', mimeType: 'image/png', buffer: Buffer.from('fake') });
+    await page.evaluate(async () => {
+      document.getElementById('game-plan-outfit-text').value = 'Rave fit check';
+      await addGamePlanOutfitIdea('c1');
+    });
+    await page.waitForTimeout(50);
+    const idea = await page.evaluate(() =>
+      (window.__store.game_plan_items || []).find(it => it.kind === 'outfit' && it.text === 'Rave fit check'));
+    expect(idea.image_url).toBe('https://example.com/fit.jpg');
+  });
+
+  test('reacting to an outfit idea toggles the reaction on and off', async ({ page }) => {
+    await bootAuthedApp(page);
+    await openGamePlan(page);
+    const ideaId = await page.evaluate(async () => {
+      const gp = await dbGetOrCreateGamePlan('c1', 'f1');
+      const idea = await dbAddOutfitIdea(gp.id, 'c1', 'Y2K rave fit', null);
+      return idea.id;
+    });
+
+    await page.evaluate(async (id) => { await toggleGamePlanOutfitReaction(id, '🔥'); }, ideaId);
+    let idea = await page.evaluate((id) => window.__store.game_plan_items.find(it => it.id === id), ideaId);
+    expect(idea.reactions['🔥']).toEqual(['test-user-id']);
+
+    await page.evaluate(async (id) => { await toggleGamePlanOutfitReaction(id, '🔥'); }, ideaId);
+    idea = await page.evaluate((id) => window.__store.game_plan_items.find(it => it.id === id), ideaId);
+    expect(idea.reactions['🔥']).toBeUndefined();
+  });
+
+  test('pinning a huddle message unpins whatever was previously pinned in that room', async ({ page }) => {
+    await bootAuthedApp(page);
+    await openGamePlan(page); // default section is huddle, which materializes the festival room
+
+    const { m1, m2 } = await page.evaluate(async () => {
+      const room = huddleRooms[0];
+      const a = await sb.from('huddle_messages').insert({ room_id: room.id, crew_id: 'c1', sender_id: 'test-user-id', kind: 'text', body: 'first' }).select().single();
+      const b = await sb.from('huddle_messages').insert({ room_id: room.id, crew_id: 'c1', sender_id: 'test-user-id', kind: 'text', body: 'second' }).select().single();
+      huddleMessages.push(a.data, b.data);
+      return { m1: a.data.id, m2: b.data.id };
+    });
+
+    await page.evaluate(async (id) => { await togglePinHuddleMessage(id, false); }, m1);
+    await page.evaluate(async (id) => { await togglePinHuddleMessage(id, false); }, m2);
+
+    const pinned = await page.evaluate(() => window.__store.huddle_messages.filter(m => m.pinned_at));
+    expect(pinned.length).toBe(1);
+    expect(pinned[0].id).toBe(m2);
+  });
+
+  test('a lodging host can be joined by a guest, and shows spaces left', async ({ page }) => {
+    await bootAuthedApp(page);
+    await openGamePlan(page);
+    await page.evaluate(async () => switchGamePlanSection('stay', document.querySelector('.game-plan-section-tab[data-section="stay"]')));
+
+    const { hostId } = await page.evaluate(async () => {
+      const gp = await dbGetOrCreateGamePlan('c1', 'f1');
+      const host = await dbAddLodgingHost(gp.id, 'c1', 'r-you', 2, 'Sunset Airbnb', 'https://airbnb.com/rooms/1');
+      await dbAddLodgingGuest(gp.id, 'c1', host.id, 'r-sam');
+      rerenderGamePlanStay('c1');
+      return { hostId: host.id };
+    });
+    await expect(page.locator('#game-plan-section-stay')).toContainText('Sunset Airbnb');
+    await expect(page.locator('#game-plan-section-stay')).toContainText('1 space left');
+
+    const guest = await page.evaluate((hid) =>
+      (window.__store.game_plan_items || []).find(it => it.kind === 'lodging_guest' && it.driver_item_id === hid),
+      hostId);
+    expect(guest).toBeTruthy();
+    expect(guest.assignee_raver_id).toBe('r-sam');
+  });
+
+  test('deleting a lodging host also removes their guests', async ({ page }) => {
+    await bootAuthedApp(page);
+    await openGamePlan(page);
+
+    const hostId = await page.evaluate(async () => {
+      const gp = await dbGetOrCreateGamePlan('c1', 'f1');
+      const host = await dbAddLodgingHost(gp.id, 'c1', 'r-you', 2, 'Sunset Airbnb', null);
+      await dbAddLodgingGuest(gp.id, 'c1', host.id, 'r-sam');
+      return host.id;
+    });
+    await page.evaluate(async (id) => { await dbDeleteGamePlanItem(id, 'c1'); }, hostId);
+
+    const hostRow = await page.evaluate((id) => window.__store.game_plan_items.find(it => it.id === id), hostId);
+    expect(hostRow.deleted_at).toBeTruthy();
+    const guestRow = await page.evaluate((id) =>
+      window.__store.game_plan_items.find(it => it.kind === 'lodging_guest' && it.driver_item_id === id),
+      hostId);
+    expect(guestRow.deleted_at).toBeTruthy();
+  });
+});
+
+test.describe('crew-wide activity feed (main Huddle)', () => {
+  test('postCrewActivity posts a system message into the main Huddle room', async ({ page }) => {
+    await bootAuthedApp(page);
+    await page.evaluate(async () => { await postCrewActivity('c1', '🎉 Test crew event'); });
+
+    const room = await page.evaluate(() =>
+      (window.__store.huddle_rooms || []).find(r => r.crew_id === 'c1' && r.room_key === 'main'));
+    expect(room).toBeTruthy();
+    const msg = await page.evaluate((roomId) =>
+      (window.__store.huddle_messages || []).find(m => m.room_id === roomId && m.kind === 'system' && m.body === '🎉 Test crew event'),
+      room.id);
+    expect(msg).toBeTruthy();
+  });
+
+  test('RSVPing to a new festival posts an activity message into each shared crew\'s main Huddle', async ({ page }) => {
+    await bootAuthedApp(page); // c1 (status: recruiting) already has r-you as a member
+    await page.evaluate(async () => { await toggleGoingToFest('f2'); });
+    await page.waitForTimeout(50);
+
+    const room = await page.evaluate(() =>
+      (window.__store.huddle_rooms || []).find(r => r.crew_id === 'c1' && r.room_key === 'main'));
+    expect(room).toBeTruthy();
+    const msg = await page.evaluate((roomId) =>
+      (window.__store.huddle_messages || []).find(m => m.room_id === roomId && m.kind === 'system' && (m.body || '').includes('Awakenings')),
+      room.id);
+    expect(msg).toBeTruthy();
+    expect(msg.body).toContain('Theile');
+  });
 });
