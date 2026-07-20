@@ -17593,17 +17593,17 @@ async function doProfilePasswordChange() {
     if (def.type === 'crew') {
       const { error } = await sb.from('crew_achievements')
         .insert({ crew_id: crewId, badge_id: badgeId });
-      if (error && error.code !== '23505') { console.error('award crew badge error', error); return; }
-      if (!crewAchievements.some(a => a.badge_id === badgeId)) {
-        crewAchievements.push({ crew_id: crewId, badge_id: badgeId, earned_at: new Date().toISOString() });
-      }
+      // 23505 (unique violation) means this crew already earned it — some
+      // other call site's stale in-memory crewAchievements snapshot raced
+      // us here. Either way, bail out silently instead of re-announcing an
+      // achievement that isn't actually new.
+      if (error) { if (error.code !== '23505') console.error('award crew badge error', error); return; }
+      crewAchievements.push({ crew_id: crewId, badge_id: badgeId, earned_at: new Date().toISOString() });
     } else {
       const { error } = await sb.from('raver_achievements')
         .insert({ raver_id: raverId, crew_id: crewId, badge_id: badgeId });
-      if (error && error.code !== '23505') { console.error('award raver badge error', error); return; }
-      if (!raverAchievements.some(a => a.badge_id === badgeId && String(a.raver_id) === String(raverId))) {
-        raverAchievements.push({ raver_id: raverId, crew_id: crewId, badge_id: badgeId, earned_at: new Date().toISOString() });
-      }
+      if (error) { if (error.code !== '23505') console.error('award raver badge error', error); return; }
+      raverAchievements.push({ raver_id: raverId, crew_id: crewId, badge_id: badgeId, earned_at: new Date().toISOString() });
     }
 
     const earnerRaver = raverId ? squad.find(r => String(r.id) === String(raverId)) : null;

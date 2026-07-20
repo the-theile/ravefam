@@ -156,6 +156,15 @@ async function installSupabaseStub(page, opts = {}) {
           });
         }
 
+        // Tables with a real Postgres UNIQUE constraint that client code relies
+        // on getting back as a 23505 error (e.g. awardAchievement's re-award
+        // guard) — mirrors crew_achievements_crew_id_badge_id_key /
+        // raver_achievements_raver_id_crew_id_badge_id_key in production.
+        const UNIQUE_INSERT_KEYS = {
+          crew_achievements: ['crew_id', 'badge_id'],
+          raver_achievements: ['raver_id', 'crew_id', 'badge_id'],
+        };
+
         function makeBuilder(table) {
           const st = { table, op: 'select', sel: '*', payload: null, upsertOpts: null, filters: [], limit: null };
           const pred = row => st.filters.every(f => f(row));
@@ -168,6 +177,11 @@ async function installSupabaseStub(page, opts = {}) {
             }
             if (st.op === 'insert') {
               const arr = Array.isArray(st.payload) ? st.payload : [st.payload];
+              const uniqueKeys = UNIQUE_INSERT_KEYS[table];
+              if (uniqueKeys) {
+                const dupe = arr.find(r => tbl.some(existing => uniqueKeys.every(k => String(existing[k]) === String(r[k]))));
+                if (dupe) return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' } };
+              }
               const ins = arr.map(r => { const row = clone(r); if (row.id == null) row.id = table + '-' + (++idc); tbl.push(row); return clone(row); });
               return { data: ins, error: null };
             }
