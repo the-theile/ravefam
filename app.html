@@ -2940,6 +2940,14 @@
     box-shadow: 0 0 20px -6px var(--ac, var(--neon-pink));
   }
   .crew-feature-tile-icon svg { width: 21px; height: 21px; stroke: var(--ac, var(--neon-pink)); }
+  /* Pulses when the tile has content the user hasn't opened yet — see
+     refreshCrewFeatureGlow/markCrewFeatureRead. Uses the tile's own --ac
+     accent so each feature glows its own color. */
+  .crew-feature-tile-icon.has-unseen { animation: crewFeatureGlowPulse 2.2s ease-in-out infinite; }
+  @keyframes crewFeatureGlowPulse {
+    0%,100% { box-shadow: 0 0 20px -6px var(--ac, var(--neon-pink)); }
+    50%     { box-shadow: 0 0 26px 2px var(--ac, var(--neon-pink)); }
+  }
   .crew-feature-tile-label {
     font-weight: 700;
     font-size: 0.68rem;
@@ -12065,6 +12073,10 @@ async function doProfilePasswordChange() {
   let crewPollVotes = {};
   let crewJams = [];
   let crewJamVibes = [];
+  // feature -> last_read_at (ISO string) for the currently open crew's
+  // Overview tiles (pins/dreamboard/poll/jams/archive — huddle tracks reads
+  // per-room separately, see huddle_room_reads). null until loaded.
+  let _crewFeatureReadMap = null;
   // Game Plan: per-(crew, rave) hub folding in the per-rave Huddle plus
   // Checklist/Roles/Logistics/Outfit. gamePlans holds every game_plans row
   // seen for the active crew (one per eligible rave); gamePlanItems holds
@@ -12135,16 +12147,19 @@ async function doProfilePasswordChange() {
     crewFeedEvents = [];
     crewHistoryRows = [];
     crewHistoryExpanded = false;
+    _crewFeatureReadMap = null;
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById('page-crew-detail').classList.add('active');
     window.scrollTo(0, 0);
     renderDetail(id);
+    loadCrewFeatureReadMap(id).then(() => refreshCrewFeatureGlow(id)).catch(console.warn);
     await dbLoadDreamPins(id);
     rerenderDreamBoard(id);
-    dbLoadArchiveLinks(id).then(() => rerenderArchive(id)).catch(console.warn);
-    dbLoadPolls(id).then(() => rerenderPolls(id)).catch(console.warn);
-    dbLoadJams(id).then(() => rerenderJams(id)).catch(console.warn);
-    dbLoadAchievements(id).then(() => { rerenderFamPins(id); checkAndAwardBadges(id); }).catch(console.warn);
+    refreshCrewFeatureGlow(id);
+    dbLoadArchiveLinks(id).then(() => { rerenderArchive(id); refreshCrewFeatureGlow(id); }).catch(console.warn);
+    dbLoadPolls(id).then(() => { rerenderPolls(id); refreshCrewFeatureGlow(id); }).catch(console.warn);
+    dbLoadJams(id).then(() => { rerenderJams(id); refreshCrewFeatureGlow(id); }).catch(console.warn);
+    dbLoadAchievements(id).then(() => { rerenderFamPins(id); checkAndAwardBadges(id); refreshCrewFeatureGlow(id); }).catch(console.warn);
     dbLoadCrewHistory(id).then(rows => { crewHistoryRows = rows; rerenderCrewHistory(id); }).catch(console.warn);
     if (opts && opts.tab === 'huddle') {
       // Main Huddle lives as a tile under Overview and now opens by default
@@ -12719,8 +12734,76 @@ async function doProfilePasswordChange() {
             body: "Send an urgent ping that cuts through the chat when it actually matters — lost at the fest, meetup change, whatever."
           });
         });
+      } else if (CREW_FEATURE_READ_KEYS.includes(feature)) {
+        markCrewFeatureRead(activeDetailId, feature);
       }
     }
+  }
+
+  // Which of the Overview tiles carry their own "last read" watermark (see
+  // crew_feature_reads) and can pulse their icon when unseen. Huddle is
+  // excluded — its reads are tracked per-room, not per-crew (see
+  // huddle_room_reads/markHuddleRoomRead).
+  const CREW_FEATURE_READ_KEYS = ['pins', 'dreamboard', 'poll', 'jams', 'archive'];
+
+  // Loads this user's read watermarks for the given crew's non-huddle tiles
+  // into _crewFeatureReadMap ({feature: last_read_at ISO string}). Missing
+  // entries mean "never read" (any content counts as unseen).
+  async function loadCrewFeatureReadMap(crewId) {
+    if (!currentUser) return;
+    const { data, error } = await sb.from('crew_feature_reads')
+      .select('feature, last_read_at').eq('user_id', currentUser.id).eq('crew_id', crewId);
+    if (error) { console.warn('crew feature reads load failed', error); return; }
+    const map = {};
+    (data || []).forEach(row => { map[row.feature] = row.last_read_at; });
+    _crewFeatureReadMap = map;
+  }
+
+  // Decides whether each non-huddle Overview tile has content newer than the
+  // user's last-read watermark for it, and toggles the pulsing glow class on
+  // that tile's icon accordingly. Reads straight from the already-loaded
+  // in-memory arrays (dreamPins/archiveLinks/crewPolls/crewJams/
+  // crewFeedEvents) rather than issuing fresh queries — this only runs after
+  // openDetail's own loads populate them. Own contributions don't count as
+  // "unseen" for the tiles that track an author column; the Pins tile (badge
+  // feed) has no such column so it isn't filtered.
+  function refreshCrewFeatureGlow(crewId) {
+    if (!_crewFeatureReadMap || String(activeDetailId) !== String(crewId)) return;
+    const latestOf = (rows, authorKey) => rows.reduce((max, r) => {
+      if (authorKey && r[authorKey] === currentUser?.id) return max;
+      return (!max || r.created_at > max) ? r.created_at : max;
+    }, null);
+    const latest = {
+      pins: latestOf(crewFeedEvents, null),
+      dreamboard: latestOf(dreamPins, 'added_by'),
+      poll: latestOf(crewPolls, 'created_by'),
+      jams: latestOf(crewJams, 'added_by'),
+      archive: latestOf(archiveLinks, 'added_by')
+    };
+    CREW_FEATURE_READ_KEYS.forEach(feature => {
+      const lastActivity = latest[feature];
+      const lastRead = _crewFeatureReadMap[feature];
+      const unseen = !!lastActivity && (!lastRead || lastActivity > lastRead);
+      const icon = document.querySelector(`.crew-feature-tile[data-feature="${feature}"] .crew-feature-tile-icon`);
+      if (icon) icon.classList.toggle('has-unseen', unseen);
+    });
+  }
+
+  // Marks a non-huddle tile read as of now: persists the watermark, updates
+  // the local map, and clears that tile's glow immediately (optimistic, same
+  // pattern as markHuddleRoomRead).
+  async function markCrewFeatureRead(crewId, feature) {
+    if (!currentUser || !crewId) return;
+    const nowIso = new Date().toISOString();
+    if (!_crewFeatureReadMap) _crewFeatureReadMap = {};
+    _crewFeatureReadMap[feature] = nowIso;
+    refreshCrewFeatureGlow(crewId);
+    try {
+      await sb.from('crew_feature_reads').upsert(
+        { user_id: currentUser.id, crew_id: crewId, feature, last_read_at: nowIso },
+        { onConflict: 'user_id,crew_id,feature' }
+      );
+    } catch (err) { console.warn('mark crew feature read failed', err); }
   }
 
   // ===== HUDDLE =====
