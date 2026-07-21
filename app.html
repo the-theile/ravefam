@@ -12996,10 +12996,10 @@ async function doProfilePasswordChange() {
 
     body.innerHTML = `
       <div class="pm-kpi-grid">
-        ${pmKpiCard('Waitlist', pmFmt(t.waitlist), 'Signups so far')}
+        ${pmKpiCard('New Users (7d)', pmFmt(t.new_users_7d), pmTrendSub(t.new_users_7d, t.new_users_prev_7d))}
         ${pmKpiCard('Registered Users', pmFmt(t.registered_users), `${pmFmt(t.active_crews)} active crews`)}
         ${pmKpiCard('Active Crew Members', pmFmt(t.active_crew_members), `${pmFmt(t.active_crews)} crews`)}
-        ${pmKpiCard('Explorer Visitors (30d)', pmFmt(d.pageviews.unique_visitors_30d), `${pmFmt(d.pageviews.last_30d)} pageviews`)}
+        ${pmKpiCard('Explorer Visitors (30d)', pmFmt(d.pageviews.unique_visitors_30d), `${pmFmt(d.pageviews.last_30d)} pageviews · ${pmFmt(d.pageviews.explorer_clickthrough_30d)} → site`)}
         ${pmKpiCard('Upcoming Raves', pmFmt(t.festivals_upcoming), `${pmFmt(t.festivals_total)} total logged`)}
         ${pmKpiCard('NPS', d.nps.count > 0 ? d.nps.nps_score : '—', d.nps.count > 0 ? `from ${d.nps.count} response${d.nps.count === 1 ? '' : 's'}` : 'No responses yet')}
       </div>
@@ -13007,12 +13007,12 @@ async function doProfilePasswordChange() {
       <div class="pm-grid-2">
         <div class="pm-section">
           <div class="pm-section-title">Growth (Last 8 Weeks)</div>
-          <div class="pm-section-sub">Waitlist &amp; active crews (cumulative), Explorer unique visitors (weekly)</div>
+          <div class="pm-section-sub">Registered users &amp; active crews (cumulative), Explorer unique visitors (weekly)</div>
           ${pmChartOrFallback('pm-chart-growth')}
         </div>
         <div class="pm-section">
-          <div class="pm-section-title">Weekly Waitlist Signups</div>
-          <div class="pm-section-sub">New signups per week, not cumulative</div>
+          <div class="pm-section-title">Weekly New Signups</div>
+          <div class="pm-section-sub">New registrations per week, not cumulative</div>
           ${pmChartOrFallback('pm-chart-acquisition')}
         </div>
       </div>
@@ -13059,6 +13059,20 @@ async function doProfilePasswordChange() {
           <div class="pm-section-title">Top Pages</div>
           <div class="pm-section-sub">All-time pageviews, all surfaces (site, app, Lineup Explorer)</div>
           ${pmTopPathsRows(d.pageviews.top_paths)}
+        </div>
+      </div>
+
+      <div class="pm-grid-2">
+        <div class="pm-section">
+          <div class="pm-section-title">Landing Page CTA Clicks</div>
+          <div class="pm-section-sub">Which Sign up / Log in / Explorer link people actually tap (last 30 days: ${pmFmt(d.cta_clicks.last_30d)})</div>
+          ${pmCtaClicksRows(d.cta_clicks.top)}
+        </div>
+        <div class="pm-section" style="display:flex;flex-direction:column;justify-content:center;">
+          <div class="pm-section-title">Explorer → Site Click-through</div>
+          <div class="pm-section-sub">Landing/app visits that arrived via a referrer from a Lineup Explorer page</div>
+          <div class="pm-kpi-value" style="text-align:center;margin:14px 0 4px;font-size:2.2rem;">${pmFmt(d.pageviews.explorer_clickthrough_30d)}</div>
+          <div class="pm-kpi-sub" style="text-align:center;">last 30 days · ${pmFmt(d.pageviews.explorer_clickthrough_total)} all-time</div>
         </div>
       </div>
 
@@ -13135,6 +13149,24 @@ async function doProfilePasswordChange() {
       </div>`).join('');
   }
 
+  function pmCtaClicksRows(rows) {
+    if (!rows.length) return pmEmptyNote('No CTA clicks logged yet');
+    return rows.map(r => `
+      <div class="pm-row">
+        <span class="pm-row-label" style="font-family:monospace;font-size:0.78rem;">${escHtml(r.label || '(unlabeled)')}</span>
+        <span class="pm-row-value">${pmFmt(r.count)}</span>
+      </div>`).join('');
+  }
+
+  function pmTrendSub(cur, prev) {
+    cur = cur ?? 0; prev = prev ?? 0;
+    if (prev === 0) return cur > 0 ? `+${pmFmt(cur)} vs prior 7d` : 'vs prior 7 days';
+    const delta = cur - prev;
+    const pct = Math.round((delta / prev) * 100);
+    const sign = delta > 0 ? '+' : '';
+    return `${sign}${delta} (${sign}${pct}%) vs prior 7d`;
+  }
+
   function pmRenderGrowthChart(weekly) {
     const ctx = document.getElementById('pm-chart-growth');
     if (!ctx) return;
@@ -13144,7 +13176,7 @@ async function doProfilePasswordChange() {
       data: {
         labels: weekly.map(w => pmWeekLabel(w.week_start)),
         datasets: [
-          { label: 'Waitlist', data: weekly.map(w => w.waitlist), borderColor: '#BF00FF', backgroundColor: 'rgba(191,0,255,0.12)', borderWidth: 3, tension: 0.35, fill: true, pointRadius: 0 },
+          { label: 'Registered Users', data: weekly.map(w => w.registered_users), borderColor: '#BF00FF', backgroundColor: 'rgba(191,0,255,0.12)', borderWidth: 3, tension: 0.35, fill: true, pointRadius: 0 },
           { label: 'Active Crews', data: weekly.map(w => w.crews), borderColor: '#FF2D78', backgroundColor: 'rgba(255,45,120,0.12)', borderWidth: 3, tension: 0.35, fill: true, pointRadius: 0 },
           { label: 'Explorer Unique Visitors', data: weekly.map(w => w.explorer_unique_visitors), borderColor: '#00F5FF', backgroundColor: 'rgba(0,245,255,0.08)', borderWidth: 2, borderDash: [4, 2], tension: 0.3, fill: false, pointRadius: 0 },
         ]
