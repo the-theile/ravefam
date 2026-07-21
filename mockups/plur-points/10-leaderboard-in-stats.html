@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PLUR Points — Mockup 10: Leaderboard in Crew Stats</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=Urbanist:wght@800;900&family=Orbitron:wght@700;800;900&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --neon-pink: #FF2D78; --neon-cyan: #00F5FF; --neon-yellow: #FFE600; --neon-purple: #BF00FF; --neon-green: #39FF14;
+    --bg: #050509; --surface: #0E0E16; --text: #F0EEFF; --muted: #8585A5;
+    --peace: var(--neon-cyan); --love: var(--neon-pink); --unity: var(--neon-purple); --respect: var(--neon-yellow);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; min-height: 100vh; display: flex; justify-content: center; padding: 40px 16px; }
+  .phone { width: 100%; max-width: 420px; }
+  .kicker { font-family: 'Outfit', sans-serif; font-size: 0.65rem; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; color: var(--neon-pink); margin-bottom: 6px; text-align: center; }
+  .mockup-title { font-family: 'Urbanist', sans-serif; font-weight: 900; font-size: 1.1rem; text-align: center; margin-bottom: 8px; color: var(--muted); }
+  .mockup-sub { font-size: 0.76rem; text-align: center; color: var(--muted); margin-bottom: 24px; opacity: 0.8; }
+
+  .navbar { display: flex; align-items: center; gap: 10px; padding: 10px 4px; margin-bottom: 14px; }
+  .navlogo { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 1.05rem; }
+  .navlogo span { color: var(--neon-green); }
+  .navicons { display: flex; gap: 8px; margin-left: auto; }
+  .navicon { width: 30px; height: 30px; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; font-size: 0.8rem; }
+
+  /* ── real #page-stats markup/CSS, copied from app.html ── */
+  .section-title { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.3rem; margin-bottom: 16px; }
+  .stats-vitals-strip { display: flex; align-items: center; gap: 9px; margin-bottom: 16px; }
+  .stats-vitals-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--neon-green); box-shadow: 0 0 6px var(--neon-green), 0 0 14px rgba(57,255,20,0.6); }
+  .stats-vitals-label { font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: 0.6rem; letter-spacing: 2.5px; text-transform: uppercase; color: var(--neon-green); }
+  .stats-vitals-line { flex: 1; height: 1px; background: linear-gradient(90deg, rgba(57,255,20,0.45), transparent); }
+
+  .stats-subtabs { display: flex; gap: 6px; margin-bottom: 20px; background: var(--surface); border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 4px; }
+  .stats-subtab { flex: 1; padding: 9px 12px; border: none; background: transparent; color: var(--muted); font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: 0.68rem; letter-spacing: 0.5px; text-transform: uppercase; border-radius: 9px; cursor: pointer; }
+  #page-stats .stats-subtab.active { background: var(--neon-cyan); color: #000; box-shadow: 0 0 18px -3px rgba(0,245,255,0.75), 0 0 0 1px rgba(0,245,255,0.4); }
+
+  .stats-hero-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 16px; }
+  .stats-hero-card { position: relative; background: var(--surface); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 18px 12px 14px; text-align: center; overflow: hidden; }
+  .stats-hero-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--vital-c, var(--neon-pink)); box-shadow: 0 0 10px var(--vital-c, var(--neon-pink)); }
+  .stats-hero-card:nth-child(1) { --vital-c: var(--neon-pink); }
+  .stats-hero-card:nth-child(2) { --vital-c: var(--neon-cyan); }
+  .stats-hero-card:nth-child(3) { --vital-c: var(--neon-green); }
+  .stats-hero-card:nth-child(4) { --vital-c: var(--neon-yellow); }
+  .stats-hero-number { font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 2.1rem; color: var(--vital-c, var(--neon-pink)); text-shadow: 0 0 18px var(--vital-c, rgba(255,45,120,0.5)); line-height: 1; }
+  .stats-hero-label { font-size: 0.6rem; color: var(--muted); font-family: 'Outfit', sans-serif; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; margin-top: 6px; }
+
+  .stats-section-card { position: relative; background: var(--surface); border: 1px solid rgba(255,255,255,0.07); border-radius: 16px; padding: 18px 16px 16px; margin-bottom: 14px; overflow: hidden; }
+  .stats-section-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, var(--neon-pink), var(--neon-purple), var(--neon-cyan)); }
+  .stats-section-card.plur-card::before { background: linear-gradient(90deg, var(--peace), var(--love), var(--unity), var(--respect)); }
+  .stats-section-title { font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: 0.76rem; letter-spacing: 0.6px; color: var(--text); margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; }
+  .stats-section-title-sub { font-size: 0.64rem; color: var(--muted); font-family: 'Outfit', sans-serif; font-weight: 600; letter-spacing: 0; text-transform: none; }
+
+  .stats-leaderboard-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .stats-leaderboard-row:last-child { border-bottom: none; }
+  .stats-lb-rank { font-family: 'Orbitron', sans-serif; font-weight: 800; font-size: 0.85rem; color: var(--muted); width: 24px; text-align: center; flex-shrink: 0; }
+  .stats-lb-avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--neon-pink); display: flex; align-items: center; justify-content: center; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.7rem; color: #fff; flex-shrink: 0; overflow: hidden; }
+  .stats-lb-name { flex: 1; font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.82rem; color: var(--text); }
+  .stats-lb-name.you { color: var(--neon-pink); text-shadow: 0 0 10px rgba(255,45,120,0.35); }
+  .stats-lb-val { font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: 0.68rem; letter-spacing: 0.3px; color: var(--muted); }
+  .stats-lb-og { font-size: 0.56rem; background: rgba(255,230,0,0.12); border: 1px solid rgba(255,230,0,0.35); color: #FFE600; padding: 1px 5px; border-radius: 6px; margin-left: 6px; }
+
+  /* new bits, styled to match the section above them exactly */
+  .plur-scope-toggle { display: flex; gap: 4px; background: rgba(255,255,255,0.04); border-radius: 8px; padding: 3px; }
+  .plur-scope-btn { padding: 4px 9px; border-radius: 6px; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.62rem; color: var(--muted); cursor: pointer; }
+  .plur-scope-btn.active { background: rgba(255,255,255,0.1); color: var(--text); }
+  .plur-scope-btn.locked { opacity: 0.4; cursor: not-allowed; }
+  .stats-lb-val.plur-val { color: var(--unity); font-weight: 800; }
+  .stats-lb-bar-wrap { height: 3px; background: rgba(255,255,255,0.07); border-radius: 3px; margin-top: 4px; overflow: hidden; }
+  .stats-lb-bar-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--peace), var(--love), var(--unity), var(--respect)); }
+
+  .note { margin-top: 28px; padding: 14px 16px; background: rgba(255,255,255,0.03); border: 1px dashed rgba(255,255,255,0.12); border-radius: 12px; font-size: 0.76rem; color: var(--muted); line-height: 1.5; }
+  .note b { color: var(--text); }
+  a.back { display: inline-block; margin-top: 20px; font-size: 0.78rem; color: var(--muted); text-decoration: none; }
+</style>
+</head>
+<body>
+  <div class="phone">
+    <div class="kicker">Mockup 10 of 10 · Round 3 — final placement</div>
+    <div class="mockup-title">PLUR Leaderboard, inside Crew Stats</div>
+    <div class="mockup-sub">Recreated against the real Stats page — new section added below the existing Rave Leaderboard</div>
+
+    <div class="navbar">
+      <div class="navlogo">Rave<span>FAM</span></div>
+      <div class="navicons"><div class="navicon">🛡️</div><div class="navicon">🔔</div><div class="navicon">?</div></div>
+    </div>
+
+    <div class="section-title">Rave Life 📊</div>
+    <div class="stats-vitals-strip">
+      <span class="stats-vitals-dot"></span>
+      <span class="stats-vitals-label">Live Rave Vitals</span>
+      <span class="stats-vitals-line"></span>
+    </div>
+    <div class="stats-subtabs">
+      <div class="stats-subtab">My Stats</div>
+      <div class="stats-subtab active">Crew Stats</div>
+    </div>
+
+    <div class="stats-hero-grid">
+      <div class="stats-hero-card"><div class="stats-hero-number">12</div><div class="stats-hero-label">Crew Size</div></div>
+      <div class="stats-hero-card"><div class="stats-hero-number">18</div><div class="stats-hero-label">Shared Raves</div></div>
+      <div class="stats-hero-card"><div class="stats-hero-number">6</div><div class="stats-hero-label">Cities Hit</div></div>
+      <div class="stats-hero-card"><div class="stats-hero-number">2023</div><div class="stats-hero-label">Raving Since</div></div>
+    </div>
+
+    <div class="stats-section-card">
+      <div class="stats-section-title">🏆 Rave Leaderboard</div>
+      <div class="stats-leaderboard-row"><div class="stats-lb-rank">🥇</div><div class="stats-lb-avatar">AV</div><div class="stats-lb-name">Avery Solstice<span class="stats-lb-og">OG</span></div><div class="stats-lb-val">24 raves</div></div>
+      <div class="stats-leaderboard-row"><div class="stats-lb-rank">🥈</div><div class="stats-lb-avatar">MI</div><div class="stats-lb-name">Milo Frequency</div><div class="stats-lb-val">19 raves</div></div>
+      <div class="stats-leaderboard-row"><div class="stats-lb-rank">🥉</div><div class="stats-lb-avatar">JR</div><div class="stats-lb-name you">Theile Riordan (you)</div><div class="stats-lb-val">16 raves</div></div>
+    </div>
+
+    <!-- ── new: PLUR leaderboard, same section-card/row pattern, new content ── -->
+    <div class="stats-section-card plur-card">
+      <div class="stats-section-title">
+        <span>✨ PLUR Leaderboard</span>
+        <div class="plur-scope-toggle">
+          <div class="plur-scope-btn active">Crew</div>
+          <div class="plur-scope-btn locked" title="Coming later">🔒 Global</div>
+        </div>
+      </div>
+      <div class="stats-leaderboard-row">
+        <div class="stats-lb-rank">🥇</div>
+        <div class="stats-lb-avatar" style="background:linear-gradient(135deg,#FFE600,#FF2D78)">AV</div>
+        <div class="stats-lb-name">Avery Solstice
+          <div class="stats-lb-bar-wrap" style="width:120px;"><div class="stats-lb-bar-fill" style="width:100%"></div></div>
+        </div>
+        <div class="stats-lb-val plur-val">1,890</div>
+      </div>
+      <div class="stats-leaderboard-row">
+        <div class="stats-lb-rank">🥈</div>
+        <div class="stats-lb-avatar" style="background:linear-gradient(135deg,#00F5FF,#5B6EFF)">MI</div>
+        <div class="stats-lb-name">Milo Frequency
+          <div class="stats-lb-bar-wrap" style="width:120px;"><div class="stats-lb-bar-fill" style="width:84%"></div></div>
+        </div>
+        <div class="stats-lb-val plur-val">1,590</div>
+      </div>
+      <div class="stats-leaderboard-row">
+        <div class="stats-lb-rank">🥉</div>
+        <div class="stats-lb-avatar" style="background:linear-gradient(135deg,var(--neon-purple),var(--neon-pink))">JR</div>
+        <div class="stats-lb-name you">Theile Riordan (you)
+          <div class="stats-lb-bar-wrap" style="width:120px;"><div class="stats-lb-bar-fill" style="width:66%"></div></div>
+        </div>
+        <div class="stats-lb-val plur-val">1,240</div>
+      </div>
+      <div class="stats-leaderboard-row">
+        <div class="stats-lb-rank">4</div>
+        <div class="stats-lb-avatar" style="background:linear-gradient(135deg,#39FF14,#00F5FF)">RO</div>
+        <div class="stats-lb-name">Rosa Nightglow
+          <div class="stats-lb-bar-wrap" style="width:120px;"><div class="stats-lb-bar-fill" style="width:58%"></div></div>
+        </div>
+        <div class="stats-lb-val plur-val">1,090</div>
+      </div>
+    </div>
+
+    <div class="note"><b>Why here:</b> the Crew Stats subtab already has an identical "🏆 Rave Leaderboard" section (ranked by rave count) using the exact `.stats-section-card`/`.stats-leaderboard-row` components — the PLUR leaderboard is a second card in that same list, reusing those components as-is rather than inventing a new visual pattern. The crew/global scope toggle sits in the card's own header rather than a page-level tab, since it only applies to this one section.</div>
+    <a class="back" href="index.html">← back to all mockups</a>
+  </div>
+</body>
+</html>
