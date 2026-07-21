@@ -145,6 +145,41 @@ test.describe('coachmarks · privacy controls tip', () => {
   });
 });
 
+test.describe('coachmarks · plur points tip', () => {
+  // privacy_controls also queues (synchronously) on your own profile, ahead
+  // of plur_points (which only queues once the async totals load resolves),
+  // so it's pre-seen here the same way stacked tips are elsewhere in this file.
+  test('shows once on your own profile, anchored to the PLUR bar', async ({ page }) => {
+    await bootAuthedApp(page, {
+      sessionOver: { user_metadata: { guidance_dismissed: true, seen_tips: { privacy_controls: true } } },
+    });
+    await page.evaluate(() => openProfile('r-you'));
+    await expect(page.locator('#page-profile')).toHaveClass(/active/);
+
+    const coachmark = page.locator('#coachmark');
+    await expect(coachmark).toHaveClass(/show/);
+    await expect(coachmark).toContainText('Earn PLUR Points');
+  });
+
+  test('does not fire on someone else\'s profile', async ({ page }) => {
+    await bootAuthedApp(page, { sessionOver: { user_metadata: { guidance_dismissed: true } } });
+    await page.evaluate(() => openProfile('r-sam'));
+    await page.waitForTimeout(400);
+    await expect(page.locator('#coachmark')).not.toHaveClass(/show/);
+  });
+
+  test('does not show again cross-session once seen_tips.plur_points is set', async ({ page }) => {
+    await bootAuthedApp(page, {
+      sessionOver: {
+        user_metadata: { guidance_dismissed: true, seen_tips: { privacy_controls: true, plur_points: true } },
+      },
+    });
+    await page.evaluate(() => openProfile('r-you'));
+    await page.waitForTimeout(400);
+    await expect(page.locator('#coachmark')).not.toHaveClass(/show/);
+  });
+});
+
 test.describe('coachmarks · unclaimed badge tip', () => {
   test('shows once on the Ravers grid when an unclaimed profile is present', async ({ page }) => {
     // seedData()'s r-sam is unclaimed (claimed_by: null, status: 'unclaimed'). The
