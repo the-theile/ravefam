@@ -2620,6 +2620,26 @@
     transition: border-color 0.15s, background 0.15s;
   }
   .notif-bell-btn:hover { border-color: rgba(255,255,255,0.25); background: rgba(255,255,255,0.05); }
+  .admin-menu-wrap { position: relative; display: inline-flex; }
+  .admin-menu {
+    position: absolute; top: calc(100% + 8px); right: 0; z-index: 200;
+    display: flex; flex-direction: column;
+    min-width: 210px;
+    background: var(--surface2);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  .admin-menu-row {
+    display: flex; align-items: center; gap: 8px;
+    background: none; border: none; cursor: pointer;
+    color: var(--text); font-size: 0.85rem; text-align: left;
+    padding: 9px 12px; border-radius: 8px; white-space: nowrap;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .admin-menu-row:hover { background: rgba(255,255,255,0.08); }
+  .admin-menu-row .notif-badge { position: static; margin-left: auto; }
   .notif-badge {
     position: absolute;
     top: 4px; right: 4px;
@@ -6542,13 +6562,21 @@
       <span class="logo-text" onclick="location.reload()" title="Refresh app" style="cursor:pointer;"><span>Rave</span><span>FAM</span></span>
     </div>
     <div class="header-actions">
-      <button class="notif-bell-btn" id="mod-dash-btn" onclick="openModDashboard()" title="Moderator Dashboard" aria-label="Moderator Dashboard" style="display:none;">
-        🛡️
-        <span class="notif-badge" id="mod-dash-badge"></span>
-      </button>
-      <button class="notif-bell-btn" id="pm-dash-btn" onclick="openPMDashboard()" title="Product Metrics Dashboard" aria-label="Product Metrics Dashboard" style="display:none;">
-        📊
-      </button>
+      <div class="admin-menu-wrap" id="admin-menu-wrap" style="display:none;">
+        <button class="notif-bell-btn" id="admin-menu-btn" onclick="toggleAdminMenu()" title="Admin Tools" aria-label="Admin Tools">
+          ⚙️
+          <span class="notif-badge" id="admin-menu-badge"></span>
+        </button>
+        <div class="admin-menu" id="admin-menu" style="display:none;">
+          <button type="button" class="admin-menu-row" id="mod-dash-btn" onclick="closeAdminMenu(); openModDashboard()" style="display:none;">
+            🛡️ Moderator Dashboard
+            <span class="notif-badge" id="mod-dash-badge"></span>
+          </button>
+          <button type="button" class="admin-menu-row" id="pm-dash-btn" onclick="closeAdminMenu(); openPMDashboard()" style="display:none;">
+            📊 Product Metrics
+          </button>
+        </div>
+      </div>
       <button class="notif-bell-btn" id="notif-bell" onclick="openNotifDrawer()" title="Notifications" aria-label="Notifications">
         🔔
         <span class="notif-badge" id="notif-badge"></span>
@@ -7555,7 +7583,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.1.0';
+  const APP_VERSION = '1.1.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -7600,6 +7628,33 @@
   function updatePMDashBadge() {
     const btn = document.getElementById('pm-dash-btn');
     if (btn) btn.style.display = isSuperAdminUser ? '' : 'none';
+    updateAdminMenuVisibility();
+  }
+
+  // ===== Admin tools menu: consolidates mod dashboard + PM metrics into one header button =====
+  function updateAdminMenuVisibility() {
+    const wrap = document.getElementById('admin-menu-wrap');
+    if (!wrap) return;
+    wrap.style.display = (isModerator() || isSuperAdminUser) ? '' : 'none';
+    const badge = document.getElementById('admin-menu-badge');
+    if (badge) badge.classList.toggle('has-unread', isModerator() && openFlagCount > 0);
+  }
+  function toggleAdminMenu() {
+    const menu = document.getElementById('admin-menu');
+    if (!menu) return;
+    const opening = menu.style.display === 'none';
+    menu.style.display = opening ? '' : 'none';
+    if (opening) setTimeout(() => document.addEventListener('click', _onAdminMenuOutside, { once: true }), 0);
+  }
+  function closeAdminMenu() {
+    const menu = document.getElementById('admin-menu');
+    if (menu) menu.style.display = 'none';
+    document.removeEventListener('click', _onAdminMenuOutside);
+  }
+  function _onAdminMenuOutside(e) {
+    const wrap = document.getElementById('admin-menu-wrap');
+    if (!wrap || !wrap.contains(e.target)) closeAdminMenu();
+    else document.addEventListener('click', _onAdminMenuOutside, { once: true });
   }
 
   // ===== MODERATION: flags/reports data layer =====
@@ -7654,6 +7709,7 @@
     btn.style.display = isModerator() ? '' : 'none';
     const badge = document.getElementById('mod-dash-badge');
     if (badge) badge.classList.toggle('has-unread', openFlagCount > 0);
+    updateAdminMenuVisibility();
   }
 
   // Per-viewer private caches (keyed by target raver ID)
