@@ -342,6 +342,47 @@ async function installSupabaseStub(page, opts = {}) {
                 && r.status !== 'merged' && !r.deleted_at);
               return { data: rows.map(r => maskRaver(r, { includeSelfOnlyFields: true })), error: null };
             }
+            // PLUR Points RPCs: re-implemented against a seeded point_totals
+            // table (mirrors the real security-definer functions closely
+            // enough for tests/screenshots -- no need for the real RLS checks
+            // here since the mock has no anonymous caller path).
+            function plurPoints(row, track) {
+              if (!row) return 0;
+              if (track && track !== 'total') return row[track + '_points'] || 0;
+              return (row.peace_points || 0) + (row.love_points || 0) + (row.unity_points || 0) + (row.respect_points || 0);
+            }
+            if (fn === 'get_raver_points') {
+              const row = (store.point_totals || []).find(t => String(t.raver_id) === String(args.p_raver_id));
+              return {
+                data: [{
+                  peace_points: row?.peace_points || 0, love_points: row?.love_points || 0,
+                  unity_points: row?.unity_points || 0, respect_points: row?.respect_points || 0,
+                  total_points: plurPoints(row),
+                }], error: null,
+              };
+            }
+            if (fn === 'get_leaderboard') {
+              const members = (store.crew_members || []).filter(m => String(m.crew_id) === String(args.p_crew_id) && !m.deleted_at);
+              const rows = members.map(m => {
+                const pt = (store.point_totals || []).find(t => String(t.raver_id) === String(m.raver_id));
+                const r = (store.ravers || []).find(rv => String(rv.id) === String(m.raver_id));
+                if (!pt || pt.leaderboard_visible === false || !r) return null;
+                return { raver_id: r.id, name: r.name, handle: r.handle, avatar_url: r.avatar_url, points: plurPoints(pt, args.p_track) };
+              }).filter(Boolean).sort((a, b) => b.points - a.points);
+              rows.forEach((row, i) => { row.rank = i + 1; });
+              return { data: rows.slice(0, args.p_limit ?? 20), error: null };
+            }
+            if (fn === 'get_my_rank') {
+              const members = (store.crew_members || []).filter(m => String(m.crew_id) === String(args.p_crew_id) && !m.deleted_at);
+              const rows = members.map(m => {
+                const pt = (store.point_totals || []).find(t => String(t.raver_id) === String(m.raver_id));
+                return { raver_id: m.raver_id, points: plurPoints(pt, args.p_track) };
+              }).sort((a, b) => b.points - a.points);
+              rows.forEach((row, i) => { row.rank = i + 1; });
+              const myRaver = (store.ravers || []).find(r => String(r.claimed_by) === String(uid));
+              const mine = myRaver ? rows.find(r => String(r.raver_id) === String(myRaver.id)) : null;
+              return { data: mine ? [{ ...mine, crew_size: rows.length }] : [], error: null };
+            }
             return { data: [], error: null };
           }
           return {

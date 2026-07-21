@@ -61,10 +61,11 @@ async function shoot(context, { name, data, run, target }) {
   await run(page);
   await page.waitForTimeout(400); // let fire-and-forget dbLoad*().then(rerender*) calls in openDetail() settle
   // Clear chrome that isn't part of the feature being shown: the onboarding
-  // tips banner, any toast fired by seeded data (e.g. badge-unlock side
-  // effects), the fixed bottom nav, and the floating QR-scan button --
-  // all of which otherwise visually overlap whatever sits at the bottom
-  // or corner of the viewport.
+  // tips banner, any queued coachmark bubble (e.g. the "Lost on the floor?"
+  // tip that auto-shows over the crew header), any toast fired by seeded
+  // data (e.g. badge-unlock side effects), the fixed bottom nav, and the
+  // floating QR-scan button -- all of which otherwise visually overlap
+  // whatever sits at the top, bottom, or corner of the viewport.
   await page.evaluate(() => {
     if (typeof dismissGuidanceBanner === 'function') { try { dismissGuidanceBanner(); } catch (e) {} }
     const toastEl = document.getElementById('toast');
@@ -74,6 +75,23 @@ async function shoot(context, { name, data, run, target }) {
     const fabEl = document.getElementById('qr-fab');
     if (fabEl) fabEl.style.display = 'none';
   });
+  // dismissCoachmark() only closes whichever tip is currently showing, then
+  // re-queues the *next* one 150ms later (_showNextCoachmark) -- a single
+  // call can leave a second tip popping up mid-screenshot when a flow
+  // queues more than one (e.g. opening a crew, then its Game Plan tab).
+  // Drain the queue by dismissing repeatedly with a gap longer than that
+  // 150ms delay until nothing more shows up.
+  for (let i = 0; i < 4; i++) {
+    const stillShowing = await page.evaluate(() => {
+      if (typeof dismissCoachmark !== 'function') return false;
+      const el = document.getElementById('coachmark');
+      const wasShowing = !!(el && el.classList.contains('show'));
+      try { dismissCoachmark(); } catch (e) {}
+      return wasShowing;
+    });
+    if (!stillShowing) break;
+    await page.waitForTimeout(200);
+  }
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const outPath = path.join(OUT_DIR, `${name}.png`);
   if (target) {
@@ -104,7 +122,9 @@ async function main() {
       run: (p) => p.evaluate(() => openDetail('c1')),
     });
 
-    // 2. dream-board.png
+    // 2. dream-board.png -- Dream Board now lives inside a collapsed Overview
+    // tile (buildCrewFeatureTilesHTML, only Huddle starts open); open it via
+    // toggleCrewFeatureTile before the section is visible enough to shoot.
     {
       const d = seedData();
       d.dream_board_pins = [
@@ -114,7 +134,10 @@ async function main() {
       await shoot(context, {
         name: 'dream-board',
         data: d,
-        run: (p) => p.evaluate(() => openDetail('c1')),
+        run: (p) => p.evaluate(() => {
+          openDetail('c1');
+          toggleCrewFeatureTile('dreamboard', document.querySelector('.crew-feature-tile[data-feature="dreamboard"]'));
+        }),
         target: '#dream-board-section',
       });
     }
@@ -178,7 +201,8 @@ async function main() {
       target: '#wrapped-card',
     });
 
-    // 5. crew-jams.png
+    // 5. crew-jams.png -- Jams tile also starts collapsed; open it (see the
+    // dream-board.png note above for why).
     {
       const d = seedData();
       d.crew_jams = [{
@@ -191,13 +215,17 @@ async function main() {
       await shoot(context, {
         name: 'crew-jams',
         data: d,
-        run: (p) => p.evaluate(() => openDetail('c1')),
+        run: (p) => p.evaluate(() => {
+          openDetail('c1');
+          toggleCrewFeatureTile('jams', document.querySelector('.crew-feature-tile[data-feature="jams"]'));
+        }),
         target: '#jam-section',
       });
     }
 
     // 8. fam-poll.png -- needs votes (not just a bare poll) to render result
     // bars instead of an empty ballot; TEST_UID voting makes hasVoted true.
+    // Poll tile also starts collapsed.
     {
       const d = seedData();
       d.crew_polls = [{
@@ -214,12 +242,15 @@ async function main() {
       await shoot(context, {
         name: 'fam-poll',
         data: d,
-        run: (p) => p.evaluate(() => openDetail('c1')),
+        run: (p) => p.evaluate(() => {
+          openDetail('c1');
+          toggleCrewFeatureTile('poll', document.querySelector('.crew-feature-tile[data-feature="poll"]'));
+        }),
         target: '#fam-poll-section',
       });
     }
 
-    // 9. archive-links.png
+    // 9. archive-links.png -- Archive tile also starts collapsed.
     {
       const d = seedData();
       d.crew_archive_links = [{
@@ -230,7 +261,10 @@ async function main() {
       await shoot(context, {
         name: 'archive-links',
         data: d,
-        run: (p) => p.evaluate(() => openDetail('c1')),
+        run: (p) => p.evaluate(() => {
+          openDetail('c1');
+          toggleCrewFeatureTile('archive', document.querySelector('.crew-feature-tile[data-feature="archive"]'));
+        }),
         target: '#archive-section',
       });
     }
@@ -273,6 +307,70 @@ async function main() {
       run: (p) => p.evaluate(() => switchTab('members')),
       target: '#members-grid',
     });
+
+    // 13. game-plan.png -- Checklist section of the Game Plan hub. A Game Plan
+    // only appears for a rave both "you" and a crewmate are attending; base
+    // seedData() already has r-you + r-sam both RSVP'd to f1, so the tab
+    // exists without extra wiring. Default active section is Huddle (a live
+    // chat, unfit for a static shot) -- switch to Checklist after the async
+    // game-plan load settles.
+    {
+      const d = withNearFutureFestivalDates(seedData());
+      d.game_plans = [{
+        id: 'gp-1', crew_id: 'c1', festival_id: 'f1',
+        theme_text: null, meetup_at: null, meetup_location: null,
+        created_by: TEST_UID, created_at: '2026-06-01T00:00:00Z', updated_at: '2026-06-01T00:00:00Z',
+      }];
+      d.game_plan_items = [
+        { id: 'gpi-1', game_plan_id: 'gp-1', crew_id: 'c1', kind: 'task', added_by: TEST_UID, text: 'Grab tickets', phase: 'before_we_leave', assignee_raver_id: 'r-you', is_done: true, seats: null, driver_item_id: null, created_at: '2026-06-01T00:00:00Z', deleted_at: null },
+        { id: 'gpi-2', game_plan_id: 'gp-1', crew_id: 'c1', kind: 'task', added_by: TEST_UID, text: 'Charge glowsticks + portable battery', phase: 'night_before', assignee_raver_id: 'r-sam', is_done: false, seats: null, driver_item_id: null, created_at: '2026-06-01T00:01:00Z', deleted_at: null },
+        { id: 'gpi-3', game_plan_id: 'gp-1', crew_id: 'c1', kind: 'task', added_by: TEST_UID, text: 'Book the Airbnb', phase: 'before_we_leave', assignee_raver_id: null, is_done: false, seats: null, driver_item_id: null, created_at: '2026-06-01T00:02:00Z', deleted_at: null },
+        { id: 'gpi-4', game_plan_id: 'gp-1', crew_id: 'c1', kind: 'task', added_by: TEST_UID, text: 'Print the tickets / screenshot the QR', phase: null, assignee_raver_id: null, is_done: false, seats: null, driver_item_id: null, created_at: '2026-06-01T00:03:00Z', deleted_at: null },
+      ];
+      await shoot(context, {
+        name: 'game-plan',
+        data: d,
+        run: async (p) => {
+          await p.evaluate(() => openDetail('c1'));
+          await p.evaluate(() => {
+            const gpBtn = document.querySelector('#page-crew-detail .stats-subtab[data-tab="gameplan"]');
+            switchCrewDetailTab('gameplan', gpBtn);
+          });
+          await p.waitForTimeout(500); // openGamePlanTab's game_plans/game_plan_items/huddle_rooms round-trips
+          await p.evaluate(() => {
+            const checklistBtn = document.querySelector('#crew-detail-panel-gameplan .game-plan-section-tab[data-section="checklist"]');
+            switchGamePlanSection('checklist', checklistBtn);
+          });
+        },
+        target: '#game-plan-section-checklist',
+      });
+    }
+
+    // 14. plur-points.png -- PLUR Points crew leaderboard on Stats > Crew
+    // Stats. get_leaderboard/get_my_rank/get_raver_points are security-definer
+    // RPCs re-implemented in tests/helpers.js's mock (same pattern as the
+    // other RPCs already stubbed there) against a seeded point_totals table.
+    {
+      const d = seedData();
+      d.point_totals = [
+        { raver_id: 'r-you', peace_points: 40, love_points: 65, unity_points: 20, respect_points: 15, leaderboard_visible: true },
+        { raver_id: 'r-kai', peace_points: 30, love_points: 20, unity_points: 50, respect_points: 10, leaderboard_visible: true },
+        { raver_id: 'r-sam', peace_points: 10, love_points: 5, unity_points: 5, respect_points: 0, leaderboard_visible: true },
+      ];
+      await shoot(context, {
+        name: 'plur-points',
+        data: d,
+        run: async (p) => {
+          await p.evaluate(() => { switchTab('stats'); loadStatsPage(); });
+          await p.evaluate(() => {
+            const crewBtn = document.querySelector('.stats-subtab[onclick*="crew"]');
+            switchStatTab('crew', crewBtn);
+          });
+          await p.waitForTimeout(500); // loadAndRenderPlurLeaderboard's RPC round-trip
+        },
+        target: '#plur-leaderboard-wrap',
+      });
+    }
   } finally {
     await browser.close();
     stopServer();
