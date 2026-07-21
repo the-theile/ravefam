@@ -2060,6 +2060,33 @@
 </footer>
 
 <script>
+  // Lightweight, best-effort pageview ping for the internal PM metrics
+  // dashboard — loads supabase-js on the fly (not in <head>) so it never
+  // blocks this landing page's critical render path.
+  (function () {
+    function getVisitorId() {
+      try {
+        let vid = localStorage.getItem('rf_vid');
+        if (!vid) { vid = crypto.randomUUID(); localStorage.setItem('rf_vid', vid); }
+        return vid;
+      } catch (e) { return null; }
+    }
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+    s.onload = function () {
+      try {
+        var sb = supabase.createClient(
+          'https://tvpgopciioqbqmjjjigh.supabase.co',
+          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2cGdvcGNpaW9xYnFtampqaWdoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3NTY2OTUsImV4cCI6MjA5NjMzMjY5NX0.DAgcx2UsGV1gUCQzHdGmv1Pu0rXlJdQxhn-bf1wGsiI'
+        );
+        sb.rpc('log_pageview', { p_path: location.pathname, p_referrer: document.referrer, p_visitor_id: getVisitorId() });
+      } catch (e) {}
+    };
+    document.body.appendChild(s);
+  })();
+</script>
+
+<script>
   // Phone tab switcher
   function switchTab(tab) {
     document.querySelectorAll('.phone-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));

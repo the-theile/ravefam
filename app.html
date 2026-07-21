@@ -6247,6 +6247,40 @@
     cursor: pointer;
   }
 
+  /* ===== PM METRICS DASHBOARD ===== */
+  .pm-kpi-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }
+  @media (min-width: 640px) { .pm-kpi-grid { grid-template-columns: repeat(3, 1fr); } }
+  .pm-kpi-card { background: var(--surface); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 14px 16px; }
+  .pm-kpi-label { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; color: var(--muted); text-transform: uppercase; }
+  .pm-kpi-value { font-size: 1.6rem; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .pm-kpi-sub { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+  .pm-section { background: var(--surface); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; padding: 18px; margin-bottom: 16px; }
+  .pm-section-title { font-size: 0.95rem; font-weight: 700; margin-bottom: 2px; }
+  .pm-section-sub { font-size: 0.72rem; color: var(--muted); margin-bottom: 12px; }
+  .pm-chart-wrap { position: relative; height: 240px; }
+  .pm-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 0.84rem; }
+  .pm-row:last-child { border-bottom: none; }
+  .pm-row-label { color: var(--text); }
+  .pm-row-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .pm-bar-track { background: rgba(255,255,255,0.06); border-radius: 999px; height: 6px; overflow: hidden; margin-top: 6px; }
+  .pm-bar-fill { height: 6px; border-radius: 999px; background: linear-gradient(90deg, var(--neon-purple), var(--neon-pink)); }
+  .pm-grid-2 { display: grid; grid-template-columns: 1fr; gap: 16px; }
+  @media (min-width: 860px) { .pm-grid-2 { grid-template-columns: 1fr 1fr; } }
+  .pm-cohort-row { display: grid; grid-template-columns: 1.3fr repeat(5, 0.8fr); gap: 6px; font-size: 0.78rem; padding: 7px 0; align-items: center; }
+  .pm-cohort-head { color: var(--muted); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.03em; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 6px; margin-bottom: 2px; }
+  .pm-cohort-pct { text-align: center; font-variant-numeric: tabular-nums; }
+  .pm-pill { display: inline-block; font-size: 0.62rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,0.08); color: var(--muted); }
+
+  /* ===== NPS PROMPT ===== */
+  .nps-prompt-card { position: relative; background: var(--surface); border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; padding: 16px 18px; margin-bottom: 16px; }
+  .nps-prompt-close { position: absolute; top: 10px; right: 12px; color: var(--muted); cursor: pointer; font-size: 0.8rem; padding: 4px; }
+  .nps-prompt-q { font-size: 0.86rem; font-weight: 600; padding-right: 20px; }
+  .nps-score-row { display: grid; grid-template-columns: repeat(11, 1fr); gap: 4px; margin-top: 12px; }
+  .nps-score-btn { aspect-ratio: 1; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.04); color: var(--text); font-size: 0.72rem; font-weight: 600; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+  .nps-score-btn:hover { background: rgba(191,0,255,0.18); border-color: var(--neon-purple); }
+  .nps-prompt-scale { display: flex; justify-content: space-between; font-size: 0.62rem; color: var(--muted); margin-top: 4px; }
+  .nps-prompt-thanks { text-align: center; font-size: 0.86rem; font-weight: 600; }
+
 </style>
 </head>
 <body>
@@ -6511,6 +6545,9 @@
         🛡️
         <span class="notif-badge" id="mod-dash-badge"></span>
       </button>
+      <button class="notif-bell-btn" id="pm-dash-btn" onclick="openPMDashboard()" title="Product Metrics Dashboard" aria-label="Product Metrics Dashboard" style="display:none;">
+        📊
+      </button>
       <button class="notif-bell-btn" id="notif-bell" onclick="openNotifDrawer()" title="Notifications" aria-label="Notifications">
         🔔
         <span class="notif-badge" id="notif-badge"></span>
@@ -6642,6 +6679,11 @@
       <!-- rendered by JS -->
     </div>
 
+    <!-- PM METRICS DASHBOARD PAGE (dedicated, full-view, super-admin only) -->
+    <div class="page" id="page-pm-dashboard">
+      <!-- rendered by JS -->
+    </div>
+
     <!-- CHECKLIST PAGE -->
     <div class="page" id="page-checklist">
       <div class="section-header" style="margin-bottom:16px;">
@@ -6655,6 +6697,7 @@
       <div class="section-header" style="margin-bottom:16px;">
         <div class="section-title">Rave Life 📊</div>
       </div>
+      <div id="nps-prompt-slot"></div>
       <div class="stats-vitals-strip">
         <span class="stats-vitals-dot"></span>
         <span class="stats-vitals-label">Live Rave Vitals</span>
@@ -7516,8 +7559,19 @@
   // configured as a send-beacon-push Edge Function secret; not sensitive on its own.
   const VAPID_PUBLIC_KEY = 'BCF_mOzUV61zYqsbcN-NuAiGrmuc3pPx6qQDCmRV057Dw8JNy-IwvrPb9mpYDvqDBLruXtLCk9-Q1E7caAfn_6M';
 
+  // Anonymous per-browser id (no PII) shared across app.html / index.html /
+  // lineup-explorer so the PM dashboard can approximate unique visitors —
+  // same localStorage key everywhere, since it's all one origin.
+  function getVisitorId() {
+    try {
+      let vid = localStorage.getItem('rf_vid');
+      if (!vid) { vid = crypto.randomUUID(); localStorage.setItem('rf_vid', vid); }
+      return vid;
+    } catch (e) { return null; }
+  }
+
   // Fire-and-forget pageview
-  sb.rpc('log_pageview', { p_path: location.pathname, p_referrer: document.referrer });
+  sb.rpc('log_pageview', { p_path: location.pathname, p_referrer: document.referrer, p_visitor_id: getVisitorId() });
 
   let currentUser = null;  // holds the logged-in Supabase user object
   let _seenTips = {};  // local mirror of user_metadata.seen_tips — coachmarks already shown
@@ -7529,6 +7583,18 @@
     moderatorIds = new Set((data || []).map(m => String(m.user_id)));
   }
   function isModerator() { return !!currentUser && moderatorIds.has(String(currentUser.id)); }
+
+  // ===== PM METRICS DASHBOARD: super-admin gate =====
+  let isSuperAdminUser = false;
+  async function dbLoadSuperAdmin() {
+    if (!currentUser) { isSuperAdminUser = false; return; }
+    const { data } = await sb.rpc('is_super_admin');
+    isSuperAdminUser = data === true;
+  }
+  function updatePMDashBadge() {
+    const btn = document.getElementById('pm-dash-btn');
+    if (btn) btn.style.display = isSuperAdminUser ? '' : 'none';
+  }
 
   // ===== MODERATION: flags/reports data layer =====
   let openFlagCount = 0;  // drives the header badge
@@ -9197,6 +9263,8 @@ async function doProfilePasswordChange() {
     await dbLoadModerators().catch(() => {});
     if (isModerator()) await dbLoadFlags().catch(() => {});
     updateModBadge();
+    await dbLoadSuperAdmin().catch(() => {});
+    updatePMDashBadge();
     await dbLoadMyVendorBadges().catch(() => {});
 
     // --- Festivals ---
@@ -12852,6 +12920,292 @@ async function doProfilePasswordChange() {
 
   function goToProfileFromDetail(raverId) {
     openProfile(raverId, false, 'crews');
+  }
+
+  // ===== PM METRICS DASHBOARD (super-admin only) =====
+  let pmDashData = null;
+  let pmDashCharts = {};
+  let _chartJsPromise = null;
+  function loadChartJs() {
+    if (window.Chart) return Promise.resolve();
+    if (_chartJsPromise) return _chartJsPromise;
+    _chartJsPromise = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
+      s.onload = resolve;
+      s.onerror = () => reject(new Error('Failed to load Chart.js'));
+      document.head.appendChild(s);
+    });
+    return _chartJsPromise;
+  }
+
+  function pmFmt(n) { return (n ?? 0).toLocaleString(); }
+  function pmPct(n) { return (n === null || n === undefined) ? '—' : `${n}%`; }
+  function pmMonthLabel(iso) { return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', year: '2-digit' }); }
+  function pmWeekLabel(iso) { return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); }
+
+  async function openPMDashboard() {
+    if (!isSuperAdminUser) { showToast('🔒 Not available'); return; }
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-pm-dashboard').classList.add('active');
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    window.scrollTo(0, 0);
+    await renderPMDashboard();
+  }
+  function closePMDashboard() { closeDetail(); }
+
+  async function renderPMDashboard() {
+    const page = document.getElementById('page-pm-dashboard');
+    if (!page) return;
+    page.innerHTML = `
+      <button class="profile-back" onclick="closePMDashboard()">← Back</button>
+      <div class="section-header" style="margin-top:8px;">
+        <div class="section-title">📊 Product Metrics</div>
+      </div>
+      <div style="font-size:0.86rem;color:var(--muted);margin-bottom:18px;">Live numbers straight from the database — visible to you only.</div>
+      <div id="pm-dash-body" class="es-block" style="padding:40px 24px;"><div class="es-icon">⏳</div><div class="es-headline">Loading metrics…</div></div>
+    `;
+    const { data, error } = await sb.rpc('get_pm_dashboard_metrics');
+    if (error || !data || !data.ok) {
+      const body = document.getElementById('pm-dash-body');
+      if (body) body.innerHTML = `<div class="es-block" style="padding:40px 24px;"><div class="es-icon">⚠️</div><div class="es-headline">Couldn't load metrics</div><div class="es-sub">${escHtml(data?.error || error?.message || 'Unknown error')}</div></div>`;
+      return;
+    }
+    pmDashData = data;
+    await loadChartJs().catch(() => {});
+    renderPMDashBody();
+  }
+
+  function pmChartOrFallback(canvasId) {
+    return window.Chart
+      ? `<div class="pm-chart-wrap"><canvas id="${canvasId}"></canvas></div>`
+      : pmEmptyNote('Charts unavailable right now (offline, or the chart library failed to load) — numbers above are still live.');
+  }
+
+  function renderPMDashBody() {
+    const body = document.getElementById('pm-dash-body');
+    if (!body || !pmDashData) return;
+    const d = pmDashData;
+    const t = d.totals;
+
+    body.innerHTML = `
+      <div class="pm-kpi-grid">
+        ${pmKpiCard('Waitlist', pmFmt(t.waitlist), 'Signups so far')}
+        ${pmKpiCard('Registered Users', pmFmt(t.registered_users), `${pmFmt(t.active_crews)} active crews`)}
+        ${pmKpiCard('Active Crew Members', pmFmt(t.active_crew_members), `${pmFmt(t.active_crews)} crews`)}
+        ${pmKpiCard('Explorer Visitors (30d)', pmFmt(d.pageviews.unique_visitors_30d), `${pmFmt(d.pageviews.last_30d)} pageviews`)}
+        ${pmKpiCard('Upcoming Raves', pmFmt(t.festivals_upcoming), `${pmFmt(t.festivals_total)} total logged`)}
+        ${pmKpiCard('NPS', d.nps.count > 0 ? d.nps.nps_score : '—', d.nps.count > 0 ? `from ${d.nps.count} response${d.nps.count === 1 ? '' : 's'}` : 'No responses yet')}
+      </div>
+
+      <div class="pm-grid-2">
+        <div class="pm-section">
+          <div class="pm-section-title">Growth (Last 8 Weeks)</div>
+          <div class="pm-section-sub">Waitlist &amp; active crews (cumulative), Explorer unique visitors (weekly)</div>
+          ${pmChartOrFallback('pm-chart-growth')}
+        </div>
+        <div class="pm-section">
+          <div class="pm-section-title">Weekly Waitlist Signups</div>
+          <div class="pm-section-sub">New signups per week, not cumulative</div>
+          ${pmChartOrFallback('pm-chart-acquisition')}
+        </div>
+      </div>
+
+      <div class="pm-grid-2">
+        <div class="pm-section">
+          <div class="pm-section-title">Feature Adoption</div>
+          <div class="pm-section-sub">% of active crews that have used each feature at least once</div>
+          ${pmChartOrFallback('pm-chart-adoption')}
+        </div>
+        <div class="pm-section">
+          <div class="pm-section-title">Engagement Totals</div>
+          <div class="pm-section-sub">All-time counts across all crews</div>
+          ${pmEngagementRows(d.engagement)}
+        </div>
+      </div>
+
+      <div class="pm-section">
+        <div class="pm-section-title">Cohort Retention</div>
+        <div class="pm-section-sub">% of crew members still showing activity N weeks after joining (— = cohort hasn't reached that week yet)</div>
+        ${pmRetentionTable(d.retention_cohorts)}
+      </div>
+
+      <div class="pm-grid-2">
+        <div class="pm-section">
+          <div class="pm-section-title">Top Performing Crews</div>
+          <div class="pm-section-sub">Ranked by pins + jams + polls + messages</div>
+          ${pmTopCrewsRows(d.top_crews)}
+        </div>
+        <div class="pm-section">
+          <div class="pm-section-title">Rave Interest</div>
+          <div class="pm-section-sub">Ranked by RSVPs + interest taps</div>
+          ${pmFestivalInterestRows(d.festival_interest)}
+        </div>
+      </div>
+
+      <div class="pm-grid-2">
+        <div class="pm-section">
+          <div class="pm-section-title">Preview Platform Usage</div>
+          <div class="pm-section-sub">Which service people tap to preview an artist on Lineup Explorer</div>
+          ${d.preview_clicks.total > 0 ? pmChartOrFallback('pm-chart-platforms') : pmEmptyNote('No preview clicks logged yet')}
+        </div>
+        <div class="pm-section">
+          <div class="pm-section-title">Top Pages</div>
+          <div class="pm-section-sub">All-time pageviews, all surfaces (site, app, Lineup Explorer)</div>
+          ${pmTopPathsRows(d.pageviews.top_paths)}
+        </div>
+      </div>
+
+      <div style="font-size:0.68rem;color:var(--muted);text-align:center;margin-top:4px;">Generated ${new Date(d.generated_at).toLocaleString()}</div>
+    `;
+
+    if (window.Chart) {
+      pmRenderGrowthChart(d.growth_weekly);
+      pmRenderAcquisitionChart(d.acquisition_weekly);
+      pmRenderAdoptionChart(d.feature_adoption);
+      if (d.preview_clicks.total > 0) pmRenderPlatformsChart(d.preview_clicks.by_platform);
+    }
+  }
+
+  function pmKpiCard(label, value, sub) {
+    return `<div class="pm-kpi-card"><div class="pm-kpi-label">${escHtml(label)}</div><div class="pm-kpi-value">${value}</div><div class="pm-kpi-sub">${escHtml(sub)}</div></div>`;
+  }
+  function pmEmptyNote(text) {
+    return `<div class="es-block" style="padding:24px 10px;"><div class="es-icon">🤷</div><div class="es-sub">${escHtml(text)}</div></div>`;
+  }
+
+  function pmEngagementRows(e) {
+    const rows = [
+      ['💬 Huddle Messages', e.huddle_messages],
+      ['📌 Dream Board Pins', e.dream_pins],
+      ['🎵 Crew Jams', e.crew_jams],
+      ['🗳️ FAM Polls', e.crew_polls],
+      ['✅ Poll Votes', e.poll_votes],
+      ['🗺️ Game Plan Items', e.game_plan_items],
+      ['⚡ PLUR Point Events', e.point_events],
+    ];
+    return rows.map(([label, val]) => `<div class="pm-row"><span class="pm-row-label">${label}</span><span class="pm-row-value">${pmFmt(val)}</span></div>`).join('');
+  }
+
+  function pmRetentionTable(cohorts) {
+    if (!cohorts.length) return pmEmptyNote("No cohorts old enough to measure yet");
+    const head = `<div class="pm-cohort-row pm-cohort-head"><span>Cohort</span><span class="pm-cohort-pct">Wk 1</span><span class="pm-cohort-pct">Wk 2</span><span class="pm-cohort-pct">Wk 4</span><span class="pm-cohort-pct">Wk 8</span><span class="pm-cohort-pct">Wk 12</span></div>`;
+    const rows = cohorts.map(c => `
+      <div class="pm-cohort-row">
+        <span>${pmMonthLabel(c.cohort_month)} <span class="pm-pill">n=${c.cohort_size}</span></span>
+        <span class="pm-cohort-pct">${pmPct(c.week1_pct)}</span>
+        <span class="pm-cohort-pct">${pmPct(c.week2_pct)}</span>
+        <span class="pm-cohort-pct">${pmPct(c.week4_pct)}</span>
+        <span class="pm-cohort-pct">${pmPct(c.week8_pct)}</span>
+        <span class="pm-cohort-pct">${pmPct(c.week12_pct)}</span>
+      </div>`).join('');
+    return head + rows;
+  }
+
+  function pmTopCrewsRows(crews) {
+    if (!crews.length) return pmEmptyNote('No crews yet');
+    return crews.map(c => `
+      <div class="pm-row">
+        <span class="pm-row-label">${escHtml(c.name)} <span class="pm-pill">${c.member_count} member${c.member_count === 1 ? '' : 's'}</span></span>
+        <span class="pm-row-value">${c.engagement_score} pts</span>
+      </div>`).join('');
+  }
+
+  function pmFestivalInterestRows(fests) {
+    if (!fests.length) return pmEmptyNote('No raves logged yet');
+    return fests.map(f => `
+      <div class="pm-row">
+        <span class="pm-row-label">${escHtml(f.name)}</span>
+        <span class="pm-row-value">${f.rsvp_count} RSVP${f.rsvp_count === 1 ? '' : 's'}${f.interest_count ? ` · ${f.interest_count} interested` : ''}</span>
+      </div>`).join('');
+  }
+
+  function pmTopPathsRows(paths) {
+    if (!paths.length) return pmEmptyNote('No pageviews logged yet');
+    return paths.map(p => `
+      <div class="pm-row">
+        <span class="pm-row-label" style="font-family:monospace;font-size:0.78rem;">${escHtml(p.path || '(unknown)')}</span>
+        <span class="pm-row-value">${pmFmt(p.hits)}</span>
+      </div>`).join('');
+  }
+
+  function pmRenderGrowthChart(weekly) {
+    const ctx = document.getElementById('pm-chart-growth');
+    if (!ctx) return;
+    if (pmDashCharts.growth) pmDashCharts.growth.destroy();
+    pmDashCharts.growth = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: weekly.map(w => pmWeekLabel(w.week_start)),
+        datasets: [
+          { label: 'Waitlist', data: weekly.map(w => w.waitlist), borderColor: '#BF00FF', backgroundColor: 'rgba(191,0,255,0.12)', borderWidth: 3, tension: 0.35, fill: true, pointRadius: 0 },
+          { label: 'Active Crews', data: weekly.map(w => w.crews), borderColor: '#FF2D78', backgroundColor: 'rgba(255,45,120,0.12)', borderWidth: 3, tension: 0.35, fill: true, pointRadius: 0 },
+          { label: 'Explorer Unique Visitors', data: weekly.map(w => w.explorer_unique_visitors), borderColor: '#00F5FF', backgroundColor: 'rgba(0,245,255,0.08)', borderWidth: 2, borderDash: [4, 2], tension: 0.3, fill: false, pointRadius: 0 },
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { color: '#8585A5', boxWidth: 10, font: { size: 10 } } } },
+        scales: {
+          x: { grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { color: '#8585A5', font: { size: 10 } } },
+          y: { grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { color: '#8585A5', font: { size: 10 } }, beginAtZero: true }
+        }
+      }
+    });
+  }
+
+  function pmRenderAcquisitionChart(weekly) {
+    const ctx = document.getElementById('pm-chart-acquisition');
+    if (!ctx) return;
+    if (pmDashCharts.acquisition) pmDashCharts.acquisition.destroy();
+    pmDashCharts.acquisition = new Chart(ctx, {
+      type: 'bar',
+      data: { labels: weekly.map(w => pmWeekLabel(w.week_start)), datasets: [{ label: 'New Signups', data: weekly.map(w => w.new_signups), backgroundColor: '#BF00FF', borderRadius: 4 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { color: '#8585A5', font: { size: 10 } } },
+          y: { grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { color: '#8585A5', font: { size: 10 }, precision: 0 }, beginAtZero: true }
+        }
+      }
+    });
+  }
+
+  function pmRenderAdoptionChart(features) {
+    const ctx = document.getElementById('pm-chart-adoption');
+    if (!ctx) return;
+    if (pmDashCharts.adoption) pmDashCharts.adoption.destroy();
+    pmDashCharts.adoption = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: features.map(f => f.feature),
+        datasets: [{ label: '% of active crews', data: features.map(f => f.pct || 0), backgroundColor: ['#BF00FF', '#FF2D78', '#00F5FF', '#FFE600', '#39FF14', '#5B6EFF'], borderRadius: 6 }]
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { color: '#8585A5', font: { size: 10 } }, beginAtZero: true, max: 100 },
+          y: { grid: { display: false }, ticks: { color: '#F0EEFF', font: { size: 11 } } }
+        }
+      }
+    });
+  }
+
+  function pmRenderPlatformsChart(byPlatform) {
+    const ctx = document.getElementById('pm-chart-platforms');
+    if (!ctx) return;
+    if (pmDashCharts.platforms) pmDashCharts.platforms.destroy();
+    const colors = { spotify: '#1DB954', apple: '#FC3C44', youtube: '#FF0000', soundcloud: '#FF7700', beatport: '#01FF95' };
+    pmDashCharts.platforms = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: byPlatform.map(p => p.platform),
+        datasets: [{ data: byPlatform.map(p => p.count), backgroundColor: byPlatform.map(p => colors[p.platform] || '#8585A5'), borderColor: '#0E0E16', borderWidth: 3 }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { position: 'right', labels: { color: '#8585A5', font: { size: 11 } } } } }
+    });
   }
 
   function renderDetail(id) {
@@ -23618,7 +23972,64 @@ async function doProfilePasswordChange() {
     return festivals.filter(f => myFestIds.some(id => String(id) === String(f.id)) && isFestAchieved(f));
   }
 
+  // ===== NPS PROMPT (lightweight, on the Stats page) =====
+  let _npsSlotChecked = false;  // avoid re-querying nps_eligible every time Stats re-renders in the same session
+  let _npsPendingScore = null;
+
+  async function maybeShowNPSPrompt() {
+    const slot = document.getElementById('nps-prompt-slot');
+    if (!slot) return;
+    if (_npsSlotChecked) return;  // already asked (or dismissed) this session
+    _npsSlotChecked = true;
+    try {
+      const { data: eligible } = await sb.rpc('nps_eligible');
+      if (eligible === true) renderNPSPromptCard();
+    } catch (e) {}
+  }
+
+  function renderNPSPromptCard() {
+    const slot = document.getElementById('nps-prompt-slot');
+    if (!slot) return;
+    const scoreBtns = Array.from({ length: 11 }, (_, i) =>
+      `<button class="nps-score-btn" onclick="pickNPSScore(${i})">${i}</button>`).join('');
+    slot.innerHTML = `
+      <div class="nps-prompt-card" id="nps-prompt-card">
+        <div class="nps-prompt-close" onclick="dismissNPSPrompt()" title="Not now">✕</div>
+        <div class="nps-prompt-q">How likely are you to recommend RaveFAM to a friend?</div>
+        <div class="nps-score-row">${scoreBtns}</div>
+        <div class="nps-prompt-scale"><span>Not likely</span><span>Very likely</span></div>
+      </div>`;
+  }
+
+  function pickNPSScore(score) {
+    _npsPendingScore = score;
+    const card = document.getElementById('nps-prompt-card');
+    if (!card) return;
+    card.innerHTML = `
+      <div class="nps-prompt-q">Thanks! Anything you'd add? <span style="color:var(--muted);font-weight:400;">(optional)</span></div>
+      <textarea class="form-input" id="nps-comment-input" rows="2" maxlength="500" placeholder="What would make it better…" style="resize:none;line-height:1.5;margin-top:8px;"></textarea>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button class="btn btn-ghost" style="flex:1;" onclick="submitNPS(false)">Skip</button>
+        <button class="btn btn-primary" style="flex:1;" onclick="submitNPS(true)">Send</button>
+      </div>`;
+  }
+
+  async function submitNPS(withComment) {
+    const comment = withComment ? (document.getElementById('nps-comment-input')?.value || '').trim() : null;
+    const score = _npsPendingScore;
+    const slot = document.getElementById('nps-prompt-slot');
+    if (slot) slot.innerHTML = `<div class="nps-prompt-card nps-prompt-thanks">🙏 Thanks for the feedback!</div>`;
+    try { await sb.rpc('submit_nps_response', { p_score: score, p_comment: comment || null }); } catch (e) {}
+    setTimeout(() => { if (slot) slot.innerHTML = ''; }, 2200);
+  }
+
+  function dismissNPSPrompt() {
+    const slot = document.getElementById('nps-prompt-slot');
+    if (slot) slot.innerHTML = '';
+  }
+
   function loadStatsPage() {
+    maybeShowNPSPrompt();
     const you = squad.find(r => r.isYou);
     if (!you) {
       document.getElementById('stats-content').innerHTML = `

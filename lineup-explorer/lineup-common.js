@@ -1,3 +1,76 @@
+// Best-effort analytics for the internal PM metrics dashboard: a pageview
+// ping per festival page load, plus a single delegated click listener that
+// catches every "preview on Spotify/Apple/etc" link click across all
+// festival pages (artist cards set href via LineupPlatforms.buildUrl at
+// *render* time, which fires on every filter/search re-render — hooking
+// that would wildly overcount, so this listens for the real click instead).
+// supabase-js is loaded lazily here (not referenced anywhere else on these
+// static pages), so it never blocks first paint.
+(function () {
+  "use strict";
+
+  function getVisitorId() {
+    try {
+      var vid = window.localStorage.getItem("rf_vid");
+      if (!vid) { vid = crypto.randomUUID(); window.localStorage.setItem("rf_vid", vid); }
+      return vid;
+    } catch (e) { return null; }
+  }
+
+  var sbClient = null;
+  var sbReadyCallbacks = [];
+  function withClient(fn) {
+    if (sbClient) { fn(sbClient); return; }
+    sbReadyCallbacks.push(fn);
+  }
+
+  var script = document.createElement("script");
+  script.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
+  script.onload = function () {
+    try {
+      sbClient = window.supabase.createClient(
+        "https://tvpgopciioqbqmjjjigh.supabase.co",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2cGdvcGNpaW9xYnFtampqaWdoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3NTY2OTUsImV4cCI6MjA5NjMzMjY5NX0.DAgcx2UsGV1gUCQzHdGmv1Pu0rXlJdQxhn-bf1wGsiI"
+      );
+      sbReadyCallbacks.forEach(function (fn) { fn(sbClient); });
+      sbReadyCallbacks = [];
+    } catch (e) {}
+  };
+  document.head.appendChild(script);
+
+  window._rfTrack = {
+    previewClick: function (platform, query) {
+      withClient(function (sb) {
+        sb.rpc("log_preview_click", {
+          p_path: location.pathname, p_platform: platform, p_query: query, p_visitor_id: getVisitorId()
+        });
+      });
+    }
+  };
+
+  withClient(function (sb) {
+    sb.rpc("log_pageview", { p_path: location.pathname, p_referrer: document.referrer, p_visitor_id: getVisitorId() });
+  });
+
+  var PLATFORM_HREF_PATTERNS = [
+    [/open\.spotify\.com/, "spotify"],
+    [/music\.youtube\.com/, "youtube"],
+    [/music\.apple\.com/, "apple"],
+    [/soundcloud\.com/, "soundcloud"],
+    [/beatport\.com/, "beatport"]
+  ];
+
+  document.addEventListener("click", function (e) {
+    var a = e.target && e.target.closest && e.target.closest("a[href]");
+    if (!a) return;
+    var href = a.href || "";
+    var match = PLATFORM_HREF_PATTERNS.find(function (p) { return p[0].test(href); });
+    if (!match) return;
+    var label = (a.getAttribute("aria-label") || a.textContent || "").trim().slice(0, 200);
+    window._rfTrack.previewClick(match[1], label);
+  }, true);
+})();
+
 (function () {
   "use strict";
 
