@@ -68,7 +68,6 @@ async function shoot(context, { name, data, run, target }) {
   // whatever sits at the top, bottom, or corner of the viewport.
   await page.evaluate(() => {
     if (typeof dismissGuidanceBanner === 'function') { try { dismissGuidanceBanner(); } catch (e) {} }
-    if (typeof dismissCoachmark === 'function') { try { dismissCoachmark(); } catch (e) {} }
     const toastEl = document.getElementById('toast');
     if (toastEl) { toastEl.innerHTML = ''; toastEl.className = 'toast'; }
     const navEl = document.querySelector('nav');
@@ -76,6 +75,23 @@ async function shoot(context, { name, data, run, target }) {
     const fabEl = document.getElementById('qr-fab');
     if (fabEl) fabEl.style.display = 'none';
   });
+  // dismissCoachmark() only closes whichever tip is currently showing, then
+  // re-queues the *next* one 150ms later (_showNextCoachmark) -- a single
+  // call can leave a second tip popping up mid-screenshot when a flow
+  // queues more than one (e.g. opening a crew, then its Game Plan tab).
+  // Drain the queue by dismissing repeatedly with a gap longer than that
+  // 150ms delay until nothing more shows up.
+  for (let i = 0; i < 4; i++) {
+    const stillShowing = await page.evaluate(() => {
+      if (typeof dismissCoachmark !== 'function') return false;
+      const el = document.getElementById('coachmark');
+      const wasShowing = !!(el && el.classList.contains('show'));
+      try { dismissCoachmark(); } catch (e) {}
+      return wasShowing;
+    });
+    if (!stillShowing) break;
+    await page.waitForTimeout(200);
+  }
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const outPath = path.join(OUT_DIR, `${name}.png`);
   if (target) {
