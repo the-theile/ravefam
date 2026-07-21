@@ -102,6 +102,24 @@ const TEMPLATES: Record<string, { subject: string; render: (ctx: { firstName: st
       <p>That's the whole tour. See you out there 🖤</p>
       ${button("Open Crew Jams", `${APP_ORIGIN}/app.html`)}`,
   },
+  game_plan_intro: {
+    subject: "Your rave just got a Game Plan 🗺️",
+    render: ({ firstName }) => `
+      <h1 style="font-size:1.4rem;">${firstName}, stop planning your next rave over five different group chats</h1>
+      <p>Whenever you and a crewmate are both going to the same show, a <strong>Game Plan</strong> shows up automatically — one hub with a Huddle, a shared Checklist, Roles, Rides, Stay, and Outfit/Theme, all scoped to that one rave.</p>
+      ${feature("✅", "Checklist", "call out what needs doing before you go and claim it so it doesn't fall on one person", "game-plan.png", "A Game Plan Checklist with tasks, assignees, and a packing progress bar")}
+      <p>Find it under any crew you share an upcoming rave with.</p>
+      ${button("Open your Game Plan", `${APP_ORIGIN}/app.html`)}`,
+  },
+  plur_points_intro: {
+    subject: "You've been earning points this whole time ✨",
+    render: ({ firstName }) => `
+      <h1 style="font-size:1.4rem;">${firstName}, turns out showing up counts for something</h1>
+      <p>Every real thing you do on RaveFAM — RSVPing, building your crew, dropping jams, looking out for people — earns <strong>PLUR Points</strong> across four tracks: Peace, Love, Unity, and Respect. They're verified server-side, so it's never something an app can fake.</p>
+      ${feature("🏆", "PLUR Leaderboard", "see where you rank against your crew, per track or overall", "plur-points.png", "A PLUR Points leaderboard ranking crew members by total points")}
+      <p>Tap the ✨ PLUR bar on your profile any time to see your breakdown and milestones.</p>
+      ${button("Check your PLUR Points", `${APP_ORIGIN}/app.html`)}`,
+  },
 };
 
 async function sendResendEmail(to: string, subject: string, html: string) {
