@@ -284,6 +284,94 @@
     main { padding: 20px 16px 90px; }
   }
 
+  /* ===== ASK FAM WIDGET ===== */
+  .ask-fam-fab {
+    position: fixed;
+    right: 16px;
+    bottom: 20px;
+    z-index: 150;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    border: none;
+    background: linear-gradient(135deg, var(--neon-cyan), var(--neon-pink));
+    color: #000;
+    font-size: 1.3rem;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 18px rgba(0,245,255,0.35);
+    transition: transform 0.25s ease;
+  }
+  .ask-fam-fab:hover { transform: scale(1.08); }
+  @media (max-width: 640px) {
+    .ask-fam-fab { bottom: calc(74px + env(safe-area-inset-bottom, 0px)); }
+  }
+  .ask-fam-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 240px;
+    max-height: 50vh;
+  }
+  .ask-fam-bubble {
+    max-width: 85%;
+    padding: 10px 14px;
+    border-radius: 14px;
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+  .ask-fam-bubble-user {
+    align-self: flex-end;
+    background: linear-gradient(135deg, var(--neon-cyan), var(--neon-pink));
+    color: #000;
+    border-bottom-right-radius: 4px;
+  }
+  .ask-fam-bubble-bot {
+    align-self: flex-start;
+    background: rgba(255,255,255,0.07);
+    color: var(--text);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-bottom-left-radius: 4px;
+  }
+  .ask-fam-bubble-loading { opacity: 0.6; }
+  .ask-fam-input-row {
+    display: flex;
+    gap: 8px;
+    padding: 10px 20px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .ask-fam-input-row input {
+    flex: 1;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 100px;
+    padding: 10px 16px;
+    color: var(--text);
+    font-size: 0.85rem;
+    outline: none;
+  }
+  .ask-fam-input-row button {
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    border: none;
+    background: linear-gradient(135deg, var(--neon-cyan), var(--neon-pink));
+    color: #000;
+    cursor: pointer;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ask-fam-input-row button:disabled { opacity: 0.5; cursor: default; }
+  .ask-fam-disclaimer {
+    padding: 8px 20px 0;
+    font-size: 0.65rem;
+    color: var(--muted);
+    opacity: 0.7;
+    line-height: 1.4;
+  }
+
   /* Pages */
   .page { display: none; animation: fadeIn 0.3s ease; }
   .page.active { display: block; }
@@ -7663,6 +7751,24 @@
   </div>
 </div>
 
+<!-- Ask FAM — floating help chatbot button + modal, visible across all tabs. -->
+<button class="ask-fam-fab" id="ask-fam-fab" onclick="openAskFam()" title="Ask FAM" aria-label="Ask FAM">💬</button>
+
+<div class="modal-overlay" id="ask-fam-overlay" onclick="if(event.target===this)closeAskFam()">
+  <div class="modal ask-fam-modal" style="max-width:420px;max-height:80vh;display:flex;flex-direction:column;padding:0;overflow:hidden;">
+    <div class="modal-title" style="padding:20px 20px 0;">💬 Ask FAM</div>
+    <div class="ask-fam-messages" id="ask-fam-messages"></div>
+    <div class="ask-fam-input-row">
+      <input type="text" id="ask-fam-input" placeholder="Ask about crews, PLUR Points, Game Plan…" autocomplete="off" onkeydown="if(event.key==='Enter')sendAskFamMessage()">
+      <button type="button" onclick="sendAskFamMessage()" aria-label="Send" id="ask-fam-send-btn">➤</button>
+    </div>
+    <div class="ask-fam-disclaimer">AI-generated from the RaveFAM Help Center — may not always be right. For account issues, email <a href="mailto:bump@myravefam.com" style="color:var(--neon-cyan);">bump@myravefam.com</a>.</div>
+    <div class="modal-actions" style="padding:14px 20px 20px;">
+      <button class="btn btn-ghost" style="flex:1;" onclick="closeAskFam()">Close</button>
+    </div>
+  </div>
+</div>
+
 </div><!-- /#main-app -->
 
 <!-- ===== HANDLE PICKER OVERLAY ===== -->
@@ -7708,7 +7814,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.1.1';
+  const APP_VERSION = '1.2.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -23470,6 +23576,69 @@ async function doProfilePasswordChange() {
     const wasOpen = item.classList.contains('open');
     document.querySelectorAll('#help-faq-results .help-faq-item.open').forEach(i => i.classList.remove('open'));
     if (!wasOpen) item.classList.add('open');
+  }
+
+  // ===== ASK FAM CHAT WIDGET =====
+  // RAG-grounded help chatbot backed by the ask-fam edge function (retrieves
+  // from kb_chunks, answers via Claude Haiku using only that context — see
+  // supabase/functions/ask-fam). Phase 1: non-streaming, JSON in/out.
+  let _askFamHistory = [];
+
+  function openAskFam() {
+    document.getElementById('ask-fam-overlay').classList.add('open');
+    document.getElementById('ask-fam-input')?.focus();
+  }
+
+  function closeAskFam() {
+    document.getElementById('ask-fam-overlay').classList.remove('open');
+  }
+
+  function appendAskFamMessage(role, text, opts) {
+    const container = document.getElementById('ask-fam-messages');
+    if (!container) return null;
+    const bubble = document.createElement('div');
+    bubble.className = `ask-fam-bubble ask-fam-bubble-${role === 'user' ? 'user' : 'bot'}${opts && opts.loading ? ' ask-fam-bubble-loading' : ''}`;
+    bubble.textContent = text;
+    container.appendChild(bubble);
+    container.scrollTop = container.scrollHeight;
+    return bubble;
+  }
+
+  async function sendAskFamMessage() {
+    const input = document.getElementById('ask-fam-input');
+    const sendBtn = document.getElementById('ask-fam-send-btn');
+    const message = (input?.value || '').trim();
+    if (!message) return;
+    input.value = '';
+    if (sendBtn) sendBtn.disabled = true;
+
+    appendAskFamMessage('user', message);
+    const loadingBubble = appendAskFamMessage('bot', '…', { loading: true });
+
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) throw new Error('not signed in');
+      const res = await fetch(`${SUPA_URL}/functions/v1/ask-fam`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': SUPA_KEY,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ message, history: _askFamHistory.slice(-6) })
+      });
+      if (!res.ok) throw new Error(`ask-fam ${res.status}`);
+      const { reply } = await res.json();
+      loadingBubble.classList.remove('ask-fam-bubble-loading');
+      loadingBubble.textContent = reply;
+      _askFamHistory.push({ role: 'user', content: message });
+      _askFamHistory.push({ role: 'assistant', content: reply });
+    } catch (err) {
+      loadingBubble.classList.remove('ask-fam-bubble-loading');
+      loadingBubble.innerHTML = `Couldn't reach Ask FAM right now — try the <a href="#" onclick="closeAskFam();openAppGuide();return false;" style="color:var(--neon-cyan);">Help Center</a> or email <a href="mailto:bump@myravefam.com" style="color:var(--neon-cyan);">bump@myravefam.com</a>.`;
+    } finally {
+      if (sendBtn) sendBtn.disabled = false;
+    }
   }
 
   // ── Offline banner ────────────────────────────────────
