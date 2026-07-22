@@ -17000,11 +17000,20 @@ async function doProfilePasswordChange() {
       return;
     }
     if (loadUserGeo()) {
-      _raveFilters.distance = _nearbyRadius;
+      activateNearbyFilter();
       renderEvents();
     } else {
       requestUserLocation();
     }
+  }
+
+  // Shared by every path that turns Nearby on: sets the radius, and — the
+  // first time, if no time axis is picked yet — defaults to Upcoming, since
+  // "nearby" is about raves to go to. Independent afterward: tapping Past
+  // still works fine with Nearby on, this is just a one-time default.
+  function activateNearbyFilter() {
+    _raveFilters.distance = _nearbyRadius;
+    if (_raveFilters.time == null) _raveFilters.time = 'upcoming';
   }
 
   function setNearbyRadius(val) {
@@ -22208,7 +22217,7 @@ async function doProfilePasswordChange() {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         saveUserGeo({ lat: pos.coords.latitude, lng: pos.coords.longitude, label: 'Current location', source: 'geo' });
-        _raveFilters.distance = _nearbyRadius;
+        activateNearbyFilter();
         closeNearbyLocModal();
         renderEvents();
       },
@@ -22274,7 +22283,7 @@ async function doProfilePasswordChange() {
     const item = _userLocItems[idx];
     if (!item) return;
     saveUserGeo({ lat: item.lat, lng: item.lng, label: item.label, source: 'manual' });
-    _raveFilters.distance = _nearbyRadius;
+    activateNearbyFilter();
     closeNearbyLocModal();
     renderEvents();
   }
