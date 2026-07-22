@@ -781,6 +781,12 @@
   .rave-filter-pill.going-pill.active { background: rgba(57,255,20,0.1); border-color: rgba(57,255,20,0.5); color: var(--neon-green); }
   .rave-filter-pill.interested-pill.active { background: rgba(0,245,255,0.1); border-color: rgba(0,245,255,0.5); color: var(--neon-cyan); }
 
+  .rave-nearby-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -10px 0 16px; font-size: 0.78rem; }
+  .rave-nearby-bar:empty { display: none; margin: 0; }
+  .rave-nearby-label { color: var(--neon-pink); font-weight: 600; }
+  .rave-nearby-radius { background: var(--surface2); color: var(--text); border: 1.5px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 3px 8px; font-size: 0.76rem; font-family: 'Outfit', sans-serif; }
+  .rave-nearby-change { background: none; border: none; color: var(--neon-cyan); font-size: 0.76rem; text-decoration: underline; cursor: pointer; padding: 0; font-family: 'Outfit', sans-serif; }
+
   /* Layered treatment — going: glow uses event's own accent colour (--card-rgb set inline) */
   .event-item-going {
     border-color: rgba(var(--card-rgb), 0.22);
@@ -6775,6 +6781,7 @@
         <input class="rave-search" id="rave-search" type="text" placeholder="Search raves…" oninput="renderEvents()" autocomplete="off">
       </div>
       <div class="rave-filter-bar" id="rave-filter-bar"><!-- rendered by JS --></div>
+      <div class="rave-nearby-bar" id="rave-nearby-bar"><!-- rendered by JS --></div>
       <div class="events-list" id="events-list">
         <!-- rendered by JS from the festivals catalog -->
       </div>
@@ -7035,6 +7042,28 @@
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeNewRavePopup()">Cancel</button>
       <button class="btn btn-primary" onclick="saveNewRavePopup()">Add Rave 🔥</button>
+    </div>
+  </div>
+</div>
+
+<!-- Nearby Raves — manual location fallback (geolocation denied/unavailable, or "change") -->
+<div class="modal-overlay" id="nearby-loc-overlay" onclick="if(event.target===this)closeNearbyLocModal()">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-title">📍 Set Your Location</div>
+    <p style="font-size:0.82rem;color:var(--muted);margin:-14px 0 16px;">Enter a city so we can show raves near you.</p>
+    <div class="form-group" style="position:relative;">
+      <label class="form-label">City</label>
+      <div class="loc-autocomplete-wrap">
+        <input class="form-input" id="nearby-loc-input" placeholder="e.g. Berlin, DE" autocomplete="off"
+          oninput="userLocSearchDebounce(this.value)"
+          onkeydown="userLocKeydown(event)"
+          onblur="setTimeout(closeUserLocDropdown,200)" style="font-size:16px;">
+        <div class="loc-dropdown" id="nearby-loc-dropdown"></div>
+      </div>
+    </div>
+    <div class="modal-actions" style="justify-content:space-between;">
+      <button class="btn btn-ghost" onclick="closeNearbyLocModal()">Cancel</button>
+      <button class="btn btn-ghost" onclick="requestUserLocation()">📍 Use My Location</button>
     </div>
   </div>
 </div>
@@ -7708,7 +7737,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.1.1';
+  const APP_VERSION = '1.2.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -9462,7 +9491,7 @@ async function doProfilePasswordChange() {
       .order('date', { ascending: true });
     if (!fErr && dbFests) {
       dbFests.forEach(f => {
-        festivals.push({ id: f.id, name: f.name, date: f.date, location: f.location || '', color: f.color || null, days: f.days || null, createdBy: f.created_by || null, archived: !!f.archived_at, mapUrl: f.map_url || null });
+        festivals.push({ id: f.id, name: f.name, date: f.date, location: f.location || '', color: f.color || null, days: f.days || null, createdBy: f.created_by || null, archived: !!f.archived_at, mapUrl: f.map_url || null, lat: f.lat ?? null, lng: f.lng ?? null });
       });
     }
 
@@ -10512,7 +10541,7 @@ async function doProfilePasswordChange() {
   async function dbSaveFestival(data, id) {
     const uid = currentUser?.id;
     if (!uid) return null;
-    const row = { name: data.name, date: data.date, location: data.location, color: data.color || null, days: data.days || null };
+    const row = { name: data.name, date: data.date, location: data.location, color: data.color || null, days: data.days || null, lat: data.lat ?? null, lng: data.lng ?? null };
     if (id) {
       const { error } = await sb.from('festivals').update(row).eq('id', id);
       if (error) { console.error('festival update error', error); showToast('⚠️ Could not update rave — try again'); }
@@ -12758,7 +12787,8 @@ async function doProfilePasswordChange() {
   let myVendorSpots = [];           // current user's OWN spots across all vendors/festivals (badge-progress cache — kept separate from vendorSpotsCache, see dbLoadMyVendorSpots)
   let savedVendorIds = new Set();
   let _jamFilters = { tag: null, festivalId: null };
-  let _raveFilters = { time: null, status: null }; // time: 'upcoming'|'past'|null, status: 'going'|'interested'|null
+  let _raveFilters = { time: null, status: null, distance: null }; // time: 'upcoming'|'past'|null, status: 'going'|'interested'|null, distance: radius in miles|null
+  let _nearbyRadius = 50;
   let crewAchievements = [];
   let raverAchievements = [];
   let crewFeedEvents = [];
@@ -16960,6 +16990,26 @@ async function doProfilePasswordChange() {
 
   function toggleRaveFilter(axis, val) {
     _raveFilters[axis] = _raveFilters[axis] === val ? null : val;
+    renderEvents();
+  }
+
+  function toggleNearbyFilter() {
+    if (_raveFilters.distance != null) {
+      _raveFilters.distance = null;
+      renderEvents();
+      return;
+    }
+    if (loadUserGeo()) {
+      _raveFilters.distance = _nearbyRadius;
+      renderEvents();
+    } else {
+      requestUserLocation();
+    }
+  }
+
+  function setNearbyRadius(val) {
+    _nearbyRadius = parseInt(val, 10) || 50;
+    _raveFilters.distance = _nearbyRadius;
     renderEvents();
   }
 
@@ -22141,6 +22191,170 @@ async function doProfilePasswordChange() {
     if (changed) saveWeatherCache(cache);
   }
 
+  // ===== Nearby raves (distance filter) =====
+  // User location is device-local only (localStorage) — unlike a rave's location, a person's
+  // precise coordinates shouldn't be persisted to Supabase or visible to anyone else.
+  const USER_GEO_KEY = 'rf_user_geo';
+
+  function loadUserGeo() {
+    try { return JSON.parse(localStorage.getItem(USER_GEO_KEY)) || null; } catch(e) { return null; }
+  }
+  function saveUserGeo(loc) {
+    try { localStorage.setItem(USER_GEO_KEY, JSON.stringify(loc)); } catch(e) {}
+  }
+
+  function requestUserLocation() {
+    if (!navigator.geolocation) { openNearbyLocModal(); return; }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        saveUserGeo({ lat: pos.coords.latitude, lng: pos.coords.longitude, label: 'Current location', source: 'geo' });
+        _raveFilters.distance = _nearbyRadius;
+        closeNearbyLocModal();
+        renderEvents();
+      },
+      () => { openNearbyLocModal(); },
+      { timeout: 8000, maximumAge: 300000 }
+    );
+  }
+
+  function openNearbyLocModal() {
+    const inp = document.getElementById('nearby-loc-input');
+    if (inp) inp.value = '';
+    closeUserLocDropdown();
+    document.getElementById('nearby-loc-overlay')?.classList.add('open');
+  }
+  function closeNearbyLocModal() {
+    document.getElementById('nearby-loc-overlay')?.classList.remove('open');
+  }
+
+  // Separate autocomplete instance from the rave-editor's locSearch/pickLoc (app.html ~22380) —
+  // kept independent rather than shared so the two dropdowns can't stomp on each other's state.
+  let _userLocTimer = null;
+  let _userLocIdx = -1;
+  let _userLocItems = [];
+
+  function userLocSearchDebounce(q) {
+    clearTimeout(_userLocTimer);
+    _userLocIdx = -1;
+    if (q.length < 2) { closeUserLocDropdown(); return; }
+    _userLocTimer = setTimeout(() => userLocSearch(q), 320);
+  }
+
+  async function userLocSearch(q) {
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&addressdetails=1&limit=8&featuretype=city&accept-language=en`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const dropdown = document.getElementById('nearby-loc-dropdown');
+      if (!dropdown) return;
+
+      const seen = new Set();
+      const items = [];
+      for (const d of data) {
+        const a = d.address || {};
+        const city    = a.city || a.town || a.village || a.municipality || d.display_name.split(',')[0].trim();
+        const state   = a.state || a.region || '';
+        const country = a.country || '';
+        const label   = [city, state, country].filter(Boolean).join(', ');
+        if (!seen.has(label)) { seen.add(label); items.push({ label, lat: parseFloat(d.lat), lng: parseFloat(d.lon) }); }
+        if (items.length >= 6) break;
+      }
+
+      if (items.length === 0) { closeUserLocDropdown(); return; }
+      _userLocItems = items;
+      dropdown.style.display = 'block';
+      dropdown.innerHTML = items.map((item, i) =>
+        `<div class="loc-item" data-idx="${i}" onmousedown="pickUserLoc(${i})">${escHtml(item.label)}</div>`
+      ).join('');
+      _userLocIdx = -1;
+    } catch(e) { closeUserLocDropdown(); }
+  }
+
+  function pickUserLoc(idx) {
+    const item = _userLocItems[idx];
+    if (!item) return;
+    saveUserGeo({ lat: item.lat, lng: item.lng, label: item.label, source: 'manual' });
+    _raveFilters.distance = _nearbyRadius;
+    closeNearbyLocModal();
+    renderEvents();
+  }
+
+  function closeUserLocDropdown() {
+    const d = document.getElementById('nearby-loc-dropdown');
+    if (d) d.style.display = 'none';
+    _userLocIdx = -1;
+  }
+
+  function userLocKeydown(e) {
+    const dropdown = document.getElementById('nearby-loc-dropdown');
+    if (!dropdown || dropdown.style.display === 'none') return;
+    const items = dropdown.querySelectorAll('.loc-item');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      _userLocIdx = Math.min(_userLocIdx + 1, items.length - 1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      _userLocIdx = Math.max(_userLocIdx - 1, 0);
+    } else if (e.key === 'Enter' && _userLocIdx >= 0) {
+      e.preventDefault();
+      items[_userLocIdx]?.dispatchEvent(new MouseEvent('mousedown'));
+      return;
+    } else if (e.key === 'Escape') {
+      closeUserLocDropdown(); return;
+    } else { return; }
+    items.forEach((el, i) => el.classList.toggle('loc-active', i === _userLocIdx));
+    items[_userLocIdx]?.scrollIntoView({ block: 'nearest' });
+  }
+
+  function haversineMiles(lat1, lng1, lat2, lng2) {
+    const R = 3958.8;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) ** 2 + Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) * Math.sin(dLng/2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function festGeocodeCacheKey(f) {
+    return (f.location || '').toLowerCase().trim();
+  }
+
+  // Coordinates picked at save time (app.html ~22390, pickLoc) win; otherwise fall back to the
+  // same Nominatim geocode cache the "Cities Hit" map uses (rf_city_geocode_cache).
+  function festivalCoords(f) {
+    if (f.lat != null && f.lng != null) return { lat: f.lat, lng: f.lng };
+    if (!f.location) return null;
+    const cache = loadGeocodeCache();
+    return cache[festGeocodeCacheKey(f)] || null;
+  }
+
+  function festivalDistance(f, userLoc) {
+    if (!userLoc) return null;
+    const coords = festivalCoords(f);
+    if (!coords) return null;
+    return haversineMiles(userLoc.lat, userLoc.lng, coords.lat, coords.lng);
+  }
+
+  // Async fetch-then-patch, same shape as fetchMissingWeather — geocodes whatever in `list`
+  // still lacks coordinates and re-renders once new ones land. Only called while the Nearby
+  // filter is active, and only against the currently-visible (pre-radius-cut) list.
+  async function fetchMissingFestivalGeocodes(list) {
+    const cache = loadGeocodeCache();
+    const targets = list.filter(f => f.lat == null && f.location && cache[festGeocodeCacheKey(f)] === undefined);
+    if (!targets.length) return;
+    let changed = false;
+    for (const f of targets) {
+      const coords = await geocodeCity(f.location);
+      cache[festGeocodeCacheKey(f)] = coords;
+      changed = true;
+      // Nominatim's usage policy caps public requests at ~1/sec.
+      await new Promise(r => setTimeout(r, 1100));
+    }
+    if (changed) {
+      saveGeocodeCache(cache);
+      renderEvents();
+    }
+  }
+
   // Active festival being edited (UUID-safe global, same pattern as activeDetailId)
   let activeFestId = null;
 
@@ -22150,6 +22364,8 @@ async function doProfilePasswordChange() {
     if (!list) return;
 
     const query = (document.getElementById('rave-search')?.value || '').toLowerCase().trim();
+    const nearbyRadius = _raveFilters.distance;
+    const userLoc = nearbyRadius != null ? loadUserGeo() : null;
 
     // Render filter pills (active state mirrors _raveFilters)
     const filterBar = document.getElementById('rave-filter-bar');
@@ -22160,7 +22376,18 @@ async function doProfilePasswordChange() {
         pill('time', 'upcoming', '⏳ Upcoming') +
         pill('time', 'past', '📼 Past') +
         pill('status', 'going', '🎟️ Going', 'going-pill') +
-        pill('status', 'interested', '👀 Interested', 'interested-pill');
+        pill('status', 'interested', '👀 Interested', 'interested-pill') +
+        `<button class="rave-filter-pill${nearbyRadius != null ? ' active' : ''}" onclick="toggleNearbyFilter()">📍 Nearby</button>`;
+    }
+    const nearbyBar = document.getElementById('rave-nearby-bar');
+    if (nearbyBar) {
+      nearbyBar.innerHTML = (nearbyRadius != null && userLoc)
+        ? `<span class="rave-nearby-label">📍 Near ${escHtml(userLoc.label)}</span>
+           <select class="rave-nearby-radius" onchange="setNearbyRadius(this.value)">
+             ${[25,50,100,250].map(mi => `<option value="${mi}"${nearbyRadius === mi ? ' selected' : ''}>${mi} mi</option>`).join('')}
+           </select>
+           <button class="rave-nearby-change" onclick="openNearbyLocModal()">change</button>`
+        : '';
     }
 
     const you = squad.find(r => r.isYou);
@@ -22178,8 +22405,22 @@ async function doProfilePasswordChange() {
     }
     // Archived raves stay in the DB (RSVPs and links intact) but come off the active list.
     filtered = filtered.filter(f => !f.archived);
-    const up = filtered.filter(f => f._d && f._d >= TODAY).sort((a,b) => a._d - b._d);
-    const past = filtered.filter(f => !f._d || f._d < TODAY).sort((a,b) => (b._d||0) - (a._d||0));
+
+    // Nearby axis — snapshot before the radius cut so fetchMissingFestivalGeocodes can still
+    // resolve coordinates for events currently held back (unresolved distance, not yet excluded).
+    const preNearby = filtered;
+    let pendingGeocodes = 0;
+    if (nearbyRadius != null && userLoc) {
+      filtered = filtered.filter(f => {
+        const d = festivalDistance(f, userLoc);
+        if (d == null) { pendingGeocodes++; return false; }
+        return d <= nearbyRadius;
+      });
+    }
+
+    const nearbySort = (a, b) => (festivalDistance(a, userLoc) ?? Infinity) - (festivalDistance(b, userLoc) ?? Infinity);
+    const up = filtered.filter(f => f._d && f._d >= TODAY).sort(nearbyRadius != null ? nearbySort : (a,b) => a._d - b._d);
+    const past = filtered.filter(f => !f._d || f._d < TODAY).sort(nearbyRadius != null ? nearbySort : (a,b) => (b._d||0) - (a._d||0));
 
     const weatherCache = loadWeatherCache();
     const BULB_ROW_HTML = Array.from({ length: 11 }, (_, i) => `<div class="marquee-bulb" style="animation-delay:${(i * 0.12).toFixed(2)}s"></div>`).join('');
@@ -22197,7 +22438,8 @@ async function doProfilePasswordChange() {
         ? `${durLabel ? durLabel + ' · ' : ''}${countdownLabel(f._d)}`
         : `📼 ${durLabel ? durLabel + ' · ' : ''}${f._d ? 'Happened in ' + f._d.getFullYear() : 'Past'}`;
       const dateBit = f._d ? `${f._d.getDate()} ${MON_SHORT[f._d.getMonth()]}${!isUpcoming ? ' ' + f._d.getFullYear() : ''}` : '';
-      const metaLine = `📍 ${escHtml(f.location || 'Location TBD')}` + (dateBit ? ` · ${dateBit}` : '');
+      const distMi = nearbyRadius != null ? festivalDistance(f, userLoc) : null;
+      const metaLine = `📍 ${escHtml(f.location || 'Location TBD')}` + (distMi != null ? ` · ${Math.round(distMi)} mi away` : '') + (dateBit ? ` · ${dateBit}` : '');
       const weatherChip = weatherChipHTML(f, weatherCache);
       const mapUrlJs = String(f.mapUrl || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       const mapBtn = f.mapUrl
@@ -22288,15 +22530,18 @@ async function doProfilePasswordChange() {
     if (showUp && up.length) html += `<div class="fest-group-label" style="margin:4px 0 10px;">🔜 Upcoming</div>` + up.map(card).join('');
     if (showPast && past.length) html += `<div class="fest-group-label" style="margin:22px 0 10px;">📼 Past</div>` + past.map(card).join('');
     if (!html) {
-      const hasFilters = _raveFilters.time || _raveFilters.status;
+      const hasFilters = _raveFilters.time || _raveFilters.status || nearbyRadius != null;
       html = query
         ? `<div class="fest-empty" style="padding:20px;text-align:center;color:var(--muted);">No raves found for "${escHtml(query)}"</div>`
-        : hasFilters
-          ? `<div class="fest-empty" style="padding:20px;text-align:center;color:var(--muted);">No raves match these filters</div>`
-          : `<div class="fest-empty es-block" style="padding:32px 20px"><div class="es-icon">🎟️</div><div class="es-headline">Your calendar is looking too clean</div><div class="es-sub">Add a festival, club night, or that warehouse party on Saturday.</div></div>`;
+        : (nearbyRadius != null && pendingGeocodes > 0)
+          ? `<div class="fest-empty" style="padding:20px;text-align:center;color:var(--muted);">📍 Finding nearby raves…</div>`
+          : hasFilters
+            ? `<div class="fest-empty" style="padding:20px;text-align:center;color:var(--muted);">No raves match these filters</div>`
+            : `<div class="fest-empty es-block" style="padding:32px 20px"><div class="es-icon">🎟️</div><div class="es-headline">Your calendar is looking too clean</div><div class="es-sub">Add a festival, club night, or that warehouse party on Saturday.</div></div>`;
     }
     list.innerHTML = html;
     if (showUp) fetchMissingWeather(up, weatherCache);
+    if (nearbyRadius != null) fetchMissingFestivalGeocodes(preNearby);
     } catch(err) { console.error('[renderEvents]', err); const el = document.getElementById('events-list'); if (el) el.innerHTML = sectionErrorHTML('events'); }
   }
 
@@ -22310,6 +22555,8 @@ async function doProfilePasswordChange() {
     if (q.length < 2) { closeLoc(); return; }
     _locTimer = setTimeout(() => locSearch(q), 320);
   }
+
+  let _locItems = [];
 
   async function locSearch(q) {
     try {
@@ -22327,23 +22574,37 @@ async function doProfilePasswordChange() {
         const state   = a.state || a.region || '';
         const country = a.country || '';
         const label   = [city, state, country].filter(Boolean).join(', ');
-        if (!seen.has(label)) { seen.add(label); items.push(label); }
+        if (!seen.has(label)) { seen.add(label); items.push({ label, lat: parseFloat(d.lat), lng: parseFloat(d.lon) }); }
         if (items.length >= 6) break;
       }
 
       if (items.length === 0) { closeLoc(); return; }
+      _locItems = items;
       dropdown.style.display = 'block';
-      dropdown.innerHTML = items.map((label, i) =>
-        `<div class="loc-item" data-idx="${i}" onmousedown="pickLoc('${label.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${escHtml(label)}</div>`
+      dropdown.innerHTML = items.map((item, i) =>
+        `<div class="loc-item" data-idx="${i}" onmousedown="pickLoc(${i})">${escHtml(item.label)}</div>`
       ).join('');
       _locIdx = -1;
     } catch(e) { closeLoc(); }
   }
 
-  function pickLoc(val) {
+  function pickLoc(idx) {
+    const item = _locItems[idx];
+    if (!item) return;
     const inp = document.getElementById('fe-loc');
-    if (inp) inp.value = val;
+    if (inp) inp.value = item.label;
+    const latInp = document.getElementById('fe-lat');
+    const lngInp = document.getElementById('fe-lng');
+    if (latInp) latInp.value = item.lat;
+    if (lngInp) lngInp.value = item.lng;
     closeLoc();
+  }
+
+  function clearLocCoords() {
+    const latInp = document.getElementById('fe-lat');
+    const lngInp = document.getElementById('fe-lng');
+    if (latInp) latInp.value = '';
+    if (lngInp) lngInp.value = '';
   }
 
   function closeLoc() {
@@ -22461,9 +22722,11 @@ async function doProfilePasswordChange() {
           <div class="loc-autocomplete-wrap">
             <input class="form-input" id="fe-loc" value="${(f?.location||'').replace(/"/g,'&quot;')}"
               placeholder="e.g. Amsterdam, NL" autocomplete="off" maxlength="100"
-              oninput="locSearchDebounce(this.value)"
+              oninput="locSearchDebounce(this.value); clearLocCoords()"
               onkeydown="locKeydown(event)"
               onblur="setTimeout(closeLoc,200)" ${canEditFest ? '' : 'disabled'}>
+            <input type="hidden" id="fe-lat" value="${f?.lat ?? ''}">
+            <input type="hidden" id="fe-lng" value="${f?.lng ?? ''}">
             <div class="loc-dropdown" id="loc-dropdown"></div>
           </div>
         </div>
@@ -22751,6 +23014,10 @@ async function doProfilePasswordChange() {
     const name = val('fe-name')?.slice(0, 100);
     const date = document.getElementById('fe-date').value;
     const location = (val('fe-loc') || '').slice(0, 100);
+    const latRaw = document.getElementById('fe-lat')?.value;
+    const lngRaw = document.getElementById('fe-lng')?.value;
+    const lat = latRaw ? parseFloat(latRaw) : null;
+    const lng = lngRaw ? parseFloat(lngRaw) : null;
     const daysRaw = parseInt(document.getElementById('fe-days')?.value || '', 10);
     const days = daysRaw >= 1 && daysRaw <= 14 ? daysRaw : null;
     if (!name) { showToast('Rave needs a name ✍️'); return; }
@@ -22763,10 +23030,10 @@ async function doProfilePasswordChange() {
       const before = { name: f.name, date: f.date, location: f.location, color: f.color, days: f.days };
       const after = { name, date, location, color, days };
       const changedFields = Object.keys(after).filter(k => String(before[k] ?? '') !== String(after[k] ?? ''));
-      Object.assign(f, { name, date, location, color, days });
+      Object.assign(f, { name, date, location, color, days, lat, lng });
       showToast(`✅ Updated ${name}`);
       if (currentUser) {
-        dbSaveFestival({ name, date, location, color, days }, editingFestivalId);
+        dbSaveFestival({ name, date, location, color, days, lat, lng }, editingFestivalId);
         if (changedFields.length) {
           logAudit({ action: 'festival.update', entityType: 'festival', entityId: editingFestivalId, metadata: { fields: changedFields } });
         }
@@ -22775,7 +23042,7 @@ async function doProfilePasswordChange() {
       const dupe = findFestivalByName(name, date);
       if (dupe) { showToast(`"${dupe.name}" already exists`); return; }
       const tempId = 'temp_' + Date.now();
-      const newFest = { id: tempId, name, date, location, color, days, createdBy: currentUser?.id || null };
+      const newFest = { id: tempId, name, date, location, color, days, lat, lng, createdBy: currentUser?.id || null };
       festivals.push(newFest);
       showToast(`🎉 Added ${name}`);
       const _isPastRave = date && new Date(date + 'T23:59:59') < new Date();
@@ -22804,7 +23071,7 @@ async function doProfilePasswordChange() {
         addNotification(_raveMsg);
       }
       if (currentUser) {
-        dbSaveFestival({ name, date, location, color, days }, null).then(dbId => {
+        dbSaveFestival({ name, date, location, color, days, lat, lng }, null).then(dbId => {
           if (!dbId) return;
           newFest.id = dbId;
           // If a racing loadAllData() cleared the array before the save returned,

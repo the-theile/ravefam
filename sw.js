@@ -1,4 +1,4 @@
-const CACHE = 'ravefam-v7';
+const CACHE = 'ravefam-v8';
 const PRECACHE = [
   '/',
   '/app.html',
@@ -29,8 +29,11 @@ function isHTMLRequest(req) {
 self.addEventListener('fetch', e => {
   const req = e.request;
   const url = req.url;
-  // Always go to network for Supabase API and external resources
-  if (url.includes('supabase.co') || url.includes('fonts.') || url.includes('cdn.')) return;
+  // Always go to network for Supabase API and external resources — includes
+  // Nominatim (rave location autocomplete + geocoding) and Open-Meteo (rave
+  // weather chips), whose responses shouldn't be served from the SW cache.
+  if (url.includes('supabase.co') || url.includes('fonts.') || url.includes('cdn.')
+      || url.includes('nominatim.openstreetmap.org') || url.includes('open-meteo.com')) return;
   if (req.method !== 'GET') return;
 
   // Network-first for HTML/navigation: the whole app lives in app.html,
