@@ -119,6 +119,28 @@ test.describe('nearby raves filter', () => {
     await expect(list).not.toContainText('Awakenings');
   });
 
+  test('turning on Nearby defaults the time axis to Upcoming when none is set', async ({ page }) => {
+    await bootAuthedApp(page, { data: seedWithFestivalCoords() });
+    await page.evaluate(() => switchTab('events'));
+    await page.evaluate((loc) => {
+      saveUserGeo({ ...loc, label: 'Boom, BE', source: 'manual' });
+      toggleNearbyFilter();
+    }, BOOM_BE);
+    expect(await page.evaluate(() => _raveFilters.time)).toBe('upcoming');
+    expect(await page.evaluate(() => _raveFilters.distance)).toBe(50);
+  });
+
+  test('turning on Nearby leaves an already-chosen time filter alone', async ({ page }) => {
+    await bootAuthedApp(page, { data: seedWithFestivalCoords() });
+    await page.evaluate(() => switchTab('events'));
+    await page.evaluate((loc) => {
+      saveUserGeo({ ...loc, label: 'Boom, BE', source: 'manual' });
+      toggleRaveFilter('time', 'past'); // explicit choice, made before Nearby is turned on
+      toggleNearbyFilter();
+    }, BOOM_BE);
+    expect(await page.evaluate(() => _raveFilters.time)).toBe('past');
+  });
+
   test('geolocation denial falls back to the manual location modal', async ({ page }) => {
     await bootAuthedApp(page);
     await page.evaluate(() => switchTab('events'));
