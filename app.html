@@ -7737,7 +7737,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.2.1';
+  const APP_VERSION = '1.2.2';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -22427,9 +22427,10 @@ async function doProfilePasswordChange() {
       });
     }
 
-    const nearbySort = (a, b) => (festivalDistance(a, userLoc) ?? Infinity) - (festivalDistance(b, userLoc) ?? Infinity);
-    const up = filtered.filter(f => f._d && f._d >= TODAY).sort(nearbyRadius != null ? nearbySort : (a,b) => a._d - b._d);
-    const past = filtered.filter(f => !f._d || f._d < TODAY).sort(nearbyRadius != null ? nearbySort : (a,b) => (b._d||0) - (a._d||0));
+    // Nearby only narrows the list to the chosen radius — it doesn't change sort
+    // order. Date stays the sort key so the soonest nearby rave surfaces first.
+    const up = filtered.filter(f => f._d && f._d >= TODAY).sort((a,b) => a._d - b._d);
+    const past = filtered.filter(f => !f._d || f._d < TODAY).sort((a,b) => (b._d||0) - (a._d||0));
 
     const weatherCache = loadWeatherCache();
     const BULB_ROW_HTML = Array.from({ length: 11 }, (_, i) => `<div class="marquee-bulb" style="animation-delay:${(i * 0.12).toFixed(2)}s"></div>`).join('');
