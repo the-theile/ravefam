@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { bootAuthedApp } = require('./helpers');
+const { bootAuthedApp, seedData, TEST_UID } = require('./helpers');
 
 async function refetch(page, expr) {
   return page.evaluate(async (src) => { await loadAllData(); return eval(src); }, expr);
@@ -104,6 +104,41 @@ test.describe('ravers / profile', () => {
     await page.evaluate(() => saveProfile());
     const genres = await refetch(page, "squad.find(r=>r.isYou).genres");
     expect(genres).not.toContain(skipped);
+  });
+
+  test('creator still sees a crew-less raver after their invite is merged into an existing account', async ({ page }) => {
+    // Reproduces: Theile creates Jose without adding him to a crew, sends Jose
+    // an invite link, Jose (already signed up elsewhere) redeems it — the
+    // client merges the stub into Jose's own raver and marks the stub
+    // 'merged'. With no crew link ever created, Theile's only tie to Jose was
+    // that merged stub, so Jose must still surface via merged_into.
+    const data = seedData();
+    data.ravers.push({
+      id: 'r-jose', name: 'Jose', handle: 'jose',
+      is_you: false, created_by: 'jose-uid', claimed_by: 'jose-uid', status: 'claimed',
+      base: 'Madrid, ES', gradient: 'linear-gradient(135deg,#FF2D78,#BF00FF)',
+      avatar_url: null, blocked_tags: [], genres: [],
+      instagram: '', radiate: '', phone: '', phone_visible: false,
+      met_story: '', notes: '', qr_token: 'qr-jose',
+      vibe_tags: [], custom_vibe_tags: [], deleted_at: null,
+    });
+    data.ravers.push({
+      id: 'r-jose-stub', name: 'Jose', handle: '',
+      is_you: false, created_by: TEST_UID, claimed_by: null, status: 'merged', merged_into: 'r-jose',
+      base: '', gradient: 'linear-gradient(135deg,#FF2D78,#BF00FF)',
+      avatar_url: null, blocked_tags: [], genres: [],
+      instagram: '', radiate: '', phone: '', phone_visible: false,
+      met_story: '', notes: '', qr_token: 'qr-jose-stub',
+      vibe_tags: [], custom_vibe_tags: [], deleted_at: null,
+    });
+    await bootAuthedApp(page, { data });
+
+    const jose = await refetch(page, "squad.find(r => r.id === 'r-jose')");
+    expect(jose).toBeTruthy();
+    expect(jose.name).toBe('Jose');
+
+    const stubStillShown = await refetch(page, "squad.some(r => r.id === 'r-jose-stub')");
+    expect(stubStillShown).toBe(false);
   });
 
   test('raver search filters the grid', async ({ page }) => {
