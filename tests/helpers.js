@@ -337,8 +337,13 @@ async function installSupabaseStub(page, opts = {}) {
               return { data: rows.map(r => maskRaver(r, { includeSelfOnlyFields: false })), error: null };
             }
             if (fn === 'get_own_and_created_ravers') {
+              const mergedStubCreators = new Set(
+                (store.ravers || [])
+                  .filter(stub => stub.merged_into != null && String(stub.created_by) === String(uid))
+                  .map(stub => String(stub.merged_into))
+              );
               const rows = (store.ravers || []).filter(r =>
-                (String(r.created_by) === String(uid) || String(r.claimed_by) === String(uid))
+                (String(r.created_by) === String(uid) || String(r.claimed_by) === String(uid) || mergedStubCreators.has(String(r.id)))
                 && r.status !== 'merged' && !r.deleted_at);
               return { data: rows.map(r => maskRaver(r, { includeSelfOnlyFields: true })), error: null };
             }
