@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { bootAuthedApp, seedData } = require('./helpers');
+const { bootAuthedApp, installSupabaseStub, seedData } = require('./helpers');
 
 test.describe('QR invite modal', () => {
   test('shows the invite code derived from the raver qr_token', async ({ page }) => {
@@ -128,5 +128,44 @@ test.describe('crew invite link', () => {
     await page.evaluate(async () => { await generateAndShareCrewInvite('c1'); });
     const clip = await page.evaluate(() => navigator.clipboard.readText());
     expect(clip).toContain('?join=inv-c1');
+  });
+});
+
+test.describe('pre-auth invite intercept', () => {
+  // Regression test for a bug where #claim-intercept opened correctly (the
+  // .open class was applied and its content was populated) but was rendered
+  // completely hidden behind #auth-screen (z-index 1000 vs the intercept's
+  // old z-index 65), so a scanning friend landed on a bare signup form with
+  // no explanation of what they'd been invited to.
+  test('shows the crew-personalized banner above the auth form for a ?claim= link', async ({ page }) => {
+    const errors = require('./helpers').collectPageErrors(page);
+    await installSupabaseStub(page, { session: null, data: seedData() });
+    await page.goto('/app.html?claim=qr-sam'); // r-sam is in crew c1 "Bass Syndicate"
+
+    const intercept = page.locator('#claim-intercept');
+    await expect(intercept).toHaveClass(/open/);
+    await expect(page.locator('#intercept-title')).toContainText('Bass Syndicate');
+    await expect(page.locator('#intercept-crew-name')).toContainText('Bass Syndicate');
+
+    // The banner must actually be the topmost element, not just logically "open".
+    const topId = await page.evaluate(() => document.elementFromPoint(
+      window.innerWidth / 2, window.innerHeight / 2
+    )?.closest('#claim-intercept')?.id);
+    expect(topId).toBe('claim-intercept');
+    expect(errors).toEqual([]);
+  });
+
+  test('shows the crew-personalized banner above the auth form for a ?join= link', async ({ page }) => {
+    await installSupabaseStub(page, { session: null, data: seedData() });
+    await page.goto('/app.html?join=inv-c1'); // c1 "Bass Syndicate" invite token
+
+    const intercept = page.locator('#claim-intercept');
+    await expect(intercept).toHaveClass(/open/);
+    await expect(page.locator('#intercept-title')).toContainText('Bass Syndicate');
+
+    const topId = await page.evaluate(() => document.elementFromPoint(
+      window.innerWidth / 2, window.innerHeight / 2
+    )?.closest('#claim-intercept')?.id);
+    expect(topId).toBe('claim-intercept');
   });
 });
