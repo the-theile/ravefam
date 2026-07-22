@@ -7708,7 +7708,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.1.1';
+  const APP_VERSION = '1.1.2';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -9303,7 +9303,7 @@ async function doProfilePasswordChange() {
     if (!meta) return;
     const message = `${meta.emoji} +${ev.amount} ${meta.name} points`;
     showToast(message);
-    if (currentUser) dbAddNotification(currentUser.id, null, message, 'points_earned', { track: ev.track, amount: ev.amount, event_type: ev.event_type });
+    if (currentUser) dbAddNotification(currentUser.id, null, message, 'points_earned', { track: ev.track, amount: ev.amount, event_type: ev.event_type }, ev.id);
   }
 
   // Same realtime channel also carries crew_feed_events, which is how a
@@ -10814,15 +10814,23 @@ async function doProfilePasswordChange() {
 
   // ===== NOTIFICATION DB HELPERS =====
 
-  async function dbAddNotification(userId, crewId, message, type = null, data = null) {
+  async function dbAddNotification(userId, crewId, message, type = null, data = null, pointEventId = null) {
     if (!userId) return;
-    const { error } = await sb.from('notifications').insert({
+    const row = {
       user_id: userId,
       crew_id: crewId || null,
       message,
       type: type || null,
-      data: data || null
-    });
+      data: data || null,
+      point_event_id: pointEventId || null
+    };
+    // point_event_id-tagged notifications go through upsert+ignoreDuplicates
+    // against a unique index on that column, so a redelivered realtime event
+    // (reconnect, tab refocus) can't produce a second notification row for
+    // the same point_events award.
+    const { error } = pointEventId
+      ? await sb.from('notifications').upsert(row, { onConflict: 'point_event_id', ignoreDuplicates: true })
+      : await sb.from('notifications').insert(row);
     if (error) console.error('notification insert error', error);
   }
 
