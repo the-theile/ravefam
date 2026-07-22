@@ -2470,6 +2470,116 @@
   }
   .coachmark-dismiss:hover { transform: translateY(-1px); }
 
+  /* Contextual help link — small inline "? How this works" affordance dropped
+     next to non-obvious controls (crew status, Game Plan). Always opens the
+     Help Center tab of the App Guide modal, filtered to the relevant topic —
+     unlike coachmarks, it's available on demand, not just first-encounter. */
+  .help-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.72rem;
+    color: var(--neon-cyan);
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .help-link:hover { text-decoration: underline; }
+
+  /* App Guide modal — Overview / Help Center tabs */
+  .help-center-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .help-center-tab {
+    flex: 1;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.76rem;
+    letter-spacing: 0.3px;
+    padding: 9px 10px;
+    border-radius: 100px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .help-center-tab.active {
+    background: var(--neon-pink);
+    border-color: var(--neon-pink);
+    color: #fff;
+  }
+  .help-search-input {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 100px;
+    padding: 10px 16px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.84rem;
+    color: var(--text);
+    margin-bottom: 14px;
+  }
+  .help-search-input:focus { outline: none; border-color: var(--neon-cyan); }
+  .help-category-label {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--neon-cyan);
+    margin: 16px 0 6px;
+  }
+  .help-category-label:first-child { margin-top: 0; }
+  .help-faq-item {
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    margin-bottom: 6px;
+    overflow: hidden;
+  }
+  .help-faq-q {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 14px;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.8rem;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .help-faq-q .chevron {
+    flex-shrink: 0;
+    font-size: 0.65rem;
+    color: var(--muted);
+    transition: transform 0.15s ease;
+  }
+  .help-faq-item.open .help-faq-q .chevron { transform: rotate(180deg); }
+  .help-faq-a {
+    max-height: 0;
+    overflow: hidden;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.78rem;
+    line-height: 1.55;
+    color: var(--muted);
+    transition: max-height 0.2s ease;
+  }
+  .help-faq-item.open .help-faq-a { max-height: 400px; }
+  .help-faq-a-inner { padding: 0 14px 12px; }
+  .help-faq-empty {
+    text-align: center;
+    padding: 24px 12px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.82rem;
+    color: var(--muted);
+  }
+
   /* Offline banner */
   #offline-banner {
     position: fixed;
@@ -7003,19 +7113,34 @@
   </div>
 </div>
 
-<!-- App Guide Modal — manually reopenable "how RaveFam works" walkthrough -->
+<!-- App Guide Modal — manually reopenable "how RaveFam works" walkthrough,
+     now doubling as the searchable Help Center (Overview tab = the original
+     quick tour; Help Center tab = full searchable FAQ, opened directly to a
+     given category by contextual "?" links via openAppGuide({category})). -->
 <div class="modal-overlay" id="app-guide-overlay" onclick="if(event.target===this)closeAppGuide()">
   <div class="modal" style="max-width:460px;text-align:left;max-height:80vh;overflow-y:auto;">
     <div class="modal-title">🎪 How RaveFam Works</div>
-    <p style="font-size:0.8rem;color:var(--muted);margin-bottom:16px;line-height:1.5;">A quick tour of the core features — come back here anytime from the 📖 Guide button.</p>
-    <div class="onboard-features">
-      <div class="onboard-feat"><span class="onboard-feat-icon">🎪</span><span><strong>Crews</strong> — your fam's home base. Lead your own or join one someone shares with you.</span></div>
-      <div class="onboard-feat"><span class="onboard-feat-icon">🤫</span><span><strong>Start solo, in Secret</strong> — a new crew begins private. Add ravers you already know as unclaimed profiles from "Add Member" — no account needed for them yet — to track your whole fam before anyone's even signed up. Nothing is sent or notified while you're Secret.</span></div>
-      <div class="onboard-feat"><span class="onboard-feat-icon">🟢</span><span><strong>Level up to Recruiting</strong> — when you're ready, flip your crew from Secret to Recruiting from its detail page. Your tribe gets notified, QR codes and invite links go live so people can claim the spot you saved for them, and crew Polls and Jams (shared playlists) unlock. Your Dream Board wish-list works anytime, even while Secret.</span></div>
-      <div class="onboard-feat"><span class="onboard-feat-icon">🗓️</span><span><strong>Raves</strong> — browse events and mark yourself Going or Interested so your crew knows the plan.</span></div>
-      <div class="onboard-feat"><span class="onboard-feat-icon">🎵</span><span><strong>Your profile</strong> — genres, favorite artists, and vibe tags help your crew (and future crews) know your sound.</span></div>
-      <div class="onboard-feat"><span class="onboard-feat-icon">📡</span><span><strong>Invites</strong> — scanning a QR or invite link claims a spot a crew leader saved for you, with your details ready to review first.</span></div>
-      <div class="onboard-feat"><span class="onboard-feat-icon">🔒</span><span><strong>Privacy</strong> — control what your crew and other ravers can see, anytime from <a href="#" onclick="closeAppGuide();openPrivacySettingsModal(squad.find(r=&gt;r.isYou)?.id);return false;" style="color:var(--neon-pink);text-decoration:none;font-weight:600;">Privacy Settings</a>.</span></div>
+    <div class="help-center-tabs">
+      <button type="button" class="help-center-tab active" id="guide-tab-btn-overview" onclick="switchGuideTab('overview')">Overview</button>
+      <button type="button" class="help-center-tab" id="guide-tab-btn-faq" onclick="switchGuideTab('faq')">🔍 Help Center</button>
+    </div>
+    <div id="guide-tab-overview">
+      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:16px;line-height:1.5;">A quick tour of the core features — come back here anytime from the 📖 Guide button.</p>
+      <div class="onboard-features">
+        <div class="onboard-feat"><span class="onboard-feat-icon">🎪</span><span><strong>Crews</strong> — your fam's home base. Lead your own or join one someone shares with you.</span></div>
+        <div class="onboard-feat"><span class="onboard-feat-icon">🤫</span><span><strong>Start solo, in Secret</strong> — a new crew begins private. Add ravers you already know as unclaimed profiles from "Add Member" — no account needed for them yet — to track your whole fam before anyone's even signed up. Nothing is sent or notified while you're Secret.</span></div>
+        <div class="onboard-feat"><span class="onboard-feat-icon">🟢</span><span><strong>Level up to Recruiting</strong> — when you're ready, flip your crew from Secret to Recruiting from its detail page. Your tribe gets notified, QR codes and invite links go live so people can claim the spot you saved for them, and crew Polls and Jams (shared playlists) unlock. Your Dream Board wish-list works anytime, even while Secret.</span></div>
+        <div class="onboard-feat"><span class="onboard-feat-icon">🗺️</span><span><strong>Game Plan</strong> — every rave you share with a crew gets its own board: Huddle, Checklist, Roles, Rides, Stay, and Outfit, so logistics live in one place.</span></div>
+        <div class="onboard-feat"><span class="onboard-feat-icon">✨</span><span><strong>PLUR Points</strong> — real activity across Peace, Love, Unity, and Respect earns you points, verified by RaveFAM. Tap your points bar on your profile anytime to see how.</span></div>
+        <div class="onboard-feat"><span class="onboard-feat-icon">🗓️</span><span><strong>Raves</strong> — browse events and mark yourself Going or Interested so your crew knows the plan.</span></div>
+        <div class="onboard-feat"><span class="onboard-feat-icon">🎵</span><span><strong>Your profile</strong> — genres, favorite artists, and vibe tags help your crew (and future crews) know your sound.</span></div>
+        <div class="onboard-feat"><span class="onboard-feat-icon">📡</span><span><strong>Invites</strong> — scanning a QR or invite link claims a spot a crew leader saved for you, with your details ready to review first.</span></div>
+        <div class="onboard-feat"><span class="onboard-feat-icon">🔒</span><span><strong>Privacy</strong> — control what your crew and other ravers can see, anytime from <a href="#" onclick="closeAppGuide();openPrivacySettingsModal(squad.find(r=&gt;r.isYou)?.id);return false;" style="color:var(--neon-pink);text-decoration:none;font-weight:600;">Privacy Settings</a>.</span></div>
+      </div>
+    </div>
+    <div id="guide-tab-faq" style="display:none;">
+      <input type="text" class="help-search-input" id="help-search-input" placeholder="Search for help… (e.g. &quot;carpool&quot;, &quot;locked in&quot;)" oninput="renderHelpFAQ(this.value)" autocomplete="off">
+      <div id="help-faq-results"></div>
     </div>
     <div style="margin-top:18px;border-top:1px solid rgba(255,255,255,0.08);padding-top:16px;">
       <button type="button" onclick="toggleGuideSupportWidget()" style="cursor:pointer;user-select:none;width:100%;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:rgba(255,230,0,0.08);border:1px solid rgba(255,230,0,0.25);border-radius:100px;padding:10px 18px;font-family:'Outfit',sans-serif;font-weight:700;font-size:0.78rem;color:var(--neon-yellow);letter-spacing:1px;text-transform:uppercase;">☕ Support the build</button>
@@ -13456,7 +13581,7 @@ async function doProfilePasswordChange() {
       </div>
       <div class="crew-status-zone">
         <div class="crew-status-zone-header">
-          <span class="crew-status-zone-label">Status</span>
+          <span class="crew-status-zone-label">Status <a href="#" class="help-link" onclick="openAppGuide({category:'crew-modes'});return false;">❓ How this works</a></span>
           <span style="font-size:0.78rem;color:var(--muted);">${crew.members.length} member${crew.members.length!==1?'s':''}</span>
         </div>
         <div class="status-meaning-compact">${meaning}</div>
@@ -14904,6 +15029,17 @@ async function doProfilePasswordChange() {
     if (btnEl) btnEl.classList.add('active');
     if (leavingHuddle) teardownHuddleLive();
     if (section === 'huddle') openGamePlanHuddle(_gamePlanActiveCrewId, _gamePlanActiveFestivalId);
+    // Roles, Rides, and Stay all share the same "claim an open slot" pattern
+    // (driver/rider, host/guest) — it's the least self-explanatory part of
+    // Game Plan, so one shared tip covers whichever of the three is opened
+    // first rather than repeating it per tab.
+    if (['roles', 'logistics', 'stay'].includes(section)) {
+      queueCoachmark('game_plan_claim_slot', {
+        targetEl: document.querySelector(`#game-plan-section-${section} .section-banner`),
+        title: '🙋 Claim your spot',
+        body: "Tap an open slot to claim a role, seat, or place to stay — tap your own claim again to back out. Everyone can see who's covering what before the rave."
+      });
+    }
   }
 
   async function openGamePlanHuddle(crewId, festivalId) {
@@ -14963,6 +15099,7 @@ async function doProfilePasswordChange() {
       <div class="game-plan-shortcuts">
         <button class="btn btn-ghost" onclick="jumpToGamePlanJams('${escCrewId}','${escHtml(activeFestId)}')">🎧 Jams</button>
         <button class="btn btn-ghost" onclick="jumpToGamePlanArchive('${escCrewId}','${escHtml(activeFestId)}')">📸 Archive</button>
+        <button class="btn btn-ghost" onclick="openAppGuide({category:'game-plan'})">❓ How this works</button>
       </div>
       <div class="game-plan-section-tabs">${sectionTabs}</div>
       <div id="game-plan-section-huddle" class="game-plan-section" style="${activeSection === 'huddle' ? '' : 'display:none;'}">
@@ -17619,6 +17756,11 @@ async function doProfilePasswordChange() {
     if (!root) return;
     root.innerHTML = vendorVillageShellHTML();
     loadVendorVillageData();
+    queueCoachmark('vendor_village_intro', {
+      targetEl: document.querySelector('.vv-subtabs'),
+      title: '🏪 Welcome to Vendor Village',
+      body: "Browse local vendors your crew recommends, save your favorites, and add your own — reviews and badges help everyone find the good stuff."
+    });
   }
 
   function vendorVillageShellHTML() {
@@ -23169,10 +23311,19 @@ async function doProfilePasswordChange() {
     showToast('🔕 Beacon push notifications off');
   }
 
-  function openAppGuide() {
+  // opts.category, when passed by a contextual "?" link (e.g. crew status
+  // zone, Game Plan header), jumps straight to that Help Center category
+  // instead of the default Overview tab.
+  function openAppGuide(opts) {
     const widget = document.getElementById('guide-support-widget');
     if (widget) widget.style.display = 'none';
     document.getElementById('app-guide-overlay').classList.add('open');
+    if (opts && opts.category) {
+      switchGuideTab('faq');
+      const input = document.getElementById('help-search-input');
+      if (input) input.value = '';
+      renderHelpFAQ('', opts.category);
+    }
   }
 
   function closeAppGuide() {
@@ -23182,6 +23333,143 @@ async function doProfilePasswordChange() {
   function toggleGuideSupportWidget() {
     const el = document.getElementById('guide-support-widget');
     if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+  }
+
+  // ===== HELP CENTER =====
+  // Searchable FAQ living inside the App Guide modal, alongside its original
+  // Overview tour. HELP_ARTICLES is the single source of truth for both this
+  // in-app search and contact.html's public FAQ — keep the two in sync by
+  // hand when either changes (contact.html has no JS bundle to share this
+  // array with).
+  const HELP_CATEGORY_LABELS = {
+    'getting-started': 'Getting Started',
+    'crew-modes': 'Crews & Modes',
+    'game-plan': 'Game Plan',
+    'huddle': 'Huddle & Beacons',
+    'plur-points': 'PLUR Points',
+    'vendor-village': 'Vendor Village',
+    'account': 'Account & Privacy',
+    'tips': 'Tips & Help'
+  };
+
+  const HELP_ARTICLES = [
+    { id: 'what-is-ravefam', category: 'getting-started', q: 'What is RaveFAM?',
+      a: "Your rave crew's home base — one place to plan raves together: who's going, the plan, who's driving, where you're staying, and the group chat that pulls it all together." },
+    { id: 'create-join-crew', category: 'getting-started', q: 'How do I create or join a crew?',
+      a: 'Tap + on the Crews tab to start your own, or ask a crew leader to switch their crew to Recruiting and share their QR code or invite link with you.',
+      keywords: ['qr', 'invite link'] },
+    { id: 'multiple-crews', category: 'getting-started', q: 'Can I be in multiple crews?',
+      a: 'Yes — no limit. Join or lead as many crews as you like.' },
+    { id: 'crew-modes-explained', category: 'crew-modes', q: "What's the difference between Secret, Recruiting, and Locked In?",
+      a: "<strong>Secret</strong> is the default — invisible to everyone but you, so you can quietly build your crew list first. <strong>Recruiting</strong> opens things up: your tribe gets notified and QR/invite links go live so people can claim their spot. <strong>Locked In</strong> seals the roster — no new members, and your crew gets a heads-up that it's official. You can flip back to Recruiting anytime you need to add someone (no going back to Secret once you leave it).",
+      keywords: ['status', 'visibility'] },
+    { id: 'crew-visibility', category: 'crew-modes', q: 'Who can see my crew?',
+      a: "While Secret, only you. Once Recruiting or Locked In, your crew's existing members can see it — outsiders still need an invite link or QR code to join." },
+    { id: 'leave-crew', category: 'crew-modes', q: 'How do I leave or remove a crew?',
+      a: 'Open the crew, tap the settings icon, and choose Leave Crew. Crew Leads: leadership transfer is on the way — for now email <a href="mailto:bump@myravefam.com" style="color:var(--neon-cyan);">bump@myravefam.com</a> and we\'ll sort it.' },
+    { id: 'game-plan-intro', category: 'game-plan', q: 'What is the Game Plan tab?',
+      a: "Once you and a crewmate are both marked as going to the same rave, that rave gets its own Game Plan — a board with Huddle chat, Checklist, Roles, Rides, Stay, and Outfit tabs so logistics live in one place instead of scattered texts." },
+    { id: 'game-plan-checklist', category: 'game-plan', q: 'How does Checklist work?',
+      a: 'Add tasks your crew needs done before the rave, grouped by phase — anyone can claim one to own it.',
+      keywords: ['tasks', 'todo'] },
+    { id: 'game-plan-roles', category: 'game-plan', q: 'How do Roles work?',
+      a: "Give people a job for the rave — driver, navigator, vibe curator, whatever your crew needs. One person can hold multiple roles, and a role can be shared by more than one person." },
+    { id: 'game-plan-rides', category: 'game-plan', q: 'How does carpool claiming work in Rides?',
+      a: "Whoever's driving posts their car with an optional seat count; crewmates tap an open seat to claim it. Once every seat's claimed, the ride shows Full. Tap your own claim again to back out.",
+      keywords: ['carpool', 'driver', 'seats', 'logistics'] },
+    { id: 'game-plan-stay', category: 'game-plan', q: 'How does Stay work?',
+      a: "Same idea as Rides but for lodging — post the place you're staying and, if you've got room, open spots for crewmates to claim. Leave the spot count blank if you're just sharing where you'll be, not offering a place.",
+      keywords: ['lodging', 'hotel', 'airbnb', 'host', 'guest'] },
+    { id: 'game-plan-outfit', category: 'game-plan', q: "What's Outfit for?",
+      a: 'Coordinate looks and themes with your crew before the rave — drop photo references so everyone knows the vibe.' },
+    { id: 'huddle-intro', category: 'huddle', q: 'What is Huddle?',
+      a: "Your crew's real-time group chat — one for the crew overall, plus a dedicated one per rave inside its Game Plan." },
+    { id: 'beacon-intro', category: 'huddle', q: "What's a Beacon?",
+      a: "An urgent ping that cuts through the chat when it actually matters — lost at the fest, meetup change, whatever. Tap the beacon button inside Huddle to send one." },
+    { id: 'plur-points-intro', category: 'plur-points', q: 'What are PLUR Points?',
+      a: 'Real activity earns you points across Peace, Love, Unity, and Respect — verified by RaveFAM. Tap the PLUR bar on any profile to see exactly what earns points and check your milestones.',
+      keywords: ['peace', 'love', 'unity', 'respect', 'milestones'] },
+    { id: 'vendor-village-intro', category: 'vendor-village', q: 'What is Vendor Village?',
+      a: 'A crew-sourced directory of local vendors — browse what other ravers recommend, save your favorites, and add your own with reviews and badges to help everyone find the good stuff.' },
+    { id: 'delete-account', category: 'account', q: 'How do I delete my account?',
+      a: 'Email <a href="mailto:bump@myravefam.com" style="color:var(--neon-cyan);">bump@myravefam.com</a> with subject "Delete my account" — we\'ll process it within 30 days, including all associated data.' },
+    { id: 'forgot-password', category: 'account', q: 'I forgot my password — what do I do?',
+      a: 'On the login screen tap Forgot password and enter your email. Check spam if the reset link doesn\'t show up in a few minutes.' },
+    { id: 'remove-unclaimed-profile', category: 'account', q: 'A crew leader added me before I signed up — how do I get removed?',
+      a: 'Email <a href="mailto:bump@myravefam.com" style="color:var(--neon-cyan);">bump@myravefam.com</a> with subject "Remove my profile" and we\'ll delete it within 30 days, no questions asked.' },
+    { id: 'is-free', category: 'account', q: 'Is RaveFAM free to use?',
+      a: "Yes, fully free to sign up and use, no card required. There's an optional Ko-fi tip jar in the App Guide if you want to support the build." },
+    { id: 'security-report', category: 'account', q: 'I found a security vulnerability. Who do I tell?',
+      a: 'Email <a href="mailto:bump@myravefam.com" style="color:var(--neon-cyan);">bump@myravefam.com</a> immediately with subject "Security Issue" — we take these seriously and respond fast.' },
+    { id: 'tips-toggle', category: 'tips', q: 'How do I turn tips on/off or see them again?',
+      a: 'Open Settings → Privacy &amp; Notifications. Toggle "Tips &amp; hints" off to stop coachmarks from appearing, or tap Reset to see every tip again, including ones you\'ve already dismissed.',
+      keywords: ['coachmark', 'reset tips'] }
+  ];
+
+  function switchGuideTab(tab) {
+    document.getElementById('guide-tab-btn-overview').classList.toggle('active', tab === 'overview');
+    document.getElementById('guide-tab-btn-faq').classList.toggle('active', tab === 'faq');
+    document.getElementById('guide-tab-overview').style.display = tab === 'overview' ? '' : 'none';
+    document.getElementById('guide-tab-faq').style.display = tab === 'faq' ? '' : 'none';
+    if (tab === 'faq' && !document.getElementById('help-faq-results').childElementCount) renderHelpFAQ('');
+  }
+
+  function searchHelpArticles(query) {
+    const q = query.toLowerCase().trim();
+    const tokens = q.split(/\s+/).filter(Boolean);
+    const scored = HELP_ARTICLES.map(article => {
+      const qLower = article.q.toLowerCase();
+      const hay = (article.q + ' ' + article.a + ' ' + (article.keywords || []).join(' ')).toLowerCase();
+      let score = 0;
+      if (qLower.includes(q)) score += 10;
+      if (hay.includes(q)) score += 4;
+      tokens.forEach(t => {
+        if (qLower.includes(t)) score += 3;
+        if (hay.includes(t)) score += 1;
+      });
+      return { article, score };
+    }).filter(x => x.score > 0);
+    scored.sort((a, b) => b.score - a.score);
+    return scored.map(x => x.article);
+  }
+
+  // query: free-text search (ignored when categoryFilter is set).
+  // categoryFilter: jump straight to one category (used by contextual "?"
+  // links) — shows every article in that category, first one expanded.
+  function renderHelpFAQ(query, categoryFilter) {
+    const results = document.getElementById('help-faq-results');
+    if (!results) return;
+    let articles;
+    if (categoryFilter) articles = HELP_ARTICLES.filter(a => a.category === categoryFilter);
+    else if (query && query.trim()) articles = searchHelpArticles(query);
+    else articles = HELP_ARTICLES;
+
+    if (!articles.length) {
+      results.innerHTML = `<div class="help-faq-empty">No results for "${escHtml(query)}" — try another word, or email <a href="mailto:bump@myravefam.com" style="color:var(--neon-cyan);">bump@myravefam.com</a>.</div>`;
+      return;
+    }
+    const order = [];
+    const byCat = {};
+    articles.forEach(a => {
+      if (!byCat[a.category]) { byCat[a.category] = []; order.push(a.category); }
+      byCat[a.category].push(a);
+    });
+    results.innerHTML = order.map(cat => `
+      <div class="help-category-label">${escHtml(HELP_CATEGORY_LABELS[cat] || cat)}</div>
+      ${byCat[cat].map(a => `
+        <div class="help-faq-item" id="help-item-${escHtml(a.id)}">
+          <div class="help-faq-q" onclick="toggleHelpFAQItem(this)">${escHtml(a.q)}<span class="chevron">▼</span></div>
+          <div class="help-faq-a"><div class="help-faq-a-inner">${a.a}</div></div>
+        </div>`).join('')}
+    `).join('');
+    if (categoryFilter) results.querySelector('.help-faq-item')?.classList.add('open');
+  }
+
+  function toggleHelpFAQItem(el) {
+    const item = el.closest('.help-faq-item');
+    const wasOpen = item.classList.contains('open');
+    document.querySelectorAll('#help-faq-results .help-faq-item.open').forEach(i => i.classList.remove('open'));
+    if (!wasOpen) item.classList.add('open');
   }
 
   // ── Offline banner ────────────────────────────────────
