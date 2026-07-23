@@ -1323,6 +1323,7 @@
     color: var(--muted);
   }
   .lineup-seen-btn.seen { background: color-mix(in srgb, var(--neon-green) 22%, transparent); }
+  .lineup-seen-btn.missed { background: color-mix(in srgb, var(--neon-pink) 22%, transparent); }
   .profile-actions { display: flex; gap: 10px; margin: 4px 0 12px; }
 
   /* Connect row (IG / Call / Text) */
@@ -7143,6 +7144,13 @@
   </div>
 </div>
 
+<!-- Artist Sightings Modal: per-artist seen/missed toggle across every past rave they're tagged to -->
+<div class="modal-overlay" id="artist-sightings-overlay" onclick="if(event.target===this)closeArtistSightingsModal()">
+  <div class="modal" id="artist-sightings-modal" style="max-height:80vh;overflow-y:auto;">
+    <!-- filled by JS -->
+  </div>
+</div>
+
 <!-- Photo Confirm Modal -->
 <div class="modal-overlay" id="photo-confirm-overlay">
   <div class="modal" id="photo-confirm-modal" style="max-width:340px;text-align:center;">
@@ -7897,7 +7905,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.9.0';
+  const APP_VERSION = '1.10.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -21997,7 +22005,7 @@ async function doProfilePasswordChange() {
       if (!artist) return '';
       const seen = mySightings.has(String(a.artist_id));
       const seenBtn = achieved && canEdit
-        ? `<button type="button" class="lineup-seen-btn${seen ? ' seen' : ''}" title="${seen ? 'You saw this — tap to undo' : 'Mark as seen'}" onclick="dbToggleArtistSighting('${festId}','${a.artist_id}')">${seen ? '✅' : '👁️'}</button>`
+        ? `<button type="button" class="lineup-seen-btn${seen ? ' seen' : ' missed'}" title="${seen ? 'You saw this — tap if you missed it' : 'Marked as missed — tap if you actually caught them'}" onclick="dbToggleArtistSighting('${festId}','${a.artist_id}')">${seen ? '✅' : '❌'}</button>`
         : '';
       const removeBtn = canEdit
         ? `<button type="button" class="tag-remove-btn" title="Remove ${escHtml(artist.name)}" aria-label="Remove ${escHtml(artist.name)}" onclick="lineupRemoveArtist('${festId}','${a.artist_id}')">&nbsp;✕</button>`
@@ -26949,7 +26957,7 @@ async function doProfilePasswordChange() {
         <div class="stats-section-title">🎧 Full List</div>
         <div class="rlog-list">
           ${seen.map(({ artist, count }) => `
-            <div class="rlog-item" style="cursor:default;">
+            <div class="rlog-item" style="cursor:pointer;" onclick="openArtistSightingsModal('${artist.id}')" title="Tap to edit which raves you caught ${escHtml(artist.name)} at">
               <span class="rlog-item-dot" style="background:${artistColor(artist.name)};"></span>
               <div class="rlog-item-main">
                 <div class="rlog-item-name">${escHtml(artist.name)}</div>
@@ -26964,6 +26972,57 @@ async function doProfilePasswordChange() {
     if (genreRows.length && window.Chart) {
       drawStatsChart('artistsGenre', 'artists-genre-chart', statsHBarConfig(genreRows.map(r => r[0]), genreRows.map(r => r[1]), genreRows.map(r => genreColor(r[0]))));
     }
+  }
+
+  // Every past rave this raver attended where a given artist is tagged on the lineup,
+  // regardless of current seen/missed status — backs the Artist Sightings modal so a
+  // tap on "Artists Seen Live" can edit any appearance, not just already-checked ones.
+  function myArtistFestivalHistory(artistId) {
+    const festIdsWithArtist = new Set(
+      artistAppearances.filter(a => String(a.artist_id) === String(artistId)).map(a => String(a.festival_id))
+    );
+    return myAchievedFests()
+      .filter(f => festIdsWithArtist.has(String(f.id)))
+      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  }
+
+  function renderArtistSightingsModalBody(artistId) {
+    const modal = document.getElementById('artist-sightings-modal');
+    if (!modal) return;
+    const artist = findArtistById(artistId);
+    if (!artist) { closeArtistSightingsModal(); return; }
+    const fests = myArtistFestivalHistory(artistId);
+    const rows = fests.map(f => {
+      const seen = myLineupSightingIds(f.id).has(String(artistId));
+      const dateLabel = festDate(f).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      return `
+        <div class="rlog-item" style="cursor:default;">
+          <span class="rlog-item-dot" style="background:${raveSwatchGradient(festColor(f))};"></span>
+          <div class="rlog-item-main">
+            <div class="rlog-item-name">${escHtml(f.name)}</div>
+            <div class="rlog-item-sub">${dateLabel}</div>
+          </div>
+          <button type="button" class="lineup-seen-btn${seen ? ' seen' : ' missed'}" title="${seen ? 'You saw this — tap if you missed it' : 'Marked as missed — tap if you actually caught them'}" onclick="dbToggleArtistSighting('${f.id}','${artistId}').then(()=>renderArtistSightingsModalBody('${artistId}'))">${seen ? '✅' : '❌'}</button>
+        </div>`;
+    }).join('');
+    modal.innerHTML = `
+      <div class="modal-title">${escHtml(artist.name)}</div>
+      <div class="stats-empty-sub" style="margin-bottom:12px;">Tap a rave to toggle whether you caught them live</div>
+      <div class="rlog-list">${rows || '<div class="fest-empty">No past raves with this artist tagged</div>'}</div>
+      <div class="modal-actions"><button class="btn btn-ghost" onclick="closeArtistSightingsModal()">Close</button></div>
+    `;
+  }
+
+  function openArtistSightingsModal(artistId) {
+    renderArtistSightingsModalBody(artistId);
+    document.getElementById('artist-sightings-overlay').classList.add('open');
+  }
+
+  function closeArtistSightingsModal() {
+    document.getElementById('artist-sightings-overlay').classList.remove('open');
+    // A toggle inside the modal can change (or zero out) an artist's count — refresh
+    // the Full List/hero stats behind it so they don't go stale once it's closed.
+    if (document.getElementById('page-artists-seen').classList.contains('active')) renderArtistsSeenPage();
   }
 
   const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];

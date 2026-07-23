@@ -93,6 +93,44 @@ test.describe('stats', () => {
     await expect(page.locator('#page-artists-seen .stats-empty-title')).toHaveText('No lineup data yet');
   });
 
+  test('Artists Seen Live: tapping an artist opens a modal to toggle seen/missed per rave', async ({ page }) => {
+    const d = statsData();
+    // Charlotte de Witte (a1) played two past raves r-you attended; already
+    // checked off at f-past, still unmarked at f-past2 — the modal should
+    // show both with independent toggles, not just a single aggregate action.
+    d.festivals.push({ id: 'f-past2', name: 'Second Past Fest', date: '2021-06-01', location: 'Berlin, DE', color: '#00F5FF', days: 1, deleted_at: null });
+    d.raver_festivals.push({ raver_id: 'r-you', festival_id: 'f-past2' });
+    d.artist_festival_appearances = [
+      { artist_id: 'a1', festival_id: 'f-past' },
+      { artist_id: 'a1', festival_id: 'f-past2' },
+    ];
+    d.raver_artist_sightings = [{ raver_id: 'r-you', artist_id: 'a1', festival_id: 'f-past' }];
+    await bootAuthedApp(page, { data: d });
+    await page.evaluate(() => { switchTab('stats'); openArtistsSeenPage(); });
+
+    await expect(page.locator('#page-artists-seen .rlog-item-name')).toHaveText('Charlotte de Witte');
+    await page.locator('#page-artists-seen .rlog-item', { hasText: 'Charlotte de Witte' }).click();
+
+    const modal = page.locator('#artist-sightings-modal');
+    await expect(modal).toContainText('Past Fest');
+    await expect(modal).toContainText('Second Past Fest');
+    const rows = modal.locator('.rlog-item');
+    await expect(rows).toHaveCount(2);
+    const seenRow = modal.locator('.rlog-item', { hasText: 'Past Fest' }).filter({ hasNotText: 'Second' });
+    const missedRow = modal.locator('.rlog-item', { hasText: 'Second Past Fest' });
+    await expect(seenRow.locator('.lineup-seen-btn')).toHaveClass(/seen/);
+    await expect(missedRow.locator('.lineup-seen-btn')).toHaveClass(/missed/);
+
+    // Toggle the still-unmarked rave to seen — the modal row should flip, and
+    // the aggregate count behind it should go from 1x to 2x once closed.
+    await missedRow.locator('.lineup-seen-btn').click();
+    await expect(missedRow.locator('.lineup-seen-btn')).toHaveClass(/seen/);
+
+    await page.locator('#artist-sightings-modal .modal-actions button', { hasText: 'Close' }).click();
+    await expect(page.locator('#artist-sightings-overlay')).not.toHaveClass(/open/);
+    await expect(page.locator('#page-artists-seen .rlog-item', { hasText: 'Charlotte de Witte' })).toContainText('2x');
+  });
+
   test('Distance Traveled tile prompts to set a location, then shows miles once one is set', async ({ page }) => {
     const d = statsData();
     d.festivals.find(f => f.id === 'f-past').lat = 42.3314;
