@@ -5966,6 +5966,8 @@
   .stats-hero-card:nth-child(2) { --vital-c: var(--neon-cyan); }
   .stats-hero-card:nth-child(3) { --vital-c: var(--neon-green); }
   .stats-hero-card:nth-child(4) { --vital-c: var(--neon-yellow); }
+  .stats-hero-card:nth-child(5) { --vital-c: var(--neon-purple); }
+  .stats-hero-card:nth-child(6) { --vital-c: var(--neon-pink); }
   /* Tappable stat tiles keep their own accent color (the nth-child rotation above);
      hover/press feedback and the chevron just pick up that same --vital-c. */
   .stats-hero-card.tappable {
@@ -6175,6 +6177,10 @@
     width: 24px; text-align: right; flex-shrink: 0;
     font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: 0.75rem; color: var(--neon-cyan);
   }
+
+  /* Chart.js canvas wrapper for Stats charts — height is set inline per-chart based on
+     row count, since the number of categories (cities, artists, months...) varies a lot. */
+  .stats-chart-wrap { position: relative; margin-bottom: 4px; }
 
   .citymap {
     position: relative; width: 100%; height: 280px;
@@ -6989,6 +6995,12 @@
 
     <!-- CITIES HIT MAP PAGE (dedicated, full-view) -->
     <div class="page" id="page-cities-map"><!-- rendered by JS --></div>
+
+    <!-- ARTISTS SEEN LIVE PAGE (dedicated, full-view) -->
+    <div class="page" id="page-artists-seen"><!-- rendered by JS --></div>
+
+    <!-- RAVES ON YOUR RADAR PAGE (dedicated, full-view) -->
+    <div class="page" id="page-raves-radar"><!-- rendered by JS --></div>
 
 </main>
 </div>
@@ -7857,7 +7869,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.4.0';
+  const APP_VERSION = '1.5.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -22542,6 +22554,11 @@ async function doProfilePasswordChange() {
   // precise coordinates shouldn't be persisted to Supabase or visible to anyone else.
   const USER_GEO_KEY = 'rf_user_geo';
 
+  // Which feature opened the location flow — decides what happens on success.
+  // 'nearby' (default) re-runs the Nearby-raves filter; 'stats' just re-renders Stats
+  // (used by the Distance Traveled tile, which shouldn't silently flip on Nearby).
+  let _locPromptSource = 'nearby';
+
   function loadUserGeo() {
     try { return JSON.parse(localStorage.getItem(USER_GEO_KEY)) || null; } catch(e) { return null; }
   }
@@ -22554,13 +22571,31 @@ async function doProfilePasswordChange() {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         saveUserGeo({ lat: pos.coords.latitude, lng: pos.coords.longitude, label: 'Current location', source: 'geo' });
-        activateNearbyFilter();
-        closeNearbyLocModal();
-        renderEvents();
+        onUserLocationSet();
       },
       () => { openNearbyLocModal(); },
       { timeout: 8000, maximumAge: 300000 }
     );
+  }
+
+  // Shared "location successfully set" side effect, branched by whichever feature
+  // asked for it (see _locPromptSource above).
+  function onUserLocationSet() {
+    const source = _locPromptSource;
+    _locPromptSource = 'nearby';
+    closeNearbyLocModal();
+    if (source === 'stats') {
+      loadStatsPage();
+    } else {
+      activateNearbyFilter();
+      renderEvents();
+    }
+  }
+
+  // Entry point for Distance Traveled's "📍 Set Location" tile.
+  function promptLocationForStats() {
+    _locPromptSource = 'stats';
+    requestUserLocation();
   }
 
   function openNearbyLocModal() {
@@ -22620,9 +22655,7 @@ async function doProfilePasswordChange() {
     const item = _userLocItems[idx];
     if (!item) return;
     saveUserGeo({ lat: item.lat, lng: item.lng, label: item.label, source: 'manual' });
-    activateNearbyFilter();
-    closeNearbyLocModal();
-    renderEvents();
+    onUserLocationSet();
   }
 
   function closeUserLocDropdown() {
@@ -25102,6 +25135,49 @@ async function doProfilePasswordChange() {
   let _wrappedStarTaps   = 0;
   let _wrappedUnlocked   = false;
 
+  // ===== Stats charts (Chart.js) — same destroy-before-create pattern as the PM
+  // dashboard's pmDashCharts, kept in its own registry so the two features never collide. =====
+  let _statsCharts = {};
+
+  const STATS_CHART_MUTED = '#8585A5';
+  const STATS_CHART_GRID  = 'rgba(255,255,255,0.06)';
+  const STATS_CHART_TOOLTIP = {
+    backgroundColor: '#16161F', borderColor: 'rgba(255,255,255,0.12)', borderWidth: 1,
+    titleColor: '#F0EEFF', bodyColor: '#F0EEFF', padding: 10, cornerRadius: 8,
+  };
+
+  function drawStatsChart(key, canvasId, config) {
+    const el = document.getElementById(canvasId);
+    if (!el) return;
+    if (_statsCharts[key]) { _statsCharts[key].destroy(); delete _statsCharts[key]; }
+    _statsCharts[key] = new Chart(el, config);
+  }
+
+  // Renders a canvas if Chart.js loaded successfully, else falls back to the given
+  // pre-built HTML (for migrated charts, that's the original custom-CSS bar markup —
+  // nothing is ever lost if the chart library fails to load or is offline).
+  function statsChartOrFallback(canvasId, fallbackHtml, heightPx) {
+    return window.Chart
+      ? `<div class="stats-chart-wrap" style="height:${heightPx}px;"><canvas id="${canvasId}"></canvas></div>`
+      : fallbackHtml;
+  }
+
+  // Shared horizontal single-series bar config (Days/Cities/Artist-genre charts all use this shape).
+  function statsHBarConfig(labels, data, color) {
+    return {
+      type: 'bar',
+      data: { labels, datasets: [{ data, backgroundColor: color, borderRadius: 4 }] },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: STATS_CHART_TOOLTIP },
+        scales: {
+          x: { grid: { color: STATS_CHART_GRID }, ticks: { color: STATS_CHART_MUTED, font: { size: 10 }, precision: 0 }, beginAtZero: true },
+          y: { grid: { display: false }, ticks: { color: '#F0EEFF', font: { size: 11 } } }
+        }
+      }
+    };
+  }
+
   function wrappedStarTap() {
     _wrappedStarTaps++;
     if (_wrappedStarTaps >= 3) {
@@ -25132,6 +25208,52 @@ async function doProfilePasswordChange() {
     if (!you) return [];
     const myFestIds = you.festIds || [];
     return festivals.filter(f => myFestIds.some(id => String(id) === String(f.id)) && isFestAchieved(f));
+  }
+
+  // Raves the signed-in user is RSVP'd to that haven't happened yet — the mirror image
+  // of myAchievedFests(), used by "Raves on Your Radar".
+  function myUpcomingFests() {
+    const you = squad.find(r => r.isYou);
+    if (!you) return [];
+    const myFestIds = you.festIds || [];
+    return festivals.filter(f => myFestIds.some(id => String(id) === String(f.id)) && !isFestAchieved(f));
+  }
+
+  // Distinct artists seen across achieved raves, most-seen first. Each artist is counted
+  // once per achieved festival they appeared at (lineup granularity, not per-set).
+  function myArtistsSeen() {
+    const achievedIds = new Set(myAchievedFests().map(f => String(f.id)));
+    const counts = new Map(); // artistId -> # of achieved fests they appeared at
+    artistAppearances.forEach(a => {
+      if (!achievedIds.has(String(a.festival_id))) return;
+      const id = String(a.artist_id);
+      counts.set(id, (counts.get(id) || 0) + 1);
+    });
+    return [...counts.entries()]
+      .map(([id, count]) => ({ artist: findArtistById(id), count }))
+      .filter(x => x.artist)
+      .sort((a, b) => b.count - a.count || a.artist.name.localeCompare(b.artist.name));
+  }
+
+  // Bridges artists.genres (lowercase, e.g. "techno") into genreColor()'s Title Case keys.
+  function titleCaseGenre(g) {
+    return (g || '').replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  // Total distance "raved" — sum of haversine distance from the user's saved location
+  // (rf_user_geo, device-local) to every achieved festival with resolvable coords.
+  // Returns null (not 0) when no location is set yet, so callers can distinguish
+  // "haven't set a location" from "legitimately 0 miles."
+  function myTravelDistance() {
+    const userLoc = loadUserGeo();
+    if (!userLoc) return null;
+    const fests = myAchievedFests();
+    let total = 0, counted = 0;
+    fests.forEach(f => {
+      const d = festivalDistance(f, userLoc);
+      if (d != null) { total += d; counted++; }
+    });
+    return { total, counted, skipped: fests.length - counted, totalFests: fests.length };
   }
 
   // ===== NPS PROMPT (lightweight, on the Stats page) =====
@@ -25230,6 +25352,12 @@ async function doProfilePasswordChange() {
     const PASSPORT_SLOTS = 9;
     const emptySlots = Math.max(0, PASSPORT_SLOTS - passportFests.length);
 
+    const artistsSeenCount = myArtistsSeen().length;
+    const travelDist = myTravelDistance();
+
+    const upcomingFests = myUpcomingFests().filter(f => f.date).sort((a,b) => festDate(a) - festDate(b));
+    const nextUp = upcomingFests[0] || null;
+
     let html = '';
 
     // Hero numbers
@@ -25253,6 +25381,44 @@ async function doProfilePasswordChange() {
         <div class="stats-hero-number">${ravingSince || '—'}</div>
         <div class="stats-hero-label">Raving Since</div>
       </div>
+      <div class="stats-hero-card tappable" onclick="openArtistsSeenPage()" role="button" tabindex="0" aria-label="View artists you've seen live">
+        <span class="stats-hero-chevron">›</span>
+        <div class="stats-hero-number">${artistsSeenCount || '—'}</div>
+        <div class="stats-hero-label">Artists Seen</div>
+      </div>
+      ${travelDist === null ? `
+      <div class="stats-hero-card tappable" onclick="promptLocationForStats()" role="button" tabindex="0" aria-label="Set your location to see distance traveled">
+        <div class="stats-hero-number">📍</div>
+        <div class="stats-hero-label">Set Location</div>
+      </div>` : `
+      <div class="stats-hero-card">
+        <div class="stats-hero-number">${Math.round(travelDist.total).toLocaleString()}</div>
+        <div class="stats-hero-label">Miles Raved</div>
+      </div>`}
+    </div>`;
+    if (travelDist && travelDist.skipped > 0) {
+      html += `<div style="font-size:0.62rem;color:var(--muted);margin:-10px 0 14px;">📍 ${travelDist.skipped} rave${travelDist.skipped!==1?'s':''} couldn't be mapped yet</div>`;
+    }
+
+    // Raves on Your Radar — upcoming RSVPs, shown regardless of achieved-rave count
+    html += `<div class="stats-section-card">
+      <div class="stats-section-title">📡 Raves on Your Radar <span style="font-size:0.68rem;color:var(--muted);font-weight:400;margin-left:auto;">${upcomingFests.length} upcoming</span></div>
+      ${nextUp ? `
+        <div class="stats-personality" style="background:linear-gradient(135deg, rgba(191,0,255,0.14), rgba(191,0,255,0.04));border-color:rgba(191,0,255,0.3);">
+          <div class="stats-personality-emoji">⏳</div>
+          <div>
+            <div class="stats-personality-label">${escHtml(nextUp.name)}</div>
+            <div class="stats-personality-sub">${(() => { const days = Math.ceil((festDate(nextUp) - TODAY) / 86400000); return `In ${days} day${days!==1?'s':''}`; })()} · ${festDate(nextUp).toLocaleDateString('en-US',{month:'short',day:'numeric'})}${nextUp.location ? ' · ' + escHtml(nextUp.location) : ''}</div>
+          </div>
+        </div>
+        ${upcomingFests.length > 1 ? `<button class="profile-back cyan" style="margin-top:10px;" onclick="openRavesRadarPage()">View all ${upcomingFests.length} upcoming raves →</button>` : ''}
+      ` : `
+        <div class="stats-empty-state" style="padding:20px 0;">
+          <div class="stats-empty-icon">📡</div>
+          <div class="stats-empty-title">Nothing on the radar yet</div>
+          <div class="stats-empty-sub">RSVP to an upcoming rave to see it here.</div>
+        </div>
+      `}
     </div>`;
 
     // Rave Wrapped button (5+ raves, December only) or lock/unlock gate
@@ -25327,7 +25493,7 @@ async function doProfilePasswordChange() {
     document.getElementById('stats-content').innerHTML = html;
   }
 
-  function renderCrewStats() {
+  async function renderCrewStats() {
     const you = squad.find(r => r.isYou);
     const content = document.getElementById('stats-crew-content');
 
@@ -25339,6 +25505,9 @@ async function doProfilePasswordChange() {
       </div>`;
       return;
     }
+
+    await loadChartJs().catch(() => {});
+    if (document.getElementById('stats-crew-panel').style.display === 'none') return; // switched tabs while Chart.js was loading
 
     const selectedCrew = (_statsSelectedCrewId ? crews.find(c => String(c.id) === _statsSelectedCrewId) : null) || crews[0];
     if (!selectedCrew) return;
@@ -25368,6 +25537,36 @@ async function doProfilePasswordChange() {
 
     const ogMember = crewMembers[0];
     const rankIcons = ['🥇','🥈','🥉'];
+
+    // "Most Vibes Left" award — surfaces lb[].vibeCount, computed above but otherwise unused.
+    const maxVibes = Math.max(0, ...lb.map(m => m.vibeCount));
+    const vibeLeaders = lb.filter(m => m.vibeCount === maxVibes && maxVibes > 0);
+    const vibeAwardHtml = vibeLeaders.length ? `
+      <div class="stats-section-card">
+        <div class="stats-personality" style="margin-bottom:0;background:linear-gradient(135deg, rgba(255,230,0,0.14), rgba(255,230,0,0.04));border-color:rgba(255,230,0,0.3);">
+          <div class="stats-personality-emoji">✨</div>
+          <div>
+            <div class="stats-personality-label">${vibeLeaders.map(m => escHtml(m.name)).join(' & ')}</div>
+            <div class="stats-personality-sub">Most Vibes Left — ${maxVibes} vibe${maxVibes !== 1 ? 's' : ''} logged</div>
+          </div>
+        </div>
+      </div>` : '';
+
+    // Crew year-over-year trend — everyone's achieved raves (not just shared ones), so
+    // this stays meaningful even for a single-member crew or one with no shared raves yet.
+    const crewYoyCounts = {};
+    crewFests.forEach(f => {
+      const d = festDate(f);
+      if (!d) return;
+      const y = d.getFullYear();
+      crewYoyCounts[y] = (crewYoyCounts[y] || 0) + 1;
+    });
+    const crewYoyRows = Object.entries(crewYoyCounts).sort((a, b) => Number(a[0]) - Number(b[0]));
+
+    // Crew genre mix — squad genres are already Title Case, no normalization needed.
+    const crewGenreCounts = {};
+    crewMembers.forEach(m => (m.genres || []).forEach(g => { crewGenreCounts[g] = (crewGenreCounts[g] || 0) + 1; }));
+    const crewGenreRows = Object.entries(crewGenreCounts).sort((a, b) => b[1] - a[1]);
 
     let pairwiseHtml = '';
     const youInCrew = you && crewMembers.find(m => String(m.id) === String(you.id));
@@ -25433,9 +25632,26 @@ async function doProfilePasswordChange() {
           </div>`;
         }).join('') : '<div class="archive-empty" style="padding:16px 0;">No raves logged yet — start adding raves to see who leads the pack 🏆</div>'}
       </div>
+      ${vibeAwardHtml}
+      ${crewYoyRows.length ? `
+      <div class="stats-section-card">
+        <div class="stats-section-title">📈 Crew Raves Over Time</div>
+        ${statsChartOrFallback('crew-chart-yoy', crewYoyRows.map(([y, c]) => `<span class="stats-pill">${escHtml(y)} · ${c}</span>`).join(''), Math.max(140, crewYoyRows.length * 34))}
+      </div>` : ''}
+      ${crewGenreRows.length ? `
+      <div class="stats-section-card">
+        <div class="stats-section-title">🧬 Crew Genre Mix</div>
+        ${statsChartOrFallback('crew-chart-genre', crewGenreRows.map(([g, c]) => `<span class="stats-pill cyan">${escHtml(g)} · ${c}</span>`).join(''), Math.max(140, crewGenreRows.length * 34))}
+      </div>` : ''}
       <div id="plur-leaderboard-wrap">${plurLeaderboardCardHTML([], null, true)}</div>
       ${pairwiseHtml}
     `;
+
+    if (window.Chart) {
+      if (crewYoyRows.length) drawStatsChart('crewYoy', 'crew-chart-yoy', statsHBarConfig(crewYoyRows.map(r => r[0]), crewYoyRows.map(r => r[1]), '#FF2D78'));
+      if (crewGenreRows.length) drawStatsChart('crewGenre', 'crew-chart-genre', statsHBarConfig(crewGenreRows.map(r => r[0]), crewGenreRows.map(r => r[1]), crewGenreRows.map(r => genreColor(r[0]))));
+    }
+
     loadAndRenderPlurLeaderboard(selectedCrew.id);
   }
 
@@ -25638,6 +25854,114 @@ async function doProfilePasswordChange() {
     `;
   }
 
+  function openRavesRadarPage() {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-raves-radar').classList.add('active');
+    window.scrollTo(0, 0);
+    renderRavesRadarPage();
+  }
+
+  function renderRavesRadarPage() {
+    const upcoming = myUpcomingFests().filter(f => f.date).sort((a, b) => festDate(a) - festDate(b));
+
+    const body = upcoming.length
+      ? `<div class="rlog-list">${upcoming.map(f => {
+          const d = festDate(f);
+          const days = Math.ceil((d - TODAY) / 86400000);
+          const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          return `<div class="rlog-item" data-fest-id="${escHtml(String(f.id))}" onclick="openRaveEditor(this.dataset.festId)" role="button" tabindex="0">
+            <span class="rlog-item-dot" style="background:${festColor(f)};"></span>
+            <div class="rlog-item-main">
+              <div class="rlog-item-name">${escHtml(f.name)}</div>
+              <div class="rlog-item-sub">${escHtml(dateLabel)}${f.location ? ' · ' + escHtml(f.location) : ''} · in ${days} day${days !== 1 ? 's' : ''}</div>
+            </div>
+            <span class="rlog-item-chevron">›</span>
+          </div>`;
+        }).join('')}</div>`
+      : `<div class="stats-empty-state">
+          <div class="stats-empty-icon">📡</div>
+          <div class="stats-empty-title">Nothing on the radar yet</div>
+          <div class="stats-empty-sub">RSVP to an upcoming rave to see it here.</div>
+        </div>`;
+
+    document.getElementById('page-raves-radar').innerHTML = `
+      <button class="profile-back cyan" onclick="backToStats()">← Rave Life</button>
+      <div class="section-header" style="margin-bottom:14px;">
+        <div class="section-title">Raves on Your Radar 📡</div>
+      </div>
+      ${body}
+    `;
+  }
+
+  function openArtistsSeenPage() {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-artists-seen').classList.add('active');
+    window.scrollTo(0, 0);
+    renderArtistsSeenPage();
+  }
+
+  async function renderArtistsSeenPage() {
+    const page = document.getElementById('page-artists-seen');
+    const seen = myArtistsSeen();
+
+    if (!seen.length) {
+      page.innerHTML = `
+        <button class="profile-back cyan" onclick="backToStats()">← Rave Life</button>
+        <div class="section-header" style="margin-bottom:14px;"><div class="section-title">Artists Seen Live 🎤</div></div>
+        <div class="stats-empty-state">
+          <div class="stats-empty-icon">🎤</div>
+          <div class="stats-empty-title">No lineup data yet</div>
+          <div class="stats-empty-sub">Once your raves' lineups are added, the artists you've seen will show up here.</div>
+        </div>`;
+      return;
+    }
+
+    await loadChartJs().catch(() => {});
+    if (!page.classList.contains('active')) return; // navigated away while Chart.js was loading
+
+    const top = seen[0];
+    // Genre breakdown counts each distinct artist once per genre — a headliner you've
+    // seen 5 times shouldn't drown out everyone else you've only caught once.
+    const genreCounts = {};
+    seen.forEach(({ artist }) => (artist.genres || []).forEach(g => {
+      const label = titleCaseGenre(g);
+      genreCounts[label] = (genreCounts[label] || 0) + 1;
+    }));
+    const genreRows = Object.entries(genreCounts).sort((a, b) => b[1] - a[1]);
+
+    page.innerHTML = `
+      <button class="profile-back cyan" onclick="backToStats()">← Rave Life</button>
+      <div class="section-header" style="margin-bottom:14px;"><div class="section-title">Artists Seen Live 🎤</div></div>
+      <div class="stats-hero-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:18px;">
+        <div class="stats-hero-card"><div class="stats-hero-number">${seen.length}</div><div class="stats-hero-label">Distinct Artists</div></div>
+        <div class="stats-hero-card"><div class="stats-hero-number" style="font-size:1.3rem;">${escHtml(top.artist.name)}</div><div class="stats-hero-label">Most Seen (${top.count}x)</div></div>
+      </div>
+      ${genreRows.length ? `
+      <div class="stats-section-card">
+        <div class="stats-section-title">🧬 Genre Breakdown</div>
+        ${statsChartOrFallback('artists-genre-chart', genreRows.map(([g, c]) => `<span class="stats-pill cyan">${escHtml(g)} · ${c}</span>`).join(''), Math.max(140, genreRows.length * 34))}
+      </div>` : ''}
+      <div class="stats-section-card">
+        <div class="stats-section-title">🎧 Full List</div>
+        <div class="rlog-list">
+          ${seen.map(({ artist, count }) => `
+            <div class="rlog-item" style="cursor:default;">
+              <span class="rlog-item-dot" style="background:${artistColor(artist.name)};"></span>
+              <div class="rlog-item-main">
+                <div class="rlog-item-name">${escHtml(artist.name)}</div>
+                <div class="rlog-item-sub">${(artist.genres || []).map(titleCaseGenre).join(', ')}</div>
+              </div>
+              <span style="font-family:'Orbitron',sans-serif;font-weight:700;font-size:0.78rem;color:var(--neon-purple);">${count}x</span>
+            </div>`).join('')}
+        </div>
+      </div>
+    `;
+
+    if (genreRows.length && window.Chart) {
+      drawStatsChart('artistsGenre', 'artists-genre-chart', statsHBarConfig(genreRows.map(r => r[0]), genreRows.map(r => r[1]), genreRows.map(r => genreColor(r[0]))));
+    }
+  }
+
   const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -25657,7 +25981,7 @@ async function doProfilePasswordChange() {
       </div>`).join('');
   }
 
-  function renderDaysStatsPage() {
+  async function renderDaysStatsPage() {
     const myFests = myAchievedFests().filter(f => f.date);
     const page = document.getElementById('page-days-stats');
 
@@ -25672,6 +25996,9 @@ async function doProfilePasswordChange() {
         </div>`;
       return;
     }
+
+    await loadChartJs().catch(() => {});
+    if (!page.classList.contains('active')) return; // navigated away while Chart.js was loading
 
     const totalDays = myFests.reduce((sum, f) => sum + (Number(f.days) || 1), 0);
     const dayCounts = Array(7).fill(0);
@@ -25706,12 +26033,12 @@ async function doProfilePasswordChange() {
 
       <div class="stats-section-card">
         <div class="stats-section-title">📆 Most Popular Day to Rave</div>
-        ${statBarRows(dayRows, dayCounts[topDayIdx])}
+        ${statsChartOrFallback('days-chart-weekday', statBarRows(dayRows, dayCounts[topDayIdx]), Math.max(140, dayRows.length * 34))}
       </div>
 
       <div class="stats-section-card">
         <div class="stats-section-title">🗓️ Most Popular Month</div>
-        ${statBarRows(monthRows, monthNameCounts[topMonthNameIdx])}
+        ${statsChartOrFallback('days-chart-month', statBarRows(monthRows, monthNameCounts[topMonthNameIdx]), Math.max(140, monthRows.length * 34))}
       </div>
 
       ${bestMonthEntry ? `
@@ -25726,6 +26053,11 @@ async function doProfilePasswordChange() {
         </div>
       </div>` : ''}
     `;
+
+    if (window.Chart) {
+      drawStatsChart('daysWeekday', 'days-chart-weekday', statsHBarConfig(dayRows.map(r => r.label), dayRows.map(r => r.count), '#00F5FF'));
+      drawStatsChart('daysMonth', 'days-chart-month', statsHBarConfig(monthRows.map(r => r.label), monthRows.map(r => r.count), '#00F5FF'));
+    }
   }
 
   function openCitiesMapPage() {
@@ -25735,7 +26067,7 @@ async function doProfilePasswordChange() {
     renderCitiesMapPage();
   }
 
-  function renderCitiesMapPage() {
+  async function renderCitiesMapPage() {
     const myFests = myAchievedFests();
     // Key by the full "City, State/Country" string, not just the city name — otherwise
     // e.g. "St Petersburg, FL" and "St Petersburg, Russia" would collapse into one bucket
@@ -25775,6 +26107,9 @@ async function doProfilePasswordChange() {
       return;
     }
 
+    await loadChartJs().catch(() => {});
+    if (!page.classList.contains('active')) return; // navigated away while Chart.js was loading
+
     const topCity = cityList[0];
     page.innerHTML = `
       <button class="profile-back cyan" onclick="backToStats()">← Rave Life</button>
@@ -25791,9 +26126,13 @@ async function doProfilePasswordChange() {
       <div id="citymap" class="citymap"><div class="citymap-loading">📍 Mapping your cities…</div></div>
       <div class="stats-section-card">
         <div class="stats-section-title">🌆 City Breakdown</div>
-        ${statBarRows(cityList.map(c => ({ label: c.city, count: c.count })), topCity.count)}
+        ${statsChartOrFallback('cities-chart', statBarRows(cityList.map(c => ({ label: c.city, count: c.count })), topCity.count), Math.max(140, cityList.length * 34))}
       </div>
     `;
+
+    if (window.Chart) {
+      drawStatsChart('cities', 'cities-chart', statsHBarConfig(cityList.map(c => c.city), cityList.map(c => c.count), '#00F5FF'));
+    }
 
     geocodeAndRenderCityMap(cityList);
   }

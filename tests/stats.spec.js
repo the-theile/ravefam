@@ -38,4 +38,78 @@ test.describe('stats', () => {
     await expect(page.locator('#stats-crew-panel')).toBeVisible();
     await expect(page.locator('#stats-my-panel')).toBeHidden();
   });
+
+  test('Raves on Your Radar shows the next upcoming RSVP (f1 is 2099-dated)', async ({ page }) => {
+    await bootAuthedApp(page, { data: statsData() });
+    await page.evaluate(() => { switchTab('stats'); loadStatsPage(); });
+    const radarCard = page.locator('#stats-content .stats-section-title', { hasText: 'Raves on Your Radar' });
+    await expect(radarCard).toContainText('1 upcoming');
+    await expect(page.locator('#stats-content .stats-personality-label')).toHaveText('Tomorrowland');
+  });
+
+  test('Raves on Your Radar shows a friendly empty state with no upcoming RSVPs', async ({ page }) => {
+    const d = statsData();
+    d.raver_festivals = d.raver_festivals.filter(rf => rf.festival_id !== 'f1'); // drop the only upcoming RSVP
+    await bootAuthedApp(page, { data: d });
+    await page.evaluate(() => { switchTab('stats'); loadStatsPage(); });
+    await expect(page.locator('#stats-content .stats-empty-title', { hasText: 'Nothing on the radar yet' })).toBeVisible();
+  });
+
+  test('Artists Seen Live tile counts distinct artists from achieved raves and drills into the list', async ({ page }) => {
+    const d = statsData();
+    // Charlotte de Witte (a1, techno) appeared at f-past, which r-you attended.
+    d.artist_festival_appearances = [{ artist_id: 'a1', festival_id: 'f-past' }];
+    await bootAuthedApp(page, { data: d });
+    await page.evaluate(() => { switchTab('stats'); loadStatsPage(); });
+
+    const heroNumbers = page.locator('#stats-content .stats-hero-number');
+    await expect(heroNumbers.nth(4)).toHaveText('1'); // Artists Seen
+
+    await page.evaluate(() => openArtistsSeenPage());
+    await expect(page.locator('#page-artists-seen .rlog-item-name')).toHaveText('Charlotte de Witte');
+    await expect(page.locator('#page-artists-seen')).toContainText('Distinct Artists');
+  });
+
+  test('Artists Seen Live shows a dedicated empty state with no lineup data', async ({ page }) => {
+    await bootAuthedApp(page, { data: statsData() }); // no artist_festival_appearances seeded
+    await page.evaluate(() => { switchTab('stats'); openArtistsSeenPage(); });
+    await expect(page.locator('#page-artists-seen .stats-empty-title')).toHaveText('No lineup data yet');
+  });
+
+  test('Distance Traveled tile prompts to set a location, then shows miles once one is set', async ({ page }) => {
+    const d = statsData();
+    d.festivals.find(f => f.id === 'f-past').lat = 42.3314;
+    d.festivals.find(f => f.id === 'f-past').lng = -83.0458; // Detroit
+    await bootAuthedApp(page, { data: d });
+    await page.evaluate(() => { switchTab('stats'); loadStatsPage(); });
+
+    const heroLabels = page.locator('#stats-content .stats-hero-label');
+    await expect(heroLabels.nth(5)).toHaveText('Set Location');
+
+    await page.evaluate(() => {
+      saveUserGeo({ lat: 40.7128, lng: -74.0060, label: 'New York, NY', source: 'manual' });
+      loadStatsPage();
+    });
+    await expect(page.locator('#stats-content .stats-hero-label').nth(5)).toHaveText('Miles Raved');
+    await expect(page.locator('#stats-content .stats-hero-number').nth(5)).not.toHaveText('0');
+  });
+
+  test('Crew Stats surfaces a Most Vibes Left award for the member with the most reactions', async ({ page }) => {
+    const d = statsData();
+    d.raver_festivals.push({ raver_id: 'r-kai', festival_id: 'f-past' }); // Kai also attended
+    d.festival_vibes = [
+      { raver_id: 'r-you', festival_id: 'f-past', emoji: '🔥', caption: '' },
+      { raver_id: 'r-kai', festival_id: 'f-past', emoji: '✨', caption: '' },
+      { raver_id: 'r-kai', festival_id: 'f1', emoji: '💫', caption: '' },
+    ];
+    await bootAuthedApp(page, { data: d });
+    await page.evaluate(() => {
+      switchTab('stats');
+      loadStatsPage();
+      const tabs = document.querySelectorAll('.stats-subtab');
+      switchStatTab('crew', tabs[1]);
+    });
+    await expect(page.locator('#stats-crew-content')).toContainText('Most Vibes Left');
+    await expect(page.locator('#stats-crew-content .stats-personality-label')).toContainText('Kai M.');
+  });
 });
