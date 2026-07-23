@@ -7816,7 +7816,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.3.0';
+  const APP_VERSION = '1.4.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -7837,8 +7837,39 @@
     } catch (e) { return null; }
   }
 
+  function getUtmParams() {
+    try {
+      const p = new URLSearchParams(location.search);
+      return { source: p.get('utm_source'), medium: p.get('utm_medium'), campaign: p.get('utm_campaign') };
+    } catch (e) { return {}; }
+  }
+
   // Fire-and-forget pageview
-  sb.rpc('log_pageview', { p_path: location.pathname, p_referrer: document.referrer, p_visitor_id: getVisitorId() });
+  (function () {
+    const utm = getUtmParams();
+    sb.rpc('log_pageview', {
+      p_path: location.pathname, p_referrer: document.referrer, p_visitor_id: getVisitorId(),
+      p_utm_source: utm.source, p_utm_medium: utm.medium, p_utm_campaign: utm.campaign
+    });
+  })();
+
+  // Best-effort client error logging for the PM dashboard's "Client Errors"
+  // section — deduped per page load so one repeating bug doesn't spam rows.
+  const _seenErrors = {};
+  function logClientError(message, stack) {
+    const key = String(message).slice(0, 200);
+    if (_seenErrors[key]) return;
+    _seenErrors[key] = true;
+    sb.rpc('log_client_error', {
+      p_message: message, p_stack: stack || null, p_path: location.pathname,
+      p_visitor_id: getVisitorId(), p_user_agent: navigator.userAgent
+    });
+  }
+  window.addEventListener('error', (e) => logClientError(e.message, e.error && e.error.stack));
+  window.addEventListener('unhandledrejection', (e) => {
+    const reason = e.reason;
+    logClientError(reason && reason.message ? reason.message : String(reason), reason && reason.stack);
+  });
 
   let currentUser = null;  // holds the logged-in Supabase user object
   let _seenTips = {};  // local mirror of user_metadata.seen_tips — coachmarks already shown
@@ -13385,6 +13416,38 @@ async function doProfilePasswordChange() {
         </div>
       </div>
 
+      <div class="pm-grid-2">
+        <div class="pm-section">
+          <div class="pm-section-title">Traffic Sources</div>
+          <div class="pm-section-sub">Where pageviews came from, by referrer domain (all-time)</div>
+          ${pmReferrerRows(d.traffic_sources.by_referrer)}
+        </div>
+        <div class="pm-section">
+          <div class="pm-section-title">Campaign Clicks (UTM)</div>
+          <div class="pm-section-sub">Visits via tagged links (utm_source / utm_campaign)</div>
+          ${pmCampaignRows(d.traffic_sources.by_campaign)}
+        </div>
+      </div>
+
+      <div class="pm-grid-2">
+        <div class="pm-section">
+          <div class="pm-section-title">Email Engagement</div>
+          <div class="pm-section-sub">From Resend delivery webhooks (all-time)</div>
+          ${pmEmailEngagementRows(d.email_engagement)}
+        </div>
+        <div class="pm-section">
+          <div class="pm-section-title">Push Notification Engagement</div>
+          <div class="pm-section-sub">Beacon push notifications tapped vs. sent (all-time)</div>
+          ${pmPushEngagementRows(d.push_engagement)}
+        </div>
+      </div>
+
+      <div class="pm-section">
+        <div class="pm-section-title">Client Errors (7d)</div>
+        <div class="pm-section-sub">Top distinct JS error messages across the site, last 7 days</div>
+        ${pmClientErrorRows(d.client_errors.top)}
+      </div>
+
       <div style="font-size:0.68rem;color:var(--muted);text-align:center;margin-top:4px;">Generated ${new Date(d.generated_at).toLocaleString()}</div>
     `;
 
@@ -13464,6 +13527,55 @@ async function doProfilePasswordChange() {
       <div class="pm-row">
         <span class="pm-row-label" style="font-family:monospace;font-size:0.78rem;">${escHtml(r.label || '(unlabeled)')}</span>
         <span class="pm-row-value">${pmFmt(r.count)}</span>
+      </div>`).join('');
+  }
+
+  function pmReferrerRows(rows) {
+    if (!rows || !rows.length) return pmEmptyNote('No pageviews logged yet');
+    return rows.map(r => `
+      <div class="pm-row">
+        <span class="pm-row-label">${escHtml(r.source)}</span>
+        <span class="pm-row-value">${pmFmt(r.count)}</span>
+      </div>`).join('');
+  }
+
+  function pmCampaignRows(rows) {
+    if (!rows || !rows.length) return pmEmptyNote('No tagged (utm_source/utm_campaign) links clicked yet');
+    return rows.map(r => `
+      <div class="pm-row">
+        <span class="pm-row-label" style="font-family:monospace;font-size:0.78rem;">${escHtml(r.utm_source || '(no source)')}${r.utm_campaign ? ` / ${escHtml(r.utm_campaign)}` : ''}</span>
+        <span class="pm-row-value">${pmFmt(r.count)}</span>
+      </div>`).join('');
+  }
+
+  function pmEmailEngagementRows(e) {
+    if (!e || (!e.delivered && !e.opened && !e.clicked && !e.bounced)) {
+      return pmEmptyNote('No email events yet — connect the Resend webhook to start tracking opens/clicks');
+    }
+    const rows = [
+      ['📬 Delivered', pmFmt(e.delivered)],
+      ['👀 Opened', `${pmFmt(e.opened)}${e.open_rate != null ? ` (${e.open_rate}%)` : ''}`],
+      ['🔗 Clicked', `${pmFmt(e.clicked)}${e.click_rate != null ? ` (${e.click_rate}%)` : ''}`],
+      ['⚠️ Bounced', pmFmt(e.bounced)],
+    ];
+    return rows.map(([label, val]) => `<div class="pm-row"><span class="pm-row-label">${label}</span><span class="pm-row-value">${val}</span></div>`).join('');
+  }
+
+  function pmPushEngagementRows(p) {
+    if (!p || !p.sent) return pmEmptyNote('No push sends logged yet');
+    const rows = [
+      ['📤 Sent', pmFmt(p.sent)],
+      ['👆 Tapped', `${pmFmt(p.clicks)}${p.click_rate != null ? ` (${p.click_rate}%)` : ''}`],
+    ];
+    return rows.map(([label, val]) => `<div class="pm-row"><span class="pm-row-label">${label}</span><span class="pm-row-value">${val}</span></div>`).join('');
+  }
+
+  function pmClientErrorRows(rows) {
+    if (!rows || !rows.length) return pmEmptyNote('No client errors logged in the last 7 days 🎉');
+    return rows.map(r => `
+      <div class="pm-row">
+        <span class="pm-row-label" style="font-family:monospace;font-size:0.78rem;" title="${escHtml(r.message)}">${escHtml(r.message)}</span>
+        <span class="pm-row-value">${pmFmt(r.count)} · ${new Date(r.last_seen).toLocaleDateString()}</span>
       </div>`).join('');
   }
 
@@ -25693,6 +25805,7 @@ async function doProfilePasswordChange() {
 })();
 </script>
 <script defer src="/_vercel/insights/script.js"></script>
+<script defer src="/_vercel/speed-insights/script.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
 <script>try { if (typeof maybeInitEruda === 'function') maybeInitEruda(); } catch (e) {}</script>
 </body>

@@ -2073,6 +2073,13 @@
       } catch (e) { return null; }
     }
 
+    function getUtmParams() {
+      try {
+        var p = new URLSearchParams(location.search);
+        return { source: p.get('utm_source'), medium: p.get('utm_medium'), campaign: p.get('utm_campaign') };
+      } catch (e) { return {}; }
+    }
+
     var sbClient = null;
     var sbReadyCallbacks = [];
     function withClient(fn) {
@@ -2095,7 +2102,33 @@
     document.body.appendChild(s);
 
     withClient(function (sb) {
-      sb.rpc('log_pageview', { p_path: location.pathname, p_referrer: document.referrer, p_visitor_id: getVisitorId() });
+      var utm = getUtmParams();
+      sb.rpc('log_pageview', {
+        p_path: location.pathname, p_referrer: document.referrer, p_visitor_id: getVisitorId(),
+        p_utm_source: utm.source, p_utm_medium: utm.medium, p_utm_campaign: utm.campaign
+      });
+    });
+
+    // Best-effort client error logging for the PM dashboard's "Client Errors"
+    // section — deduped per page load so one repeating bug doesn't spam rows.
+    var _seenErrors = {};
+    function logClientError(message, stack) {
+      var key = String(message).slice(0, 200);
+      if (_seenErrors[key]) return;
+      _seenErrors[key] = true;
+      withClient(function (sb) {
+        sb.rpc('log_client_error', {
+          p_message: message, p_stack: stack || null, p_path: location.pathname,
+          p_visitor_id: getVisitorId(), p_user_agent: navigator.userAgent
+        });
+      });
+    }
+    window.addEventListener('error', function (e) {
+      logClientError(e.message, e.error && e.error.stack);
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      var reason = e.reason;
+      logClientError(reason && reason.message ? reason.message : String(reason), reason && reason.stack);
     });
 
     // Single delegated listener covers every tagged CTA on the page (nav,
@@ -2196,6 +2229,7 @@
 </script>
 
 <script defer src="/_vercel/insights/script.js"></script>
+<script defer src="/_vercel/speed-insights/script.js"></script>
 
 <!-- ══ QR SCANNER MODAL ══ -->
 <div id="qr-scan-modal" role="dialog" aria-modal="true" aria-label="Scan crew invite QR code">

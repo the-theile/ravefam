@@ -78,11 +78,28 @@ self.addEventListener('push', e => {
   }));
 });
 
+// Same project/anon key app.html uses (SUPA_URL/SUPA_KEY there) -- public by
+// design, just enough to call the rate-limited log_push_click RPC.
+const SUPA_URL = 'https://tvpgopciioqbqmjjjigh.supabase.co';
+const SUPA_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2cGdvcGNpaW9xYnFtampqaWdoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3NTY2OTUsImV4cCI6MjA5NjMzMjY5NX0.DAgcx2UsGV1gUCQzHdGmv1Pu0rXlJdQxhn-bf1wGsiI';
+
+function logPushClick(messageId, crewId) {
+  return fetch(`${SUPA_URL}/rest/v1/rpc/log_push_click`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` },
+    body: JSON.stringify({ p_message_id: messageId || null, p_crew_id: crewId || null })
+  }).catch(() => {});
+}
+
 self.addEventListener('notificationclick', e => {
   e.notification.close();
   const url = '/app.html';
-  e.waitUntil(clients.matchAll({ type: 'window' }).then(list => {
-    for (const c of list) if ('focus' in c) return c.focus();
-    return clients.openWindow(url);
-  }));
+  const { messageId, crewId } = e.notification.data || {};
+  e.waitUntil(Promise.all([
+    logPushClick(messageId, crewId),
+    clients.matchAll({ type: 'window' }).then(list => {
+      for (const c of list) if ('focus' in c) return c.focus();
+      return clients.openWindow(url);
+    })
+  ]));
 });
