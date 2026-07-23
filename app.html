@@ -593,6 +593,7 @@
   /* Neon Marquee treatment — scoped to the rave card (.event-item-clickable is rave-only) */
   .event-item-clickable {
     cursor: pointer;
+    position: relative;
     background: linear-gradient(160deg, rgba(22,18,10,0.92), rgba(10,9,6,0.95));
   }
   .marquee-bulb-row { display: flex; justify-content: space-between; padding: 10px 16px 0; flex-shrink: 0; }
@@ -604,32 +605,41 @@
     animation: bulbTwinkle 1.6s ease-in-out infinite;
   }
   @keyframes bulbTwinkle { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+  /* Past events — a third of the bulbs read as burnt out, the rest just dim */
+  .marquee-bulb-dim { animation: none; opacity: 0.5; }
+  .marquee-bulb-dead { animation: none; opacity: 0.12; box-shadow: none; background: #4a4030; }
 
-  .marquee-body { padding: 6px 16px 4px; }
-  .marquee-eyebrow {
-    text-align: center;
-    font-family: 'Outfit', sans-serif;
-    font-weight: 700;
-    font-size: 0.64rem;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    margin-bottom: 8px;
+  .marquee-body { padding: 14px 18px 4px; position: relative; }
+  .marquee-countdown-stamp {
+    position: absolute; top: 10px; right: 18px;
+    background: var(--surface2); border: 1px solid rgba(255,45,120,0.35);
+    border-radius: 10px; padding: 5px 10px; text-align: center;
+    transform: rotate(3deg);
   }
+  .marquee-countdown-stamp .n { font-family: 'Fraunces', serif; font-weight: 800; font-size: 1rem; color: var(--neon-pink); line-height: 1; }
+  .marquee-countdown-stamp .u { font-size: 0.52rem; font-weight: 800; letter-spacing: 0.6px; color: var(--muted); text-transform: uppercase; }
   .marquee-name {
-    text-align: center;
     font-family: 'Outfit', sans-serif;
     font-weight: 900;
-    font-size: 1.12rem;
-    letter-spacing: 0.2px;
-    margin-bottom: 6px;
+    font-size: 1.22rem;
+    letter-spacing: 0.1px;
+    max-width: 72%;
+    margin-bottom: 8px;
     text-wrap: balance;
   }
+  .marquee-duration-badge {
+    display: inline-flex; align-items: center;
+    font-size: 0.6rem; font-weight: 800; letter-spacing: 1.1px;
+    color: var(--gold, #FFC96B);
+    background: rgba(255,201,107,0.1); border: 1px solid rgba(255,201,107,0.28);
+    border-radius: 999px; padding: 3px 9px;
+  }
+  .marquee-dot { opacity: 0.5; }
   .marquee-meta {
-    display: flex; align-items: center; justify-content: center; gap: 7px;
+    display: flex; align-items: center; gap: 8px;
     flex-wrap: wrap;
-    text-align: center;
-    font-size: 0.76rem; color: var(--muted);
-    margin-bottom: 14px;
+    font-size: 0.78rem; color: var(--muted);
+    margin-bottom: 12px;
   }
   .marquee-weather {
     display: inline-flex; align-items: center; gap: 3px;
@@ -637,7 +647,7 @@
     background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
     border-radius: 100px; padding: 2px 8px 2px 6px;
   }
-  .pill-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 12px; }
+  .pill-row { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 8px; margin-bottom: 14px; }
   .map-pill {
     display: inline-flex; align-items: center; gap: 5px;
     padding: 4px 11px;
@@ -649,18 +659,16 @@
   }
   .map-pill:hover { background: rgba(0,245,255,0.16); border-color: rgba(0,245,255,0.5); }
 
-  .attendee-section { margin-bottom: 8px; }
-  .attendee-section:last-child { margin-bottom: 0; }
-  .attendee-section-label {
+  .marquee-crew { padding: 0 18px 16px; }
+  .marquee-crew-label {
     font-family: 'Outfit', sans-serif;
     font-size: 0.58rem;
-    font-weight: 700;
+    font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 1.2px;
-    margin-bottom: 5px;
+    color: var(--muted);
+    margin-bottom: 8px;
   }
-  .attendee-section-label.going { color: rgba(57,255,20,0.7); }
-  .attendee-section-label.interested { color: rgba(0,245,255,0.6); }
 
   .going-avatars {
     display: flex;
@@ -678,6 +686,10 @@
   }
   .going-avatar.row-end { margin-right: 8px; }
   .going-avatar:hover { transform: scale(1.15) translateY(-2px); z-index: 10; }
+  /* Going/interested now share one row — a colored ring carries the distinction
+     that used to come from separate labeled sections. */
+  .going-avatar.ring-going { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px rgba(57,255,20,0.6); }
+  .going-avatar.ring-interested { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px rgba(0,245,255,0.45); opacity: 0.85; }
 
   /* Corner emoji badge — always visible, shows vibe at a glance */
   .vibe-emoji-badge {
@@ -721,8 +733,6 @@
   .going-count-inline.green { color: var(--neon-green); }
   .going-count-inline.cyan  { color: var(--neon-cyan); }
   .going-count-inline.muted { color: var(--muted); }
-
-  .interested-avatars { opacity: 0.75; }
 
   /* Bottom action bar */
   .event-action-bar { display: flex; border-top: 1px solid rgba(255,255,255,0.05); }
@@ -798,6 +808,70 @@
   }
   /* Interested — no glow, just a subtly brighter border */
   .event-item-interested { border-color: rgba(255,255,255,0.13); }
+
+  /* Past raves — dimmed, desaturated, a little warm at the edges. One filter
+     does the fading so every accent color (border glow, avatar rings, action
+     bar) fades together without per-color overrides. */
+  .event-item-past {
+    filter: grayscale(0.68) sepia(0.22) saturate(0.48) brightness(0.76);
+  }
+  .event-item-past::before {
+    content: '';
+    position: absolute; inset: 0; z-index: 3; pointer-events: none;
+    background: radial-gradient(ellipse at 50% 40%, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.62) 100%);
+  }
+  .rave-cobweb {
+    position: absolute; z-index: 4; pointer-events: none;
+    left: -2px; bottom: -2px; width: 74px; height: 74px;
+    transform: scaleY(-1);
+  }
+  .rave-cobweb-mini {
+    position: absolute; z-index: 2; pointer-events: none;
+    left: 1px; top: 1px; width: 15px; height: 15px;
+  }
+
+  /* ===== Compact Row (list view) ===== */
+  .events-list.rave-list-view { gap: 10px; }
+  .rave-row-wrap { display: flex; flex-direction: column; gap: 10px; }
+  .rave-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 12px;
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 14px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+    position: relative;
+    overflow: hidden;
+  }
+  .rave-row:hover { border-color: rgba(255,255,255,0.16); }
+  .rave-row-past { filter: grayscale(0.68) sepia(0.22) saturate(0.48) brightness(0.76); }
+  .rave-row-swatch {
+    width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    position: relative; overflow: hidden;
+  }
+  .rave-row-date-num { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 1.05rem; line-height: 1; color: #fff; letter-spacing: -0.02em; }
+  .rave-row-date-dow { font-size: 0.5rem; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase; color: rgba(255,255,255,0.78); margin-top: 2px; }
+  .rave-row-mid { flex: 1; min-width: 0; }
+  .rave-row-name { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.94rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rave-row-sub { font-size: 0.74rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .rave-row-sub .rave-row-cd { color: var(--neon-pink); font-weight: 700; }
+  .rave-row-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .rave-row-avatars { display: flex; }
+  .rave-row-avatar { width: 22px; height: 22px; border-radius: 50%; margin-right: -7px; border: 2px solid var(--surface); font-size: 0.5rem; font-weight: 800; color: #0a0a0f; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .rave-row-more { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--surface); font-size: 0.5rem; font-weight: 800; color: var(--muted); background: var(--surface3, #1D1D28); display: flex; align-items: center; justify-content: center; }
+  .rave-row-cta {
+    width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.14);
+    color: var(--muted); display: flex; align-items: center; justify-content: center;
+    font-size: 0.9rem; cursor: pointer; transition: all 0.15s;
+  }
+  .rave-row-cta.active { background: rgba(57,255,20,0.12); border-color: rgba(57,255,20,0.4); color: var(--neon-green); }
+  .rave-row-chevron { color: var(--muted); font-size: 0.65rem; flex-shrink: 0; }
+
+  /* Card/list view toggle button — reuses .rave-filter-pill's look */
+  .rave-view-toggle-btn { white-space: nowrap; }
 
   /* Color picker in Edit Rave popup */
   .color-picker-grid {
@@ -6776,7 +6850,10 @@
     <div class="page" id="page-events">
       <div class="section-header">
         <div class="section-title">Raves</div>
-        <button class="btn btn-ghost" style="font-size:0.78rem;" onclick="openRaveEditor()">+ Add Rave</button>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="rave-filter-pill rave-view-toggle-btn" id="rave-view-toggle-btn" onclick="toggleRaveView()"></button>
+          <button class="btn btn-ghost" style="font-size:0.78rem;" onclick="openRaveEditor()">+ Add Rave</button>
+        </div>
       </div>
       <div class="rave-search-wrap">
         <span class="rave-search-icon">🔍</span>
@@ -7739,7 +7816,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.2.3';
+  const APP_VERSION = '1.3.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -12314,6 +12391,7 @@ async function doProfilePasswordChange() {
 
   // Pretty display for a festival date, e.g. "21 Jun 2026".
   const MON_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const DOW_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   function festWhenLabel(f) {
     const d = festDate(f);
     if (!d) return f.when || '';
@@ -12340,6 +12418,21 @@ async function doProfilePasswordChange() {
       return weeks === 1 ? '1 week' : `${weeks} weeks`;
     }
     return `${Math.round(n/30)} months`;
+  }
+
+  // Same thresholds as countdownLabel, split into a big-number/small-unit pair
+  // for the marquee card's corner stamp (e.g. {n:'2', u:'wks'}).
+  function countdownStampParts(d) {
+    const n = daysUntil(d);
+    if (n === null || n < 0) return null;
+    if (n === 0) return { n: '🔥', u: 'today' };
+    if (n === 1) return { n: '1', u: 'day' };
+    if (n < 7) return { n: String(n), u: 'days' };
+    if (n < 90) {
+      const weeks = Math.max(1, Math.round(n / 7));
+      return { n: String(weeks), u: weeks === 1 ? 'wk' : 'wks' };
+    }
+    return { n: String(Math.round(n / 30)), u: 'mos' };
   }
 
   // "3-DAY FEST" / "1-DAY EVENT" label for a festival's duration, if known.
@@ -22115,6 +22208,49 @@ async function doProfilePasswordChange() {
     return FALLBACK_COLORS[h % FALLBACK_COLORS.length];
   }
 
+  // Compact-row date swatch background — the fest's own accent color, same as
+  // the card's border/glow, fading to near-black.
+  function raveSwatchGradient(hex) {
+    return `linear-gradient(150deg, ${hex}, #0a0a0f)`;
+  }
+
+  // Corner cobweb + dangling spider for past raves — bottom-left of the full
+  // card (flipped vertically so the anchor sits in that corner) and a smaller
+  // web-only version tucked into the compact row's date swatch.
+  const COBWEB_SVG = `<svg class="rave-cobweb" viewBox="0 0 100 100" fill="none" aria-hidden="true">
+    <g stroke="rgba(255,255,255,0.4)" stroke-width="1">
+      <line x1="0" y1="0" x2="85" y2="0"></line>
+      <line x1="0" y1="0" x2="78.5" y2="32.5"></line>
+      <line x1="0" y1="0" x2="60.1" y2="60.1"></line>
+      <line x1="0" y1="0" x2="32.5" y2="78.5"></line>
+      <line x1="0" y1="0" x2="0" y2="85"></line>
+      <polyline points="25,0 23.1,9.6 17.7,17.7 9.6,23.1 0,25"></polyline>
+      <polyline points="50,0 46.2,19.1 35.4,35.4 19.1,46.2 0,50"></polyline>
+      <polyline points="75,0 69.3,28.7 53,53 28.7,69.3 0,75"></polyline>
+    </g>
+    <line x1="35.4" y1="35.4" x2="46" y2="58" stroke="rgba(255,255,255,0.45)" stroke-width="1.1" stroke-linecap="round"></line>
+    <g transform="translate(46,60)">
+      <ellipse cx="0" cy="0" rx="3.2" ry="4" fill="rgba(20,18,16,0.9)" stroke="rgba(255,255,255,0.3)" stroke-width="0.6"></ellipse>
+      <circle cx="0" cy="-4.6" r="1.6" fill="rgba(20,18,16,0.9)" stroke="rgba(255,255,255,0.3)" stroke-width="0.6"></circle>
+      <g stroke="rgba(255,255,255,0.35)" stroke-width="0.7" stroke-linecap="round">
+        <line x1="-3" y1="-1" x2="-8" y2="-4"></line>
+        <line x1="-3" y1="1" x2="-8" y2="1"></line>
+        <line x1="-3" y1="3" x2="-7" y2="6"></line>
+        <line x1="3" y1="-1" x2="8" y2="-4"></line>
+        <line x1="3" y1="1" x2="8" y2="1"></line>
+        <line x1="3" y1="3" x2="7" y2="6"></line>
+      </g>
+    </g>
+  </svg>`;
+  const COBWEB_SVG_MINI = `<svg class="rave-cobweb-mini" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+    <g stroke="rgba(255,255,255,0.5)" stroke-width="1.6">
+      <line x1="0" y1="0" x2="34" y2="0"></line>
+      <line x1="0" y1="0" x2="24" y2="24"></line>
+      <line x1="0" y1="0" x2="0" y2="34"></line>
+      <polyline points="20,0 14,14 0,20"></polyline>
+    </g>
+  </svg>`;
+
   // Who from the tribe references a given festival id (String-coerced for UUID safety)
   function festivalGoers(festId) {
     return squad.filter(p => (p.festIds || []).some(fid => String(fid) === String(festId)));
@@ -22372,6 +22508,34 @@ async function doProfilePasswordChange() {
   // Active festival being edited (UUID-safe global, same pattern as activeDetailId)
   let activeFestId = null;
 
+  // ===== Raves: card view vs. compact list view =====
+  const RAVE_VIEW_KEY = 'rf_rave_view';
+  function getRaveView() {
+    try { return localStorage.getItem(RAVE_VIEW_KEY) === 'list' ? 'list' : 'card'; } catch(e) { return 'card'; }
+  }
+  function setRaveView(view) {
+    try { localStorage.setItem(RAVE_VIEW_KEY, view); } catch(e) {}
+    renderEvents();
+  }
+  function toggleRaveView() {
+    setRaveView(getRaveView() === 'card' ? 'list' : 'card');
+  }
+  function renderRaveViewToggle() {
+    const btn = document.getElementById('rave-view-toggle-btn');
+    if (!btn) return;
+    const isCard = getRaveView() === 'card';
+    btn.textContent = isCard ? '☰ List' : '🎴 Cards';
+    btn.title = isCard ? 'Switch to list view' : 'Switch to card view';
+  }
+
+  // Which rows are expanded to their full card, in list view. Keyed by fest id (string).
+  const _raveRowExpanded = new Set();
+  function toggleRaveRowExpand(festId) {
+    const key = String(festId);
+    if (_raveRowExpanded.has(key)) _raveRowExpanded.delete(key); else _raveRowExpanded.add(key);
+    renderEvents();
+  }
+
   function renderEvents() {
     try {
     const list = document.getElementById('events-list');
@@ -22439,6 +22603,22 @@ async function doProfilePasswordChange() {
 
     const weatherCache = loadWeatherCache();
     const BULB_ROW_HTML = Array.from({ length: 11 }, (_, i) => `<div class="marquee-bulb" style="animation-delay:${(i * 0.12).toFixed(2)}s"></div>`).join('');
+    // Past cards: a third of the bulbs read as burnt out, the rest just dim — fixed
+    // pattern (not random) so a given card doesn't re-shuffle its "dead" bulbs on re-render.
+    const BULB_ROW_HTML_PAST = Array.from({ length: 11 }, (_, i) =>
+      `<div class="marquee-bulb ${i % 3 === 2 ? 'marquee-bulb-dead' : 'marquee-bulb-dim'}"></div>`).join('');
+
+    // Shared contextual action bar: at most one of Going/Interested can be true
+    // (toggleGoingToFest/toggleInterestedInFest already keep them mutually
+    // exclusive), so once you've picked one, the other button steps aside.
+    const actionBarHTML = (festId, youGoing, youInterested, isUpcoming) => {
+      const goingLabel = isUpcoming ? 'Going' : 'Sent It';
+      const vibeBtn = `<button class="event-action-btn vibe-action" onclick="event.stopPropagation(); openVibePicker('${festId}')">✦ Vibe</button>`;
+      const goingBtn = `<button class="event-action-btn going-action${youGoing ? ' active' : ''}" onclick="event.stopPropagation(); toggleGoingToFest('${festId}')">${youGoing ? '🎟️ ' : '＋ '}${goingLabel}</button>`;
+      const interestedBtn = `<button class="event-action-btn interested-action${youInterested ? ' active' : ''}" onclick="event.stopPropagation(); toggleInterestedInFest('${festId}')">👀 Interested</button>`;
+      const buttons = youGoing ? [vibeBtn, goingBtn] : youInterested ? [vibeBtn, interestedBtn] : [vibeBtn, goingBtn, interestedBtn];
+      return `<div class="event-action-bar">${buttons.join('')}</div>`;
+    };
 
     const card = (f) => {
       const lineupUrl = getLineupExplorerUrl(f);
@@ -22449,18 +22629,21 @@ async function doProfilePasswordChange() {
       const goers = festivalGoers(f.id);
       const isUpcoming = f._d && f._d >= TODAY;
       const durLabel = raveDurationLabel(f);
-      const eyebrow = isUpcoming
-        ? `${durLabel ? durLabel + ' · ' : ''}${countdownLabel(f._d)}`
-        : `📼 ${durLabel ? durLabel + ' · ' : ''}${f._d ? 'Happened in ' + f._d.getFullYear() : 'Past'}`;
+      const stamp = isUpcoming
+        ? countdownStampParts(f._d)
+        : { n: '📼', u: f._d ? String(f._d.getFullYear()) : 'past' };
       const dateBit = f._d ? `${f._d.getDate()} ${MON_SHORT[f._d.getMonth()]}${!isUpcoming ? ' ' + f._d.getFullYear() : ''}` : '';
       const distMi = nearbyRadius != null ? festivalDistance(f, userLoc) : null;
-      const metaLine = `📍 ${escHtml(f.location || 'Location TBD')}` + (distMi != null ? ` · ${Math.round(distMi)} mi away` : '') + (dateBit ? ` · ${dateBit}` : '');
+      const metaBits = [];
+      if (durLabel) metaBits.push(`<span class="marquee-duration-badge">${escHtml(durLabel)}</span>`);
+      metaBits.push(`<span>📍 ${escHtml(f.location || 'Location TBD')}${distMi != null ? ` · ${Math.round(distMi)} mi away` : ''}</span>`);
+      if (dateBit) metaBits.push(`<span>${escHtml(dateBit)}</span>`);
       const weatherChip = weatherChipHTML(f, weatherCache);
       const mapUrlJs = String(f.mapUrl || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       const mapBtn = f.mapUrl
         ? `<button class="map-pill" onclick="event.stopPropagation(); openMapPinLightbox('${mapUrlJs}', null, null, null, null, null, null, null, null)">🗺️ View Map</button>`
         : '';
-      const pillRow = (lineupBtn || mapBtn) ? `<div class="pill-row">${lineupBtn}${mapBtn}</div>` : '';
+      const pillRow = (lineupBtn || mapBtn || weatherChip) ? `<div class="pill-row">${lineupBtn}${mapBtn}${weatherChip}</div>` : '';
       const you = squad.find(r => r.isYou);
       const youGoing = you && (you.festIds || []).some(fid => String(fid) === String(f.id));
       const youInterested = you && (you.interestedFestIds || []).some(fid => String(fid) === String(f.id));
@@ -22468,21 +22651,26 @@ async function doProfilePasswordChange() {
 
       // Layered shadow — derive RGB from event accent for neutral cards
       const rgb = color.replace('#','').match(/.{2}/g).map(v => parseInt(v,16)).join(',');
-      const stateClass = youGoing ? ' event-item-going' : youInterested ? ' event-item-interested' : '';
+      const stateClass = (youGoing ? ' event-item-going' : youInterested ? ' event-item-interested' : '') + (isUpcoming ? '' : ' event-item-past');
       const cardStyle = youGoing
         ? `--card-rgb:${rgb};border-left:5px solid ${color}`
         : youInterested
           ? `border-left:5px solid ${color}`
           : `border-left:5px solid ${color};box-shadow:-5px 0 20px rgba(${rgb},0.15),inset 3px 0 16px rgba(${rgb},0.04),0 4px 14px rgba(0,0,0,0.4)`;
 
-      // All avatars shown — vibe emoji badge on corner, full bubble revealed on hover
-      const buildAvatarRow = (people, showVibes) => people.map((w, idx) => {
+      // Going and interested now share one row — a colored ring (not a separate
+      // labeled section) carries who's confirmed vs. just watching.
+      const crewEntries = [
+        ...goers.map(w => ({ w, ring: 'ring-going', showVibes: true })),
+        ...interestedPeople.map(w => ({ w, ring: 'ring-interested', showVibes: false })),
+      ];
+      const crewAvatarsHTML = crewEntries.map(({ w, ring, showVibes }, idx) => {
         const dn = displayName(w);
         const bg = w.avatarUrl ? 'transparent;overflow:hidden;padding:0' : extractFirstColor(w.gradient);
         const inner = w.avatarUrl
           ? `<img src="${escHtml(w.avatarUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${escHtml(initials(dn))}">`
           : initials(dn).toUpperCase();
-        const isLast = idx === people.length - 1;
+        const isLast = idx === crewEntries.length - 1;
         let badgeHtml = '', bubbleHtml = '';
         if (showVibes) {
           const vibe = (festVibesCache[String(f.id)] || []).find(v => String(v.raverId) === String(w.id));
@@ -22495,55 +22683,103 @@ async function doProfilePasswordChange() {
             bubbleHtml = `<div class="${cls}" ${click}>${vibe.emoji}${captionHtml}</div>`;
           }
         }
-        return `<div class="avatar going-avatar${isLast ? ' row-end' : ''}" style="background:${bg};" data-raver-id="${w.id}" onclick="event.stopPropagation(); openProfile(this.dataset.raverId, false, 'members')" title="${escHtml(dn)}">${inner}${bubbleHtml}${badgeHtml}</div>`;
+        return `<div class="avatar going-avatar ${ring}${isLast ? ' row-end' : ''}" style="background:${bg};" data-raver-id="${w.id}" onclick="event.stopPropagation(); openProfile(this.dataset.raverId, false, 'members')" title="${escHtml(dn)}">${inner}${bubbleHtml}${badgeHtml}</div>`;
       }).join('');
 
-      const goingLabel = isUpcoming ? 'Going' : 'Sent It';
-      const goingSection = goers.length
-        ? `<div class="attendee-section">
-            <div class="attendee-section-label going">${goingLabel}</div>
-            <div class="going-avatars">${buildAvatarRow(goers, true)}<span class="going-count-inline ${youGoing ? 'green' : 'muted'}">${goers.length} ${isUpcoming ? 'going' : 'sent it'}</span></div>
+      const countChips = [];
+      if (goers.length) countChips.push(`<span class="going-count-inline ${youGoing ? 'green' : 'muted'}">${goers.length} ${isUpcoming ? 'going' : 'sent it'}</span>`);
+      if (interestedPeople.length) countChips.push(`<span class="going-count-inline cyan">${interestedPeople.length} interested</span>`);
+      const crewSection = crewEntries.length
+        ? `<div class="marquee-crew">
+            <div class="marquee-crew-label">Who's in</div>
+            <div class="going-avatars">${crewAvatarsHTML}${countChips.join('')}</div>
            </div>`
-        : `<div class="attendee-section"><span style="font-size:0.74rem;color:var(--muted)">Nobody from the tribe yet</span></div>`;
-
-      const interestedSection = interestedPeople.length
-        ? `<div class="attendee-section">
-            <div class="attendee-section-label interested">Interested</div>
-            <div class="going-avatars interested-avatars">${buildAvatarRow(interestedPeople, false)}<span class="going-count-inline cyan">${interestedPeople.length} interested</span></div>
-           </div>`
-        : '';
+        : `<div class="marquee-crew"><span style="font-size:0.74rem;color:var(--muted)">Nobody from the tribe yet</span></div>`;
 
       const vibeRowContent = buildVibeRowHTML(f.id);
       const vibeSection = vibeRowContent
         ? `<div class="fest-vibe-row" style="padding:0 16px 12px;">${vibeRowContent}</div>`
         : `<div id="vibe-picker-${f.id}" style="display:none;padding:0 8px 8px;"></div>`;
 
+      const cobweb = isUpcoming ? '' : COBWEB_SVG;
+
       return `
         <div class="event-item event-item-clickable${stateClass}" data-fest-id="${f.id}" style="${cardStyle}" onclick="activeFestId=this.dataset.festId; openRaveEditor(this.dataset.festId)" title="Tap to edit ${escHtml(f.name)}">
-          <div class="marquee-bulb-row top">${BULB_ROW_HTML}</div>
+          ${cobweb}
+          <div class="marquee-bulb-row top">${isUpcoming ? BULB_ROW_HTML : BULB_ROW_HTML_PAST}</div>
           <div class="marquee-body">
-            <div class="marquee-eyebrow" style="color:${color}">${eyebrow}</div>
+            <div class="marquee-countdown-stamp"><div class="n">${stamp.n}</div><div class="u">${stamp.u}</div></div>
             <div class="marquee-name">${escHtml(f.name)} <span class="fest-edit-hint">✏️</span></div>
-            <div class="marquee-meta"><span>${metaLine}</span>${weatherChip}</div>
+            <div class="marquee-meta">${metaBits.join('<span class="marquee-dot">·</span>')}</div>
             ${pillRow}
-            ${goingSection}
-            ${interestedSection}
           </div>
+          ${crewSection}
           ${vibeSection}
-          <div class="event-action-bar">
-            <button class="event-action-btn vibe-action" onclick="event.stopPropagation(); openVibePicker('${f.id}')">✦ Vibe</button>
-            <button class="event-action-btn going-action${youGoing ? ' active' : ''}" onclick="event.stopPropagation(); toggleGoingToFest('${f.id}')">${isUpcoming ? (youGoing ? '🎟️ Going' : '＋ Going') : (youGoing ? '🎟️ Sent It' : '＋ Sent It')}</button>
-            <button class="event-action-btn interested-action${youInterested ? ' active' : ''}" onclick="event.stopPropagation(); toggleInterestedInFest('${f.id}')">👀 Interested</button>
-          </div>
-          <div class="marquee-bulb-row bottom">${BULB_ROW_HTML}</div>
+          ${actionBarHTML(f.id, youGoing, youInterested, isUpcoming)}
+          <div class="marquee-bulb-row bottom">${isUpcoming ? BULB_ROW_HTML : BULB_ROW_HTML_PAST}</div>
         </div>`;
     };
+
+    // Compact list-view row — a denser scan mode for a long calendar. Tapping
+    // it expands the same full card() markup directly beneath it; the CTA
+    // icon is a quick Going toggle that doesn't require expanding first.
+    const raveRow = (f) => {
+      const isUpcoming = f._d && f._d >= TODAY;
+      const expanded = _raveRowExpanded.has(String(f.id));
+      const color = festColor(f);
+      const goers = festivalGoers(f.id);
+      const interestedPeople = festivalInterestedGoers(f.id);
+      const you = squad.find(r => r.isYou);
+      const youGoing = you && (you.festIds || []).some(fid => String(fid) === String(f.id));
+      const distMi = nearbyRadius != null ? festivalDistance(f, userLoc) : null;
+      const dow = f._d ? DOW_SHORT[f._d.getDay()] : '–';
+      const dayNum = f._d ? f._d.getDate() : '–';
+      const subLine = isUpcoming
+        ? `<span class="rave-row-cd">${countdownLabel(f._d)}</span> · ${escHtml(f.location || 'Location TBD')}${distMi != null ? ` · ${Math.round(distMi)} mi` : ''}`
+        : `📼 Happened in ${f._d ? f._d.getFullYear() : '—'} · ${escHtml(f.location || 'Location TBD')}`;
+      const allPeople = [...goers, ...interestedPeople];
+      const shown = allPeople.slice(0, 3);
+      const moreCount = allPeople.length - shown.length;
+      const avatarsHTML = shown.map(w => {
+        const dn = displayName(w);
+        const bg = w.avatarUrl ? 'transparent' : extractFirstColor(w.gradient);
+        const inner = w.avatarUrl
+          ? `<img src="${escHtml(w.avatarUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${escHtml(initials(dn))}">`
+          : initials(dn).toUpperCase();
+        return `<div class="rave-row-avatar" style="background:${bg}">${inner}</div>`;
+      }).join('') + (moreCount > 0 ? `<div class="rave-row-more">+${moreCount}</div>` : '');
+      const ctaIcon = youGoing ? '🎟️' : '＋';
+      const ctaTitle = youGoing ? (isUpcoming ? 'Going — tap to remove' : 'Sent it — tap to remove') : 'Mark going';
+      const cobweb = isUpcoming ? '' : COBWEB_SVG_MINI;
+
+      return `<div class="rave-row${isUpcoming ? '' : ' rave-row-past'}" data-fest-id="${f.id}" onclick="toggleRaveRowExpand('${f.id}')" title="Tap to expand ${escHtml(f.name)}">
+        <div class="rave-row-swatch" style="background:${raveSwatchGradient(color)}">
+          ${cobweb}
+          <div class="rave-row-date-num">${dayNum}</div><div class="rave-row-date-dow">${dow}</div>
+        </div>
+        <div class="rave-row-mid">
+          <div class="rave-row-name">${escHtml(f.name)}</div>
+          <div class="rave-row-sub">${subLine}</div>
+        </div>
+        <div class="rave-row-right">
+          <div class="rave-row-avatars">${avatarsHTML}</div>
+          <button class="rave-row-cta${youGoing ? ' active' : ''}" onclick="event.stopPropagation(); toggleGoingToFest('${f.id}')" title="${ctaTitle}">${ctaIcon}</button>
+          <span class="rave-row-chevron">${expanded ? '▲' : '▼'}</span>
+        </div>
+      </div>`;
+    };
+
+    const raveViewIsList = getRaveView() === 'list';
+    list.classList.toggle('rave-list-view', raveViewIsList);
+    const renderItem = raveViewIsList
+      ? (f) => `<div class="rave-row-wrap">${raveRow(f)}${_raveRowExpanded.has(String(f.id)) ? card(f) : ''}</div>`
+      : card;
 
     const showUp = _raveFilters.time !== 'past';
     const showPast = _raveFilters.time !== 'upcoming';
     let html = '';
-    if (showUp && up.length) html += `<div class="fest-group-label" style="margin:4px 0 10px;">🔜 Upcoming</div>` + up.map(card).join('');
-    if (showPast && past.length) html += `<div class="fest-group-label" style="margin:22px 0 10px;">📼 Past</div>` + past.map(card).join('');
+    if (showUp && up.length) html += `<div class="fest-group-label" style="margin:4px 0 10px;">🔜 Upcoming</div>` + up.map(renderItem).join('');
+    if (showPast && past.length) html += `<div class="fest-group-label" style="margin:22px 0 10px;">📼 Past</div>` + past.map(renderItem).join('');
     if (!html) {
       const hasFilters = _raveFilters.time || _raveFilters.status || nearbyRadius != null;
       html = query
@@ -22555,6 +22791,7 @@ async function doProfilePasswordChange() {
             : `<div class="fest-empty es-block" style="padding:32px 20px"><div class="es-icon">🎟️</div><div class="es-headline">Your calendar is looking too clean</div><div class="es-sub">Add a festival, club night, or that warehouse party on Saturday.</div></div>`;
     }
     list.innerHTML = html;
+    renderRaveViewToggle();
     if (showUp) fetchMissingWeather(up, weatherCache);
     if (nearbyRadius != null) fetchMissingFestivalGeocodes(preNearby);
     } catch(err) { console.error('[renderEvents]', err); const el = document.getElementById('events-list'); if (el) el.innerHTML = sectionErrorHTML('events'); }
