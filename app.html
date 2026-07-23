@@ -21895,6 +21895,10 @@ async function doProfilePasswordChange() {
   }
 
   async function dbAddLineupArtist(festId, artistId) {
+    // A brand-new rave keeps its temp_ client id until dbSaveFestival resolves;
+    // reopening its editor in that window would otherwise send a non-UUID
+    // festival_id straight to Postgres (invalid input syntax for type uuid).
+    if (String(festId).startsWith('temp_')) { showToast('Still saving — try again in a moment'); return false; }
     // Client-side dedup — the DB deliberately has no uniqueness constraint here
     // (distinct b2b/multi-night sets can legitimately share an artist+festival),
     // so a plain crowdsourced tap should skip if this artist is already tagged.
@@ -21914,6 +21918,7 @@ async function doProfilePasswordChange() {
   }
 
   async function dbRemoveLineupArtist(festId, artistId) {
+    if (String(festId).startsWith('temp_')) { showToast('Still saving — try again in a moment'); return false; }
     const { error } = await sb.from('artist_festival_appearances')
       .delete().eq('festival_id', festId).eq('artist_id', artistId);
     if (error) {
@@ -21929,6 +21934,7 @@ async function doProfilePasswordChange() {
   }
 
   async function dbToggleArtistSighting(festId, artistId) {
+    if (String(festId).startsWith('temp_')) { showToast('Still saving — try again in a moment'); return; }
     const you = squad.find(r => r.isYou);
     if (!you) return;
     const seen = myLineupSightingIds(festId).has(String(artistId));
