@@ -55,15 +55,22 @@ test.describe('stats', () => {
     await expect(page.locator('#stats-content .stats-empty-title', { hasText: 'Nothing on the radar yet' })).toBeVisible();
   });
 
-  test('Artists Seen Live tile counts distinct artists from achieved raves and drills into the list', async ({ page }) => {
+  test('Artists Seen Live tile counts distinct artists this raver personally checked off, not just the lineup', async ({ page }) => {
     const d = statsData();
-    // Charlotte de Witte (a1, techno) appeared at f-past, which r-you attended.
-    d.artist_festival_appearances = [{ artist_id: 'a1', festival_id: 'f-past' }];
+    // Charlotte de Witte (a1) and a second artist both appeared at f-past, which
+    // r-you attended — but r-you only checked off a1 as personally seen, so the
+    // stat should reflect that, not the full 2-artist lineup.
+    d.artists.push({ id: 'a2', name: 'Amelie Lens', genres: ['techno'] });
+    d.artist_festival_appearances = [
+      { artist_id: 'a1', festival_id: 'f-past' },
+      { artist_id: 'a2', festival_id: 'f-past' },
+    ];
+    d.raver_artist_sightings = [{ raver_id: 'r-you', artist_id: 'a1', festival_id: 'f-past' }];
     await bootAuthedApp(page, { data: d });
     await page.evaluate(() => { switchTab('stats'); loadStatsPage(); });
 
     const heroNumbers = page.locator('#stats-content .stats-hero-number');
-    await expect(heroNumbers.nth(4)).toHaveText('1'); // Artists Seen
+    await expect(heroNumbers.nth(4)).toHaveText('1'); // Artists Seen — only the checked-off one
 
     await page.evaluate(() => openArtistsSeenPage());
     await expect(page.locator('#page-artists-seen .rlog-item-name')).toHaveText('Charlotte de Witte');
@@ -72,6 +79,16 @@ test.describe('stats', () => {
 
   test('Artists Seen Live shows a dedicated empty state with no lineup data', async ({ page }) => {
     await bootAuthedApp(page, { data: statsData() }); // no artist_festival_appearances seeded
+    await page.evaluate(() => { switchTab('stats'); openArtistsSeenPage(); });
+    await expect(page.locator('#page-artists-seen .stats-empty-title')).toHaveText('No lineup data yet');
+  });
+
+  test('Artists Seen Live stays empty when a lineup exists but nothing is checked off yet', async ({ page }) => {
+    const d = statsData();
+    d.artist_festival_appearances = [{ artist_id: 'a1', festival_id: 'f-past' }];
+    // No raver_artist_sightings seeded — attending a rave with a lineup isn't
+    // enough on its own; the raver has to have checked an artist off.
+    await bootAuthedApp(page, { data: d });
     await page.evaluate(() => { switchTab('stats'); openArtistsSeenPage(); });
     await expect(page.locator('#page-artists-seen .stats-empty-title')).toHaveText('No lineup data yet');
   });

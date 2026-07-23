@@ -1315,6 +1315,13 @@
     0%, 100% { box-shadow: 0 0 7px -3px currentColor; }
     50%       { box-shadow: 0 0 16px -1px currentColor; }
   }
+  .lineup-seen-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; margin-left: 2px; border-radius: 50%; border: none;
+    background: rgba(255,255,255,0.08); cursor: pointer; font-size: 0.72rem; line-height: 1;
+    color: var(--muted);
+  }
+  .lineup-seen-btn.seen { background: color-mix(in srgb, var(--neon-green) 22%, transparent); }
   .profile-actions { display: flex; gap: 10px; margin: 4px 0 12px; }
 
   /* Connect row (IG / Call / Text) */
@@ -7869,7 +7876,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.5.0';
+  const APP_VERSION = '1.6.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -9664,6 +9671,7 @@ async function doProfilePasswordChange() {
     // --- Artists (canonical list + festival appearances) ---
     await dbLoadArtists().catch(() => {});
     await dbLoadArtistAppearances().catch(() => {});
+    await dbLoadArtistSightings().catch(() => {});
 
     // --- Ravers ---
     // Load own ravers AND any stubs the user has claimed (claimed_by = uid).
@@ -21182,6 +21190,15 @@ async function doProfilePasswordChange() {
     if (data) artistAppearances = data;
   }
 
+  // Personal "artists I saw" checklist — distinct from artistAppearances (the
+  // shared lineup of who played). Drives myArtistsSeen() stats.
+  let raverArtistSightings = [];
+
+  async function dbLoadArtistSightings() {
+    const { data } = await sb.from('raver_artist_sightings').select('raver_id,artist_id,festival_id');
+    if (data) raverArtistSightings = data;
+  }
+
   function findArtistById(id) {
     return artists.find(a => String(a.id) === String(id)) || DEMO_ARTISTS.find(a => String(a.id) === String(id));
   }
@@ -21213,6 +21230,163 @@ async function doProfilePasswordChange() {
     }
     artists.push(data);
     return data;
+  }
+
+  // ===== Rave lineup tagging (shared lineup + personal "I saw this" checklist) =====
+  // Any raver attending a rave can crowdsource its lineup; the personal
+  // sighting checklist only opens up once the rave is achieved (past).
+  function lineupArtistsFor(festId) {
+    return artistAppearances.filter(a => String(a.festival_id) === String(festId));
+  }
+
+  function myLineupSightingIds(festId) {
+    const you = squad.find(r => r.isYou);
+    if (!you) return new Set();
+    return new Set(
+      raverArtistSightings
+        .filter(s => String(s.raver_id) === String(you.id) && String(s.festival_id) === String(festId))
+        .map(s => String(s.artist_id))
+    );
+  }
+
+  function canEditFestLineup(festId) {
+    return festivalGoers(festId).some(g => g.isYou);
+  }
+
+  async function dbAddLineupArtist(festId, artistId) {
+    // Client-side dedup — the DB deliberately has no uniqueness constraint here
+    // (distinct b2b/multi-night sets can legitimately share an artist+festival),
+    // so a plain crowdsourced tap should skip if this artist is already tagged.
+    if (lineupArtistsFor(festId).some(a => String(a.artist_id) === String(artistId))) {
+      showToast('Already on the lineup');
+      return false;
+    }
+    const { error } = await sb.from('artist_festival_appearances')
+      .insert({ artist_id: artistId, festival_id: festId });
+    if (error) {
+      console.error('artist_festival_appearances insert error', error);
+      showToast('⚠️ Could not add artist to lineup');
+      return false;
+    }
+    artistAppearances.push({ artist_id: artistId, festival_id: festId, is_headliner: false, night: null, note: null });
+    return true;
+  }
+
+  async function dbRemoveLineupArtist(festId, artistId) {
+    const { error } = await sb.from('artist_festival_appearances')
+      .delete().eq('festival_id', festId).eq('artist_id', artistId);
+    if (error) {
+      console.error('artist_festival_appearances delete error', error);
+      showToast('⚠️ Could not remove artist from lineup');
+      return false;
+    }
+    artistAppearances = artistAppearances.filter(a =>
+      !(String(a.festival_id) === String(festId) && String(a.artist_id) === String(artistId)));
+    raverArtistSightings = raverArtistSightings.filter(s =>
+      !(String(s.festival_id) === String(festId) && String(s.artist_id) === String(artistId)));
+    return true;
+  }
+
+  async function dbToggleArtistSighting(festId, artistId) {
+    const you = squad.find(r => r.isYou);
+    if (!you) return;
+    const seen = myLineupSightingIds(festId).has(String(artistId));
+    if (seen) {
+      const { error } = await sb.from('raver_artist_sightings')
+        .delete().eq('raver_id', you.id).eq('festival_id', festId).eq('artist_id', artistId);
+      if (error) { console.error('raver_artist_sightings delete error', error); showToast('⚠️ Could not update — try again'); return; }
+      raverArtistSightings = raverArtistSightings.filter(s =>
+        !(String(s.raver_id) === String(you.id) && String(s.festival_id) === String(festId) && String(s.artist_id) === String(artistId)));
+    } else {
+      const { error } = await sb.from('raver_artist_sightings')
+        .insert({ raver_id: you.id, artist_id: artistId, festival_id: festId });
+      if (error) { console.error('raver_artist_sightings insert error', error); showToast('⚠️ Could not update — try again'); return; }
+      raverArtistSightings.push({ raver_id: you.id, artist_id: artistId, festival_id: festId });
+    }
+    renderFestivalLineupSection(festId);
+  }
+
+  function renderFestivalLineupSection(festId) {
+    const box = document.getElementById('lineup-section');
+    if (!box) return;
+    const f = getFestival(festId);
+    if (!f) { box.innerHTML = ''; return; }
+    const canEdit = canEditFestLineup(festId);
+    const rows = lineupArtistsFor(festId);
+    const achieved = isFestAchieved(f);
+    const mySightings = achieved ? myLineupSightingIds(festId) : new Set();
+
+    const chipHtml = rows.map(a => {
+      const artist = findArtistById(a.artist_id);
+      if (!artist) return '';
+      const seen = mySightings.has(String(a.artist_id));
+      const seenBtn = achieved && canEdit
+        ? `<button type="button" class="lineup-seen-btn${seen ? ' seen' : ''}" title="${seen ? 'You saw this — tap to undo' : 'Mark as seen'}" onclick="dbToggleArtistSighting('${festId}','${a.artist_id}')">${seen ? '✅' : '👁️'}</button>`
+        : '';
+      const removeBtn = canEdit
+        ? `<button type="button" class="tag-remove-btn" title="Remove ${escHtml(artist.name)}" aria-label="Remove ${escHtml(artist.name)}" onclick="lineupRemoveArtist('${festId}','${a.artist_id}')">&nbsp;✕</button>`
+        : '';
+      const hl = a.is_headliner ? ' 🌟' : '';
+      return `<span class="fav-chip" style="--chip-col:${artistColor(artist.name)};">${escHtml(artist.name)}${hl}${seenBtn}${removeBtn}</span>`;
+    }).join('');
+    const chipsOrEmpty = chipHtml || `<span class="fest-empty" style="font-size:0.78rem;">No lineup tagged yet${canEdit ? ' — who played?' : ''}</span>`;
+
+    const addHtml = canEdit ? `
+      <div class="fest-search-wrap" style="margin-top:8px;">
+        <input class="form-input" id="lu-artist-search-input" placeholder="🔍 Add an artist to the lineup…" autocomplete="off" style="font-size:16px;"
+          oninput="lineupArtistSearchInput('${festId}', this.value)" onfocus="lineupArtistSearchInput('${festId}', this.value)"
+          onblur="setTimeout(()=>{const d=document.getElementById('lu-artist-search-results');if(d)d.style.display='none';},200)">
+        <div id="lu-artist-search-results" class="fest-search-dropdown" style="display:none;"></div>
+      </div>` : '';
+
+    const sightingHint = achieved && canEdit && rows.length
+      ? `<div class="fest-empty" style="font-size:0.72rem;margin-top:6px;">👁️ Tap an artist to mark whether you personally caught their set</div>`
+      : (!canEdit && rows.length === 0 ? `<div class="fest-empty" style="font-size:0.72rem;margin-top:6px;">RSVP to this rave to tag its lineup</div>` : '');
+
+    box.innerHTML = `<div class="fav-chip-row" id="lineup-chip-wrap">${chipsOrEmpty}</div>${addHtml}${sightingHint}`;
+  }
+
+  function lineupArtistSearchInput(festId, q) {
+    const results = document.getElementById('lu-artist-search-results');
+    if (!results) return;
+    const query = (q || '').trim();
+    const existingIds = lineupArtistsFor(festId).map(a => a.artist_id);
+    const matches = artistSearchResults(query, existingIds);
+    if (!query && !matches.length) { results.style.display = 'none'; return; }
+    const matchHtml = matches.map(a =>
+      `<div class="fest-search-item" onmousedown="lineupPickFromSearch('${festId}','${a.id}')">
+        <span class="fest-search-name">${escHtml(a.name)}</span>
+      </div>`
+    ).join('');
+    const exactMatch = query && artists.some(a => a.name.toLowerCase() === query.toLowerCase());
+    const addNewHtml = query && !exactMatch
+      ? `<div class="fest-search-item" onmousedown="lineupAddNewArtistFromSearch('${festId}','${query.replace(/'/g,"\\'")}')">
+          <span class="fest-search-name">+ Add "${escHtml(query)}" as new artist</span>
+        </div>`
+      : '';
+    if (!matchHtml && !addNewHtml) { results.style.display = 'none'; return; }
+    results.innerHTML = matchHtml + addNewHtml;
+    results.style.display = 'block';
+  }
+
+  async function lineupPickFromSearch(festId, artistId) {
+    const ok = await dbAddLineupArtist(festId, artistId);
+    const inp = document.getElementById('lu-artist-search-input');
+    if (inp) inp.value = '';
+    const res = document.getElementById('lu-artist-search-results');
+    if (res) res.style.display = 'none';
+    if (ok) renderFestivalLineupSection(festId);
+  }
+
+  async function lineupAddNewArtistFromSearch(festId, name) {
+    const artist = await addNewArtist(name);
+    if (!artist) return;
+    await lineupPickFromSearch(festId, artist.id);
+  }
+
+  async function lineupRemoveArtist(festId, artistId) {
+    const ok = await dbRemoveLineupArtist(festId, artistId);
+    if (ok) renderFestivalLineupSection(festId);
   }
 
   function upcomingAppearance(artistId) {
@@ -23287,6 +23461,10 @@ async function doProfilePasswordChange() {
             oninput="reSearch(this.value)"
             onblur="setTimeout(()=>{const d=document.getElementById('re-raver-results');if(d)d.style.display='none';},200)">
           <div id="re-raver-results" class="fest-search-dropdown" style="display:none;"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">🎧 Lineup</label>
+          <div id="lineup-section"></div>
         </div>` : ''}
       </div>
       <div class="page-panel-footer">
@@ -23299,6 +23477,7 @@ async function doProfilePasswordChange() {
       </div>
     `;
     document.getElementById('rave-edit-overlay').classList.add('open');
+    if (f) renderFestivalLineupSection(f.id);
   }
 
   // Swaps the existing rave-edit modal body to a read-only History view for
@@ -25220,13 +25399,18 @@ async function doProfilePasswordChange() {
   }
 
   // Distinct artists seen across achieved raves, most-seen first. Each artist is counted
-  // once per achieved festival they appeared at (lineup granularity, not per-set).
+  // once per achieved festival where this raver personally checked them off as seen
+  // (raver_artist_sightings) — not simply every artist on a lineup they attended, since
+  // attending a rave doesn't mean you caught every set.
   function myArtistsSeen() {
+    const you = squad.find(r => r.isYou);
+    if (!you) return [];
     const achievedIds = new Set(myAchievedFests().map(f => String(f.id)));
-    const counts = new Map(); // artistId -> # of achieved fests they appeared at
-    artistAppearances.forEach(a => {
-      if (!achievedIds.has(String(a.festival_id))) return;
-      const id = String(a.artist_id);
+    const counts = new Map(); // artistId -> # of achieved fests this raver marked them seen at
+    raverArtistSightings.forEach(s => {
+      if (String(s.raver_id) !== String(you.id)) return;
+      if (!achievedIds.has(String(s.festival_id))) return;
+      const id = String(s.artist_id);
       counts.set(id, (counts.get(id) || 0) + 1);
     });
     return [...counts.entries()]
@@ -25911,7 +26095,7 @@ async function doProfilePasswordChange() {
         <div class="stats-empty-state">
           <div class="stats-empty-icon">🎤</div>
           <div class="stats-empty-title">No lineup data yet</div>
-          <div class="stats-empty-sub">Once your raves' lineups are added, the artists you've seen will show up here.</div>
+          <div class="stats-empty-sub">Tag artists to your past raves and check off who you personally caught — they'll show up here.</div>
         </div>`;
       return;
     }
