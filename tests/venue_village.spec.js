@@ -155,6 +155,23 @@ test.describe('Venue Directory · rave linking', () => {
     await expect(page.locator('#vn-detail-modal')).toContainText('Tomorrowland');
   });
 
+  test('a linked venue shows on the rave card and the compact list row', async ({ page }) => {
+    await bootAuthedApp(page, { data: seedWithOwnedFest() });
+    await page.evaluate(async () => {
+      const v = await dbAddVenue({ name: 'Card View Venue', location: '' });
+      openRaveEditor('f1');
+      pickFestVenue(v.id);
+      saveRave();
+      closeRaveEditor();
+      switchTab('events');
+      renderEvents();
+    });
+    await expect(page.locator('#events-list')).toContainText('Card View Venue');
+
+    await page.evaluate(() => { setRaveView('list'); renderEvents(); });
+    await expect(page.locator('#events-list')).toContainText('Card View Venue');
+  });
+
   test('adding a new venue inline from the rave editor search creates it and links it', async ({ page }) => {
     await bootAuthedApp(page, { data: seedWithOwnedFest() });
     await page.evaluate(() => openRaveEditor('f1'));

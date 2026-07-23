@@ -7895,7 +7895,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.7.0';
+  const APP_VERSION = '1.7.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -19001,6 +19001,11 @@ async function doProfilePasswordChange() {
     venues = data || [];
   }
 
+  function findVenueById(id) {
+    if (!id) return null;
+    return venues.find(v => String(v.id) === String(id)) || null;
+  }
+
   async function dbAddVenue({ name, description = '', websiteUrl = '', instagram = '', location = '' }) {
     if (!currentUser) return null;
     const trimmedName = (name || '').trim().slice(0, 80);
@@ -23784,9 +23789,11 @@ async function doProfilePasswordChange() {
         : { n: '📼', u: f._d ? String(f._d.getFullYear()) : 'past' };
       const dateBit = f._d ? `${f._d.getDate()} ${MON_SHORT[f._d.getMonth()]}${!isUpcoming ? ' ' + f._d.getFullYear() : ''}` : '';
       const distMi = nearbyRadius != null ? festivalDistance(f, userLoc) : null;
+      const venue = findVenueById(f.venueId);
       const metaBits = [];
       if (durLabel) metaBits.push(`<span class="marquee-duration-badge">${escHtml(durLabel)}</span>`);
       metaBits.push(`<span>📍 ${escHtml(f.location || 'Location TBD')}${distMi != null ? ` · ${Math.round(distMi)} mi away` : ''}</span>`);
+      if (venue) metaBits.push(`<span>🏛️ ${escHtml(venue.name)}</span>`);
       if (dateBit) metaBits.push(`<span>${escHtml(dateBit)}</span>`);
       const weatherChip = weatherChipHTML(f, weatherCache);
       const mapUrlJs = String(f.mapUrl || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
@@ -23884,9 +23891,11 @@ async function doProfilePasswordChange() {
       const distMi = nearbyRadius != null ? festivalDistance(f, userLoc) : null;
       const dow = f._d ? DOW_SHORT[f._d.getDay()] : '–';
       const dayNum = f._d ? f._d.getDate() : '–';
+      const venue = findVenueById(f.venueId);
+      const venueBit = venue ? ` · 🏛️ ${escHtml(venue.name)}` : '';
       const subLine = isUpcoming
-        ? `<span class="rave-row-cd">${countdownLabel(f._d)}</span> · ${escHtml(f.location || 'Location TBD')}${distMi != null ? ` · ${Math.round(distMi)} mi` : ''}`
-        : `📼 Happened in ${f._d ? f._d.getFullYear() : '—'} · ${escHtml(f.location || 'Location TBD')}`;
+        ? `<span class="rave-row-cd">${countdownLabel(f._d)}</span> · ${escHtml(f.location || 'Location TBD')}${distMi != null ? ` · ${Math.round(distMi)} mi` : ''}${venueBit}`
+        : `📼 Happened in ${f._d ? f._d.getFullYear() : '—'} · ${escHtml(f.location || 'Location TBD')}${venueBit}`;
       const allPeople = [...goers, ...interestedPeople];
       const shown = allPeople.slice(0, 3);
       const moreCount = allPeople.length - shown.length;
