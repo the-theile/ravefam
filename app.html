@@ -1315,6 +1315,13 @@
     0%, 100% { box-shadow: 0 0 7px -3px currentColor; }
     50%       { box-shadow: 0 0 16px -1px currentColor; }
   }
+  .lineup-seen-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; margin-left: 2px; border-radius: 50%; border: none;
+    background: rgba(255,255,255,0.08); cursor: pointer; font-size: 0.72rem; line-height: 1;
+    color: var(--muted);
+  }
+  .lineup-seen-btn.seen { background: color-mix(in srgb, var(--neon-green) 22%, transparent); }
   .profile-actions { display: flex; gap: 10px; margin: 4px 0 12px; }
 
   /* Connect row (IG / Call / Text) */
@@ -6825,7 +6832,7 @@
     <button class="nav-tab c-raves" onclick="switchTab('events', this)"><span class="tab-icon"><svg><use href="#i-raves"/></svg></span><span class="tab-label-full">Raves</span><span class="tab-label-short">Raves</span></button>
     <button class="nav-tab c-ravers" onclick="switchTab('members', this)"><span class="tab-icon"><svg><use href="#i-ravers"/></svg></span><span class="tab-label-full">Ravers</span><span class="tab-label-short">Ravers</span></button>
     <button class="nav-tab c-stats" onclick="switchTab('stats', this); loadStatsPage();"><span class="tab-icon"><svg><use href="#i-stats"/></svg></span><span class="tab-label-full">Stats</span><span class="tab-label-short">Stats</span></button>
-    <button class="nav-tab c-village" onclick="switchTab('checklist', this); renderVendorVillage();"><span class="tab-icon">🏪</span><span class="tab-label-full">Village</span><span class="tab-label-short">Village</span></button>
+    <button class="nav-tab c-village" onclick="switchTab('checklist', this); renderVillage();"><span class="tab-icon">🏪</span><span class="tab-label-full">Village</span><span class="tab-label-short">Village</span></button>
   </nav>
 
   <main>
@@ -6961,7 +6968,12 @@
       <div class="section-header" style="margin-bottom:16px;">
         <div class="section-title">Village 🏪</div>
       </div>
+      <div class="stats-subtabs" id="village-section-tabs">
+        <button class="stats-subtab active" onclick="switchVillageSection('vendors', this)">🏪 Vendors</button>
+        <button class="stats-subtab" onclick="switchVillageSection('venues', this)">🏛️ Venues</button>
+      </div>
       <div id="vendor-village-root" style="width:100%;"></div>
+      <div id="venue-village-root" style="width:100%;display:none;"></div>
     </div>
 
     <!-- STATS PAGE -->
@@ -7067,6 +7079,20 @@
 <!-- Vendor Village: Edit Vendor Modal -->
 <div class="modal-overlay" id="vv-edit-overlay" onclick="if(event.target===this)closeEditVendorModal()">
   <div class="modal" id="vv-edit-modal" style="max-height:88vh;overflow-y:auto;">
+    <!-- filled by JS -->
+  </div>
+</div>
+
+<!-- Venue Village: Venue Detail Modal -->
+<div class="modal-overlay" id="vn-detail-overlay" onclick="if(event.target===this)closeVenueDetail()">
+  <div class="modal" id="vn-detail-modal" style="max-height:88vh;overflow-y:auto;">
+    <!-- filled by JS -->
+  </div>
+</div>
+
+<!-- Venue Village: Edit Venue Modal -->
+<div class="modal-overlay" id="vn-edit-overlay" onclick="if(event.target===this)closeEditVenueModal()">
+  <div class="modal" id="vn-edit-modal" style="max-height:88vh;overflow-y:auto;">
     <!-- filled by JS -->
   </div>
 </div>
@@ -7869,7 +7895,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.5.0';
+  const APP_VERSION = '1.7.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -9657,13 +9683,18 @@ async function doProfilePasswordChange() {
       .order('date', { ascending: true });
     if (!fErr && dbFests) {
       dbFests.forEach(f => {
-        festivals.push({ id: f.id, name: f.name, date: f.date, location: f.location || '', color: f.color || null, days: f.days || null, createdBy: f.created_by || null, archived: !!f.archived_at, mapUrl: f.map_url || null, lat: f.lat ?? null, lng: f.lng ?? null });
+        festivals.push({ id: f.id, name: f.name, date: f.date, location: f.location || '', color: f.color || null, days: f.days || null, createdBy: f.created_by || null, archived: !!f.archived_at, mapUrl: f.map_url || null, lat: f.lat ?? null, lng: f.lng ?? null, venueId: f.venue_id ?? null });
       });
     }
 
     // --- Artists (canonical list + festival appearances) ---
     await dbLoadArtists().catch(() => {});
     await dbLoadArtistAppearances().catch(() => {});
+    await dbLoadArtistSightings().catch(() => {});
+
+    // --- Venues (loaded at boot, not just on visiting Village, so the rave
+    // editor's venue picker has data even if the user never opened Village) ---
+    await dbLoadVenues().catch(() => {});
 
     // --- Ravers ---
     // Load own ravers AND any stubs the user has claimed (claimed_by = uid).
@@ -10707,7 +10738,7 @@ async function doProfilePasswordChange() {
   async function dbSaveFestival(data, id) {
     const uid = currentUser?.id;
     if (!uid) return null;
-    const row = { name: data.name, date: data.date, location: data.location, color: data.color || null, days: data.days || null, lat: data.lat ?? null, lng: data.lng ?? null };
+    const row = { name: data.name, date: data.date, location: data.location, color: data.color || null, days: data.days || null, lat: data.lat ?? null, lng: data.lng ?? null, venue_id: data.venueId ?? null };
     if (id) {
       const { error } = await sb.from('festivals').update(row).eq('id', id);
       if (error) { console.error('festival update error', error); showToast('⚠️ Could not update rave — try again'); }
@@ -10870,6 +10901,8 @@ async function doProfilePasswordChange() {
       case 'vendor':        return [{ table: 'vendors', match: { id: row.entity_id } }];
       case 'vendor_review': return [{ table: 'vendor_reviews', match: { id: row.entity_id } }];
       case 'vendor_spot':   return [{ table: 'vendor_spots', match: { id: row.entity_id } }];
+      case 'venue':         return [{ table: 'venues', match: { id: row.entity_id } }];
+      case 'venue_review':  return [{ table: 'venue_reviews', match: { id: row.entity_id } }];
       case 'photo':
         // our_photos has no single `id` in play here — entityId is the uploader,
         // metadata carries the pair, matching how logAudit recorded it above.
@@ -13136,7 +13169,8 @@ async function doProfilePasswordChange() {
   const FLAG_TARGET_LABELS = {
     raver: '👤 Raver', festival: '🎟️ Rave', crew: '🎪 Crew', crew_member: '👥 Crew Member', vibe_tag: '🏷️ Vibe Tag',
     photo: '📸 Photo', dream_pin: '✨ Dream Pin', archive_link: '📸 Archive Link', poll: '🗳️ Poll', jam: '🎵 Jam',
-    vendor: '🏪 Vendor', vendor_review: '⭐ Vendor Review', vendor_spot: '📍 Vendor Spot'
+    vendor: '🏪 Vendor', vendor_review: '⭐ Vendor Review', vendor_spot: '📍 Vendor Spot',
+    venue: '🏛️ Venue', venue_review: '⭐ Venue Review'
   };
 
   function formatModDate(iso) {
@@ -13157,7 +13191,7 @@ async function doProfilePasswordChange() {
             <div class="event-meta">${escHtml(f.reason || 'No reason given')}</div>
             <div class="event-meta" style="opacity:0.7;" title="${escHtml(when.full)}">Reported ${escHtml(when.rel)}</div>
             <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
-              <button class="btn btn-ghost" style="padding:8px 14px;font-size:0.76rem;" onclick="viewFlagTarget('${f.target_type}','${escHtml(String(f.target_id))}','${escHtml(String(f.metadata?.crew_id || ''))}','${escHtml(String(f.metadata?.vendor_id || ''))}')">👀 View</button>
+              <button class="btn btn-ghost" style="padding:8px 14px;font-size:0.76rem;" onclick="viewFlagTarget('${f.target_type}','${escHtml(String(f.target_id))}','${escHtml(String(f.metadata?.crew_id || ''))}','${escHtml(String(f.metadata?.vendor_id || ''))}','${escHtml(String(f.metadata?.venue_id || ''))}')">👀 View</button>
               <button class="btn btn-ghost" style="padding:8px 14px;font-size:0.76rem;" onclick="handleDismissFlag('${f.id}')">Dismiss</button>
               <button class="btn btn-primary" style="padding:8px 14px;font-size:0.76rem;" onclick="handleResolveFlag('${f.id}')">Resolve</button>
             </div>
@@ -13302,7 +13336,7 @@ async function doProfilePasswordChange() {
 
   // Jump to the actual content so a mod acts through the app's existing
   // moderator-gated buttons — the Reports tab itself is triage-only.
-  function viewFlagTarget(targetType, targetId, crewId, vendorId) {
+  function viewFlagTarget(targetType, targetId, crewId, vendorId, venueId) {
     // crew_member reports use the raver_id as target_id (crew_id lives in
     // metadata) — same navigable target as a plain raver report.
     if (targetType === 'raver' || targetType === 'crew_member' || targetType === 'vibe_tag') { openProfile(targetId); return; }
@@ -13320,6 +13354,8 @@ async function doProfilePasswordChange() {
     if (targetType === 'vendor') { jumpToVendorVillage(targetId); return; }
     if (targetType === 'vendor_review' && vendorId) { jumpToVendorVillage(vendorId); return; }
     if (targetType === 'vendor_spot' && vendorId) { jumpToVendorVillage(vendorId); return; }
+    if (targetType === 'venue') { jumpToVenueVillage(targetId); return; }
+    if (targetType === 'venue_review' && venueId) { jumpToVenueVillage(venueId); return; }
     showToast('Nothing to preview for this report');
   }
 
@@ -18948,6 +18984,612 @@ async function doProfilePasswordChange() {
     if (ok) openVendorDetail(vendorId);
   }
 
+  // ===== VENUE DIRECTORY — data layer =====
+  // Community venue directory: any raver can post a venue and it goes live
+  // immediately (no pre-approval queue), moderated after the fact via the
+  // existing flags/report system — same posture as Vendor Village. Reviews
+  // are open to any raver, not gated on having attended a rave there.
+  let venues = [];
+  let venueReviewsCache = {};
+
+  async function dbLoadVenues() {
+    const { data, error } = await sb.from('venues')
+      .select('*')
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false });
+    if (error) { console.error('venues load error', error); return; }
+    venues = data || [];
+  }
+
+  async function dbAddVenue({ name, description = '', websiteUrl = '', instagram = '', location = '' }) {
+    if (!currentUser) return null;
+    const trimmedName = (name || '').trim().slice(0, 80);
+    if (!trimmedName) { showToast('⚠️ Venue name is required'); return null; }
+    const { data, error } = await sb.from('venues').insert({
+      created_by: currentUser.id,
+      name: trimmedName,
+      description: description ? description.trim().slice(0, 600) : null,
+      website_url: websiteUrl ? websiteUrl.trim() : null,
+      instagram: instagram ? instagram.trim() : null,
+      location: location ? location.trim().slice(0, 100) : null
+    }).select().single();
+    if (error) { console.error('venue insert error', error); showToast('⚠️ Could not add venue — try again'); return null; }
+    venues.unshift(data);
+    return data;
+  }
+
+  async function dbUpdateVenue(venueId, { name, description, websiteUrl, instagram, location }) {
+    const venue = venues.find(v => v.id === venueId);
+    if (!venue || !currentUser || (venue.created_by !== currentUser.id && !isModerator())) return null;
+    const { data, error } = await sb.from('venues').update({
+      name: name.trim().slice(0, 80),
+      description: description ? description.trim().slice(0, 600) : null,
+      website_url: websiteUrl ? websiteUrl.trim() : null,
+      instagram: instagram ? instagram.trim() : null,
+      location: location ? location.trim().slice(0, 100) : null
+    }).eq('id', venueId).select().single();
+    if (error) { console.error('venue update error', error); showToast('⚠️ Could not update venue — try again'); return null; }
+    const idx = venues.findIndex(v => v.id === venueId);
+    if (idx >= 0) venues[idx] = data;
+    return data;
+  }
+
+  async function dbDeleteVenue(venueId, reason = null) {
+    const { ok, rateLimited } = await softDeleteRow('venues', { id: venueId }, reason);
+    if (!ok) { if (!rateLimited) showToast('⚠️ Could not remove venue — try again'); return false; }
+    await logAudit({ action: 'venue.remove', entityType: 'venue', entityId: venueId, reason });
+    venues = venues.filter(v => v.id !== venueId);
+    return true;
+  }
+
+  async function dbLoadVenueReviews(venueIds) {
+    const ids = Array.isArray(venueIds) ? venueIds : [venueIds];
+    if (!ids.length) return [];
+    const { data, error } = await sb.from('venue_reviews')
+      .select('*').in('venue_id', ids).is('deleted_at', null)
+      .order('created_at', { ascending: false });
+    if (error) { console.error('venue_reviews load error', error); return []; }
+    ids.forEach(id => { venueReviewsCache[id] = []; });
+    (data || []).forEach(row => { (venueReviewsCache[row.venue_id] ||= []).push(row); });
+    return data || [];
+  }
+
+  // Upsert-on-conflict, one review per (venue, raver) — same shape as
+  // dbUpsertVendorReview.
+  async function dbUpsertVenueReview(venueId, { rating, body, photoUrl = null }) {
+    if (!currentUser) return false;
+    const trimmed = (body || '').trim().slice(0, 300);
+    const { data, error } = await sb.from('venue_reviews').upsert(
+      { venue_id: venueId, raver_id: currentUser.id, rating, body: trimmed || null, photo_url: photoUrl || null },
+      { onConflict: 'venue_id,raver_id' }
+    ).select().single();
+    if (error) { console.error('venue_reviews upsert error', error); showToast('⚠️ Could not save review — try again'); return false; }
+    const list = venueReviewsCache[venueId] || [];
+    const idx = list.findIndex(r => r.raver_id === currentUser.id);
+    if (idx >= 0) list[idx] = data; else list.unshift(data);
+    venueReviewsCache[venueId] = list;
+    return true;
+  }
+
+  async function dbDeleteVenueReview(reviewId, venueId, reason = null) {
+    const { ok, rateLimited } = await softDeleteRow('venue_reviews', { id: reviewId }, reason);
+    if (!ok) { if (!rateLimited) showToast('⚠️ Could not remove review — try again'); return false; }
+    await logAudit({ action: 'venue_review.remove', entityType: 'venue_review', entityId: reviewId, reason, metadata: { venue_id: venueId } });
+    venueReviewsCache[venueId] = (venueReviewsCache[venueId] || []).filter(r => r.id !== reviewId);
+    return true;
+  }
+
+  function venueRatingSummary(reviews) {
+    if (!reviews?.length) return { avg: null, count: 0, starDisplay: '☆☆☆☆☆' };
+    const avg = reviews.reduce((s, r) => s + r.rating, 0) / reviews.length;
+    const rounded = Math.round(avg);
+    return { avg: avg.toFixed(1), count: reviews.length, starDisplay: '★'.repeat(rounded) + '☆'.repeat(5 - rounded) };
+  }
+
+  // Raves whose venue_id points at this venue — the one-venue-per-rave link,
+  // read in the opposite direction (venue -> its raves).
+  function venueRavesHeldHere(venueId) {
+    return festivals.filter(f => String(f.venueId) === String(venueId));
+  }
+
+  // Same "crew cosign" social-proof pattern as vendorCrewCosigns — surfaces
+  // when someone in the viewer's own crew has also reviewed this venue.
+  function venueCrewCosigns(venueId) {
+    if (!currentUser) return [];
+    const reviews = (venueReviewsCache[venueId] || []).filter(r => r.raver_id !== currentUser.id);
+    const byCrew = {};
+    reviews.forEach(review => {
+      const reviewer = raverByAuthUid(review.raver_id);
+      if (!reviewer) return;
+      crews.filter(c => (c.squadIds || []).some(id => String(id) === String(reviewer.id)))
+        .forEach(crew => { (byCrew[crew.id] ||= { crew, ratings: [] }).ratings.push(review.rating); });
+    });
+    return Object.values(byCrew)
+      .map(({ crew, ratings }) => ({ crew, count: ratings.length, avgRating: ratings.reduce((a, b) => a + b, 0) / ratings.length }))
+      .sort((a, b) => b.count - a.count);
+  }
+
+  function venueCosignLineHTML(cosign) {
+    const rounded = Math.round(cosign.avgRating);
+    const stars = '★'.repeat(rounded) + '☆'.repeat(5 - rounded);
+    return `<div class="jam-meta vv-cosign-line">👥 ${cosign.count} from ${escHtml(cosign.crew.name)} rated this ${stars}</div>`;
+  }
+
+  // ===== VENUE DIRECTORY — UI =====
+  // Village has two sibling directories (vendors + venues) sharing one nav
+  // tab; this dispatches to whichever sub-section is currently selected.
+  let villageSection = 'vendors';
+
+  function renderVillage() {
+    if (villageSection === 'venues') renderVenueVillage();
+    else renderVendorVillage();
+  }
+
+  function switchVillageSection(section, el) {
+    villageSection = section;
+    document.querySelectorAll('#village-section-tabs .stats-subtab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    const vendorRoot = document.getElementById('vendor-village-root');
+    const venueRoot = document.getElementById('venue-village-root');
+    if (vendorRoot) vendorRoot.style.display = section === 'vendors' ? '' : 'none';
+    if (venueRoot) venueRoot.style.display = section === 'venues' ? '' : 'none';
+    if (section === 'venues') renderVenueVillage();
+    else renderVendorVillage();
+  }
+
+  let venueVillageTab = 'browse';
+
+  function renderVenueVillage() {
+    const root = document.getElementById('venue-village-root');
+    if (!root) return;
+    root.innerHTML = venueVillageShellHTML();
+    loadVenueVillageData();
+  }
+
+  function venueVillageShellHTML() {
+    return `
+      <div class="stats-subtabs vv-subtabs">
+        <button class="stats-subtab${venueVillageTab === 'browse' ? ' active' : ''}" onclick="switchVenueTab('browse', this)">🏛️ Browse</button>
+        <button class="stats-subtab${venueVillageTab === 'submit' ? ' active' : ''}" onclick="switchVenueTab('submit', this)">➕ Add Venue</button>
+      </div>
+      <div id="vn-browse-panel" style="display:${venueVillageTab === 'browse' ? '' : 'none'};"></div>
+      <div id="vn-submit-panel" style="display:${venueVillageTab === 'submit' ? '' : 'none'};"></div>
+    `;
+  }
+
+  async function loadVenueVillageData() {
+    await dbLoadVenues();
+    await dbLoadVenueReviews(venues.map(v => v.id));
+    renderVenueVillagePanel();
+  }
+
+  function renderVenueVillagePanel() {
+    if (venueVillageTab === 'browse') renderVenueBrowsePanel();
+    else if (venueVillageTab === 'submit') renderVenueSubmitPanel();
+  }
+
+  function switchVenueTab(tab, el) {
+    venueVillageTab = tab;
+    const root = document.getElementById('venue-village-root');
+    if (!root) return;
+    root.querySelectorAll('.stats-subtab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('vn-browse-panel').style.display = tab === 'browse' ? '' : 'none';
+    document.getElementById('vn-submit-panel').style.display = tab === 'submit' ? '' : 'none';
+    renderVenueVillagePanel();
+  }
+
+  // Jumps straight to a venue's detail view — used by moderators triaging a
+  // venue/venue_review report, mirroring jumpToVendorVillage.
+  async function jumpToVenueVillage(venueIdToOpen) {
+    switchTab('checklist');
+    villageSection = 'venues';
+    const tabs = document.querySelectorAll('#village-section-tabs .stats-subtab');
+    tabs.forEach((t, i) => t.classList.toggle('active', i === 1));
+    const vendorRoot = document.getElementById('vendor-village-root');
+    const venueRoot = document.getElementById('venue-village-root');
+    if (vendorRoot) vendorRoot.style.display = 'none';
+    if (venueRoot) { venueRoot.style.display = ''; venueRoot.innerHTML = venueVillageShellHTML(); }
+    await loadVenueVillageData();
+    if (venueIdToOpen) openVenueDetail(venueIdToOpen);
+  }
+
+  // ===== VENUE DIRECTORY — Browse panel =====
+  let _venueSearchQuery = '';
+
+  function renderVenueBrowsePanel() {
+    const panel = document.getElementById('vn-browse-panel');
+    if (!panel) return;
+    panel.innerHTML = venueBrowsePanelHTML();
+  }
+
+  function venueBrowsePanelHTML() {
+    return `
+      <div class="vendor-search-wrap">
+        <span class="vendor-search-icon">🔍</span>
+        <input class="vendor-search" id="venue-search" type="text" placeholder="Search venues…"
+          value="${escHtml(_venueSearchQuery)}" oninput="onVenueSearchInput(this.value)" autocomplete="off">
+      </div>
+      <div id="vn-browse-list">${venueBrowseListHTML()}</div>`;
+  }
+
+  function venueMatchesSearch(v, query) {
+    if (!query) return true;
+    if (v.name.toLowerCase().includes(query) || (v.location || '').toLowerCase().includes(query)) return true;
+    return (venueReviewsCache[v.id] || []).some(r => (r.body || '').toLowerCase().includes(query));
+  }
+
+  function venueBrowseListHTML() {
+    const query = _venueSearchQuery.trim().toLowerCase();
+    const visible = venues.filter(v => venueMatchesSearch(v, query));
+    const cards = visible.map(v => venueCardHTML(v)).join('');
+    const emptyMsg = venues.length === 0
+      ? `<div class="jam-empty es-block"><div class="es-icon">🏛️</div><div class="es-headline">No venues yet</div><div class="es-sub">Be the first to post a venue — a club, warehouse, or festival grounds the fam should know about.</div></div>`
+      : visible.length === 0
+      ? `<div class="jam-empty" style="text-align:center;padding:20px 0;color:var(--muted);font-size:0.82rem;">${query ? `No venues match “${escHtml(_venueSearchQuery.trim())}”` : 'No venues yet'}</div>`
+      : '';
+    return `
+      <div class="jam-cards-list vv-cards-list" style="margin-top:12px;">
+        ${emptyMsg}
+        ${cards}
+      </div>`;
+  }
+
+  function renderVenueBrowseList() {
+    const list = document.getElementById('vn-browse-list');
+    if (list) list.innerHTML = venueBrowseListHTML();
+  }
+
+  function onVenueSearchInput(val) {
+    _venueSearchQuery = val;
+    renderVenueBrowseList();
+  }
+
+  function venueCardHTML(v) {
+    const escId = escHtml(String(v.id));
+    const reviews = venueReviewsCache[v.id] || [];
+    const { avg, count, starDisplay } = venueRatingSummary(reviews);
+    const coverHTML = v.cover_photo_url
+      ? `<img class="jam-cover" src="${escHtml(v.cover_photo_url)}" alt="${escHtml(v.name)}" loading="lazy">`
+      : `<div class="jam-cover-placeholder">🏛️</div>`;
+    const raveCount = venueRavesHeldHere(v.id).length;
+    const cosigns = venueCrewCosigns(v.id);
+    return `
+      <div class="jam-card vv-card" id="vn-card-${escId}" onclick="openVenueDetail('${escId}')">
+        <div class="jam-card-header">
+          ${coverHTML}
+          <div class="jam-card-info">
+            <div class="jam-card-toprow">
+              <span class="jam-title" style="white-space:normal;overflow:visible;">${escHtml(v.name)}</span>
+            </div>
+            ${v.location ? `<div class="jam-meta">📍 ${escHtml(v.location)}</div>` : ''}
+            <div class="jam-meta">
+              <span>${starDisplay}</span>
+              <span>${count ? `${avg} · ${count} review${count !== 1 ? 's' : ''}` : 'No reviews yet'}</span>
+            </div>
+            ${raveCount ? `<div class="jam-meta">🎪 ${raveCount} rave${raveCount !== 1 ? 's' : ''} held here</div>` : ''}
+            ${cosigns.length ? venueCosignLineHTML(cosigns[0]) : ''}
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // ===== VENUE DIRECTORY — Add Venue form =====
+  function renderVenueSubmitPanel() {
+    const panel = document.getElementById('vn-submit-panel');
+    if (!panel) return;
+    panel.innerHTML = venueSubmitPanelHTML();
+  }
+
+  function venueSubmitPanelHTML() {
+    return `
+      <div class="form-group" style="margin-top:16px;">
+        <label class="form-label">Venue name</label>
+        <input class="form-input" id="vn-submit-name" type="text" maxlength="80" placeholder="e.g. The Warehouse Project">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Location</label>
+        <input class="form-input" id="vn-submit-location" type="text" maxlength="100" placeholder="e.g. Manchester, UK">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <textarea class="form-input" id="vn-submit-desc" rows="3" maxlength="600" placeholder="What's the vibe? Sound system, capacity, anything ravers should know?"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Website</label>
+        <input class="form-input" id="vn-submit-website" type="text" placeholder="https://…">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Instagram</label>
+        <input class="form-input" id="vn-submit-instagram" type="text" placeholder="@handle">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Cover photo (optional)</label>
+        <label class="btn btn-ghost" style="display:inline-block;cursor:pointer;padding:9px 16px;font-size:0.82rem;">
+          📷 Choose photo
+          <input type="file" accept="image/*" id="vn-submit-photo" style="display:none" onchange="handleVenuePhotoPicked(event)">
+        </label>
+        <span id="vn-submit-photo-name" style="font-size:0.78rem;color:var(--muted);margin-left:8px;"></span>
+      </div>
+      <button class="btn btn-primary" style="width:100%;margin-top:8px;" onclick="handleVenueSubmit()">🏛️ Add Venue</button>
+    `;
+  }
+
+  function handleVenuePhotoPicked(event) {
+    const file = event.target.files[0];
+    const label = document.getElementById('vn-submit-photo-name');
+    if (label) label.textContent = file ? file.name : '';
+  }
+
+  async function handleVenueSubmit() {
+    const nameEl = document.getElementById('vn-submit-name');
+    const name = nameEl.value.trim();
+    if (!name) { showToast('⚠️ Venue name is required'); return; }
+    const websiteUrl = document.getElementById('vn-submit-website').value.trim();
+    if (websiteUrl && !/^https?:\/\//i.test(websiteUrl)) { showToast('⚠️ Website must start with http:// or https://'); return; }
+    const description = document.getElementById('vn-submit-desc').value;
+    const instagram = document.getElementById('vn-submit-instagram').value.trim();
+    const location = document.getElementById('vn-submit-location').value.trim();
+
+    const venue = await dbAddVenue({ name, description, websiteUrl, instagram, location });
+    if (!venue) return;
+
+    const file = document.getElementById('vn-submit-photo').files[0];
+    if (file) {
+      try {
+        const url = await uploadPhotoToStorage(file, `venues/${venue.id}/cover.jpg`);
+        await sb.from('venues').update({ cover_photo_url: url }).eq('id', venue.id);
+        venue.cover_photo_url = url;
+      } catch (e) {
+        console.error('venue cover upload error', e);
+        showToast('⚠️ Venue added, but photo upload failed');
+      }
+    }
+    venueReviewsCache[venue.id] = [];
+    showToast('🏛️ Venue added!');
+    switchVenueTab('browse', document.querySelector('#venue-village-root .stats-subtab'));
+  }
+
+  // ===== VENUE DIRECTORY — Edit Venue modal =====
+  function openEditVenueModal(venueId) {
+    const venue = venues.find(v => v.id === venueId);
+    if (!venue || !currentUser || (venue.created_by !== currentUser.id && !isModerator())) return;
+    document.getElementById('vn-edit-modal').innerHTML = venueEditModalHTML(venue);
+    document.getElementById('vn-edit-overlay').classList.add('open');
+  }
+
+  function closeEditVenueModal() {
+    document.getElementById('vn-edit-overlay').classList.remove('open');
+  }
+
+  function venueEditModalHTML(venue) {
+    const escId = escHtml(String(venue.id));
+    return `
+      <div class="modal-title">Edit Venue</div>
+      <div class="form-group" style="margin-top:4px;">
+        <label class="form-label">Venue name</label>
+        <input class="form-input" id="vn-edit-name" type="text" maxlength="80" value="${escHtml(venue.name)}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Location</label>
+        <input class="form-input" id="vn-edit-location" type="text" maxlength="100" value="${escHtml(venue.location || '')}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <textarea class="form-input" id="vn-edit-desc" rows="3" maxlength="600">${escHtml(venue.description || '')}</textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Website</label>
+        <input class="form-input" id="vn-edit-website" type="text" value="${escHtml(venue.website_url || '')}" placeholder="https://…">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Instagram</label>
+        <input class="form-input" id="vn-edit-instagram" type="text" value="${escHtml(venue.instagram || '')}" placeholder="@handle">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Cover photo</label>
+        <div style="display:flex;align-items:center;gap:10px;">
+          ${venue.cover_photo_url ? `<img src="${escHtml(venue.cover_photo_url)}" alt="Current cover photo" style="width:44px;height:44px;object-fit:cover;border-radius:8px;">` : ''}
+          <label class="btn btn-ghost" style="display:inline-block;cursor:pointer;padding:9px 16px;font-size:0.82rem;">
+            ${venue.cover_photo_url ? '🔄 Replace cover photo' : '📷 Add a cover photo'}
+            <input type="file" accept="image/*" id="vn-edit-photo" style="display:none" onchange="handleVenueEditPhotoPicked(event)">
+          </label>
+          <span id="vn-edit-photo-name" style="font-size:0.78rem;color:var(--muted);"></span>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeEditVenueModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="handleVenueEditSubmit('${escId}')">Save Changes</button>
+      </div>
+    `;
+  }
+
+  function handleVenueEditPhotoPicked(event) {
+    const file = event.target.files[0];
+    const label = document.getElementById('vn-edit-photo-name');
+    if (label) label.textContent = file ? file.name : '';
+  }
+
+  async function handleVenueEditSubmit(venueId) {
+    const name = document.getElementById('vn-edit-name').value.trim();
+    if (!name) { showToast('⚠️ Venue name is required'); return; }
+    const websiteUrl = document.getElementById('vn-edit-website').value.trim();
+    if (websiteUrl && !/^https?:\/\//i.test(websiteUrl)) { showToast('⚠️ Website must start with http:// or https://'); return; }
+    const description = document.getElementById('vn-edit-desc').value;
+    const instagram = document.getElementById('vn-edit-instagram').value.trim();
+    const location = document.getElementById('vn-edit-location').value.trim();
+
+    const venue = await dbUpdateVenue(venueId, { name, description, websiteUrl, instagram, location });
+    if (!venue) return;
+
+    const file = document.getElementById('vn-edit-photo').files[0];
+    if (file) {
+      try {
+        const url = await uploadPhotoToStorage(file, `venues/${venueId}/cover.jpg`);
+        await sb.from('venues').update({ cover_photo_url: url }).eq('id', venueId);
+        venue.cover_photo_url = url;
+      } catch (e) {
+        console.error('venue cover upload error', e);
+        showToast('⚠️ Venue updated, but photo upload failed');
+      }
+    }
+    closeEditVenueModal();
+    showToast('✅ Venue updated');
+    openVenueDetail(venueId);
+    if (venueVillageTab === 'browse') renderVenueBrowsePanel();
+  }
+
+  // ===== VENUE DIRECTORY — Detail view + reviews =====
+  let _venueDetailId = null;
+  let _venueDetailDraftRating = 0;
+
+  function openVenueDetail(venueId) {
+    const venue = venues.find(v => String(v.id) === String(venueId));
+    if (!venue) return;
+    _venueDetailId = venue.id;
+    document.getElementById('vn-detail-modal').innerHTML = venueDetailModalHTML(venue);
+    document.getElementById('vn-detail-overlay').classList.add('open');
+  }
+
+  function closeVenueDetail() {
+    document.getElementById('vn-detail-overlay').classList.remove('open');
+    _venueDetailId = null;
+  }
+
+  function venueDetailModalHTML(venue) {
+    const escId = escHtml(String(venue.id));
+    const allReviews = venueReviewsCache[venue.id] || [];
+    const myReview = currentUser ? allReviews.find(r => r.raver_id === currentUser.id) : null;
+    const otherReviews = allReviews.filter(r => r !== myReview);
+    const { avg, count, starDisplay } = venueRatingSummary(allReviews);
+    const raves = venueRavesHeldHere(venue.id).sort((a, b) => (festDate(b) || 0) - (festDate(a) || 0));
+
+    const coverHTML = venue.cover_photo_url
+      ? `<img src="${escHtml(venue.cover_photo_url)}" alt="${escHtml(venue.name)}" style="width:100%;max-height:220px;object-fit:cover;border-radius:12px;margin:10px 0 14px;">`
+      : '';
+
+    const linksHTML = [
+      venue.website_url ? `<a href="${escHtml(venue.website_url)}" target="_blank" rel="noopener noreferrer" class="btn btn-ghost" style="font-size:0.78rem;padding:8px 14px;">🔗 Website</a>` : '',
+      venue.instagram ? `<a href="https://instagram.com/${escHtml(venue.instagram.replace(/^@/, ''))}" target="_blank" rel="noopener noreferrer" class="btn btn-ghost" style="font-size:0.78rem;padding:8px 14px;">📷 ${escHtml(venue.instagram)}</a>` : ''
+    ].filter(Boolean).join('');
+
+    const cosigns = venueCrewCosigns(venue.id);
+
+    const posterRaver = raverByAuthUid(venue.created_by);
+    const posterName = posterRaver ? displayName(posterRaver).split(' ')[0] : 'A raver';
+    const postedWhen = formatModDate(venue.created_at);
+
+    const ravesHTML = raves.length
+      ? `<div class="jam-cards-list" style="margin-top:8px;">
+          ${raves.map(f => `<div class="jam-card" style="cursor:pointer;" onclick="closeVenueDetail(); openRaveEditor('${escHtml(String(f.id))}')"><div class="jam-card-toprow"><span class="jam-title">${escHtml(f.name)}</span></div><div class="jam-meta">${escHtml(f.date || '')}</div></div>`).join('')}
+        </div>`
+      : `<div class="jam-meta" style="margin-top:4px;">No raves linked here yet.</div>`;
+
+    return `
+      <div class="modal-title">${escHtml(venue.name)}</div>
+      ${coverHTML}
+      ${venue.location ? `<div class="jam-meta" style="margin-bottom:6px;">📍 ${escHtml(venue.location)}</div>` : ''}
+      <div class="jam-meta" style="margin-bottom:10px;"><span>${starDisplay}</span><span>${count ? `${avg} · ${count} review${count !== 1 ? 's' : ''}` : 'No reviews yet'}</span></div>
+      ${cosigns.length ? `<div style="margin-bottom:10px;">${cosigns.map(venueCosignLineHTML).join('')}</div>` : ''}
+      <div class="jam-meta" style="margin-bottom:10px;">🧭 First posted by ${escHtml(posterName)} · <span title="${escHtml(postedWhen.full)}">${escHtml(postedWhen.rel)}</span></div>
+      ${venue.description ? `<p style="font-size:0.86rem;color:var(--text);line-height:1.6;margin-bottom:14px;">${escHtml(venue.description)}</p>` : ''}
+      ${linksHTML ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">${linksHTML}</div>` : ''}
+      <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;">
+        ${currentUser ? `<button class="btn btn-ghost" style="flex:1;color:var(--neon-pink);" onclick="showReportModal('venue','${escId}')">🚩 Report</button>` : ''}
+        ${currentUser && venue.created_by === currentUser.id ? `<button class="btn btn-ghost" style="flex:1;" onclick="openEditVenueModal('${escId}')">✏️ Edit Listing</button>` : ''}
+      </div>
+
+      <div class="section-banner"><span class="banner-inner">🎪 Raves Held Here</span></div>
+      ${ravesHTML}
+
+      <div class="section-banner" style="margin-top:14px;"><span class="banner-inner">⭐ Reviews</span></div>
+      ${currentUser ? venueReviewComposerHTML(venue.id, myReview) : ''}
+      <div class="jam-cards-list" style="margin-top:12px;">
+        ${myReview ? venueReviewRowHTML(myReview, venue.id) : ''}
+        ${allReviews.length === 0 ? `<div class="jam-empty" style="text-align:center;padding:14px 0;color:var(--muted);font-size:0.82rem;">No reviews yet — be the first.</div>` : ''}
+        ${otherReviews.map(r => venueReviewRowHTML(r, venue.id)).join('')}
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-ghost" style="flex:1;" onclick="closeVenueDetail()">Close</button>
+      </div>
+    `;
+  }
+
+  function venueReviewComposerHTML(venueId, myReview) {
+    _venueDetailDraftRating = myReview?.rating || 0;
+    const escVid = escHtml(String(venueId));
+    const stars = [1, 2, 3, 4, 5].map(n => `
+      <button type="button" class="poll-star-btn${n <= _venueDetailDraftRating ? ' lit' : ''}"
+        onmouseover="highlightVenueStars(this,${n})" onmouseleave="resetVenueStarHighlight(this)"
+        onclick="setVenueReviewRating(this,${n})">★</button>`).join('');
+    return `
+      <div class="poll-star-row" id="vn-review-stars">${stars}</div>
+      <textarea class="form-input" id="vn-review-body" rows="2" maxlength="300" placeholder="Optional — what should other ravers know?">${escHtml(myReview?.body || '')}</textarea>
+      <button class="btn btn-primary" style="margin-top:8px;width:100%;" onclick="submitVenueReview('${escVid}')">${myReview ? 'Update review' : 'Post review'}</button>
+    `;
+  }
+
+  function highlightVenueStars(btn, n) {
+    const row = btn.closest('.poll-star-row');
+    if (!row) return;
+    row.querySelectorAll('.poll-star-btn').forEach((b, i) => b.classList.toggle('lit', i < n));
+  }
+
+  function resetVenueStarHighlight(btn) {
+    const row = btn.closest('.poll-star-row');
+    if (!row) return;
+    row.querySelectorAll('.poll-star-btn').forEach((b, i) => b.classList.toggle('lit', i < _venueDetailDraftRating));
+  }
+
+  function setVenueReviewRating(btn, n) {
+    _venueDetailDraftRating = n;
+    highlightVenueStars(btn, n);
+  }
+
+  async function submitVenueReview(venueId) {
+    if (!_venueDetailDraftRating) { showToast('⚠️ Pick a star rating first'); return; }
+    const body = document.getElementById('vn-review-body').value;
+    const ok = await dbUpsertVenueReview(venueId, { rating: _venueDetailDraftRating, body });
+    if (!ok) return;
+    showToast('⭐ Review saved!');
+    openVenueDetail(venueId);
+    if (venueVillageTab === 'browse') renderVenueBrowsePanel();
+  }
+
+  function venueReviewRowHTML(review, venueId) {
+    const escRid = escHtml(String(review.id));
+    const escVid = escHtml(String(venueId));
+    const isMine = currentUser && review.raver_id === currentUser.id;
+    const rater = raverByAuthUid(review.raver_id);
+    const name = isMine ? 'You' : (rater ? displayName(rater).split(' ')[0] : 'A raver');
+    const stars = '★'.repeat(review.rating) + '☆'.repeat(5 - review.rating);
+    const when = formatModDate(review.created_at);
+    const canDelete = isMine || isModerator();
+    const sharedCrew = (!isMine && rater && currentUser)
+      ? crews.find(c => (c.squadIds || []).some(id => String(id) === String(rater.id)))
+      : null;
+    return `
+      <div class="jam-card" style="gap:4px;">
+        <div class="jam-card-toprow">
+          <span class="jam-title" style="white-space:normal;">${escHtml(name)}</span>
+          ${sharedCrew ? `<span class="jam-fest-badge" title="Also in your crew ${escHtml(sharedCrew.name)}">👥 ${escHtml(sharedCrew.name)}</span>` : ''}
+          <span style="color:var(--neon-yellow);font-size:0.82rem;">${stars}</span>
+        </div>
+        ${review.body ? `<div style="font-size:0.84rem;color:var(--text);line-height:1.5;">${escHtml(review.body)}</div>` : ''}
+        <div class="jam-meta">
+          <span title="${escHtml(when.full)}">${escHtml(when.rel)}</span>
+          ${!isMine ? `<button class="jam-action-btn" onclick="showReportModal('venue_review','${escRid}',{metadata:{venue_id:'${escVid}'}})" title="Report">🚩</button>` : ''}
+          ${canDelete ? `<button class="jam-action-btn" onclick="handleDeleteVenueReview('${escRid}','${escVid}')" title="Delete">🗑️</button>` : ''}
+        </div>
+      </div>`;
+  }
+
+  async function handleDeleteVenueReview(reviewId, venueId) {
+    const ok = await dbDeleteVenueReview(reviewId, venueId);
+    if (ok) openVenueDetail(venueId);
+  }
+
   // ===== FAM PINS — Crew Achievements =====
 
   async function dbLoadAchievements(crewId) {
@@ -21182,6 +21824,15 @@ async function doProfilePasswordChange() {
     if (data) artistAppearances = data;
   }
 
+  // Personal "artists I saw" checklist — distinct from artistAppearances (the
+  // shared lineup of who played). Drives myArtistsSeen() stats.
+  let raverArtistSightings = [];
+
+  async function dbLoadArtistSightings() {
+    const { data } = await sb.from('raver_artist_sightings').select('raver_id,artist_id,festival_id');
+    if (data) raverArtistSightings = data;
+  }
+
   function findArtistById(id) {
     return artists.find(a => String(a.id) === String(id)) || DEMO_ARTISTS.find(a => String(a.id) === String(id));
   }
@@ -21213,6 +21864,223 @@ async function doProfilePasswordChange() {
     }
     artists.push(data);
     return data;
+  }
+
+  // ===== Rave lineup tagging (shared lineup + personal "I saw this" checklist) =====
+  // Any raver attending a rave can crowdsource its lineup; the personal
+  // sighting checklist only opens up once the rave is achieved (past).
+  function lineupArtistsFor(festId) {
+    return artistAppearances.filter(a => String(a.festival_id) === String(festId));
+  }
+
+  function myLineupSightingIds(festId) {
+    const you = squad.find(r => r.isYou);
+    if (!you) return new Set();
+    return new Set(
+      raverArtistSightings
+        .filter(s => String(s.raver_id) === String(you.id) && String(s.festival_id) === String(festId))
+        .map(s => String(s.artist_id))
+    );
+  }
+
+  function canEditFestLineup(festId) {
+    return festivalGoers(festId).some(g => g.isYou);
+  }
+
+  async function dbAddLineupArtist(festId, artistId) {
+    // Client-side dedup — the DB deliberately has no uniqueness constraint here
+    // (distinct b2b/multi-night sets can legitimately share an artist+festival),
+    // so a plain crowdsourced tap should skip if this artist is already tagged.
+    if (lineupArtistsFor(festId).some(a => String(a.artist_id) === String(artistId))) {
+      showToast('Already on the lineup');
+      return false;
+    }
+    const { error } = await sb.from('artist_festival_appearances')
+      .insert({ artist_id: artistId, festival_id: festId });
+    if (error) {
+      console.error('artist_festival_appearances insert error', error);
+      showToast('⚠️ Could not add artist to lineup');
+      return false;
+    }
+    artistAppearances.push({ artist_id: artistId, festival_id: festId, is_headliner: false, night: null, note: null });
+    return true;
+  }
+
+  async function dbRemoveLineupArtist(festId, artistId) {
+    const { error } = await sb.from('artist_festival_appearances')
+      .delete().eq('festival_id', festId).eq('artist_id', artistId);
+    if (error) {
+      console.error('artist_festival_appearances delete error', error);
+      showToast('⚠️ Could not remove artist from lineup');
+      return false;
+    }
+    artistAppearances = artistAppearances.filter(a =>
+      !(String(a.festival_id) === String(festId) && String(a.artist_id) === String(artistId)));
+    raverArtistSightings = raverArtistSightings.filter(s =>
+      !(String(s.festival_id) === String(festId) && String(s.artist_id) === String(artistId)));
+    return true;
+  }
+
+  async function dbToggleArtistSighting(festId, artistId) {
+    const you = squad.find(r => r.isYou);
+    if (!you) return;
+    const seen = myLineupSightingIds(festId).has(String(artistId));
+    if (seen) {
+      const { error } = await sb.from('raver_artist_sightings')
+        .delete().eq('raver_id', you.id).eq('festival_id', festId).eq('artist_id', artistId);
+      if (error) { console.error('raver_artist_sightings delete error', error); showToast('⚠️ Could not update — try again'); return; }
+      raverArtistSightings = raverArtistSightings.filter(s =>
+        !(String(s.raver_id) === String(you.id) && String(s.festival_id) === String(festId) && String(s.artist_id) === String(artistId)));
+    } else {
+      const { error } = await sb.from('raver_artist_sightings')
+        .insert({ raver_id: you.id, artist_id: artistId, festival_id: festId });
+      if (error) { console.error('raver_artist_sightings insert error', error); showToast('⚠️ Could not update — try again'); return; }
+      raverArtistSightings.push({ raver_id: you.id, artist_id: artistId, festival_id: festId });
+    }
+    renderFestivalLineupSection(festId);
+  }
+
+  function renderFestivalLineupSection(festId) {
+    const box = document.getElementById('lineup-section');
+    if (!box) return;
+    const f = getFestival(festId);
+    if (!f) { box.innerHTML = ''; return; }
+    const canEdit = canEditFestLineup(festId);
+    const rows = lineupArtistsFor(festId);
+    const achieved = isFestAchieved(f);
+    const mySightings = achieved ? myLineupSightingIds(festId) : new Set();
+
+    const chipHtml = rows.map(a => {
+      const artist = findArtistById(a.artist_id);
+      if (!artist) return '';
+      const seen = mySightings.has(String(a.artist_id));
+      const seenBtn = achieved && canEdit
+        ? `<button type="button" class="lineup-seen-btn${seen ? ' seen' : ''}" title="${seen ? 'You saw this — tap to undo' : 'Mark as seen'}" onclick="dbToggleArtistSighting('${festId}','${a.artist_id}')">${seen ? '✅' : '👁️'}</button>`
+        : '';
+      const removeBtn = canEdit
+        ? `<button type="button" class="tag-remove-btn" title="Remove ${escHtml(artist.name)}" aria-label="Remove ${escHtml(artist.name)}" onclick="lineupRemoveArtist('${festId}','${a.artist_id}')">&nbsp;✕</button>`
+        : '';
+      const hl = a.is_headliner ? ' 🌟' : '';
+      return `<span class="fav-chip" style="--chip-col:${artistColor(artist.name)};">${escHtml(artist.name)}${hl}${seenBtn}${removeBtn}</span>`;
+    }).join('');
+    const chipsOrEmpty = chipHtml || `<span class="fest-empty" style="font-size:0.78rem;">No lineup tagged yet${canEdit ? ' — who played?' : ''}</span>`;
+
+    const addHtml = canEdit ? `
+      <div class="fest-search-wrap" style="margin-top:8px;">
+        <input class="form-input" id="lu-artist-search-input" placeholder="🔍 Add an artist to the lineup…" autocomplete="off" style="font-size:16px;"
+          oninput="lineupArtistSearchInput('${festId}', this.value)" onfocus="lineupArtistSearchInput('${festId}', this.value)"
+          onblur="setTimeout(()=>{const d=document.getElementById('lu-artist-search-results');if(d)d.style.display='none';},200)">
+        <div id="lu-artist-search-results" class="fest-search-dropdown" style="display:none;"></div>
+      </div>` : '';
+
+    const sightingHint = achieved && canEdit && rows.length
+      ? `<div class="fest-empty" style="font-size:0.72rem;margin-top:6px;">👁️ Tap an artist to mark whether you personally caught their set</div>`
+      : (!canEdit && rows.length === 0 ? `<div class="fest-empty" style="font-size:0.72rem;margin-top:6px;">RSVP to this rave to tag its lineup</div>` : '');
+
+    box.innerHTML = `<div class="fav-chip-row" id="lineup-chip-wrap">${chipsOrEmpty}</div>${addHtml}${sightingHint}`;
+  }
+
+  function lineupArtistSearchInput(festId, q) {
+    const results = document.getElementById('lu-artist-search-results');
+    if (!results) return;
+    const query = (q || '').trim();
+    const existingIds = lineupArtistsFor(festId).map(a => a.artist_id);
+    const matches = artistSearchResults(query, existingIds);
+    if (!query && !matches.length) { results.style.display = 'none'; return; }
+    const matchHtml = matches.map(a =>
+      `<div class="fest-search-item" onmousedown="lineupPickFromSearch('${festId}','${a.id}')">
+        <span class="fest-search-name">${escHtml(a.name)}</span>
+      </div>`
+    ).join('');
+    const exactMatch = query && artists.some(a => a.name.toLowerCase() === query.toLowerCase());
+    const addNewHtml = query && !exactMatch
+      ? `<div class="fest-search-item" onmousedown="lineupAddNewArtistFromSearch('${festId}','${query.replace(/'/g,"\\'")}')">
+          <span class="fest-search-name">+ Add "${escHtml(query)}" as new artist</span>
+        </div>`
+      : '';
+    if (!matchHtml && !addNewHtml) { results.style.display = 'none'; return; }
+    results.innerHTML = matchHtml + addNewHtml;
+    results.style.display = 'block';
+  }
+
+  async function lineupPickFromSearch(festId, artistId) {
+    const ok = await dbAddLineupArtist(festId, artistId);
+    const inp = document.getElementById('lu-artist-search-input');
+    if (inp) inp.value = '';
+    const res = document.getElementById('lu-artist-search-results');
+    if (res) res.style.display = 'none';
+    if (ok) renderFestivalLineupSection(festId);
+  }
+
+  async function lineupAddNewArtistFromSearch(festId, name) {
+    const artist = await addNewArtist(name);
+    if (!artist) return;
+    await lineupPickFromSearch(festId, artist.id);
+  }
+
+  async function lineupRemoveArtist(festId, artistId) {
+    const ok = await dbRemoveLineupArtist(festId, artistId);
+    if (ok) renderFestivalLineupSection(festId);
+  }
+
+  // ===== Rave editor: venue picker (single-select, search + inline add-new) =====
+  function renderFestVenuePicker() {
+    const box = document.getElementById('fe-venue-picker');
+    if (!box) return;
+    const venue = editingVenueId ? venues.find(v => String(v.id) === String(editingVenueId)) : null;
+    const selHtml = venue
+      ? `<span class="fav-chip" style="--chip-col:${artistColor(venue.name)};">${escHtml(venue.name)}<button type="button" class="tag-remove-btn" title="Remove venue" onclick="clearFestVenue()">&nbsp;✕</button></span>`
+      : `<span class="fest-empty" style="font-size:0.78rem;">No venue set</span>`;
+    box.innerHTML = `
+      <div class="fav-chip-row" id="fe-venue-sel-wrap" style="margin-bottom:8px;">${selHtml}</div>
+      <div class="fest-search-wrap">
+        <input class="form-input" id="fe-venue-search" placeholder="🔍 Search venues…" autocomplete="off" style="font-size:16px;"
+          oninput="festVenueSearchInput(this.value)" onfocus="festVenueSearchInput(this.value)"
+          onblur="setTimeout(()=>{const d=document.getElementById('fe-venue-search-results');if(d)d.style.display='none';},200)">
+        <div id="fe-venue-search-results" class="fest-search-dropdown" style="display:none;"></div>
+      </div>`;
+  }
+
+  function festVenueSearchInput(q) {
+    const results = document.getElementById('fe-venue-search-results');
+    if (!results) return;
+    const query = (q || '').trim();
+    const lower = query.toLowerCase();
+    const matches = venues
+      .filter(v => String(v.id) !== String(editingVenueId))
+      .filter(v => !lower || v.name.toLowerCase().includes(lower))
+      .slice(0, 8);
+    if (!query && !matches.length) { results.style.display = 'none'; return; }
+    const matchHtml = matches.map(v =>
+      `<div class="fest-search-item" onmousedown="pickFestVenue('${v.id}')">
+        <span class="fest-search-name">${escHtml(v.name)}</span>
+      </div>`
+    ).join('');
+    const exactMatch = query && venues.some(v => v.name.toLowerCase() === lower);
+    const addNewHtml = query && !exactMatch
+      ? `<div class="fest-search-item" onmousedown="addNewVenueFromSearch('${query.replace(/'/g,"\\'")}')">
+          <span class="fest-search-name">+ Add "${escHtml(query)}" as new venue</span>
+        </div>`
+      : '';
+    if (!matchHtml && !addNewHtml) { results.style.display = 'none'; return; }
+    results.innerHTML = matchHtml + addNewHtml;
+    results.style.display = 'block';
+  }
+
+  function pickFestVenue(venueId) {
+    editingVenueId = venueId;
+    renderFestVenuePicker();
+  }
+
+  function clearFestVenue() {
+    editingVenueId = null;
+    renderFestVenuePicker();
+  }
+
+  async function addNewVenueFromSearch(name) {
+    const venue = await dbAddVenue({ name });
+    if (!venue) return;
+    pickFestVenue(venue.id);
   }
 
   function upcomingAppearance(artistId) {
@@ -23174,6 +24042,7 @@ async function doProfilePasswordChange() {
   let editingFestivalId = null;
   let pendingDeleteFestId = null;
   let editRaveColor = null;
+  let editingVenueId = null;
 
   function pickRaveColor(color) {
     editRaveColor = color;
@@ -23236,6 +24105,7 @@ async function doProfilePasswordChange() {
     const canEditFest = !f || festivalPerms(f).canEdit;
     editingFestivalId = id || null;
     activeFestId = id || null;
+    editingVenueId = f?.venueId || null;
     const goers = id ? festivalGoers(id) : [];
     editRaveColor = f?.color || festColor(f || { id: 'new' });
     const swatchHtml = CARD_PALETTE.map(c =>
@@ -23270,6 +24140,10 @@ async function doProfilePasswordChange() {
           <label class="form-label">How Many Days? <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
           <input class="form-input" id="fe-days" type="number" min="1" max="14" value="${f?.days || ''}" placeholder="e.g. 3" style="max-width:120px;" ${canEditFest ? '' : 'disabled'}>
         </div>
+        ${canEditFest ? `<div class="form-group">
+          <label class="form-label">🏛️ Venue <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
+          <div id="fe-venue-picker"></div>
+        </div>` : ''}
         <div class="form-group">
           <label class="form-label">Card Colour</label>
           <div class="color-picker-grid" id="fe-color-grid">${swatchHtml}</div>
@@ -23287,6 +24161,10 @@ async function doProfilePasswordChange() {
             oninput="reSearch(this.value)"
             onblur="setTimeout(()=>{const d=document.getElementById('re-raver-results');if(d)d.style.display='none';},200)">
           <div id="re-raver-results" class="fest-search-dropdown" style="display:none;"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">🎧 Lineup</label>
+          <div id="lineup-section"></div>
         </div>` : ''}
       </div>
       <div class="page-panel-footer">
@@ -23299,6 +24177,8 @@ async function doProfilePasswordChange() {
       </div>
     `;
     document.getElementById('rave-edit-overlay').classList.add('open');
+    if (canEditFest) renderFestVenuePicker();
+    if (f) renderFestivalLineupSection(f.id);
   }
 
   // Swaps the existing rave-edit modal body to a read-only History view for
@@ -23560,16 +24440,17 @@ async function doProfilePasswordChange() {
     if (!date) { showToast('Pick a date 📅'); return; }
 
     const color = editRaveColor || null;
+    const venueId = editingVenueId || null;
     if (editingFestivalId) {
       const f = getFestival(editingFestivalId);
       // Snapshot before mutating so we can log exactly what changed.
       const before = { name: f.name, date: f.date, location: f.location, color: f.color, days: f.days };
       const after = { name, date, location, color, days };
       const changedFields = Object.keys(after).filter(k => String(before[k] ?? '') !== String(after[k] ?? ''));
-      Object.assign(f, { name, date, location, color, days, lat, lng });
+      Object.assign(f, { name, date, location, color, days, lat, lng, venueId });
       showToast(`✅ Updated ${name}`);
       if (currentUser) {
-        dbSaveFestival({ name, date, location, color, days, lat, lng }, editingFestivalId);
+        dbSaveFestival({ name, date, location, color, days, lat, lng, venueId }, editingFestivalId);
         if (changedFields.length) {
           logAudit({ action: 'festival.update', entityType: 'festival', entityId: editingFestivalId, metadata: { fields: changedFields } });
         }
@@ -23578,7 +24459,7 @@ async function doProfilePasswordChange() {
       const dupe = findFestivalByName(name, date);
       if (dupe) { showToast(`"${dupe.name}" already exists`); return; }
       const tempId = 'temp_' + Date.now();
-      const newFest = { id: tempId, name, date, location, color, days, lat, lng, createdBy: currentUser?.id || null };
+      const newFest = { id: tempId, name, date, location, color, days, lat, lng, venueId, createdBy: currentUser?.id || null };
       festivals.push(newFest);
       showToast(`🎉 Added ${name}`);
       const _isPastRave = date && new Date(date + 'T23:59:59') < new Date();
@@ -23607,7 +24488,7 @@ async function doProfilePasswordChange() {
         addNotification(_raveMsg);
       }
       if (currentUser) {
-        dbSaveFestival({ name, date, location, color, days, lat, lng }, null).then(dbId => {
+        dbSaveFestival({ name, date, location, color, days, lat, lng, venueId }, null).then(dbId => {
           if (!dbId) return;
           newFest.id = dbId;
           // If a racing loadAllData() cleared the array before the save returned,
@@ -25220,13 +26101,18 @@ async function doProfilePasswordChange() {
   }
 
   // Distinct artists seen across achieved raves, most-seen first. Each artist is counted
-  // once per achieved festival they appeared at (lineup granularity, not per-set).
+  // once per achieved festival where this raver personally checked them off as seen
+  // (raver_artist_sightings) — not simply every artist on a lineup they attended, since
+  // attending a rave doesn't mean you caught every set.
   function myArtistsSeen() {
+    const you = squad.find(r => r.isYou);
+    if (!you) return [];
     const achievedIds = new Set(myAchievedFests().map(f => String(f.id)));
-    const counts = new Map(); // artistId -> # of achieved fests they appeared at
-    artistAppearances.forEach(a => {
-      if (!achievedIds.has(String(a.festival_id))) return;
-      const id = String(a.artist_id);
+    const counts = new Map(); // artistId -> # of achieved fests this raver marked them seen at
+    raverArtistSightings.forEach(s => {
+      if (String(s.raver_id) !== String(you.id)) return;
+      if (!achievedIds.has(String(s.festival_id))) return;
+      const id = String(s.artist_id);
       counts.set(id, (counts.get(id) || 0) + 1);
     });
     return [...counts.entries()]
@@ -25911,7 +26797,7 @@ async function doProfilePasswordChange() {
         <div class="stats-empty-state">
           <div class="stats-empty-icon">🎤</div>
           <div class="stats-empty-title">No lineup data yet</div>
-          <div class="stats-empty-sub">Once your raves' lineups are added, the artists you've seen will show up here.</div>
+          <div class="stats-empty-sub">Tag artists to your past raves and check off who you personally caught — they'll show up here.</div>
         </div>`;
       return;
     }

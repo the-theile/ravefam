@@ -65,6 +65,74 @@ test.describe('raves / events', () => {
   });
 });
 
+test.describe('rave lineup tagging', () => {
+  function lineupData() {
+    const d = seedData();
+    d.festivals.push({ id: 'f-past', name: 'Past Fest', date: '2020-06-01', location: 'Detroit, US', color: '#39FF14', days: 2, deleted_at: null });
+    d.raver_festivals.push({ raver_id: 'r-you', festival_id: 'f-past' });
+    return d;
+  }
+
+  test('attending raver can add an artist to a rave lineup and it persists', async ({ page }) => {
+    await bootAuthedApp(page); // seedData: r-you is going to f1
+    await page.evaluate(() => openRaveEditor('f1'));
+    await page.evaluate(() => lineupArtistSearchInput('f1', 'Charlotte'));
+    await page.waitForFunction(() => document.querySelectorAll('#lu-artist-search-results .fest-search-item').length > 0);
+    await page.evaluate(() => lineupPickFromSearch('f1', 'a1'));
+    await expect(page.locator('#lineup-section')).toContainText('Charlotte de Witte');
+    const persisted = await page.evaluate(async () => {
+      const { data } = await sb.from('artist_festival_appearances').select('artist_id,festival_id').eq('festival_id', 'f1');
+      return data;
+    });
+    expect(persisted.some(r => String(r.artist_id) === 'a1')).toBe(true);
+  });
+
+  test('non-attending raver does not see the add-to-lineup control', async ({ page }) => {
+    await bootAuthedApp(page); // seedData: r-you is only Interested in f2, not going
+    await page.evaluate(() => openRaveEditor('f2'));
+    await expect(page.locator('#lu-artist-search-input')).toHaveCount(0);
+  });
+
+  test('attending raver can remove an artist they tagged, and it persists', async ({ page }) => {
+    const d = seedData();
+    d.artist_festival_appearances = [{ artist_id: 'a1', festival_id: 'f1' }];
+    await bootAuthedApp(page, { data: d });
+    await page.evaluate(() => openRaveEditor('f1'));
+    await expect(page.locator('#lineup-section')).toContainText('Charlotte de Witte');
+    await page.evaluate(() => lineupRemoveArtist('f1', 'a1'));
+    await expect(page.locator('#lineup-section')).not.toContainText('Charlotte de Witte');
+    const persisted = await page.evaluate(async () => {
+      const { data } = await sb.from('artist_festival_appearances').select('artist_id').eq('festival_id', 'f1');
+      return data;
+    });
+    expect(persisted.length).toBe(0);
+  });
+
+  test('personal "I saw this" toggle only appears once the rave is achieved, and persists when tapped', async ({ page }) => {
+    const d = lineupData();
+    d.artist_festival_appearances = [{ artist_id: 'a1', festival_id: 'f-past' }];
+    await bootAuthedApp(page, { data: d });
+    await page.evaluate(() => openRaveEditor('f-past'));
+    await expect(page.locator('.lineup-seen-btn')).toHaveCount(1);
+    await page.evaluate(() => dbToggleArtistSighting('f-past', 'a1'));
+    await expect(page.locator('.lineup-seen-btn.seen')).toHaveCount(1);
+    const persisted = await page.evaluate(async () => {
+      const { data } = await sb.from('raver_artist_sightings').select('*').eq('festival_id', 'f-past');
+      return data;
+    });
+    expect(persisted.length).toBe(1);
+  });
+
+  test('seen-toggle does not appear for an upcoming rave even with a tagged lineup', async ({ page }) => {
+    const d = seedData();
+    d.artist_festival_appearances = [{ artist_id: 'a1', festival_id: 'f1' }]; // f1 is dated 2099
+    await bootAuthedApp(page, { data: d });
+    await page.evaluate(() => openRaveEditor('f1'));
+    await expect(page.locator('#lineup-section')).toContainText('Charlotte de Witte');
+    await expect(page.locator('.lineup-seen-btn')).toHaveCount(0);
+  });
+});
+
 test.describe('nearby raves filter', () => {
   // The app's service worker intercepts cross-origin fetches (sw.js only passes
   // "cdn."/"fonts."/"supabase.co" straight to network) and issues them from its
