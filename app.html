@@ -7897,7 +7897,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.8.1';
+  const APP_VERSION = '1.9.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -7951,6 +7951,16 @@
     const reason = e.reason;
     logClientError(reason && reason.message ? reason.message : String(reason), reason && reason.stack);
   });
+
+  // Fire-and-forget crew-activation analytics — see ANALYTICS.md. "first_"
+  // events (and return_within_7_days) are deduped server-side, so it's safe
+  // to call this unconditionally on every qualifying action.
+  function logAnalyticsEvent(eventName, { crew_id = null, raver_id = null, ...properties } = {}) {
+    sb.rpc('log_analytics_event', {
+      p_event_name: eventName, p_crew_id: crew_id, p_raver_id: raver_id,
+      p_visitor_id: getVisitorId(), p_properties: properties
+    });
+  }
 
   let currentUser = null;  // holds the logged-in Supabase user object
   let _seenTips = {};  // local mirror of user_metadata.seen_tips — coachmarks already shown
@@ -8647,6 +8657,7 @@ async function doProfilePasswordChange() {
     const r = getRaver(raverId);
     if (!r || !r.qrToken) { showToast('⚠️ No QR token for this raver'); return; }
     const crew = crews.find(c => (c.squadIds || []).some(id => String(id) === String(raverId)));
+    if (crew) logAnalyticsEvent('first_invite_sent', { crew_id: crew.id, raver_id: raverId, mode: 'qr_or_code' });
     const color = safeColor(crew?.color, '#FF2D78');
     const gradient = crew?.gradient || `linear-gradient(135deg,${color},${color})`;
     const claimUrl = raverClaimUrl(r);
@@ -8678,7 +8689,7 @@ async function doProfilePasswordChange() {
       </div>
       <div style="display:flex;gap:10px;justify-content:center;margin-top:14px;flex-wrap:wrap;">
         ${shareBtn}
-        <button class="qr-copy-btn" onclick="copyClaimLink('${claimUrl}')">📋 Copy link</button>
+        <button class="qr-copy-btn" onclick="copyClaimLink('${claimUrl}'); logAnalyticsEvent('first_invite_sent', {crew_id: ${crew ? `'${crew.id}'` : 'null'}, raver_id: '${raverId}', mode: 'link'})">📋 Copy link</button>
         <button class="btn btn-ghost" style="padding:8px 18px;font-size:0.8rem;" onclick="closeQRModal()">Close</button>
       </div>`;
     document.getElementById('qr-overlay').classList.add('open');
@@ -9258,6 +9269,7 @@ async function doProfilePasswordChange() {
 
     // Persist any edits the user made in the review form
     const claimedId = result?.claimed_id || result?.merged_into;
+    logAnalyticsEvent('first_claim', { crew_id: _pendingPostClaimCrewId, raver_id: claimedId });
     if (claimedId && (editName || editHandle || editMet)) {
       const updates = {};
       if (editName)   updates.name       = editName;
@@ -9618,6 +9630,7 @@ async function doProfilePasswordChange() {
   async function bootApp() {
     try {
       await loadAllData();
+      logAnalyticsEvent('return_within_7_days', {});
       maybeInitEruda(); // second call: crew data now available for FAM Testers check
     } catch(err) {
       console.warn('DB load failed, starting fresh:', err);
@@ -10789,6 +10802,11 @@ async function doProfilePasswordChange() {
       const rows = raverIds.map(rid => ({ crew_id: crewId, raver_id: rid, added_by: uid }));
       const { error: insErr } = await sb.from('crew_members').insert(rows);
       if (insErr) { console.error('crew members insert error', insErr); showToast('⚠️ Could not save crew members — try again'); }
+      else {
+        const you = squad.find(r => r.isYou);
+        const hasOtherMember = raverIds.some(rid => !you || String(rid) !== String(you.id));
+        if (hasOtherMember) logAnalyticsEvent('first_person_added', { crew_id: crewId });
+      }
     }
   }
 
@@ -10809,7 +10827,13 @@ async function doProfilePasswordChange() {
         showToast('⚠️ Could not add member — try again');
       }
     }
-    else logAudit({ action: 'crew_member.add', entityType: 'crew_member', entityId: raverId, metadata: { crew_id: crewId } });
+    else {
+      const crew = crews.find(c => String(c.id) === String(crewId));
+      if (!crew || String(crew.leader_id) !== String(raverId)) {
+        logAnalyticsEvent('first_person_added', { crew_id: crewId, raver_id: raverId });
+      }
+      logAudit({ action: 'crew_member.add', entityType: 'crew_member', entityId: raverId, metadata: { crew_id: crewId } });
+    }
   }
 
   // Targeted single-row soft delete — only touches the removed member
@@ -20392,6 +20416,7 @@ async function doProfilePasswordChange() {
       dbSaveCrew({ name, color, gradient, status: 'secret', description, totemIcon }, null).then(dbId => {
         if (dbId) {
           newCrew.id = dbId;
+          logAnalyticsEvent('crew_created', { crew_id: dbId });
           // Keep activeDetailId (and any pending-add reference) in sync so that
           // member lookups on this crew still work after the temp→real ID swap.
           if (String(activeDetailId) === String(tempId)) activeDetailId = dbId;
@@ -20569,6 +20594,7 @@ async function doProfilePasswordChange() {
     const r = getRaver(raverId);
     if (!r || !r.qrToken) { showToast('⚠️ No invite link for this raver yet'); return; }
     const url = raverClaimUrl(r);
+    const crew = crews.find(c => (c.squadIds || []).some(id => String(id) === String(raverId)));
     const firstName = r.name.split(' ')[0];
     if (navigator.share) {
       try {
@@ -20577,9 +20603,11 @@ async function doProfilePasswordChange() {
           text: `${firstName ? firstName + ', join' : 'Join'} my crew on RaveFAM — tap to claim your spot:`,
           url,
         });
+        if (crew) logAnalyticsEvent('first_invite_sent', { crew_id: crew.id, raver_id: raverId, mode: 'share' });
       } catch (e) { /* user dismissed the share sheet — no-op */ }
     } else {
       copyClaimLink(url);
+      if (crew) logAnalyticsEvent('first_invite_sent', { crew_id: crew.id, raver_id: raverId, mode: 'link' });
     }
   }
 
@@ -20702,6 +20730,7 @@ async function doProfilePasswordChange() {
     } catch {
       prompt('Copy your invite link:', url);
     }
+    logAnalyticsEvent('first_invite_sent', { crew_id: crewId, mode: 'crew_link' });
   }
 
   let _pendingCrewJoinToken = null;
@@ -24270,6 +24299,7 @@ async function doProfilePasswordChange() {
         // Now going — add, and clear any Interested on the same rave (mutually exclusive)
         dbAddRaverFestival(you.id, festId);
         dbRemoveRaverFestivalInterest(you.id, festId);
+        logAnalyticsEvent('first_rsvp_updated', { raver_id: you.id, festival_id: festId, direction: 'going' });
       }
     }
   }
@@ -24367,6 +24397,7 @@ async function doProfilePasswordChange() {
         // Now interested — add, and clear any Going on the same rave (mutually exclusive)
         dbAddRaverFestivalInterest(you.id, festId);
         dbRemoveRaverFestival(you.id, festId);
+        logAnalyticsEvent('first_rsvp_updated', { raver_id: you.id, festival_id: festId, direction: 'interested' });
       }
     }
   }
@@ -24529,6 +24560,7 @@ async function doProfilePasswordChange() {
           if (!festivals.some(f => String(f.id) === String(dbId))) {
             festivals.push(newFest);
           }
+          _ledCrews.forEach(c => logAnalyticsEvent('first_event_added', { crew_id: c.id, festival_id: dbId }));
           renderEvents();
         });
       }
