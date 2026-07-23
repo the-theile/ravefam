@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { bootAuthedApp, seedData } = require('./helpers');
+const { bootAuthedApp, seedData, TEST_UID } = require('./helpers');
 
 // Boom, BE and Amsterdam, NL — real coordinates, ~145km (~90mi) apart, so a
 // 25mi radius keeps one and drops the other without relying on network geocoding.
@@ -130,6 +130,64 @@ test.describe('rave lineup tagging', () => {
     await page.evaluate(() => openRaveEditor('f1'));
     await expect(page.locator('#lineup-section')).toContainText('Charlotte de Witte');
     await expect(page.locator('.lineup-seen-btn')).toHaveCount(0);
+  });
+});
+
+test.describe('new rave RSVP prompt', () => {
+  test('creating a new rave prompts Going/Interested/Not now, and Going RSVPs the creator', async ({ page }) => {
+    await bootAuthedApp(page);
+    await page.evaluate(() => openRaveEditor(null));
+    await page.fill('#fe-name', 'Test New Rave');
+    await page.fill('#fe-date', '2099-05-01');
+    await page.evaluate(() => saveRave());
+
+    await expect(page.locator('#confirm-overlay')).toHaveClass(/open/);
+    await expect(page.locator('#confirm-title')).toContainText('Going to Test New Rave?');
+    await page.click('#confirm-ok-btn');
+
+    const newFestId = await page.evaluate(() => festivals.find(f => f.name === 'Test New Rave').id);
+    const going = await page.evaluate(() => squad.find(r => r.isYou).festIds.map(String));
+    expect(going).toContain(String(newFestId));
+  });
+
+  test('choosing Interested marks interest instead of going', async ({ page }) => {
+    await bootAuthedApp(page);
+    await page.evaluate(() => openRaveEditor(null));
+    await page.fill('#fe-name', 'Interested Rave');
+    await page.fill('#fe-date', '2099-06-01');
+    await page.evaluate(() => saveRave());
+    await page.click('#confirm-secondary-btn');
+
+    const newFestId = await page.evaluate(() => festivals.find(f => f.name === 'Interested Rave').id);
+    const interested = await page.evaluate(() => squad.find(r => r.isYou).interestedFestIds.map(String));
+    const going = await page.evaluate(() => squad.find(r => r.isYou).festIds.map(String));
+    expect(interested).toContain(String(newFestId));
+    expect(going).not.toContain(String(newFestId));
+  });
+
+  test('choosing Not now does not RSVP at all', async ({ page }) => {
+    await bootAuthedApp(page);
+    await page.evaluate(() => openRaveEditor(null));
+    await page.fill('#fe-name', 'Skip Rave');
+    await page.fill('#fe-date', '2099-07-01');
+    await page.evaluate(() => saveRave());
+    await page.click('#confirm-cancel-btn');
+
+    const newFestId = await page.evaluate(() => festivals.find(f => f.name === 'Skip Rave').id);
+    const going = await page.evaluate(() => squad.find(r => r.isYou).festIds.map(String));
+    const interested = await page.evaluate(() => squad.find(r => r.isYou).interestedFestIds.map(String));
+    expect(going).not.toContain(String(newFestId));
+    expect(interested).not.toContain(String(newFestId));
+  });
+
+  test('editing an existing rave does not show the prompt', async ({ page }) => {
+    const d = seedData();
+    d.festivals = d.festivals.map(f => f.id === 'f1' ? { ...f, created_by: TEST_UID } : f);
+    await bootAuthedApp(page, { data: d });
+    await page.evaluate(() => openRaveEditor('f1'));
+    await page.fill('#fe-name', 'Tomorrowland Updated');
+    await page.evaluate(() => saveRave());
+    await expect(page.locator('#confirm-overlay')).not.toHaveClass(/open/);
   });
 });
 

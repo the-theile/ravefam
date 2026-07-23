@@ -641,6 +641,7 @@
     font-size: 0.78rem; color: var(--muted);
     margin-bottom: 12px;
   }
+  .marquee-venue-line { margin-top: -6px; }
   .marquee-weather {
     display: inline-flex; align-items: center; gap: 3px;
     font-size: 0.74rem; color: var(--text);
@@ -7259,6 +7260,7 @@
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" id="confirm-cancel-btn" onclick="closeConfirm()">Cancel</button>
+      <button class="btn btn-ghost" id="confirm-secondary-btn" style="display:none;">Secondary</button>
       <button class="btn btn-primary" id="confirm-ok-btn">Confirm</button>
     </div>
   </div>
@@ -7895,7 +7897,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.7.1';
+  const APP_VERSION = '1.8.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -21893,6 +21895,10 @@ async function doProfilePasswordChange() {
   }
 
   async function dbAddLineupArtist(festId, artistId) {
+    // A brand-new rave keeps its temp_ client id until dbSaveFestival resolves;
+    // reopening its editor in that window would otherwise send a non-UUID
+    // festival_id straight to Postgres (invalid input syntax for type uuid).
+    if (String(festId).startsWith('temp_')) { showToast('Still saving — try again in a moment'); return false; }
     // Client-side dedup — the DB deliberately has no uniqueness constraint here
     // (distinct b2b/multi-night sets can legitimately share an artist+festival),
     // so a plain crowdsourced tap should skip if this artist is already tagged.
@@ -21912,6 +21918,7 @@ async function doProfilePasswordChange() {
   }
 
   async function dbRemoveLineupArtist(festId, artistId) {
+    if (String(festId).startsWith('temp_')) { showToast('Still saving — try again in a moment'); return false; }
     const { error } = await sb.from('artist_festival_appearances')
       .delete().eq('festival_id', festId).eq('artist_id', artistId);
     if (error) {
@@ -21927,6 +21934,7 @@ async function doProfilePasswordChange() {
   }
 
   async function dbToggleArtistSighting(festId, artistId) {
+    if (String(festId).startsWith('temp_')) { showToast('Still saving — try again in a moment'); return; }
     const you = squad.find(r => r.isYou);
     if (!you) return;
     const seen = myLineupSightingIds(festId).has(String(artistId));
@@ -22075,6 +22083,21 @@ async function doProfilePasswordChange() {
   function pickFestVenue(venueId) {
     editingVenueId = venueId;
     renderFestVenuePicker();
+    autoFillLocationFromVenue(venueId);
+  }
+
+  // Only fills Location when it's still empty — never clobbers a location
+  // the user already typed or picked themselves.
+  function autoFillLocationFromVenue(venueId) {
+    const locInput = document.getElementById('fe-loc');
+    if (!locInput || locInput.value.trim()) return;
+    const venue = findVenueById(venueId);
+    if (!venue || !venue.location) return;
+    locInput.value = venue.location;
+    const latInp = document.getElementById('fe-lat');
+    const lngInp = document.getElementById('fe-lng');
+    if (latInp && venue.lat != null) latInp.value = venue.lat;
+    if (lngInp && venue.lng != null) lngInp.value = venue.lng;
   }
 
   function clearFestVenue() {
@@ -23793,8 +23816,8 @@ async function doProfilePasswordChange() {
       const metaBits = [];
       if (durLabel) metaBits.push(`<span class="marquee-duration-badge">${escHtml(durLabel)}</span>`);
       metaBits.push(`<span>📍 ${escHtml(f.location || 'Location TBD')}${distMi != null ? ` · ${Math.round(distMi)} mi away` : ''}</span>`);
-      if (venue) metaBits.push(`<span>🏛️ ${escHtml(venue.name)}</span>`);
       if (dateBit) metaBits.push(`<span>${escHtml(dateBit)}</span>`);
+      const venueLine = venue ? `<div class="marquee-meta marquee-venue-line">🏛️ ${escHtml(venue.name)}</div>` : '';
       const weatherChip = weatherChipHTML(f, weatherCache);
       const mapUrlJs = String(f.mapUrl || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       const mapBtn = f.mapUrl
@@ -23868,6 +23891,7 @@ async function doProfilePasswordChange() {
             <div class="marquee-countdown-stamp"><div class="n">${stamp.n}</div><div class="u">${stamp.u}</div></div>
             <div class="marquee-name">${escHtml(f.name)} <span class="fest-edit-hint">✏️</span></div>
             <div class="marquee-meta">${metaBits.join('<span class="marquee-dot">·</span>')}</div>
+            ${venueLine}
             ${pillRow}
           </div>
           ${crewSection}
@@ -23892,10 +23916,10 @@ async function doProfilePasswordChange() {
       const dow = f._d ? DOW_SHORT[f._d.getDay()] : '–';
       const dayNum = f._d ? f._d.getDate() : '–';
       const venue = findVenueById(f.venueId);
-      const venueBit = venue ? ` · 🏛️ ${escHtml(venue.name)}` : '';
+      const venueBit = venue ? `🏛️ ${escHtml(venue.name)} · ` : '';
       const subLine = isUpcoming
-        ? `<span class="rave-row-cd">${countdownLabel(f._d)}</span> · ${escHtml(f.location || 'Location TBD')}${distMi != null ? ` · ${Math.round(distMi)} mi` : ''}${venueBit}`
-        : `📼 Happened in ${f._d ? f._d.getFullYear() : '—'} · ${escHtml(f.location || 'Location TBD')}${venueBit}`;
+        ? `<span class="rave-row-cd">${countdownLabel(f._d)}</span> · ${venueBit}${escHtml(f.location || 'Location TBD')}${distMi != null ? ` · ${Math.round(distMi)} mi` : ''}`
+        : `📼 Happened in ${f._d ? f._d.getFullYear() : '—'} · ${venueBit}${escHtml(f.location || 'Location TBD')}`;
       const allPeople = [...goers, ...interestedPeople];
       const shown = allPeople.slice(0, 3);
       const moreCount = allPeople.length - shown.length;
@@ -24132,6 +24156,10 @@ async function doProfilePasswordChange() {
           <label class="form-label">Date</label>
           <input class="form-input" id="fe-date" type="date" value="${(() => { if (!f) return ''; if (f.date) return f.date; const d = festDate(f); if (!d || isNaN(d)) return ''; return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })()}" style="color-scheme:dark;" ${canEditFest ? '' : 'disabled'}>
         </div>
+        ${canEditFest ? `<div class="form-group">
+          <label class="form-label">🏛️ Venue <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
+          <div id="fe-venue-picker"></div>
+        </div>` : ''}
         <div class="form-group">
           <label class="form-label">Location</label>
           <div class="loc-autocomplete-wrap">
@@ -24149,10 +24177,6 @@ async function doProfilePasswordChange() {
           <label class="form-label">How Many Days? <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
           <input class="form-input" id="fe-days" type="number" min="1" max="14" value="${f?.days || ''}" placeholder="e.g. 3" style="max-width:120px;" ${canEditFest ? '' : 'disabled'}>
         </div>
-        ${canEditFest ? `<div class="form-group">
-          <label class="form-label">🏛️ Venue <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
-          <div id="fe-venue-picker"></div>
-        </div>` : ''}
         <div class="form-group">
           <label class="form-label">Card Colour</label>
           <div class="color-picker-grid" id="fe-color-grid">${swatchHtml}</div>
@@ -24508,9 +24532,34 @@ async function doProfilePasswordChange() {
           renderEvents();
         });
       }
+      closeRaveEditor();
+      renderEvents(); renderCrews();
+      // newFest.id is read lazily inside the handlers below (not captured now)
+      // since the DB save above may still be resolving and reassign it from a
+      // temp id to the real one by the time the raver actually taps a button.
+      promptGoingToNewRave(newFest, name);
+      return;
     }
     closeRaveEditor();
     renderEvents(); renderCrews();
+  }
+
+  // After adding a brand-new rave, ask whether the creator is going —
+  // reasonable to assume interest since they just added it, but not to
+  // silently auto-RSVP them without asking.
+  function promptGoingToNewRave(newFest, name) {
+    if (!currentUser) return;
+    showConfirmThreeWay(
+      `🎟️ Going to ${name}?`,
+      "You just added this rave — let your crew know if you're locked in.",
+      {
+        primaryLabel: "🎟️ I'm going",
+        secondaryLabel: '👀 Interested',
+        cancelLabel: 'Not now',
+        onPrimary: () => toggleGoingToFest(newFest.id),
+        onSecondary: () => toggleInterestedInFest(newFest.id),
+      }
+    );
   }
 
   function showDeleteRaveConfirm() {
@@ -24821,7 +24870,10 @@ async function doProfilePasswordChange() {
     document.getElementById('confirm-title').textContent = title;
     document.getElementById('confirm-body').textContent = body;
     document.getElementById('confirm-reason-wrap').style.display = 'none';
-    document.getElementById('confirm-cancel-btn').style.display = '';
+    const cancelBtn = document.getElementById('confirm-cancel-btn');
+    cancelBtn.style.display = '';
+    cancelBtn.textContent = 'Cancel';
+    document.getElementById('confirm-secondary-btn').style.display = 'none';
     const okBtn = document.getElementById('confirm-ok-btn');
     okBtn.disabled = false;
     okBtn.textContent = okLabel;
@@ -24837,7 +24889,10 @@ async function doProfilePasswordChange() {
     document.getElementById('confirm-body').textContent = body;
     document.getElementById('confirm-reason-wrap').style.display = 'block';
     document.getElementById('confirm-reason-label').textContent = label;
-    document.getElementById('confirm-cancel-btn').style.display = '';
+    const cancelBtn = document.getElementById('confirm-cancel-btn');
+    cancelBtn.style.display = '';
+    cancelBtn.textContent = 'Cancel';
+    document.getElementById('confirm-secondary-btn').style.display = 'none';
     const input = document.getElementById('confirm-reason-input');
     input.value = '';
     input.placeholder = placeholder;
@@ -24855,6 +24910,28 @@ async function doProfilePasswordChange() {
     };
     document.getElementById('confirm-overlay').classList.add('open');
   }
+
+  // Three-way variant (primary / secondary / cancel) — e.g. Going / Interested /
+  // Not now after adding a rave. Reuses the same modal shell as showConfirm,
+  // just with the extra confirm-secondary-btn made visible.
+  function showConfirmThreeWay(title, body, { primaryLabel, secondaryLabel, cancelLabel = 'Cancel', onPrimary, onSecondary }) {
+    document.getElementById('confirm-title').textContent = title;
+    document.getElementById('confirm-body').textContent = body;
+    document.getElementById('confirm-reason-wrap').style.display = 'none';
+    const cancelBtn = document.getElementById('confirm-cancel-btn');
+    cancelBtn.style.display = '';
+    cancelBtn.textContent = cancelLabel;
+    const secBtn = document.getElementById('confirm-secondary-btn');
+    secBtn.style.display = '';
+    secBtn.textContent = secondaryLabel;
+    secBtn.onclick = () => { closeConfirm(); onSecondary(); };
+    const okBtn = document.getElementById('confirm-ok-btn');
+    okBtn.disabled = false;
+    okBtn.textContent = primaryLabel;
+    okBtn.onclick = () => { closeConfirm(); onPrimary(); };
+    document.getElementById('confirm-overlay').classList.add('open');
+  }
+
   function closeConfirm() { document.getElementById('confirm-overlay').classList.remove('open'); }
   function closeConfirmOutside(e) { if (e.target === document.getElementById('confirm-overlay')) closeConfirm(); }
 

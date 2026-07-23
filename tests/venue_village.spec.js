@@ -155,7 +155,7 @@ test.describe('Venue Directory · rave linking', () => {
     await expect(page.locator('#vn-detail-modal')).toContainText('Tomorrowland');
   });
 
-  test('a linked venue shows on the rave card and the compact list row', async ({ page }) => {
+  test('a linked venue shows on its own line under location on the full card', async ({ page }) => {
     await bootAuthedApp(page, { data: seedWithOwnedFest() });
     await page.evaluate(async () => {
       const v = await dbAddVenue({ name: 'Card View Venue', location: '' });
@@ -166,10 +166,29 @@ test.describe('Venue Directory · rave linking', () => {
       switchTab('events');
       renderEvents();
     });
-    await expect(page.locator('#events-list')).toContainText('Card View Venue');
+    const venueLine = page.locator('.marquee-venue-line').first();
+    await expect(venueLine).toContainText('Card View Venue');
+    // The location/date line (the first .marquee-meta) shouldn't also carry the venue name.
+    const locationLine = await page.locator('.marquee-meta').first().textContent();
+    expect(locationLine).not.toContain('Card View Venue');
+  });
 
-    await page.evaluate(() => { setRaveView('list'); renderEvents(); });
-    await expect(page.locator('#events-list')).toContainText('Card View Venue');
+  test('a linked venue leads the compact list row, before location', async ({ page }) => {
+    await bootAuthedApp(page, { data: seedWithOwnedFest() });
+    await page.evaluate(async () => {
+      const v = await dbAddVenue({ name: 'Order Test Venue', location: '' });
+      openRaveEditor('f1');
+      pickFestVenue(v.id);
+      saveRave();
+      closeRaveEditor();
+      switchTab('events');
+      setRaveView('list');
+      renderEvents();
+    });
+    const subLine = await page.locator('.rave-row-sub').first().textContent();
+    expect(subLine).toContain('Order Test Venue');
+    expect(subLine).toContain('Boom, BE'); // f1's seeded location
+    expect(subLine.indexOf('Order Test Venue')).toBeLessThan(subLine.indexOf('Boom, BE'));
   });
 
   test('adding a new venue inline from the rave editor search creates it and links it', async ({ page }) => {
@@ -198,5 +217,36 @@ test.describe('Venue Directory · rave linking', () => {
     await page.evaluate(() => saveRave());
     persisted = await page.evaluate(() => window.__store.festivals.find(f => f.id === 'f1').venue_id);
     expect(persisted).toBeFalsy();
+  });
+});
+
+test.describe('Venue Directory · location auto-fill', () => {
+  test('picking a venue with a saved location auto-fills an empty Location field', async ({ page }) => {
+    await bootAuthedApp(page);
+    const venueId = await page.evaluate(async () => (await dbAddVenue({ name: 'Auto Fill Venue', location: 'Miami, Florida, United States' })).id);
+    await page.evaluate(() => openRaveEditor(null)); // new rave — Location starts empty
+    await page.evaluate((id) => pickFestVenue(id), venueId);
+    expect(await page.locator('#fe-loc').inputValue()).toBe('Miami, Florida, United States');
+  });
+
+  test('picking a venue does not overwrite an already-typed Location', async ({ page }) => {
+    await bootAuthedApp(page);
+    const venueId = await page.evaluate(async () => (await dbAddVenue({ name: 'No Overwrite Venue', location: 'Miami, Florida, United States' })).id);
+    await page.evaluate(() => openRaveEditor(null));
+    await page.fill('#fe-loc', 'Custom Typed Location');
+    await page.evaluate((id) => pickFestVenue(id), venueId);
+    expect(await page.locator('#fe-loc').inputValue()).toBe('Custom Typed Location');
+  });
+
+  test('adding a new venue inline also auto-fills an empty Location', async ({ page }) => {
+    await bootAuthedApp(page);
+    await page.evaluate(() => openRaveEditor(null));
+    await page.evaluate(async () => {
+      const v = await dbAddVenue({ name: 'Inline Fill Venue', location: 'Denver, Colorado, United States' });
+      // Simulate the inline "+ Add new venue" flow picking up the freshly
+      // created venue's location, same as addNewVenueFromSearch would.
+      pickFestVenue(v.id);
+    });
+    expect(await page.locator('#fe-loc').inputValue()).toBe('Denver, Colorado, United States');
   });
 });
