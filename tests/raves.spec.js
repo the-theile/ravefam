@@ -72,7 +72,7 @@ test.describe('nearby raves filter', () => {
   // the Nominatim mocks below actually apply.
   test.use({ serviceWorkers: 'block' });
 
-  test('narrows to raves within the chosen radius and sorts nearest first', async ({ page }) => {
+  test('narrows to raves within the chosen radius', async ({ page }) => {
     await bootAuthedApp(page, { data: seedWithFestivalCoords() });
     await page.evaluate(() => switchTab('events'));
     await page.evaluate((loc) => {
@@ -83,6 +83,31 @@ test.describe('nearby raves filter', () => {
     const list = page.locator('#events-list');
     await expect(list).toContainText('Tomorrowland');
     await expect(list).not.toContainText('Awakenings');
+  });
+
+  test('keeps date order (soonest first) when Nearby is active, not distance order', async ({ page }) => {
+    // Antwerp is ~14mi from Boom (sooner date, farther away); Boom itself is 0mi
+    // from the user (later date, closest). A distance sort would show them in
+    // the wrong order — date should win.
+    const ANTWERP_BE = { lat: 51.2194, lng: 4.4025 };
+    const data = seedData();
+    data.festivals = [
+      { id: 'f1', name: 'Tomorrowland', date: '2099-07-18', location: 'Antwerp, BE', color: '#FF2D78', days: null, deleted_at: null, ...ANTWERP_BE },
+      { id: 'f2', name: 'Awakenings', date: '2099-10-12', location: 'Boom, BE', color: '#00F5FF', days: null, deleted_at: null, ...BOOM_BE },
+    ];
+    await bootAuthedApp(page, { data });
+    await page.evaluate(() => switchTab('events'));
+    await page.evaluate((loc) => {
+      saveUserGeo({ ...loc, label: 'Boom, BE', source: 'manual' });
+      _raveFilters.distance = 25;
+      renderEvents();
+    }, BOOM_BE);
+    const names = await page.locator('#events-list .marquee-name').allTextContents();
+    const tIdx = names.findIndex(n => n.includes('Tomorrowland'));
+    const aIdx = names.findIndex(n => n.includes('Awakenings'));
+    expect(tIdx).toBeGreaterThanOrEqual(0);
+    expect(aIdx).toBeGreaterThanOrEqual(0);
+    expect(tIdx).toBeLessThan(aIdx);
   });
 
   test('shows distance on the rave card', async ({ page }) => {
