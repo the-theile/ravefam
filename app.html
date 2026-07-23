@@ -6678,12 +6678,19 @@
       <span class="logo-text" onclick="location.reload()" title="Refresh app" style="cursor:pointer;"><span>Rave</span><span>FAM</span></span>
     </div>
     <div class="header-actions">
-      <div class="admin-menu-wrap" id="admin-menu-wrap" style="display:none;">
-        <button class="notif-bell-btn" id="admin-menu-btn" onclick="toggleAdminMenu()" title="Admin Tools" aria-label="Admin Tools">
-          ⚙️
+      <button class="notif-bell-btn" id="notif-bell" onclick="openNotifDrawer()" title="Notifications" aria-label="Notifications">
+        🔔
+        <span class="notif-badge" id="notif-badge"></span>
+      </button>
+      <div class="admin-menu-wrap" id="admin-menu-wrap">
+        <button class="notif-bell-btn" id="app-guide-btn" onclick="onAppGuideBtnClick()" title="How RaveFam Works" aria-label="How RaveFam Works">
+          ❔
           <span class="notif-badge" id="admin-menu-badge"></span>
         </button>
         <div class="admin-menu" id="admin-menu" style="display:none;">
+          <button type="button" class="admin-menu-row" onclick="closeAdminMenu(); openAppGuide()">
+            ❓ How RaveFam Works
+          </button>
           <button type="button" class="admin-menu-row" id="mod-dash-btn" onclick="closeAdminMenu(); openModDashboard()" style="display:none;">
             🛡️ Moderator Dashboard
             <span class="notif-badge" id="mod-dash-badge"></span>
@@ -6693,11 +6700,6 @@
           </button>
         </div>
       </div>
-      <button class="notif-bell-btn" id="notif-bell" onclick="openNotifDrawer()" title="Notifications" aria-label="Notifications">
-        🔔
-        <span class="notif-badge" id="notif-badge"></span>
-      </button>
-      <button class="notif-bell-btn" id="app-guide-btn" onclick="openAppGuide()" title="How RaveFam Works" aria-label="How RaveFam Works">❔</button>
 <button class="btn btn-ghost" id="logout-btn" onclick="doLogout()" title="Log out" aria-label="Log out" style="font-size:0.75rem;padding:9px 14px;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18.36 6.64A9 9 0 1 1 5.64 6.64"/><line x1="12" y1="2" x2="12" y2="12"/></svg></button>
     </div>
   </header>
@@ -7737,7 +7739,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.2.2';
+  const APP_VERSION = '1.2.3';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -7785,11 +7787,14 @@
     updateAdminMenuVisibility();
   }
 
-  // ===== Admin tools menu: consolidates mod dashboard + PM metrics into one header button =====
+  // ===== Admin tools menu: lives inside the ❔ help button so mods/admins
+  // see the exact same header as everyone else — the extra tools only
+  // appear once the dropdown is opened. =====
+  function onAppGuideBtnClick() {
+    if (isModerator() || isSuperAdminUser) toggleAdminMenu();
+    else openAppGuide();
+  }
   function updateAdminMenuVisibility() {
-    const wrap = document.getElementById('admin-menu-wrap');
-    if (!wrap) return;
-    wrap.style.display = (isModerator() || isSuperAdminUser) ? '' : 'none';
     const badge = document.getElementById('admin-menu-badge');
     if (badge) badge.classList.toggle('has-unread', isModerator() && openFlagCount > 0);
   }
