@@ -115,3 +115,35 @@ select get_crew_activation_funnel();
 Each cohort is grouped by the week the crew was **created**, and each `reached_*`/
 `activated` count reflects crews that hit that milestone within 7 days of their own
 creation (not within 7 days of the cohort week).
+
+## Micro-feedback responses
+
+Separate from the counts above — this is **qualitative** signal. The first time a user
+hits each of the same four activation moments (`crew_created`, `invite_sent`,
+`claim_made`, `event_added`), a small floating card asks one rotating question
+("What almost stopped you?" / "What would make you bring your full crew here?" /
+"Anything confusing so far?") and, if they type something and hit Send, the response is
+saved to `micro_feedback_responses`
+(`supabase/migrations/20260811000000_micro_feedback_responses.sql`).
+
+This is a **per-user, once-ever** ask, tracked client-side via
+`user_metadata.feedback_prompts_shown` (same pattern as `seen_tips`/coachmarks) — not
+the crew-scoped `(crew_id, event_name)` dedup the growth events above use. A user who
+leads several crews is never asked the same milestone question twice. Dismissing without
+typing anything ("Skip" or the ✕) marks the milestone as asked but writes no row.
+
+**To review responses:** open the RaveFam Supabase project → Table Editor →
+`micro_feedback_responses`, or run in the SQL editor:
+
+```sql
+select milestone, question, response, crew_id, created_at
+from micro_feedback_responses
+order by created_at desc;
+```
+
+Client-side: `maybeAskMicroFeedback(milestone, crewId)` (`app.html`, next to the NPS
+prompt code) is called from the same four sites that already fire the analytics events
+above — `createCrew()`, the invite-send call sites (QR modal's Copy link button,
+`shareInviteLink()`, `generateAndShareCrewInvite()` — but not `showQRModal()`'s
+modal-open, since merely displaying a QR isn't a completed "send"), `commitClaim()`
+(after `showClaimSuccess()`), and `saveRave()`'s create branch.
