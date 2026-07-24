@@ -10403,6 +10403,12 @@ async function doProfilePasswordChange() {
 
   function renderVibeRow(festId) {
     renderEvents();
+    // The Rave Focus popup is a separate overlay from the Raves tab list, so
+    // a vibe saved/cleared from inside it needs its own refresh too.
+    const overlay = document.getElementById('rave-focus-overlay');
+    if (overlay && overlay.classList.contains('open') && String(editingFestivalId) === String(festId)) {
+      openRaveFocus(festId);
+    }
   }
 
   function openVibePicker(festId) {
@@ -24277,21 +24283,52 @@ async function doProfilePasswordChange() {
     const goers = festivalGoers(f.id);
     const interestedPeople = festivalInterestedGoers(f.id);
 
+    // Same info the marquee card shows (duration/location/distance/date,
+    // venue line, Lineup Explorer / map / weather pills) — the popup is the
+    // new primary "view this rave" surface, so it carries that over rather
+    // than dropping it.
+    const durLabel = raveDurationLabel(f);
+    const distMi = _raveFilters.distance != null ? festivalDistance(f, loadUserGeo()) : null;
+    const metaBits = [];
+    if (durLabel) metaBits.push(`<span class="marquee-duration-badge">${escHtml(durLabel)}</span>`);
+    metaBits.push(`<span>📍 ${escHtml(f.location || 'Location TBD')}${distMi != null ? ` · ${Math.round(distMi)} mi away` : ''}</span>`);
+    if (dateBit) metaBits.push(`<span>${escHtml(dateBit)}</span>`);
+    const venueLine = venue ? `<div class="marquee-meta marquee-venue-line">🏛️ ${escHtml(venue.name)}</div>` : '';
+    const lineupUrl = getLineupExplorerUrl(f);
+    const lineupBtn = lineupUrl
+      ? `<a class="lineup-explorer-btn" href="${lineupUrl}" target="_blank" rel="noopener">🔭 Lineup Explorer</a>`
+      : '';
+    const mapUrlJs = String(f.mapUrl || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const mapBtn = f.mapUrl
+      ? `<button class="map-pill" onclick="openMapPinLightbox('${mapUrlJs}', null, null, null, null, null, null, null, null)">🗺️ View Map</button>`
+      : '';
+    const weatherChip = weatherChipHTML({ ...f, _d: d }, loadWeatherCache());
+    const pillRow = (lineupBtn || mapBtn || weatherChip) ? `<div class="pill-row">${lineupBtn}${mapBtn}${weatherChip}</div>` : '';
+
     const goingLabel = isUpcoming ? 'Going' : 'Sent It';
+    const vibeBtn = `<button class="event-action-btn vibe-action" onclick="openVibePicker('${f.id}')">✦ Vibe</button>`;
     const goingBtn = `<button class="event-action-btn going-action${youGoing ? ' active' : ''}" onclick="raveFocusToggleGoing('${f.id}')">${youGoing ? '🎟️ ' : '＋ '}${goingLabel}</button>`;
     const interestedBtn = `<button class="event-action-btn interested-action${youInterested ? ' active' : ''}" onclick="raveFocusToggleInterested('${f.id}')">👀 Interested</button>`;
-    const rsvpButtonsHtml = youGoing ? goingBtn : youInterested ? interestedBtn : goingBtn + interestedBtn;
+    const rsvpButtonsHtml = youGoing ? [vibeBtn, goingBtn].join('') : youInterested ? [vibeBtn, interestedBtn].join('') : [vibeBtn, goingBtn, interestedBtn].join('');
+
+    const vibeRowContent = buildVibeRowHTML(f.id);
+    const vibeSection = vibeRowContent
+      ? `<div class="fest-vibe-row" style="padding:8px 0 0;">${vibeRowContent}</div>`
+      : `<div id="vibe-picker-${f.id}" style="display:none;padding:8px 0 0;"></div>`;
 
     return `
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:4px;">
         <div>
           <div class="modal-title" style="margin-bottom:2px;">${escHtml(f.name)}</div>
-          <div style="font-size:0.78rem;color:var(--muted);">${[dateBit, venue ? '🏛️ ' + escHtml(venue.name) : (f.location ? '📍 ' + escHtml(f.location) : '')].filter(Boolean).join(' · ')}</div>
+          <div class="marquee-meta" style="font-size:0.78rem;color:var(--muted);">${metaBits.join('<span class="marquee-dot">·</span>')}</div>
+          ${venueLine}
+          ${pillRow}
         </div>
         <button type="button" class="page-panel-back" style="flex-shrink:0;" onclick="closeRaveFocus()">✕</button>
       </div>
-      <div class="event-action-bar" style="margin:10px 0 14px;">${rsvpButtonsHtml}</div>
-      ${raveCrewSectionHTML(f, goers, interestedPeople)}
+      <div class="event-action-bar" style="margin:10px 0 0;">${rsvpButtonsHtml}</div>
+      ${vibeSection}
+      <div style="margin-top:14px;">${raveCrewSectionHTML(f, goers, interestedPeople)}</div>
       <div class="fest-goers-note" id="re-goers-note" style="margin-top:14px;">${goers.length ? goers.length + ' tribe member' + (goers.length!==1?'s':'') + ' linked: ' + goers.map(g=>escHtml(g.name.split(' ')[0])).join(', ') : 'No tribe members linked yet'}</div>
       <div class="fest-search-wrap" style="margin-top:8px;margin-bottom:4px;">
         <input class="form-input" id="re-raver-search" placeholder="🔍 Search tribe to add…" autocomplete="off" style="font-size:16px;"
