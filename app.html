@@ -8214,7 +8214,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.20.0';
+  const APP_VERSION = '1.20.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -10003,34 +10003,50 @@ async function doProfilePasswordChange() {
     squad.length = 0;     squadSeq = 0;
     crews.length = 0;     crewSeq = 0;
 
-    await dbLoadModerators().catch(() => {});
-    if (isModerator()) await dbLoadFlags().catch(() => {});
-    updateModBadge();
-    await dbLoadSuperAdmin().catch(() => {});
-    updatePMDashBadge();
-    await dbLoadMyVendorBadges().catch(() => {});
+    // --- Background lookups ---
+    // Badges/menus and the artist/venue catalogs don't gate the Crews/Squad
+    // first paint (nothing below reads them), so fire them all off together
+    // instead of one-at-a-time and let them resolve whenever — previously
+    // each of these was its own awaited round trip *before* the data the
+    // Crews page actually needs even started loading.
+    dbLoadModerators().catch(() => {}).then(() => {
+      updateModBadge();
+      return isModerator() ? dbLoadFlags().catch(() => {}) : null;
+    }).then(updateModBadge);
+    dbLoadSuperAdmin().catch(() => {}).then(updatePMDashBadge);
+    dbLoadMyVendorBadges().catch(() => {});
+    dbLoadArtists().catch(() => {});
+    dbLoadArtistAppearances().catch(() => {});
+    dbLoadArtistSightings().catch(() => {});
+    dbLoadArtistPlans().catch(() => {});
+    dbLoadVenues().catch(() => {});
+    // "Our Photos" only feeds the profile detail modal (opened on demand,
+    // never on first paint) — likewise non-blocking.
+    loadAllOurPhotos().catch(() => {});
+    // Fest vibe bubbles only show on the Raves tab, not Crews/Squad.
+    loadAllFestVibes().catch(() => {});
 
-    // --- Festivals ---
-    const { data: dbFests, error: fErr } = await sb
-      .from('festivals')
-      .select('*')
-      .is('deleted_at', null)
-      .order('date', { ascending: true });
+    // --- Critical path for first paint: festivals, ravers, crews, nicknames.
+    // These used to run as four separate sequential awaits; the festivals/
+    // ravers/crews network calls don't depend on each other's *data* (only
+    // the processing below does), so fire them together and process in
+    // dependency order once all three land.
+    const [
+      { data: dbFests, error: fErr },
+      { data: dbRavers, error: rErr },
+      { data: allCrewsRaw, error: cErr1 },
+    ] = await Promise.all([
+      sb.from('festivals').select('*').is('deleted_at', null).order('date', { ascending: true }),
+      sb.rpc('get_own_and_created_ravers'),
+      sb.from('crews').select('*, crew_members(raver_id, added_at, deleted_at)').is('deleted_at', null).order('created_at', { ascending: true }),
+      loadNicknames().catch(() => {}),
+    ]);
+
     if (!fErr && dbFests) {
       dbFests.forEach(f => {
         festivals.push({ id: f.id, name: f.name, date: f.date, location: f.location || '', color: f.color || null, days: f.days || null, createdBy: f.created_by || null, archived: !!f.archived_at, mapUrl: f.map_url || null, lat: f.lat ?? null, lng: f.lng ?? null, venueId: f.venue_id ?? null });
       });
     }
-
-    // --- Artists (canonical list + festival appearances) ---
-    await dbLoadArtists().catch(() => {});
-    await dbLoadArtistAppearances().catch(() => {});
-    await dbLoadArtistSightings().catch(() => {});
-    await dbLoadArtistPlans().catch(() => {});
-
-    // --- Venues (loaded at boot, not just on visiting Village, so the rave
-    // editor's venue picker has data even if the user never opened Village) ---
-    await dbLoadVenues().catch(() => {});
 
     // --- Ravers ---
     // Load own ravers AND any stubs the user has claimed (claimed_by = uid).
@@ -10041,9 +10057,7 @@ async function doProfilePasswordChange() {
     // people's now-claimed rows too, not just the caller's own. The RPC masks
     // base/RSVPs/phone/notes/qr_token the same way get_crewmate_ravers()
     // does whenever the row isn't actually the caller's own or an unclaimed
-    // stub they still manage.
-    const { data: dbRavers, error: rErr } = await sb
-      .rpc('get_own_and_created_ravers');
+    // stub they still manage. (Fetched above, in parallel with festivals/crews.)
     if (!rErr && dbRavers) {
       const seen = new Set();
       dbRavers.forEach(r => {
@@ -10086,12 +10100,7 @@ async function doProfilePasswordChange() {
     // --- Crews ---
     // RLS now enforces visibility: Secret = leader only, else = leader + claimed members.
     // A single query returns every crew the current user is allowed to see.
-    const { data: allCrewsRaw, error: cErr1 } = await sb
-      .from('crews')
-      .select('*, crew_members(raver_id, added_at, deleted_at)')
-      .is('deleted_at', null)
-      .order('created_at', { ascending: true });
-
+    // (Fetched above, in parallel with festivals/ravers.)
     const allCrews = allCrewsRaw || [];
     if (!cErr1 && allCrews.length) {
       allCrews.forEach(c => {
@@ -10209,15 +10218,6 @@ async function doProfilePasswordChange() {
     // Load community genre pool (non-blocking)
     dbLoadCommunityGenres().catch(() => {});
 
-    // Load festival vibes before render so cards show bubbles on first paint
-    await loadAllFestVibes().catch(() => {});
-
-    // Load Our Photos before render so cards show memory photos on first paint
-    await loadAllOurPhotos().catch(() => {});
-
-    // Load nicknames before render so crew/raver cards show them on first
-    // paint instead of falling back to the real name until the next re-render.
-    await loadNicknames().catch(() => {});
     // Load private phones and viewer notes into cache (non-blocking) — these
     // only matter once a detail view is opened, not for first-paint cards.
     loadPrivatePhones().catch(() => {});
