@@ -8131,7 +8131,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.14.0';
+  const APP_VERSION = '1.14.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -12994,6 +12994,15 @@ async function doProfilePasswordChange() {
     const stripeColor = crew.gradient || crew.color || 'var(--neon-pink)';
     const canInvite = crew.isLead && crew.status === 'recruiting';
 
+    // Warm the browser's image cache for every avatar + the totem photo as
+    // soon as the card renders, so by the time the user taps "Share Card",
+    // html2canvas doesn't have to wait on network fetches. iOS Safari only
+    // honors navigator.share()/window.open() as a direct result of the tap —
+    // any real network delay after the tap is enough to lose that and make
+    // the button silently do nothing.
+    (photoUrl ? [photoUrl] : []).concat(shown.map(p => p.avatarUrl || p.avatar_url).filter(Boolean))
+      .forEach(src => { const img = new Image(); img.src = src; });
+
     document.querySelector('.crew-share-wrap').innerHTML = `
       <div id="crew-share-card" style="${cardStyle}">
         <div class="crew-share-perf"></div>
@@ -13030,33 +13039,45 @@ async function doProfilePasswordChange() {
     line.style.display = trimmed ? '' : 'none';
   }
 
+  function isIOSSafari() {
+    return /iP(hone|od|ad)/.test(navigator.userAgent) && !window.MSStream;
+  }
+
   async function shareCrewCard(crewId) {
     const crew = getCrew(crewId);
     const card = document.getElementById('crew-share-card');
     if (!card) return;
+    if (typeof html2canvas === 'undefined') { showToast('📋 Screenshot this card to share!'); return; }
     try {
-      if (typeof html2canvas !== 'undefined') {
-        const canvas = await html2canvas(card, { backgroundColor: '#050509', scale: 2, useCORS: true, logging: false });
-        canvas.toBlob(async (blob) => {
-          if (!blob) { showToast('⚠️ Could not generate image'); return; }
-          const fileName = `${(crew && crew.name ? crew.name : 'crew').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-pass.png`;
-          const file = new File([blob], fileName, { type: 'image/png' });
-          if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            try { await navigator.share({ files: [file], title: `${crew ? crew.name : 'Crew'} — RaveFAM` }); } catch {}
-          } else {
-            const url = URL.createObjectURL(blob);
-            try {
-              const a = document.createElement('a');
-              a.href = url; a.download = fileName; a.click();
-              showToast('📥 Crew card downloaded!');
-            } finally {
-              setTimeout(() => URL.revokeObjectURL(url), 1000);
-            }
-          }
-        }, 'image/png');
-      } else {
-        showToast('📋 Screenshot this card to share!');
+      const canvas = await html2canvas(card, { backgroundColor: '#050509', scale: 2, useCORS: true, logging: false });
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      if (!blob) { showToast('⚠️ Could not generate image'); return; }
+
+      const fileName = `${(crew && crew.name ? crew.name : 'crew').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-pass.png`;
+      const file = new File([blob], fileName, { type: 'image/png' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: `${crew ? crew.name : 'Crew'} — RaveFAM` });
+          return;
+        } catch (e) {
+          if (e && e.name === 'AbortError') return; // user closed the share sheet — not an error
+          // fall through to the manual fallback below
+        }
       }
+
+      // Fallback: iOS Safari doesn't reliably honor <a download>, so open the
+      // image in a new tab instead — the user can long-press to save/share it.
+      const url = URL.createObjectURL(blob);
+      if (isIOSSafari()) {
+        window.open(url, '_blank');
+        showToast('🖼️ Long-press the image to save or share it');
+      } else {
+        const a = document.createElement('a');
+        a.href = url; a.download = fileName; a.click();
+        showToast('📥 Crew card downloaded!');
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch {
       showToast('📋 Screenshot this card to share!');
     }
