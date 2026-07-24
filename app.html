@@ -6707,9 +6707,17 @@
     text-transform: uppercase;
     margin-top: 16px;
   }
+  .crew-share-bottom-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 14px;
+  }
   .crew-share-barcode {
     height: 26px;
-    margin-top: 14px;
+    flex: 1;
+    min-width: 0;
     display: flex;
     align-items: stretch;
     gap: 2px;
@@ -6719,6 +6727,14 @@
     flex-shrink: 0;
     background: rgba(255,255,255,0.35);
   }
+  .crew-share-qr {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .crew-share-qr canvas { display: block; }
   .crew-share-mode-toggle {
     display: flex;
     gap: 6px;
@@ -8198,7 +8214,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.19.7';
+  const APP_VERSION = '1.20.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -13092,6 +13108,30 @@ async function doProfilePasswordChange() {
     return widths.map(w => `<div class="crew-share-barcode-bar" style="width:${w}px"></div>`).join('');
   }
 
+  // Fills the dead space to the right of the barcode with a QR back to
+  // myravefam.com — styled the same washed-out translucent white as the
+  // barcode bars so it reads as ticket texture, not a call-to-action.
+  // Returns a promise so callers can wait for it before html2canvas runs
+  // (a plain <canvas> node with no pixels yet would export blank).
+  function renderCrewShareQRCode() {
+    return new Promise((resolve) => {
+      const wrap = document.getElementById('crew-share-qr');
+      if (!wrap || typeof QRCode === 'undefined') { resolve(); return; }
+      const canvas = document.createElement('canvas');
+      // Render at the exact CSS display size (no browser downscaling) — a
+      // larger canvas stretched down via CSS smooths the fine modules into
+      // mush, leaving just the big finder-pattern square visible.
+      QRCode.toCanvas(canvas, 'https://myravefam.com', {
+        width: 40,
+        margin: 1,
+        color: { dark: '#ffffff59', light: '#00000000' },
+      }, (err) => {
+        if (!err) wrap.appendChild(canvas);
+        resolve();
+      });
+    });
+  }
+
   function renderCrewShareCard(crew, captionValue = '') {
     const s = STATUS[crew.status];
     const people = crewSquad(crew);
@@ -13172,7 +13212,10 @@ async function doProfilePasswordChange() {
           ${eventHtml}
           <div class="crew-share-caption" id="crew-share-caption-line" style="display:${captionValue ? '' : 'none'};">${escHtml(captionValue)}</div>
           <div class="crew-share-footer">myravefam.com</div>
-          <div class="crew-share-barcode">${crewShareBarcodeHTML()}</div>
+          <div class="crew-share-bottom-row">
+            <div class="crew-share-barcode">${crewShareBarcodeHTML()}</div>
+            <div class="crew-share-qr" id="crew-share-qr"></div>
+          </div>
         </div>
       </div>
       ${modeToggleHtml}
@@ -13187,8 +13230,10 @@ async function doProfilePasswordChange() {
       </div>`;
 
     // Pre-render in the background now, not on tap — see the note by
-    // _crewShareBlob above for why this matters on iOS Safari.
-    prepareCrewShareImage(crew);
+    // _crewShareBlob above for why this matters on iOS Safari. Wait for the
+    // QR canvas to actually have pixels before snapshotting, else it exports
+    // blank.
+    renderCrewShareQRCode().then(() => prepareCrewShareImage(crew));
   }
 
   function updateCrewShareCaption(crewId, value) {
