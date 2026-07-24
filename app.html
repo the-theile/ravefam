@@ -2577,6 +2577,37 @@
   }
   .toast.show { transform: translateX(-50%) translateY(0); }
 
+  /* Micro-feedback card — floating, no backdrop, one question after a first-time milestone */
+  .micro-feedback-card {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    width: min(360px, calc(100vw - 32px));
+    background: var(--surface2);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 20px;
+    padding: 16px 18px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+    z-index: 310;
+    /* Fixed px offset (not a %), same trick the toast uses — the card starts
+       empty (no milestone fired yet) so its own height is just the padding
+       box, and a %-based transform wasn't enough to clear the viewport,
+       leaving a visible sliver over the bottom nav. pointer-events is belt
+       and suspenders so that sliver can't swallow taps either. */
+    transform: translateX(-50%) translateY(400px);
+    pointer-events: none;
+    transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  .micro-feedback-card.show { transform: translateX(-50%) translateY(0); pointer-events: auto; }
+  @media (max-width: 640px) { .micro-feedback-card { bottom: 84px; } }
+  .micro-feedback-close { position: absolute; top: 10px; right: 12px; color: var(--muted); cursor: pointer; font-size: 0.8rem; padding: 4px; }
+  .micro-feedback-eyebrow { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.66rem; text-transform: uppercase; letter-spacing: 1px; color: var(--neon-cyan); margin-bottom: 6px; }
+  .micro-feedback-q { font-size: 0.9rem; font-weight: 600; padding-right: 16px; line-height: 1.35; }
+  .micro-feedback-input { margin-top: 12px; }
+  .micro-feedback-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .micro-feedback-actions .btn { flex: 1; padding: 9px 14px; font-size: 0.78rem; }
+  .micro-feedback-thanks { text-align: center; font-size: 0.86rem; font-weight: 600; padding: 4px 0; }
+
   /* Coachmark — first-encounter feature tip, one shown at a time via queue */
   .coachmark {
     position: fixed;
@@ -7748,6 +7779,10 @@
 
 <!-- Toast -->
 <div class="toast" id="toast"></div>
+
+<!-- Micro-feedback card — floating, no backdrop, shown once per milestone per user -->
+<div class="micro-feedback-card" id="micro-feedback-card"></div>
+
 <div class="coachmark" id="coachmark">
   <div class="coachmark-title" id="coachmark-title"></div>
   <div class="coachmark-body" id="coachmark-body"></div>
@@ -8096,7 +8131,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.13.0';
+  const APP_VERSION = '1.14.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -8163,6 +8198,7 @@
 
   let currentUser = null;  // holds the logged-in Supabase user object
   let _seenTips = {};  // local mirror of user_metadata.seen_tips — coachmarks already shown
+  let _feedbackPromptsShown = {};  // local mirror of user_metadata.feedback_prompts_shown — micro-feedback asks already shown
   let _tipsEnabled = true;  // local mirror of user_metadata.tips_enabled — master on/off for coachmarks
   let moderatorIds = new Set();  // auth user ids present in the moderators table
   async function dbLoadModerators() {
@@ -8680,6 +8716,7 @@ async function doProfilePasswordChange() {
     currentUser = user;
     _seenTips = { ...(user?.user_metadata?.seen_tips || {}) };
     _tipsEnabled = user?.user_metadata?.tips_enabled !== false;
+    _feedbackPromptsShown = { ...(user?.user_metadata?.feedback_prompts_shown || {}) };
     maybeInitEruda();
     document.getElementById('claim-intercept').classList.remove('open');
     document.getElementById('app-loading').classList.add('hidden');
@@ -8888,7 +8925,7 @@ async function doProfilePasswordChange() {
       </div>
       <div style="display:flex;gap:10px;justify-content:center;margin-top:14px;flex-wrap:wrap;">
         ${shareBtn}
-        <button class="qr-copy-btn" onclick="copyClaimLink('${claimUrl}'); logAnalyticsEvent('first_invite_sent', {crew_id: ${crew ? `'${crew.id}'` : 'null'}, raver_id: '${raverId}', mode: 'link'})">📋 Copy link</button>
+        <button class="qr-copy-btn" onclick="copyClaimLink('${claimUrl}'); logAnalyticsEvent('first_invite_sent', {crew_id: ${crew ? `'${crew.id}'` : 'null'}, raver_id: '${raverId}', mode: 'link'}); maybeAskMicroFeedback('invite_sent', ${crew ? `'${crew.id}'` : 'null'})">📋 Copy link</button>
         <button class="btn btn-ghost" style="padding:8px 18px;font-size:0.8rem;" onclick="closeQRModal()">Close</button>
       </div>`;
     document.getElementById('qr-overlay').classList.add('open');
@@ -9495,6 +9532,7 @@ async function doProfilePasswordChange() {
       dbAddNotification(_claimLeaderId, _claimCrewId, `📡 ${_claimRaverName} just scanned in and claimed their spot in ${_claimCrewName}! The squad is growing!`);
     }
     showClaimSuccess(previewSnap);
+    maybeAskMicroFeedback('claim_made', _pendingPostClaimCrewId);
   }
 
   // ── Success screen ────────────────────────────────────
@@ -20745,6 +20783,7 @@ async function doProfilePasswordChange() {
         if (dbId) {
           newCrew.id = dbId;
           logAnalyticsEvent('crew_created', { crew_id: dbId });
+          maybeAskMicroFeedback('crew_created', dbId);
           // Keep activeDetailId (and any pending-add reference) in sync so that
           // member lookups on this crew still work after the temp→real ID swap.
           if (String(activeDetailId) === String(tempId)) activeDetailId = dbId;
@@ -20932,10 +20971,12 @@ async function doProfilePasswordChange() {
           url,
         });
         if (crew) logAnalyticsEvent('first_invite_sent', { crew_id: crew.id, raver_id: raverId, mode: 'share' });
+        maybeAskMicroFeedback('invite_sent', crew?.id);
       } catch (e) { /* user dismissed the share sheet — no-op */ }
     } else {
       copyClaimLink(url);
       if (crew) logAnalyticsEvent('first_invite_sent', { crew_id: crew.id, raver_id: raverId, mode: 'link' });
+      maybeAskMicroFeedback('invite_sent', crew?.id);
     }
   }
 
@@ -21061,6 +21102,7 @@ async function doProfilePasswordChange() {
       prompt('Copy your invite link:', url);
     }
     logAnalyticsEvent('first_invite_sent', { crew_id: crewId, mode: 'crew_link' });
+    maybeAskMicroFeedback('invite_sent', crewId);
   }
 
   let _pendingCrewJoinToken = null;
@@ -25116,6 +25158,7 @@ async function doProfilePasswordChange() {
             festivals.push(newFest);
           }
           _ledCrews.forEach(c => logAnalyticsEvent('first_event_added', { crew_id: c.id, festival_id: dbId }));
+          maybeAskMicroFeedback('event_added', _ledCrews[0]?.id);
           renderEvents();
         });
       }
@@ -26813,6 +26856,73 @@ async function doProfilePasswordChange() {
       if (d != null) { total += d; counted++; }
     });
     return { total, counted, skipped: fests.length - counted, totalFests: fests.length };
+  }
+
+  // ===== MICRO-FEEDBACK PROMPTS =====
+  // One-question, floating card (no backdrop) shown once ever per user after
+  // each of the four activation milestones (crew created, first invite sent,
+  // first claim, first event added). "Already asked?" is tracked per-user in
+  // user_metadata.feedback_prompts_shown (_feedbackPromptsShown mirror),
+  // same pattern as _seenTips/dismissCoachmark — set the moment the card is
+  // shown, not on submit, so a skip/dismiss never re-asks. Responses land in
+  // micro_feedback_responses via the submit_micro_feedback RPC — see
+  // ANALYTICS.md.
+  const MICRO_FEEDBACK_QUESTIONS = [
+    'What almost stopped you?',
+    'What would make you bring your full crew here?',
+    'Anything confusing so far?',
+  ];
+  let _microFeedbackShowing = false;
+
+  function maybeAskMicroFeedback(milestone, crewId) {
+    if (!currentUser || _feedbackPromptsShown[milestone] || _microFeedbackShowing) return;
+    _feedbackPromptsShown[milestone] = true;
+    sb.auth.updateUser({ data: { feedback_prompts_shown: _feedbackPromptsShown } }).catch(() => {});
+    const question = MICRO_FEEDBACK_QUESTIONS[Math.floor(Math.random() * MICRO_FEEDBACK_QUESTIONS.length)];
+    // Small delay so it doesn't visually collide with the success toast/screen
+    // that just fired (the toast auto-dismisses at 2500ms).
+    setTimeout(() => _renderMicroFeedbackCard(milestone, question, crewId), 1500);
+  }
+
+  function _renderMicroFeedbackCard(milestone, question, crewId) {
+    const card = document.getElementById('micro-feedback-card');
+    if (!card) return;
+    _microFeedbackShowing = true;
+    card.dataset.milestone = milestone;
+    card.dataset.question = question;
+    card.dataset.crewId = (crewId && !String(crewId).startsWith('temp_')) ? crewId : '';
+    card.innerHTML = `
+      <div class="micro-feedback-close" onclick="dismissMicroFeedback()" title="Not now">✕</div>
+      <div class="micro-feedback-eyebrow">👀 real quick —</div>
+      <div class="micro-feedback-q">${escHtml(question)}</div>
+      <div class="micro-feedback-input"><input type="text" class="form-input" id="micro-feedback-input" maxlength="500" placeholder="keep it real…"></div>
+      <div class="micro-feedback-actions">
+        <button class="btn btn-ghost" onclick="dismissMicroFeedback()">Skip</button>
+        <button class="btn btn-primary" onclick="submitMicroFeedback()">Send it 🚀</button>
+      </div>`;
+    card.classList.add('show');
+  }
+
+  async function submitMicroFeedback() {
+    const card = document.getElementById('micro-feedback-card');
+    if (!card) return;
+    const input = document.getElementById('micro-feedback-input');
+    const response = (input?.value || '').trim();
+    if (!response) { dismissMicroFeedback(); return; }
+    const { milestone, question, crewId } = card.dataset;
+    card.innerHTML = `<div class="micro-feedback-thanks">🙌 noted — thanks for the intel</div>`;
+    try {
+      await sb.rpc('submit_micro_feedback', {
+        p_milestone: milestone, p_question: question, p_response: response, p_crew_id: crewId || null
+      });
+    } catch (e) {}
+    setTimeout(() => { card.classList.remove('show'); _microFeedbackShowing = false; }, 1800);
+  }
+
+  function dismissMicroFeedback() {
+    const card = document.getElementById('micro-feedback-card');
+    if (card) card.classList.remove('show');
+    _microFeedbackShowing = false;
   }
 
   // ===== NPS PROMPT (lightweight, on the Stats page) =====
