@@ -7954,7 +7954,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.12.0';
+  const APP_VERSION = '1.12.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -22138,7 +22138,7 @@ async function doProfilePasswordChange() {
     const chipsOrEmpty = chipHtml || `<span class="fest-empty" style="font-size:0.78rem;">No lineup tagged yet${canEdit ? ' — who played?' : ''}</span>`;
 
     const addHtml = canEdit ? `
-      <div class="fest-search-wrap" style="margin-top:8px;">
+      <div class="fest-search-wrap">
         <input class="form-input" id="lu-artist-search-input" placeholder="🔍 Add an artist to the lineup…" autocomplete="off" style="font-size:16px;"
           oninput="lineupArtistSearchInput('${festId}', this.value)" onfocus="lineupArtistSearchInput('${festId}', this.value)"
           onblur="setTimeout(()=>{const d=document.getElementById('lu-artist-search-results');if(d)d.style.display='none';},200)">
@@ -22151,7 +22151,10 @@ async function doProfilePasswordChange() {
         ? `<div class="fest-empty" style="font-size:0.72rem;margin-top:6px;">⭐ Tap an artist to mark who you're planning to see</div>`
         : (!canEdit && rows.length === 0 ? `<div class="fest-empty" style="font-size:0.72rem;margin-top:6px;">RSVP to this rave to tag its lineup</div>` : ''));
 
-    box.innerHTML = `<div class="fav-chip-row" id="lineup-chip-wrap">${chipsOrEmpty}</div>${addHtml}${sightingHint}`;
+    // Search + hint lead, artist chips follow — for a big festival lineup,
+    // putting dozens of chips first buries the "here's how to add/tap
+    // artists" controls below a wall of bubbles.
+    box.innerHTML = `${addHtml}${sightingHint}<div class="fav-chip-row" id="lineup-chip-wrap" style="margin-top:8px;">${chipsOrEmpty}</div>`;
   }
 
   function lineupArtistSearchInput(festId, q) {
