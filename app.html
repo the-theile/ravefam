@@ -8169,7 +8169,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.17.0';
+  const APP_VERSION = '1.17.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -13694,10 +13694,8 @@ async function doProfilePasswordChange() {
     if (!modMissingGenreArtists.length) {
       return `<div class="es-block" style="padding:40px 24px;"><div class="es-icon">🎵</div><div class="es-headline">Nothing to tag</div><div class="es-sub">Every artist has at least one genre.</div></div>`;
     }
-    const suggestions = allKnownArtistGenres();
     return `
-      <datalist id="mod-genre-suggestions">${suggestions.map(g => `<option value="${escHtml(g)}"></option>`).join('')}</datalist>
-      <div style="font-size:0.8rem;color:var(--muted);margin-bottom:14px;">Artists added with no genre — pick one or more tags, then save. Type to see existing tags, or enter a new one.</div>
+      <div style="font-size:0.8rem;color:var(--muted);margin-bottom:14px;">Artists added with no genre — pick one or more tags, then save. Type to filter existing tags, or add a new one.</div>
       <div class="events-list">${modMissingGenreArtists.map(missingGenreCardHTML).join('')}</div>`;
   }
 
@@ -13712,25 +13710,52 @@ async function doProfilePasswordChange() {
           <div class="event-info" style="width:100%;">
             <div class="event-name">${escHtml(a.name)}</div>
             <div style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;">${chips}</div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <input list="mod-genre-suggestions" id="mod-genre-input-${a.id}" class="form-input" placeholder="Type a genre…" style="flex:1;min-width:140px;font-size:0.82rem;padding:8px 10px;"
-                onkeydown="if(event.key==='Enter'){event.preventDefault();addDraftGenre(${a.id});}">
-              <button class="btn btn-ghost" style="padding:8px 14px;font-size:0.76rem;" onclick="addDraftGenre(${a.id})">+ Add</button>
-              <button class="btn btn-primary" style="padding:8px 14px;font-size:0.76rem;" ${draft.length ? '' : 'disabled'} onclick="handleSaveArtistGenres(${a.id})">💾 Save</button>
+            <div class="fest-search-wrap" style="margin-bottom:8px;">
+              <input class="form-input" id="mod-genre-input-${a.id}" placeholder="🔍 Type a genre…" autocomplete="off" style="font-size:16px;"
+                oninput="modGenreSearchInput(${a.id}, this.value)" onfocus="modGenreSearchInput(${a.id}, this.value)"
+                onkeydown="if(event.key==='Enter'){event.preventDefault();modGenrePick(${a.id}, this.value);}"
+                onblur="setTimeout(()=>{const d=document.getElementById('mod-genre-results-${a.id}');if(d)d.style.display='none';},200)">
+              <div id="mod-genre-results-${a.id}" class="fest-search-dropdown" style="display:none;"></div>
             </div>
+            <button class="btn btn-primary" style="padding:8px 14px;font-size:0.76rem;" ${draft.length ? '' : 'disabled'} onclick="handleSaveArtistGenres(${a.id})">💾 Save</button>
           </div>
         </div>
       </div>`;
   }
 
-  function addDraftGenre(artistId) {
-    const input = document.getElementById(`mod-genre-input-${artistId}`);
-    if (!input) return;
-    const val = (input.value || '').trim().toLowerCase();
+  function modGenreSearchInput(artistId, q) {
+    const results = document.getElementById(`mod-genre-results-${artistId}`);
+    if (!results) return;
+    const query = (q || '').trim();
+    const lower = query.toLowerCase();
+    const already = new Set(modGenreDrafts[artistId] || []);
+    const allGenres = allKnownArtistGenres();
+    const matches = allGenres
+      .filter(g => !already.has(g))
+      .filter(g => !lower || g.includes(lower))
+      .slice(0, 8);
+    if (!query && !matches.length) { results.style.display = 'none'; return; }
+    const matchHtml = matches.map(g =>
+      `<div class="fest-search-item" onmousedown="modGenrePick(${artistId},'${g}')">
+        <span class="fest-search-name">${escHtml(g)}</span>
+      </div>`
+    ).join('');
+    const exactMatch = lower && (already.has(lower) || allGenres.includes(lower));
+    const addNewHtml = query && !exactMatch
+      ? `<div class="fest-search-item" onmousedown="modGenrePick(${artistId},'${query.replace(/'/g,"\\'")}')">
+          <span class="fest-search-name">+ Add "${escHtml(query)}" as new genre</span>
+        </div>`
+      : '';
+    if (!matchHtml && !addNewHtml) { results.style.display = 'none'; return; }
+    results.innerHTML = matchHtml + addNewHtml;
+    results.style.display = 'block';
+  }
+
+  function modGenrePick(artistId, genre) {
+    const val = (genre || '').trim().toLowerCase();
     if (!val) return;
     const list = modGenreDrafts[artistId] || (modGenreDrafts[artistId] = []);
     if (!list.includes(val)) list.push(val);
-    input.value = '';
     rerenderMissingGenresBody(artistId);
   }
 
