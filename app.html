@@ -8198,7 +8198,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.19.6';
+  const APP_VERSION = '1.19.7';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -13353,12 +13353,20 @@ async function doProfilePasswordChange() {
           // meant the NEXT unrelated element became the new blocker with no
           // further diagnosis possible (logging stopped dead after "Starting
           // document clone", no per-element output at all before timing
-          // out). Rather than chase one problem element at a time, skip
-          // everything that isn't the card itself, a descendant of it, or an
-          // ancestor of it (ancestors are still needed so the clone's
-          // layout/stacking context lines up) — only the card's own subtree
-          // ever ends up in the exported image anyway.
-          ignoreElements: (el) => el.tagName === 'VIDEO' || (el !== card && !card.contains(el) && !el.contains(card)),
+          // out). Skip everything that isn't the card itself, a descendant
+          // of it, or an ancestor of it (ancestors are still needed so the
+          // clone's layout/stacking context lines up) — EXCEPT anything
+          // inside <head>, which must always survive regardless of its
+          // relationship to the card: it's a sibling of <body>, not an
+          // ancestor, so the first version of this predicate stripped the
+          // entire stylesheet along with it — instant render, zero layout,
+          // every .crew-share-* class rule just gone (confirmed live: the
+          // exported image had only inline styles applied, nothing from
+          // the stylesheet).
+          ignoreElements: (el) => {
+            if (document.head.contains(el) || el === document.head) return false;
+            return el.tagName === 'VIDEO' || (el !== card && !card.contains(el) && !el.contains(card));
+          },
         }),
         15000, 'Rendering the card'
       );
@@ -28102,9 +28110,14 @@ async function doProfilePasswordChange() {
         // pages/modals mounted in the DOM at once, and any one of them
         // (a tainted <video>, or something else entirely) can block that
         // whole clone step. Skip everything that isn't card itself, a
-        // descendant of it, or an ancestor of it — see the crew share
-        // card's prepareCrewShareImage for how this was diagnosed.
-        const canvas = await html2canvas(card, { backgroundColor: '#06000f', scale: 2, useCORS: true, logging: false, ignoreElements: (el) => el.tagName === 'VIDEO' || (el !== card && !card.contains(el) && !el.contains(card)) });
+        // descendant of it, or an ancestor of it — EXCEPT <head> (a sibling
+        // of <body>, not an ancestor), which must always survive since it
+        // holds the stylesheet. See the crew share card's
+        // prepareCrewShareImage for how this was diagnosed.
+        const canvas = await html2canvas(card, { backgroundColor: '#06000f', scale: 2, useCORS: true, logging: false, ignoreElements: (el) => {
+          if (document.head.contains(el) || el === document.head) return false;
+          return el.tagName === 'VIDEO' || (el !== card && !card.contains(el) && !el.contains(card));
+        } });
         if (actions) actions.style.display = '';
         canvas.toBlob(async (blob) => {
           if (!blob) { showToast('⚠️ Could not generate image'); return; }
