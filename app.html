@@ -2570,7 +2570,10 @@
     font-family: 'Outfit', sans-serif;
     font-weight: 600;
     font-size: 0.85rem;
-    z-index: 300;
+    /* Above every overlay/modal/lightbox in the app (highest prior value was
+       10000 on the photo lightbox) — a toast fired while any of those are
+       open must never render underneath their backdrop. */
+    z-index: 10050;
     transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
     white-space: nowrap;
     max-width: calc(100vw - 32px);
@@ -8184,7 +8187,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.18.0';
+  const APP_VERSION = '1.18.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -13167,11 +13170,46 @@ async function doProfilePasswordChange() {
     return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
   }
 
+  // Plain-text version of the card — no rendering, no image fetches, so it
+  // always works regardless of whether html2canvas can successfully draw
+  // the avatar/totem photos. Used as the guaranteed-reliable fallback when
+  // image generation fails or times out, so the button never dead-ends.
+  function buildCrewShareText(crew) {
+    const statusLabel = (STATUS[crew.status]?.label || '').replace(/^\S+\s*/, '');
+    const lines = [`🎟️ ${crew.name} — ${statusLabel}`];
+    const next = crewNextUp(crew, true);
+    if (next.kind === 'upcoming') {
+      lines.push(`Next up: ${next.name} · ${next.date.getDate()} ${MON_SHORT[next.date.getMonth()]} · ${countdownLabel(next.date)}`);
+    }
+    lines.push('myravefam.com');
+    return lines.join('\n');
+  }
+
+  async function shareCrewTextFallback(crew) {
+    const text = buildCrewShareText(crew);
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: `${crew.name} — RaveFAM`, text });
+        return;
+      } catch (e) {
+        if (e && e.name === 'AbortError') return;
+      }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast('📋 Copied — paste it anywhere!');
+        return;
+      } catch {}
+    }
+    showToast('📋 Screenshot this card to share!');
+  }
+
   async function shareCrewCard(crewId) {
     const crew = getCrew(crewId);
     const card = document.getElementById('crew-share-card');
     if (!card) return;
-    if (typeof html2canvas === 'undefined') { showToast('📋 Screenshot this card to share!'); return; }
+    if (typeof html2canvas === 'undefined') { await shareCrewTextFallback(crew); return; }
     try {
       // html2canvas has to fetch every avatar/totem image itself; on a real
       // network a slow or CORS-blocked fetch can leave that promise hanging
@@ -13179,13 +13217,13 @@ async function doProfilePasswordChange() {
       // which is exactly the "silent failure" this is guarding against.
       const canvas = await withTimeout(
         html2canvas(card, { backgroundColor: '#050509', scale: 2, useCORS: true, logging: false }),
-        12000, 'Rendering the card'
+        10000, 'Rendering the card'
       );
       const blob = await withTimeout(
         new Promise(resolve => canvas.toBlob(resolve, 'image/png')),
-        5000, 'Generating the image'
+        4000, 'Generating the image'
       );
-      if (!blob) { showToast('⚠️ Could not generate image'); return; }
+      if (!blob) { showToast('🖼️ Couldn\'t render the image — sharing as text instead'); await shareCrewTextFallback(crew); return; }
 
       const fileName = `${(crew && crew.name ? crew.name : 'crew').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-pass.png`;
       const file = new File([blob], fileName, { type: 'image/png' });
@@ -13215,7 +13253,12 @@ async function doProfilePasswordChange() {
       }
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (e) {
-      showToast(e && /timed out/.test(e.message) ? '⚠️ Taking too long — check your connection and try again' : '📋 Screenshot this card to share!');
+      // Whatever went wrong rendering the image (timeout, a blocked image
+      // fetch, anything) — don't leave the button as a dead end. Fall back
+      // to a plain-text share that needs no rendering or network fetches at
+      // all, so there's always something the user can actually send.
+      showToast(e && /timed out/.test(e.message) ? '⏳ Image took too long — sharing as text instead' : '🖼️ Couldn\'t render the image — sharing as text instead');
+      await shareCrewTextFallback(crew);
     }
   }
 
