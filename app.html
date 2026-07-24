@@ -8198,7 +8198,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.19.1';
+  const APP_VERSION = '1.19.2';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -13309,9 +13309,12 @@ async function doProfilePasswordChange() {
       await waitForCardImages(card, 6000);
       if (token !== _crewShareToken) return; // superseded by a newer render
       // Generous timeouts are fine now that this runs ahead of the tap
-      // instead of blocking it.
+      // instead of blocking it. logging:true surfaces html2canvas's own
+      // internal step-by-step console output (image loads, cloning,
+      // font readiness) — turned on deliberately for diagnosis; the prior
+      // silent failures here were never actually logged anywhere.
       const canvas = await withTimeout(
-        html2canvas(card, { backgroundColor: '#050509', scale: 2, useCORS: true, logging: false }),
+        html2canvas(card, { backgroundColor: '#050509', scale: 2, useCORS: true, logging: true }),
         15000, 'Rendering the card'
       );
       if (token !== _crewShareToken) return;
@@ -13323,7 +13326,8 @@ async function doProfilePasswordChange() {
       if (!blob) { setShareButtonState('text-only'); return; }
       _crewShareBlob = blob;
       setShareButtonState('ready');
-    } catch {
+    } catch (e) {
+      console.error('crew share: prepareCrewShareImage failed —', e && e.name, e && e.message, e);
       if (token === _crewShareToken) setShareButtonState('text-only');
     }
   }
@@ -13336,6 +13340,10 @@ async function doProfilePasswordChange() {
     if (_crewShareBlob) {
       shareCrewImageBlob(crew, _crewShareBlob);
     } else {
+      // Text-only means the visual pass itself isn't part of what's being
+      // shared — say so up front (not just as a last-resort message) so the
+      // user knows to grab the visual separately if they want it.
+      showToast('📸 Sharing as text — screenshot the card above for the visual pass');
       shareCrewTextFallback(crew);
     }
   }
