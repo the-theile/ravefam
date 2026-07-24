@@ -8198,7 +8198,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.19.3';
+  const APP_VERSION = '1.19.4';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -13275,6 +13275,34 @@ async function doProfilePasswordChange() {
     }));
   }
 
+  // html2canvas can taint the canvas on a cross-origin image (avatar/totem
+  // photos live on the Supabase storage domain, not this app's own domain)
+  // even when the server sends proper CORS headers — if the browser already
+  // cached that exact URL from an earlier plain <img> load elsewhere in the
+  // app (e.g. the totem photo shown right on the crew Overview tab, via
+  // crewTotemMarkHTML, with no crossorigin attribute) without CORS mode, a
+  // later CORS-mode fetch of the same URL can be served that cached opaque
+  // response instead of a fresh one. Re-fetch every image ourselves and
+  // swap in local blob: URLs, which are always same-origin and safe for
+  // canvas — sidesteps the whole ambiguity instead of hoping html2canvas's
+  // own fetch behaves. A single failed image is skipped, not fatal.
+  async function inlineCardImagesAsBlobs(card, timeoutMs) {
+    const swap = async (getSrc, setSrc) => {
+      const src = getSrc();
+      if (!src || src.startsWith('blob:') || src.startsWith('data:')) return;
+      try {
+        const blob = await withTimeout(fetch(src, { mode: 'cors' }).then(r => r.blob()), timeoutMs, 'Fetching image');
+        setSrc(URL.createObjectURL(blob));
+      } catch (e) {
+        console.error('crew share: could not inline image as blob, leaving original src —', src, e);
+      }
+    };
+    const tasks = Array.from(card.querySelectorAll('img')).map(img => swap(() => img.src, (u) => { img.src = u; }));
+    const bgMatch = /url\(['"]?([^'"]+)['"]?\)/.exec(card.style.backgroundImage || '');
+    if (bgMatch) tasks.push(swap(() => bgMatch[1], (u) => { card.style.backgroundImage = `url('${u}')`; }));
+    await Promise.all(tasks);
+  }
+
   function setShareButtonState(state) {
     const btn = document.querySelector('.crew-share-actions .wrapped-share-btn');
     if (!btn) return;
@@ -13308,6 +13336,8 @@ async function doProfilePasswordChange() {
     try {
       await waitForCardImages(card, 6000);
       if (token !== _crewShareToken) return; // superseded by a newer render
+      await inlineCardImagesAsBlobs(card, 8000);
+      if (token !== _crewShareToken) return;
       // Generous timeouts are fine now that this runs ahead of the tap
       // instead of blocking it. logging:true surfaces html2canvas's own
       // internal step-by-step console output (image loads, cloning,
