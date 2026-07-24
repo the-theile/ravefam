@@ -6826,6 +6826,12 @@
   .pm-cohort-head { color: var(--muted); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.03em; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 6px; margin-bottom: 2px; }
   .pm-cohort-pct { text-align: center; font-variant-numeric: tabular-nums; }
   .pm-pill { display: inline-block; font-size: 0.62rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,0.08); color: var(--muted); }
+  .pm-feedback-card { padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .pm-feedback-card:last-child { border-bottom: none; }
+  .pm-feedback-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .pm-feedback-question { font-size: 0.72rem; color: var(--muted); margin-bottom: 4px; }
+  .pm-feedback-response { font-size: 0.86rem; color: var(--text); }
+  .pm-feedback-date { font-size: 0.66rem; color: var(--muted); }
 
   /* ===== NPS PROMPT ===== */
   .nps-prompt-card { position: relative; background: var(--surface); border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; padding: 16px 18px; margin-bottom: 16px; }
@@ -8214,7 +8220,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.20.0';
+  const APP_VERSION = '1.21.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -14386,6 +14392,7 @@ async function doProfilePasswordChange() {
         ${pmKpiCard('Explorer Visitors (30d)', pmFmt(d.pageviews.unique_visitors_30d), `${pmFmt(d.pageviews.last_30d)} pageviews · ${pmFmt(d.pageviews.explorer_clickthrough_30d)} → site`)}
         ${pmKpiCard('Upcoming Raves', pmFmt(t.festivals_upcoming), `${pmFmt(t.festivals_total)} total logged`)}
         ${pmKpiCard('NPS', d.nps.count > 0 ? d.nps.nps_score : '—', d.nps.count > 0 ? `from ${d.nps.count} response${d.nps.count === 1 ? '' : 's'}` : 'No responses yet')}
+        ${pmKpiCard('Crew Activation Rate', pmPct(d.crew_activation.activation_rate), `${pmFmt(d.crew_activation.activated_8w)} of ${pmFmt(d.crew_activation.crews_created_8w)} crews (8w)`)}
       </div>
 
       <div class="pm-grid-2">
@@ -14418,6 +14425,18 @@ async function doProfilePasswordChange() {
         <div class="pm-section-title">Cohort Retention</div>
         <div class="pm-section-sub">% of crew members still showing activity N weeks after joining (— = cohort hasn't reached that week yet)</div>
         ${pmRetentionTable(d.retention_cohorts)}
+      </div>
+
+      <div class="pm-section">
+        <div class="pm-section-title">Crew Activation Funnel</div>
+        <div class="pm-section-sub">Weekly cohorts: crews created vs. reaching each activation milestone within 7 days of creation</div>
+        ${pmChartOrFallback('pm-chart-activation')}
+      </div>
+
+      <div class="pm-section">
+        <div class="pm-section-title">Recent Feedback</div>
+        <div class="pm-section-sub">Latest micro-feedback responses captured at activation moments (crew created, invite sent, claim made, event added)</div>
+        ${pmFeedbackRows(d.recent_feedback)}
       </div>
 
       <div class="pm-grid-2">
@@ -14499,6 +14518,7 @@ async function doProfilePasswordChange() {
       pmRenderGrowthChart(d.growth_weekly);
       pmRenderAcquisitionChart(d.acquisition_weekly);
       pmRenderAdoptionChart(d.feature_adoption);
+      pmRenderActivationChart(d.crew_activation.weekly);
       if (d.preview_clicks.total > 0) pmRenderPlatformsChart(d.preview_clicks.by_platform);
     }
   }
@@ -14694,6 +14714,46 @@ async function doProfilePasswordChange() {
         }
       }
     });
+  }
+
+  function pmRenderActivationChart(weekly) {
+    const ctx = document.getElementById('pm-chart-activation');
+    if (!ctx) return;
+    if (pmDashCharts.activation) pmDashCharts.activation.destroy();
+    pmDashCharts.activation = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: weekly.map(w => pmWeekLabel(w.week_start)),
+        datasets: [
+          { label: 'Crews Created', data: weekly.map(w => w.crews_created), backgroundColor: '#8585A5', borderRadius: 4 },
+          { label: 'Reached 1st Person Added', data: weekly.map(w => w.reached_first_person_added), backgroundColor: '#00F5FF', borderRadius: 4 },
+          { label: 'Reached 1st Event Added', data: weekly.map(w => w.reached_first_event_added), backgroundColor: '#FF2D78', borderRadius: 4 },
+          { label: 'Activated', data: weekly.map(w => w.activated), backgroundColor: '#39FF14', borderRadius: 4 },
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { color: '#8585A5', boxWidth: 10, font: { size: 10 } } } },
+        scales: {
+          x: { grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { color: '#8585A5', font: { size: 10 } } },
+          y: { grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { color: '#8585A5', font: { size: 10 }, precision: 0 }, beginAtZero: true }
+        }
+      }
+    });
+  }
+
+  function pmFeedbackRows(rows) {
+    if (!rows || !rows.length) return pmEmptyNote('No micro-feedback responses yet');
+    const milestoneLabel = { crew_created: 'Crew Created', invite_sent: 'Invite Sent', claim_made: 'Claim Made', event_added: 'Event Added' };
+    return rows.map(r => `
+      <div class="pm-feedback-card">
+        <div class="pm-feedback-head">
+          <span class="pm-pill">${escHtml(milestoneLabel[r.milestone] || r.milestone)}</span>
+          <span class="pm-feedback-date">${new Date(r.created_at).toLocaleDateString()}</span>
+        </div>
+        <div class="pm-feedback-question">${escHtml(r.question)}</div>
+        <div class="pm-feedback-response">"${escHtml(r.response)}"</div>
+      </div>`).join('');
   }
 
   function pmRenderPlatformsChart(byPlatform) {
