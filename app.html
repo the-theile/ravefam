@@ -6743,6 +6743,21 @@
     accent-color: var(--neon-pink);
     cursor: pointer;
   }
+  .crew-share-result-img {
+    display: block;
+    width: 100%;
+    max-height: 70vh;
+    object-fit: contain;
+    border-radius: 16px;
+    background: var(--surface);
+  }
+  .crew-share-result-hint {
+    text-align: center;
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.8rem;
+    color: rgba(255,255,255,0.65);
+    margin: 12px 0;
+  }
   .crew-share-input-row { margin: 14px 0; }
   .crew-share-caption-input {
     width: 100%;
@@ -13144,14 +13159,32 @@ async function doProfilePasswordChange() {
     return /iP(hone|od|ad)/.test(navigator.userAgent) && !window.MSStream;
   }
 
+  function withTimeout(promise, ms, label) {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  }
+
   async function shareCrewCard(crewId) {
     const crew = getCrew(crewId);
     const card = document.getElementById('crew-share-card');
     if (!card) return;
     if (typeof html2canvas === 'undefined') { showToast('📋 Screenshot this card to share!'); return; }
     try {
-      const canvas = await html2canvas(card, { backgroundColor: '#050509', scale: 2, useCORS: true, logging: false });
-      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      // html2canvas has to fetch every avatar/totem image itself; on a real
+      // network a slow or CORS-blocked fetch can leave that promise hanging
+      // indefinitely — with no timeout the button just does nothing forever,
+      // which is exactly the "silent failure" this is guarding against.
+      const canvas = await withTimeout(
+        html2canvas(card, { backgroundColor: '#050509', scale: 2, useCORS: true, logging: false }),
+        12000, 'Rendering the card'
+      );
+      const blob = await withTimeout(
+        new Promise(resolve => canvas.toBlob(resolve, 'image/png')),
+        5000, 'Generating the image'
+      );
       if (!blob) { showToast('⚠️ Could not generate image'); return; }
 
       const fileName = `${(crew && crew.name ? crew.name : 'crew').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-pass.png`;
@@ -13167,21 +13200,37 @@ async function doProfilePasswordChange() {
         }
       }
 
-      // Fallback: iOS Safari doesn't reliably honor <a download>, so open the
-      // image in a new tab instead — the user can long-press to save/share it.
       const url = URL.createObjectURL(blob);
       if (isIOSSafari()) {
-        window.open(url, '_blank');
-        showToast('🖼️ Long-press the image to save or share it');
+        // iOS Safari doesn't reliably honor <a download>, and window.open()
+        // from this deep in an async chain risks getting silently popup-
+        // blocked too — swap the overlay to show the rendered image inline
+        // instead (no new window/tab involved) so the user can reliably
+        // long-press to save/share it.
+        showCrewShareImageResult(url);
       } else {
         const a = document.createElement('a');
         a.href = url; a.download = fileName; a.click();
         showToast('📥 Crew card downloaded!');
       }
       setTimeout(() => URL.revokeObjectURL(url), 60000);
-    } catch {
-      showToast('📋 Screenshot this card to share!');
+    } catch (e) {
+      showToast(e && /timed out/.test(e.message) ? '⚠️ Taking too long — check your connection and try again' : '📋 Screenshot this card to share!');
     }
+  }
+
+  // iOS-safe share fallback: swap the still-open overlay to show the
+  // rendered PNG directly (object-fit: contain, no cropping — the card is a
+  // tall portrait, not a square) so the user can long-press it to save or
+  // share without depending on window.open or <a download>, neither of
+  // which iOS Safari honors reliably from this deep in an async chain.
+  function showCrewShareImageResult(url) {
+    document.querySelector('.crew-share-wrap').innerHTML = `
+      <img src="${url}" class="crew-share-result-img" alt="Crew share card">
+      <div class="crew-share-result-hint">📲 Long-press the image above to save or share it</div>
+      <div class="crew-share-actions">
+        <button class="wrapped-close-btn" style="flex:1;" onclick="closeCrewShareCard()">Done</button>
+      </div>`;
   }
 
   function sectionErrorHTML(section) {
