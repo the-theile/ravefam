@@ -8198,7 +8198,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.18.2';
+  const APP_VERSION = '1.19.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -13036,6 +13036,18 @@ async function doProfilePasswordChange() {
   // Whether to use the crew's totem photo as the card's background, when one
   // is set. Defaults on (today's behavior) — reset on every fresh open.
   let _crewSharePhotoEnabled = true;
+  // iOS Safari only allows navigator.share()/clipboard.writeText() as a
+  // direct, near-immediate result of a tap — any real async work first
+  // (rendering the card, waiting on a timeout) is enough to lose that and
+  // make the share silently fail, image AND text fallback alike. So the
+  // image is pre-rendered in the background the moment the card opens or
+  // changes, not on tap — by the time the user taps Share, this already
+  // holds the finished blob (or null if it failed), and the tap itself does
+  // no async work before calling the share API. _crewShareToken invalidates
+  // an in-flight pre-render when the card changes again before it finishes.
+  let _crewShareBlob = null;
+  let _crewShareToken = 0;
+  let _crewShareCaptionTimer = null;
 
   function openCrewShareCard(crewId) {
     const crew = getCrew(crewId);
@@ -13063,6 +13075,7 @@ async function doProfilePasswordChange() {
   }
 
   function closeCrewShareCard() {
+    _crewShareToken++; // invalidate any in-flight pre-render — nothing left to update
     document.getElementById('crew-share-overlay').classList.remove('open');
   }
 
@@ -13165,21 +13178,33 @@ async function doProfilePasswordChange() {
       ${modeToggleHtml}
       ${photoToggleHtml}
       <div class="crew-share-input-row">
-        <input type="text" class="crew-share-caption-input" placeholder="Add a caption (optional)" maxlength="60" value="${escHtml(captionValue)}" oninput="updateCrewShareCaption(this.value)">
+        <input type="text" class="crew-share-caption-input" placeholder="Add a caption (optional)" maxlength="60" value="${escHtml(captionValue)}" oninput="updateCrewShareCaption('${crew.id}', this.value)">
       </div>
       <div class="crew-share-actions">
-        <button class="wrapped-share-btn" onclick="shareCrewCard('${crew.id}')">📲 Share Card</button>
+        <button class="wrapped-share-btn" onclick="shareCrewCardNow('${crew.id}')">📲 Share Card</button>
         ${canInvite ? `<button class="wrapped-close-btn" onclick="generateAndShareCrewInvite('${crew.id}')">🔗 Copy Invite Link</button>` : ''}
         <button class="wrapped-close-btn" onclick="closeCrewShareCard()">Close</button>
       </div>`;
+
+    // Pre-render in the background now, not on tap — see the note by
+    // _crewShareBlob above for why this matters on iOS Safari.
+    prepareCrewShareImage(crew);
   }
 
-  function updateCrewShareCaption(value) {
+  function updateCrewShareCaption(crewId, value) {
     const line = document.getElementById('crew-share-caption-line');
-    if (!line) return;
-    const trimmed = value.trim();
-    line.textContent = trimmed;
-    line.style.display = trimmed ? '' : 'none';
+    if (line) {
+      const trimmed = value.trim();
+      line.textContent = trimmed;
+      line.style.display = trimmed ? '' : 'none';
+    }
+    // Debounce re-rendering the pre-made image so the caption ends up baked
+    // into it too, without re-running html2canvas on every keystroke.
+    clearTimeout(_crewShareCaptionTimer);
+    _crewShareCaptionTimer = setTimeout(() => {
+      const crew = getCrew(crewId);
+      if (crew) prepareCrewShareImage(crew);
+    }, 700);
   }
 
   function isIOSSafari() {
@@ -13247,42 +13272,79 @@ async function doProfilePasswordChange() {
     }));
   }
 
-  async function shareCrewCard(crewId) {
-    const crew = getCrew(crewId);
-    const card = document.getElementById('crew-share-card');
-    if (!card) return;
-    if (typeof html2canvas === 'undefined') { await shareCrewTextFallback(crew); return; }
-
+  function setShareButtonState(state) {
     const btn = document.querySelector('.crew-share-actions .wrapped-share-btn');
-    const btnOriginalHtml = btn ? btn.innerHTML : '';
-    if (btn) {
-      btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;vertical-align:-3px;margin-right:6px;"></span>Generating…';
+    if (!btn) return;
+    if (state === 'preparing') {
+      btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;vertical-align:-3px;margin-right:6px;"></span>Preparing…';
       btn.disabled = true;
+    } else if (state === 'text-only') {
+      btn.innerHTML = '📤 Share as Text';
+      btn.disabled = false;
+    } else {
+      btn.innerHTML = '📲 Share Card';
+      btn.disabled = false;
     }
-    const restoreBtn = () => { if (btn && document.body.contains(btn)) { btn.innerHTML = btnOriginalHtml; btn.disabled = false; } };
+  }
 
+  // Renders the card to a PNG in the background — NOT on tap. iOS Safari
+  // only allows navigator.share()/clipboard.writeText() as a direct result
+  // of a tap; if the button's click handler has to await html2canvas first,
+  // that window is gone by the time the share call actually runs, so it
+  // (and the text fallback that used to run after it) can silently fail.
+  // Pre-rendering means the tap itself does no async rendering work at all.
+  async function prepareCrewShareImage(crew) {
+    const token = ++_crewShareToken;
+    _crewShareBlob = null;
+    setShareButtonState('preparing');
+    const card = document.getElementById('crew-share-card');
+    if (!card || typeof html2canvas === 'undefined') {
+      if (token === _crewShareToken) setShareButtonState('text-only');
+      return;
+    }
     try {
       await waitForCardImages(card, 6000);
-      // html2canvas has to fetch every avatar/totem image itself; on a real
-      // network a slow or CORS-blocked fetch can leave that promise hanging
-      // indefinitely — with no timeout the button just does nothing forever,
-      // which is exactly the "silent failure" this is guarding against.
+      if (token !== _crewShareToken) return; // superseded by a newer render
+      // Generous timeouts are fine now that this runs ahead of the tap
+      // instead of blocking it.
       const canvas = await withTimeout(
         html2canvas(card, { backgroundColor: '#050509', scale: 2, useCORS: true, logging: false }),
-        10000, 'Rendering the card'
+        15000, 'Rendering the card'
       );
+      if (token !== _crewShareToken) return;
       const blob = await withTimeout(
         new Promise(resolve => canvas.toBlob(resolve, 'image/png')),
-        4000, 'Generating the image'
+        5000, 'Generating the image'
       );
-      if (!blob) { showToast('🖼️ Couldn\'t render the image — sharing as text instead'); await shareCrewTextFallback(crew); return; }
+      if (token !== _crewShareToken) return;
+      if (!blob) { setShareButtonState('text-only'); return; }
+      _crewShareBlob = blob;
+      setShareButtonState('ready');
+    } catch {
+      if (token === _crewShareToken) setShareButtonState('text-only');
+    }
+  }
 
+  // The actual click handler — deliberately synchronous up to the share
+  // call itself, so it's always a direct, immediate result of the tap.
+  function shareCrewCardNow(crewId) {
+    const crew = getCrew(crewId);
+    if (!crew) return;
+    if (_crewShareBlob) {
+      shareCrewImageBlob(crew, _crewShareBlob);
+    } else {
+      shareCrewTextFallback(crew);
+    }
+  }
+
+  async function shareCrewImageBlob(crew, blob) {
+    try {
       const fileName = `${(crew && crew.name ? crew.name : 'crew').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-pass.png`;
       const file = new File([blob], fileName, { type: 'image/png' });
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
-          await navigator.share({ files: [file], title: `${crew ? crew.name : 'Crew'} — RaveFAM` });
+          await navigator.share({ files: [file], title: `${crew.name} — RaveFAM` });
           return;
         } catch (e) {
           if (e && e.name === 'AbortError') return; // user closed the share sheet — not an error
@@ -13293,10 +13355,9 @@ async function doProfilePasswordChange() {
       const url = URL.createObjectURL(blob);
       if (isIOSSafari()) {
         // iOS Safari doesn't reliably honor <a download>, and window.open()
-        // from this deep in an async chain risks getting silently popup-
-        // blocked too — swap the overlay to show the rendered image inline
-        // instead (no new window/tab involved) so the user can reliably
-        // long-press to save/share it.
+        // risks getting silently popup-blocked too — swap the overlay to
+        // show the rendered image inline instead (no new window/tab
+        // involved) so the user can reliably long-press to save/share it.
         showCrewShareImageResult(url);
       } else {
         const a = document.createElement('a');
@@ -13304,15 +13365,8 @@ async function doProfilePasswordChange() {
         showToast('📥 Crew card downloaded!');
       }
       setTimeout(() => URL.revokeObjectURL(url), 60000);
-    } catch (e) {
-      // Whatever went wrong rendering the image (timeout, a blocked image
-      // fetch, anything) — don't leave the button as a dead end. Fall back
-      // to a plain-text share that needs no rendering or network fetches at
-      // all, so there's always something the user can actually send.
-      showToast(e && /timed out/.test(e.message) ? '⏳ Image took too long — sharing as text instead' : '🖼️ Couldn\'t render the image — sharing as text instead');
+    } catch {
       await shareCrewTextFallback(crew);
-    } finally {
-      restoreBtn();
     }
   }
 
