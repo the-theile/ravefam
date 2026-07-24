@@ -6727,6 +6727,22 @@
     cursor: pointer;
   }
   .crew-share-mode-btn.active { background: var(--surface); color: var(--text); }
+  .crew-share-photo-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.78rem;
+    color: rgba(255,255,255,0.65);
+    cursor: pointer;
+  }
+  .crew-share-photo-toggle input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--neon-pink);
+    cursor: pointer;
+  }
   .crew-share-input-row { margin: 14px 0; }
   .crew-share-caption-input {
     width: 100%;
@@ -8153,7 +8169,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.15.0';
+  const APP_VERSION = '1.16.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -12987,11 +13003,15 @@ async function doProfilePasswordChange() {
   // next event. Only meaningful when an upcoming event exists — reset to
   // 'crew' on every fresh open.
   let _crewShareMode = 'crew';
+  // Whether to use the crew's totem photo as the card's background, when one
+  // is set. Defaults on (today's behavior) — reset on every fresh open.
+  let _crewSharePhotoEnabled = true;
 
   function openCrewShareCard(crewId) {
     const crew = getCrew(crewId);
     if (!crew) return;
     _crewShareMode = 'crew';
+    _crewSharePhotoEnabled = true;
     renderCrewShareCard(crew);
     document.getElementById('crew-share-overlay').classList.add('open');
   }
@@ -13004,6 +13024,14 @@ async function doProfilePasswordChange() {
     renderCrewShareCard(crew, captionValue);
   }
 
+  function toggleCrewSharePhoto(crewId, checked) {
+    const crew = getCrew(crewId);
+    if (!crew) return;
+    _crewSharePhotoEnabled = checked;
+    const captionValue = document.querySelector('.crew-share-caption-input')?.value || '';
+    renderCrewShareCard(crew, captionValue);
+  }
+
   function closeCrewShareCard() {
     document.getElementById('crew-share-overlay').classList.remove('open');
   }
@@ -13011,7 +13039,11 @@ async function doProfilePasswordChange() {
   function renderCrewShareCard(crew, captionValue = '') {
     const s = STATUS[crew.status];
     const people = crewSquad(crew);
-    const next = crewNextUp(crew);
+    // socialOnly=true, matching crewNextFestBlock's "Next Rave Up" logic —
+    // only surface an event if at least one member OTHER than the current
+    // viewer is going. Otherwise this reads as "the crew's next rave" when
+    // really it's just the viewer's personal plans nobody else shares.
+    const next = crewNextUp(crew, true);
     const hasUpcoming = next.kind === 'upcoming';
     const mode = hasUpcoming ? _crewShareMode : 'crew';
     const fallbackGradient = 'linear-gradient(135deg,#FF2D78,#00F5FF)';
@@ -13046,19 +13078,27 @@ async function doProfilePasswordChange() {
         <button class="crew-share-mode-btn${mode === 'rave' ? ' active' : ''}" onclick="setCrewShareMode('${crew.id}','rave')">This Rave</button>
       </div>` : '';
 
-    const photoUrl = crew.totemPhotoUrl || '';
+    const hasTotemPhoto = !!crew.totemPhotoUrl;
+    const photoUrl = (hasTotemPhoto && _crewSharePhotoEnabled) ? crew.totemPhotoUrl : '';
     const cardStyle = photoUrl ? `background-image:url('${escHtml(photoUrl)}');` : '';
     const stripeColor = crew.gradient || crew.color || 'var(--neon-pink)';
     const canInvite = crew.isLead && crew.status === 'recruiting';
 
+    const photoToggleHtml = hasTotemPhoto ? `
+      <label class="crew-share-photo-toggle">
+        <input type="checkbox" ${_crewSharePhotoEnabled ? 'checked' : ''} onchange="toggleCrewSharePhoto('${crew.id}', this.checked)">
+        Use crew photo as background
+      </label>` : '';
+
     // Warm the browser's image cache for every avatar (the full roster, not
     // just whichever mode is showing — toggling modes must not hit the
-    // network) + the totem photo, so by the time the user taps "Share Card",
+    // network) + the totem photo (regardless of the checkbox above, in case
+    // it gets re-enabled), so by the time the user taps "Share Card",
     // html2canvas doesn't have to wait on fetches. iOS Safari only honors
     // navigator.share()/window.open() as a direct result of the tap — any
     // real network delay after the tap is enough to lose that and make the
     // button silently do nothing.
-    (photoUrl ? [photoUrl] : []).concat(people.map(p => p.avatarUrl || p.avatar_url).filter(Boolean))
+    (hasTotemPhoto ? [crew.totemPhotoUrl] : []).concat(people.map(p => p.avatarUrl || p.avatar_url).filter(Boolean))
       .forEach(src => { const img = new Image(); img.src = src; });
 
     document.querySelector('.crew-share-wrap').innerHTML = `
@@ -13080,6 +13120,7 @@ async function doProfilePasswordChange() {
         </div>
       </div>
       ${modeToggleHtml}
+      ${photoToggleHtml}
       <div class="crew-share-input-row">
         <input type="text" class="crew-share-caption-input" placeholder="Add a caption (optional)" maxlength="60" value="${escHtml(captionValue)}" oninput="updateCrewShareCaption(this.value)">
       </div>
