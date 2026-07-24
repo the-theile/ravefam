@@ -8169,7 +8169,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.16.0';
+  const APP_VERSION = '1.17.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -11296,6 +11296,7 @@ async function doProfilePasswordChange() {
     'vendor.remove':        { emoji: '🗑️', label: 'Vendor removed' },
     'vendor_review.remove': { emoji: '🗑️', label: 'Vendor review removed' },
     'vendor_spot.remove':   { emoji: '🗑️', label: 'Vendor spot removed' },
+    'artist.genre_set':     { emoji: '🎵', label: 'Artist genre tagged' },
   };
   function historyActionMeta(action) {
     return HISTORY_ACTION_META[action] || { emoji: '📌', label: action };
@@ -13604,7 +13605,7 @@ async function doProfilePasswordChange() {
   }
 
   // ===== MOD DASHBOARD =====
-  let modDashTab = 'reports';  // 'reports' | 'recent' | 'guide'
+  let modDashTab = 'reports';  // 'reports' | 'recent' | 'genres' | 'guide'
   let modDashRecentRows = [];  // last-loaded audit_logs rows, keyed by id for Restore lookups
 
   async function openModDashboard() {
@@ -13619,8 +13620,9 @@ async function doProfilePasswordChange() {
   function closeModDashboard() { closeDetail(); }
 
   async function renderModDashboard() {
-    const [flags, recent] = await Promise.all([dbLoadFlags(), dbLoadRecentDestructiveActions()]);
+    const [flags, recent, missingGenreArtists] = await Promise.all([dbLoadFlags(), dbLoadRecentDestructiveActions(), dbLoadMissingGenreArtists()]);
     modDashRecentRows = recent;
+    modMissingGenreArtists = missingGenreArtists;
     updateModBadge();
     const openCount = flags.filter(f => f.status === 'open').length;
     const page = document.getElementById('page-mod-dashboard');
@@ -13631,9 +13633,10 @@ async function doProfilePasswordChange() {
         <div class="section-title">🛡️ Mod Dashboard</div>
       </div>
       <div style="font-size:0.86rem;color:var(--muted);margin-bottom:18px;">Keep the frequency clean — review reports and undo destructive actions.</div>
-      <div class="status-toggle" style="margin-bottom:18px;">
+      <div class="status-toggle" style="margin-bottom:18px;flex-wrap:wrap;">
         <button class="status-opt ${modDashTab==='reports'?'active':''}" onclick="switchModDashTab('reports')">🚩 Reports${openCount ? ` (${openCount})` : ''}</button>
         <button class="status-opt ${modDashTab==='recent'?'active':''}" onclick="switchModDashTab('recent')">🗑️ Recent Deletes${recent.length ? ` (${recent.length})` : ''}</button>
+        <button class="status-opt ${modDashTab==='genres'?'active':''}" onclick="switchModDashTab('genres')">🎵 Missing Genres${missingGenreArtists.length ? ` (${missingGenreArtists.length})` : ''}</button>
         <button class="status-opt ${modDashTab==='guide'?'active':''}" onclick="switchModDashTab('guide')">📖 Guide</button>
       </div>
       <div id="mod-dash-body"></div>
@@ -13655,9 +13658,108 @@ async function doProfilePasswordChange() {
       body.innerHTML = recent.length
         ? `<div class="events-list">${recent.map(recentDeleteCardHTML).join('')}</div>`
         : `<div class="es-block" style="padding:40px 24px;"><div class="es-icon">🗑️</div><div class="es-headline">No deletes yet</div><div class="es-sub">Destructive actions will show up here.</div></div>`;
+    } else if (modDashTab === 'genres') {
+      body.innerHTML = renderMissingGenresHTML();
     } else if (modDashTab === 'guide') {
       body.innerHTML = renderModGuideHTML();
     }
+  }
+
+  // ===== MOD DASHBOARD: Missing Genres tab =====
+  // Artists land here purely by having an empty genres array — no separate
+  // flag row to keep in sync. addNewArtist() (the only insert path into
+  // `artists`, used when a raver tags a favorite/lineup artist that doesn't
+  // exist yet) always inserts with no genre, so this queue self-populates
+  // for every future artist and self-clears the moment a mod saves a genre.
+  let modMissingGenreArtists = [];
+  let modGenreDrafts = {};  // artistId -> string[] of staged (unsaved) genre picks
+
+  async function dbLoadMissingGenreArtists() {
+    if (!isModerator()) return [];
+    const { data, error } = await sb.from('artists').select('id,name,genres').order('name');
+    if (error) { console.error('artists load error', error); return []; }
+    return (data || []).filter(a => !a.genres || a.genres.length === 0);
+  }
+
+  // Suggestions for the genre input come from whatever tags are already in
+  // live use — freeform, not a hardcoded enum, same convention the seeded
+  // lineup data already uses (lowercase short tags like "house", "riddim").
+  function allKnownArtistGenres() {
+    const set = new Set();
+    artists.forEach(a => (a.genres || []).forEach(g => set.add(g)));
+    return [...set].sort();
+  }
+
+  function renderMissingGenresHTML() {
+    if (!modMissingGenreArtists.length) {
+      return `<div class="es-block" style="padding:40px 24px;"><div class="es-icon">🎵</div><div class="es-headline">Nothing to tag</div><div class="es-sub">Every artist has at least one genre.</div></div>`;
+    }
+    const suggestions = allKnownArtistGenres();
+    return `
+      <datalist id="mod-genre-suggestions">${suggestions.map(g => `<option value="${escHtml(g)}"></option>`).join('')}</datalist>
+      <div style="font-size:0.8rem;color:var(--muted);margin-bottom:14px;">Artists added with no genre — pick one or more tags, then save. Type to see existing tags, or enter a new one.</div>
+      <div class="events-list">${modMissingGenreArtists.map(missingGenreCardHTML).join('')}</div>`;
+  }
+
+  function missingGenreCardHTML(a) {
+    const draft = modGenreDrafts[a.id] || [];
+    const chips = draft.length
+      ? draft.map(g => `<span class="stats-pill cyan" style="cursor:pointer;" title="Remove" onclick="removeDraftGenre(${a.id},'${escHtml(g)}')">${escHtml(g)} ✕</span>`).join('')
+      : `<span style="font-size:0.76rem;color:var(--muted);opacity:0.7;">No genres picked yet</span>`;
+    return `
+      <div class="event-item">
+        <div class="event-item-body" style="align-items:flex-start;">
+          <div class="event-info" style="width:100%;">
+            <div class="event-name">${escHtml(a.name)}</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;">${chips}</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <input list="mod-genre-suggestions" id="mod-genre-input-${a.id}" class="form-input" placeholder="Type a genre…" style="flex:1;min-width:140px;font-size:0.82rem;padding:8px 10px;"
+                onkeydown="if(event.key==='Enter'){event.preventDefault();addDraftGenre(${a.id});}">
+              <button class="btn btn-ghost" style="padding:8px 14px;font-size:0.76rem;" onclick="addDraftGenre(${a.id})">+ Add</button>
+              <button class="btn btn-primary" style="padding:8px 14px;font-size:0.76rem;" ${draft.length ? '' : 'disabled'} onclick="handleSaveArtistGenres(${a.id})">💾 Save</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function addDraftGenre(artistId) {
+    const input = document.getElementById(`mod-genre-input-${artistId}`);
+    if (!input) return;
+    const val = (input.value || '').trim().toLowerCase();
+    if (!val) return;
+    const list = modGenreDrafts[artistId] || (modGenreDrafts[artistId] = []);
+    if (!list.includes(val)) list.push(val);
+    input.value = '';
+    rerenderMissingGenresBody(artistId);
+  }
+
+  function removeDraftGenre(artistId, genre) {
+    const list = modGenreDrafts[artistId];
+    if (!list) return;
+    modGenreDrafts[artistId] = list.filter(g => g !== genre);
+    rerenderMissingGenresBody(artistId);
+  }
+
+  function rerenderMissingGenresBody(focusArtistId) {
+    const body = document.getElementById('mod-dash-body');
+    if (!body || modDashTab !== 'genres') return;
+    body.innerHTML = renderMissingGenresHTML();
+    const input = focusArtistId != null && document.getElementById(`mod-genre-input-${focusArtistId}`);
+    if (input) input.focus();
+  }
+
+  async function handleSaveArtistGenres(artistId) {
+    const genres = modGenreDrafts[artistId] || [];
+    if (!genres.length) return;
+    const { data, error } = await sb.from('artists').update({ genres }).eq('id', artistId).select('id,name,genres').single();
+    if (error) { console.error('artist genre update error', error); showToast('⚠️ Could not save — try again'); return; }
+    const idx = artists.findIndex(x => String(x.id) === String(artistId));
+    if (idx !== -1) artists[idx] = data; else artists.push(data);
+    delete modGenreDrafts[artistId];
+    await logAudit({ action: 'artist.genre_set', entityType: 'artist', entityId: artistId, metadata: { genres } });
+    showToast(`🎵 Tagged ${data.name}`);
+    renderModDashboard();
   }
 
   const FLAG_TARGET_LABELS = {
@@ -13780,6 +13882,7 @@ async function doProfilePasswordChange() {
         ${modGuideBullet(`<b>Flagging:</b> any logged-in user can flag anything with a 🚩 button — ravers, festivals, crews, crew members, vibe tags, photos, dream pins, archive links, polls, jams. Reason is optional free text. Someone can't stack a second open report on a target that already has one open (dismissed/resolved ones don't block a new report).`)}
         ${modGuideBullet(`<b>🚩 Reports tab:</b> open flags only. Each has 👀 View (jumps you to the actual content so you act through its own owner/mod controls — Reports itself has no direct "remove" button), ✅ Dismiss, and ✅ Resolve — both prompt for an optional note that gets logged.`)}
         ${modGuideBullet(`<b>🗑️ Recent Deletes tab:</b> the latest soft-deletes/removals app-wide, each with a one-tap ↩️ Restore.`)}
+        ${modGuideBullet(`<b>🎵 Missing Genres tab:</b> any artist with an empty genre list — mostly ones a raver typed in fresh while tagging a favorite/lineup artist. No separate report needed: it's a live query, so an artist drops off the list the moment a genre is saved on it. Pick one or more tags (existing ones autocomplete, or type a new one) and hit Save.`)}
         ${modGuideBullet(`<b>Rate limits:</b> destructive actions are capped server-side — new accounts: 1/day, everyone else: 5/hour. You'll see a toast if it's hit.`)}
       </div>
       ${modGuideCallout('⚠️', 'Gotcha', `There's no ban or suspend feature anywhere in the app. Moderation power is limited to flag triage plus soft-delete/restore, using the exact same permission gates content owners already have.`)}
