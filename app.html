@@ -6573,6 +6573,7 @@
     transition: opacity 0.2s;
   }
   .wrapped-share-btn:hover { opacity: 0.85; }
+  .wrapped-share-btn:disabled { opacity: 0.7; cursor: default; }
   .wrapped-close-btn {
     padding: 12px 14px;
     background: rgba(255,255,255,0.06);
@@ -6612,11 +6613,19 @@
   .crew-share-perf {
     position: absolute;
     top: 0; left: 12px; right: 0; height: 10px;
-    background-image: radial-gradient(circle, var(--bg) 3px, transparent 3.6px);
-    background-size: 16px 10px;
-    background-position: 0 -3px;
-    background-repeat: repeat-x;
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding-left: 2px;
+    overflow: hidden;
     z-index: 2;
+  }
+  .crew-share-perf-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--bg);
+    flex-shrink: 0;
   }
   .crew-share-stripe { width: 12px; flex-shrink: 0; position: relative; z-index: 1; }
   .crew-share-photo-overlay {
@@ -6701,12 +6710,14 @@
   .crew-share-barcode {
     height: 26px;
     margin-top: 14px;
-    opacity: 0.35;
-    background-image: repeating-linear-gradient(90deg,
-      #fff 0px, #fff 2px, transparent 2px, transparent 5px,
-      #fff 5px, #fff 6px, transparent 6px, transparent 11px,
-      #fff 11px, #fff 14px, transparent 14px, transparent 18px,
-      #fff 18px, #fff 19px, transparent 19px, transparent 24px);
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+    overflow: hidden;
+  }
+  .crew-share-barcode-bar {
+    flex-shrink: 0;
+    background: rgba(255,255,255,0.35);
   }
   .crew-share-mode-toggle {
     display: flex;
@@ -8187,7 +8198,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.18.1';
+  const APP_VERSION = '1.18.2';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -13055,6 +13066,19 @@ async function doProfilePasswordChange() {
     document.getElementById('crew-share-overlay').classList.remove('open');
   }
 
+  // The perforation strip and barcode were originally CSS repeating-gradient
+  // backgrounds on empty divs — html2canvas silently fails to rasterize
+  // those on real devices (they show fine on-screen but come out blank in
+  // the exported PNG), so build them from plain solid-color elements
+  // instead, which html2canvas renders reliably.
+  function crewSharePerfHTML() {
+    return Array.from({ length: 40 }, () => '<div class="crew-share-perf-dot"></div>').join('');
+  }
+  function crewShareBarcodeHTML() {
+    const widths = [2,1,3,1,2,4,1,2,1,3,2,1,4,1,2,3,1,1,2,4,1,3,2,1,2,1,4,1,3,2,1,2,1,3,1,4,2,1,2,3];
+    return widths.map(w => `<div class="crew-share-barcode-bar" style="width:${w}px"></div>`).join('');
+  }
+
   function renderCrewShareCard(crew, captionValue = '') {
     const s = STATUS[crew.status];
     const people = crewSquad(crew);
@@ -13122,7 +13146,7 @@ async function doProfilePasswordChange() {
 
     document.querySelector('.crew-share-wrap').innerHTML = `
       <div id="crew-share-card" style="${cardStyle}">
-        <div class="crew-share-perf"></div>
+        <div class="crew-share-perf">${crewSharePerfHTML()}</div>
         ${photoUrl ? '<div class="crew-share-photo-overlay"></div>' : ''}
         <div class="crew-share-stripe" style="background:${stripeColor}"></div>
         <div class="crew-share-body">
@@ -13135,7 +13159,7 @@ async function doProfilePasswordChange() {
           ${eventHtml}
           <div class="crew-share-caption" id="crew-share-caption-line" style="display:${captionValue ? '' : 'none'};">${escHtml(captionValue)}</div>
           <div class="crew-share-footer">myravefam.com</div>
-          <div class="crew-share-barcode"></div>
+          <div class="crew-share-barcode">${crewShareBarcodeHTML()}</div>
         </div>
       </div>
       ${modeToggleHtml}
@@ -13205,12 +13229,40 @@ async function doProfilePasswordChange() {
     showToast('📋 Screenshot this card to share!');
   }
 
+  // Switching Full Crew/This Rave or the photo checkbox replaces the card's
+  // DOM (fresh <img> elements) — even when the browser already has the same
+  // URL cached, a just-created <img> node still needs a beat to load/decode
+  // into that new element. html2canvas doesn't reliably wait this out, so
+  // make sure every avatar/totem image is actually ready before snapshotting
+  // (a broken image still resolves so one bad photo can't block the rest).
+  function waitForCardImages(card, timeoutMs) {
+    const imgs = Array.from(card.querySelectorAll('img'));
+    return Promise.all(imgs.map(img => {
+      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+      return new Promise(resolve => {
+        img.addEventListener('load', resolve, { once: true });
+        img.addEventListener('error', resolve, { once: true });
+        setTimeout(resolve, timeoutMs);
+      });
+    }));
+  }
+
   async function shareCrewCard(crewId) {
     const crew = getCrew(crewId);
     const card = document.getElementById('crew-share-card');
     if (!card) return;
     if (typeof html2canvas === 'undefined') { await shareCrewTextFallback(crew); return; }
+
+    const btn = document.querySelector('.crew-share-actions .wrapped-share-btn');
+    const btnOriginalHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+      btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;vertical-align:-3px;margin-right:6px;"></span>Generating…';
+      btn.disabled = true;
+    }
+    const restoreBtn = () => { if (btn && document.body.contains(btn)) { btn.innerHTML = btnOriginalHtml; btn.disabled = false; } };
+
     try {
+      await waitForCardImages(card, 6000);
       // html2canvas has to fetch every avatar/totem image itself; on a real
       // network a slow or CORS-blocked fetch can leave that promise hanging
       // indefinitely — with no timeout the button just does nothing forever,
@@ -13259,6 +13311,8 @@ async function doProfilePasswordChange() {
       // all, so there's always something the user can actually send.
       showToast(e && /timed out/.test(e.message) ? '⏳ Image took too long — sharing as text instead' : '🖼️ Couldn\'t render the image — sharing as text instead');
       await shareCrewTextFallback(crew);
+    } finally {
+      restoreBtn();
     }
   }
 
