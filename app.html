@@ -177,6 +177,9 @@
     border: 1px solid rgba(255,255,255,0.1);
   }
   .btn-ghost:hover { background: rgba(255,255,255,0.12); }
+  /* Destructive ghost variant — replaces one-off style="color:var(--neon-pink)" overrides. */
+  .btn-danger { color: var(--neon-pink); border-color: rgba(255,45,120,0.3); }
+  .btn-danger:hover { background: rgba(255,45,120,0.12); }
 
   /* Nav tabs — fixed per-item color language, shared by desktop + mobile */
   .c-crews  { --ic: var(--neon-pink); }
@@ -1324,6 +1327,13 @@
   }
   .lineup-seen-btn.seen { background: color-mix(in srgb, var(--neon-green) 22%, transparent); }
   .lineup-seen-btn.missed { background: color-mix(in srgb, var(--neon-pink) 22%, transparent); }
+  .lineup-plan-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; margin-left: 2px; border-radius: 50%; border: none;
+    background: rgba(255,255,255,0.08); cursor: pointer; font-size: 0.72rem; line-height: 1;
+    color: var(--muted);
+  }
+  .lineup-plan-btn.planned { background: color-mix(in srgb, var(--neon-cyan) 22%, transparent); }
   .profile-actions { display: flex; gap: 10px; margin: 4px 0 12px; }
 
   /* Connect row (IG / Call / Text) */
@@ -2468,6 +2478,20 @@
     color: var(--muted);
     margin-bottom: 7px;
   }
+  /* Groups related fields inside a flat form-group stack — a subtler
+     alternative to .section-banner (which is only for read/detail views). */
+  .form-section-label {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--muted);
+    margin: 20px 0 12px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .form-section-label:first-child { margin-top: 0; padding-top: 0; border-top: none; }
   .form-input {
     width: 100%;
     background: rgba(255,255,255,0.06);
@@ -2482,6 +2506,20 @@
   }
   .form-input:focus { border-color: var(--neon-pink); }
   .form-input::placeholder { color: var(--muted); }
+  /* Read-only "this value comes from elsewhere" line — e.g. a rave's Location
+     once it's live-mirroring a linked venue's address. */
+  .fe-loc-from-venue {
+    width: 100%; box-sizing: border-box;
+    background: rgba(255,255,255,0.03);
+    border: 1px dashed rgba(255,255,255,0.15);
+    border-radius: 10px;
+    padding: 11px 14px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.9rem;
+  }
+  .field-help { font-size: 0.72rem; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+  .field-help a { color: var(--neon-cyan); }
 
   .color-swatches { display: flex; gap: 10px; flex-wrap: wrap; }
   .color-swatch {
@@ -3517,16 +3555,19 @@
   .huddle-bubble-reaction-picker-right { left: auto; right: 0; }
 
   .huddle-bubble-edited { font-size: 0.68rem; color: var(--muted); margin-top: 3px; display: block; }
-  .huddle-bubble-menu-wrap { position: relative; display: inline-block; }
-  .huddle-bubble-menu-btn {
+  /* Kebab/overflow menu — a "⋯" trigger + floating popover of stacked text
+     rows, for tucking away secondary actions (originally Huddle message
+     actions, now reused for any busy popup footer). */
+  .kebab-wrap { position: relative; display: inline-block; }
+  .kebab-btn {
     display: flex; align-items: center; justify-content: center;
     width: 22px; height: 22px;
     background: rgba(255,255,255,0.05); border: 1.5px solid rgba(255,255,255,0.1);
     border-radius: 50%; font-size: 0.8rem; line-height: 1; cursor: pointer;
     color: var(--muted); transition: all 0.15s;
   }
-  .huddle-bubble-menu-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
-  .huddle-bubble-menu {
+  .kebab-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
+  .kebab-menu {
     position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 3;
     display: flex; flex-direction: column;
     min-width: 120px;
@@ -3536,14 +3577,15 @@
     padding: 4px;
     box-shadow: 0 8px 24px rgba(0,0,0,0.4);
   }
-  .huddle-bubble-menu-row {
+  .kebab-menu-row {
     display: flex; align-items: center; gap: 8px;
     background: none; border: none; cursor: pointer;
     color: var(--text); font-size: 0.82rem; text-align: left;
     padding: 7px 10px; border-radius: 8px; white-space: nowrap;
   }
-  .huddle-bubble-menu-row:hover { background: rgba(255,255,255,0.08); }
-  .huddle-bubble-menu-right { left: auto; right: 0; }
+  .kebab-menu-row:hover { background: rgba(255,255,255,0.08); }
+  .kebab-menu-row.danger { color: var(--neon-pink); }
+  .kebab-menu-right { left: auto; right: 0; }
 
   .huddle-beacon-fab-inline {
     flex-shrink: 0;
@@ -7182,6 +7224,13 @@
   </div>
 </div>
 
+<!-- Rave Focus Popup (RSVPs + lineup) -->
+<div class="modal-overlay" id="rave-focus-overlay" onclick="if(event.target===this)closeRaveFocus()">
+  <div class="modal" id="rave-focus-modal" style="max-height:88vh;overflow-y:auto;">
+    <!-- filled by JS -->
+  </div>
+</div>
+
 <!-- Rave Editor Page -->
 <div class="page-panel-overlay" id="rave-edit-overlay">
   <div class="page-panel" id="rave-edit-modal">
@@ -7905,7 +7954,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.10.0';
+  const APP_VERSION = '1.12.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -9714,6 +9763,7 @@ async function doProfilePasswordChange() {
     await dbLoadArtists().catch(() => {});
     await dbLoadArtistAppearances().catch(() => {});
     await dbLoadArtistSightings().catch(() => {});
+    await dbLoadArtistPlans().catch(() => {});
 
     // --- Venues (loaded at boot, not just on visiting Village, so the rave
     // editor's venue picker has data even if the user never opened Village) ---
@@ -10388,6 +10438,12 @@ async function doProfilePasswordChange() {
 
   function renderVibeRow(festId) {
     renderEvents();
+    // The Rave Focus popup is a separate overlay from the Raves tab list, so
+    // a vibe saved/cleared from inside it needs its own refresh too.
+    const overlay = document.getElementById('rave-focus-overlay');
+    if (overlay && overlay.classList.contains('open') && String(editingFestivalId) === String(festId)) {
+      openRaveFocus(festId);
+    }
   }
 
   function openVibePicker(festId) {
@@ -14434,14 +14490,14 @@ async function doProfilePasswordChange() {
     const retryBtn = m._failed ? `<button type="button" class="huddle-bubble-retry" data-mid="${m.id}" onclick="retryHuddleMessage(this.dataset.mid)">Retry ↻</button>` : '';
     const editedLabel = m.updated_at ? `<span class="huddle-bubble-edited" title="Edited ${escHtml(formatModDate(m.updated_at))}">edited</span>` : '';
     const menuRows = `
-        ${canPin ? `<button type="button" class="huddle-bubble-menu-row" data-mid="${m.id}" onclick="toggleHuddleBubbleActionsMenu(this.dataset.mid); togglePinHuddleMessage('${m.id}', ${!!m.pinned_at})">${m.pinned_at ? '📌 Unpin' : '📌 Pin'}</button>` : ''}
-        ${canEdit ? `<button type="button" class="huddle-bubble-menu-row" data-mid="${m.id}" onclick="toggleHuddleBubbleActionsMenu(this.dataset.mid); toggleHuddleMessageEditMode('${m.id}')">✏️ Edit</button>` : ''}
-        ${canDelete ? `<button type="button" class="huddle-bubble-menu-row" data-mid="${m.id}" onclick="toggleHuddleBubbleActionsMenu(this.dataset.mid); deleteHuddleMessage('${m.id}')">🗑️ Delete</button>` : ''}
-        ${canReport ? `<button type="button" class="huddle-bubble-menu-row" data-mid="${m.id}" onclick="toggleHuddleBubbleActionsMenu(this.dataset.mid); showReportModal('huddle_message','${m.id}',{metadata:{crew_id:'${crew.id}',room_id:'${m.room_id}'}})">🚩 Report</button>` : ''}`;
+        ${canPin ? `<button type="button" class="kebab-menu-row" data-mid="${m.id}" onclick="toggleKebabMenu('huddle-bubble-menu-${m.id}'); togglePinHuddleMessage('${m.id}', ${!!m.pinned_at})">${m.pinned_at ? '📌 Unpin' : '📌 Pin'}</button>` : ''}
+        ${canEdit ? `<button type="button" class="kebab-menu-row" data-mid="${m.id}" onclick="toggleKebabMenu('huddle-bubble-menu-${m.id}'); toggleHuddleMessageEditMode('${m.id}')">✏️ Edit</button>` : ''}
+        ${canDelete ? `<button type="button" class="kebab-menu-row danger" data-mid="${m.id}" onclick="toggleKebabMenu('huddle-bubble-menu-${m.id}'); deleteHuddleMessage('${m.id}')">🗑️ Delete</button>` : ''}
+        ${canReport ? `<button type="button" class="kebab-menu-row" data-mid="${m.id}" onclick="toggleKebabMenu('huddle-bubble-menu-${m.id}'); showReportModal('huddle_message','${m.id}',{metadata:{crew_id:'${crew.id}',room_id:'${m.room_id}'}})">🚩 Report</button>` : ''}`;
     const actionsHTML = (canPin || canEdit || canDelete || canReport) ? `
-      <div class="huddle-bubble-menu-wrap">
-        <button type="button" class="huddle-bubble-menu-btn" data-mid="${m.id}" onclick="toggleHuddleBubbleActionsMenu(this.dataset.mid)" title="More">⋯</button>
-        <div id="huddle-bubble-menu-${m.id}" class="huddle-bubble-menu${isYou ? ' huddle-bubble-menu-right' : ''}" style="display:none;">${menuRows}</div>
+      <div class="kebab-wrap">
+        <button type="button" class="kebab-btn" data-mid="${m.id}" onclick="toggleKebabMenu('huddle-bubble-menu-${m.id}')" title="More">⋯</button>
+        <div id="huddle-bubble-menu-${m.id}" class="kebab-menu${isYou ? ' kebab-menu-right' : ''}" style="display:none;">${menuRows}</div>
       </div>` : '';
 
     return `
@@ -14914,10 +14970,12 @@ async function doProfilePasswordChange() {
     document.querySelectorAll('.huddle-bubble-reaction-picker').forEach(p => { if (p !== el) p.style.display = 'none'; });
     el.style.display = opening ? '' : 'none';
   }
-  function toggleHuddleBubbleActionsMenu(messageId) {
-    const el = document.getElementById('huddle-bubble-menu-' + messageId); if (!el) return;
+  // Generic kebab/overflow menu toggler — pass the full element id of the
+  // .kebab-menu to open/close. Closes any other open kebab menu first.
+  function toggleKebabMenu(menuId) {
+    const el = document.getElementById(menuId); if (!el) return;
     const opening = el.style.display === 'none';
-    document.querySelectorAll('.huddle-bubble-menu').forEach(m => { if (m !== el) m.style.display = 'none'; });
+    document.querySelectorAll('.kebab-menu').forEach(m => { if (m !== el) m.style.display = 'none'; });
     el.style.display = opening ? '' : 'none';
   }
 
@@ -18610,7 +18668,8 @@ async function doProfilePasswordChange() {
         data-cat="${escHtml(cat)}" onclick="selectVendorEditCategory('${escHtml(cat)}', this)">${label}</button>`).join('');
     return `
       <div class="modal-title">Edit Listing</div>
-      <div class="form-group" style="margin-top:4px;">
+      <div class="form-section-label">Basics</div>
+      <div class="form-group">
         <label class="form-label">Vendor name</label>
         <input class="form-input" id="vv-edit-name" type="text" maxlength="80" value="${escHtml(vendor.name)}">
       </div>
@@ -18622,6 +18681,7 @@ async function doProfilePasswordChange() {
         <label class="form-label">Description</label>
         <textarea class="form-input" id="vv-edit-desc" rows="3" maxlength="600">${escHtml(vendor.description || '')}</textarea>
       </div>
+      <div class="form-section-label">Links</div>
       <div class="form-group">
         <label class="form-label">Website</label>
         <input class="form-input" id="vv-edit-website" type="text" value="${escHtml(vendor.website_url || '')}" placeholder="https://…">
@@ -18630,14 +18690,17 @@ async function doProfilePasswordChange() {
         <label class="form-label">Instagram</label>
         <input class="form-input" id="vv-edit-instagram" type="text" value="${escHtml(vendor.instagram || '')}" placeholder="@handle">
       </div>
+      <div class="form-section-label">Fam Discount</div>
       <div class="form-group">
         <label class="form-label">🎁 Fam discount code <span style="font-weight:400;color:var(--muted);font-size:0.8rem;">optional</span></label>
         <input class="form-input" id="vv-edit-discount-code" type="text" maxlength="40" value="${escHtml(vendor.discount_code || '')}" placeholder="e.g. RAVEFAM10">
+        <div class="field-help">Shown to crew members viewing this vendor's listing.</div>
       </div>
       <div class="form-group">
         <label class="form-label">Discount description</label>
         <input class="form-input" id="vv-edit-discount-desc" type="text" maxlength="200" value="${escHtml(vendor.discount_description || '')}" placeholder="e.g. 10% off for the fam">
       </div>
+      <div class="form-section-label">Photo</div>
       <div class="form-group">
         <label class="form-label">Cover photo</label>
         <div style="display:flex;align-items:center;gap:10px;">
@@ -18774,26 +18837,35 @@ async function doProfilePasswordChange() {
           <button type="button" class="vv-discount-code" onclick="copyDiscountCode('${escHtml(vendor.discount_code)}')" title="Tap to copy">${escHtml(vendor.discount_code)} 📋</button>
         </div>` : ''}
       ${linksHTML ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">${linksHTML}</div>` : ''}
-      <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;">
-        ${currentUser ? `<button class="btn btn-ghost" id="vv-detail-save-btn" style="flex:1;" onclick="handleToggleSaveVendor('${escId}')">${saved ? '💾 Saved' : '🔖 Save'}</button>` : ''}
-        ${currentUser ? `<button class="btn btn-ghost" style="flex:1;color:var(--neon-pink);" onclick="showReportModal('vendor','${escId}')">🚩 Report</button>` : ''}
-        ${currentUser && vendor.created_by === currentUser.id ? `<button class="btn btn-ghost" style="flex:1;" onclick="openEditVendorModal('${escId}')">✏️ Edit Listing</button>` : ''}
-        ${isModerator() ? `<button class="btn btn-ghost" style="flex:1;" onclick="toggleVendorSponsorship('${escId}')">${vendor.is_sponsored ? '🛡️ Unsponsor' : '🛡️ Mark Sponsored'}</button>` : ''}
-      </div>
+      ${(() => {
+        // Visible row: the actions most people take (Save, Edit if it's yours).
+        // Kebab: less-common ones (Report, moderator Sponsor toggle).
+        const kebabRows = [
+          currentUser ? `<button type="button" class="kebab-menu-row" onclick="toggleKebabMenu('vv-detail-kebab-${escId}'); showReportModal('vendor','${escId}')">🚩 Report</button>` : '',
+          isModerator() ? `<button type="button" class="kebab-menu-row" onclick="toggleKebabMenu('vv-detail-kebab-${escId}'); toggleVendorSponsorship('${escId}')">${vendor.is_sponsored ? '🛡️ Unsponsor' : '🛡️ Mark Sponsored'}</button>` : '',
+        ].filter(Boolean).join('');
+        const kebabHtml = kebabRows ? `
+          <div class="kebab-wrap" style="align-self:center;">
+            <button type="button" class="kebab-btn" onclick="toggleKebabMenu('vv-detail-kebab-${escId}')" title="More">⋯</button>
+            <div id="vv-detail-kebab-${escId}" class="kebab-menu kebab-menu-right" style="display:none;">${kebabRows}</div>
+          </div>` : '';
+        return `<div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;align-items:center;">
+          ${currentUser ? `<button class="btn btn-ghost" id="vv-detail-save-btn" style="flex:1;" onclick="handleToggleSaveVendor('${escId}')">${saved ? '💾 Saved' : '🔖 Save'}</button>` : ''}
+          ${currentUser && vendor.created_by === currentUser.id ? `<button class="btn btn-ghost" style="flex:1;" onclick="openEditVendorModal('${escId}')">✏️ Edit Listing</button>` : ''}
+          <button class="btn btn-ghost" style="flex:1;" onclick="closeVendorDetail()">Close</button>
+          ${kebabHtml}
+        </div>`;
+      })()}
 
       <div class="section-banner"><span class="banner-inner">⭐ Reviews</span></div>
       ${currentUser ? vendorReviewComposerHTML(vendor.id, myReview) : ''}
       <div class="jam-cards-list" style="margin-top:12px;">
         ${myReview ? vendorReviewRowHTML(myReview, vendor.id) : ''}
-        ${allReviews.length === 0 ? `<div class="jam-empty" style="text-align:center;padding:14px 0;color:var(--muted);font-size:0.82rem;">No reviews yet — be the first.</div>` : ''}
+        ${allReviews.length === 0 ? `<div class="fest-empty" style="text-align:center;padding:14px 0;">No reviews yet — be the first.</div>` : ''}
         ${otherReviews.map(r => vendorReviewRowHTML(r, vendor.id)).join('')}
       </div>
 
       ${vendorSpotsSectionHTML(vendor.id)}
-
-      <div class="modal-actions">
-        <button class="btn btn-ghost" style="flex:1;" onclick="closeVendorDetail()">Close</button>
-      </div>
     `;
   }
 
@@ -18955,7 +19027,7 @@ async function doProfilePasswordChange() {
       <div class="section-banner"><span class="banner-inner">📍 Recently Spotted</span></div>
       ${currentUser ? vendorSpotComposerHTML(vendorId) : ''}
       <div class="jam-cards-list" style="margin-top:12px;">
-        ${live.length === 0 ? `<div class="jam-empty" style="text-align:center;padding:14px 0;color:var(--muted);font-size:0.82rem;">No one's spotted them recently — be the first to call it out.</div>` : ''}
+        ${live.length === 0 ? `<div class="fest-empty" style="text-align:center;padding:14px 0;">No one's spotted them recently — be the first to call it out.</div>` : ''}
         ${live.map(vendorSpotRowHTML).join('')}
       </div>
     `;
@@ -19405,18 +19477,21 @@ async function doProfilePasswordChange() {
     const escId = escHtml(String(venue.id));
     return `
       <div class="modal-title">Edit Venue</div>
-      <div class="form-group" style="margin-top:4px;">
+      <div class="form-section-label">Basics</div>
+      <div class="form-group">
         <label class="form-label">Venue name</label>
         <input class="form-input" id="vn-edit-name" type="text" maxlength="80" value="${escHtml(venue.name)}">
       </div>
       <div class="form-group">
         <label class="form-label">Location</label>
         <input class="form-input" id="vn-edit-location" type="text" maxlength="100" value="${escHtml(venue.location || '')}">
+        <div class="field-help">Raves linked to this venue mirror this address automatically.</div>
       </div>
       <div class="form-group">
         <label class="form-label">Description</label>
         <textarea class="form-input" id="vn-edit-desc" rows="3" maxlength="600">${escHtml(venue.description || '')}</textarea>
       </div>
+      <div class="form-section-label">Links</div>
       <div class="form-group">
         <label class="form-label">Website</label>
         <input class="form-input" id="vn-edit-website" type="text" value="${escHtml(venue.website_url || '')}" placeholder="https://…">
@@ -19425,6 +19500,7 @@ async function doProfilePasswordChange() {
         <label class="form-label">Instagram</label>
         <input class="form-input" id="vn-edit-instagram" type="text" value="${escHtml(venue.instagram || '')}" placeholder="@handle">
       </div>
+      <div class="form-section-label">Photo</div>
       <div class="form-group">
         <label class="form-label">Cover photo</label>
         <div style="display:flex;align-items:center;gap:10px;">
@@ -19520,9 +19596,9 @@ async function doProfilePasswordChange() {
 
     const ravesHTML = raves.length
       ? `<div class="jam-cards-list" style="margin-top:8px;">
-          ${raves.map(f => `<div class="jam-card" style="cursor:pointer;" onclick="closeVenueDetail(); openRaveEditor('${escHtml(String(f.id))}')"><div class="jam-card-toprow"><span class="jam-title">${escHtml(f.name)}</span></div><div class="jam-meta">${escHtml(f.date || '')}</div></div>`).join('')}
+          ${raves.map(f => `<div class="jam-card" style="cursor:pointer;" onclick="closeVenueDetail(); openRaveFocus('${escHtml(String(f.id))}')"><div class="jam-card-toprow"><span class="jam-title">${escHtml(f.name)}</span></div><div class="jam-meta">${escHtml(f.date || '')}</div></div>`).join('')}
         </div>`
-      : `<div class="jam-meta" style="margin-top:4px;">No raves linked here yet.</div>`;
+      : `<div class="fest-empty" style="margin-top:4px;">No raves linked here yet — the first one added here shows up automatically.</div>`;
 
     return `
       <div class="modal-title">${escHtml(venue.name)}</div>
@@ -19534,8 +19610,9 @@ async function doProfilePasswordChange() {
       ${venue.description ? `<p style="font-size:0.86rem;color:var(--text);line-height:1.6;margin-bottom:14px;">${escHtml(venue.description)}</p>` : ''}
       ${linksHTML ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">${linksHTML}</div>` : ''}
       <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;">
-        ${currentUser ? `<button class="btn btn-ghost" style="flex:1;color:var(--neon-pink);" onclick="showReportModal('venue','${escId}')">🚩 Report</button>` : ''}
         ${currentUser && venue.created_by === currentUser.id ? `<button class="btn btn-ghost" style="flex:1;" onclick="openEditVenueModal('${escId}')">✏️ Edit Listing</button>` : ''}
+        ${currentUser ? `<button class="btn btn-ghost btn-danger" style="flex:1;" onclick="showReportModal('venue','${escId}')">🚩 Report</button>` : ''}
+        <button class="btn btn-ghost" style="flex:1;" onclick="closeVenueDetail()">Close</button>
       </div>
 
       <div class="section-banner"><span class="banner-inner">🎪 Raves Held Here</span></div>
@@ -19545,12 +19622,8 @@ async function doProfilePasswordChange() {
       ${currentUser ? venueReviewComposerHTML(venue.id, myReview) : ''}
       <div class="jam-cards-list" style="margin-top:12px;">
         ${myReview ? venueReviewRowHTML(myReview, venue.id) : ''}
-        ${allReviews.length === 0 ? `<div class="jam-empty" style="text-align:center;padding:14px 0;color:var(--muted);font-size:0.82rem;">No reviews yet — be the first.</div>` : ''}
+        ${allReviews.length === 0 ? `<div class="fest-empty" style="text-align:center;padding:14px 0;">No reviews yet — be the first.</div>` : ''}
         ${otherReviews.map(r => venueReviewRowHTML(r, venue.id)).join('')}
-      </div>
-
-      <div class="modal-actions">
-        <button class="btn btn-ghost" style="flex:1;" onclick="closeVenueDetail()">Close</button>
       </div>
     `;
   }
@@ -20654,7 +20727,8 @@ async function doProfilePasswordChange() {
     ).join('');
     document.getElementById('crew-edit-modal-content').innerHTML = `
       <div class="modal-title">Edit Crew</div>
-      <div class="form-group" style="margin-top:4px;">
+      <div class="form-section-label">Basics</div>
+      <div class="form-group">
         <label class="form-label">Crew Name</label>
         <input class="form-input" id="crew-edit-name-input" value="${crew.name.replace(/"/g,'&quot;')}" maxlength="40" placeholder="Crew name…">
       </div>
@@ -20662,6 +20736,7 @@ async function doProfilePasswordChange() {
         <label class="form-label">Crew Vibe <span style="font-weight:400;color:var(--muted);font-size:0.8rem;">optional</span></label>
         <textarea class="form-input" id="crew-edit-desc-input" rows="2" maxlength="120" style="resize:none;line-height:1.5;" placeholder="One line that says everything 🌀">${(crew.description || '').replace(/</g,'&lt;')}</textarea>
       </div>
+      <div class="form-section-label">Look</div>
       <div class="form-group">
         <label class="form-label">Crew Colour</label>
         <div class="color-swatches">${swatches}</div>
@@ -21877,6 +21952,16 @@ async function doProfilePasswordChange() {
     if (data) raverArtistSightings = data;
   }
 
+  // Personal "artists I plan to see" checklist — pre-event sibling of
+  // raverArtistSightings, since sightings can only be marked once a rave is
+  // in the past (raver_artist_sightings RLS requires festivals.date < today).
+  let raverArtistPlans = [];
+
+  async function dbLoadArtistPlans() {
+    const { data } = await sb.from('raver_artist_plans').select('raver_id,artist_id,festival_id');
+    if (data) raverArtistPlans = data;
+  }
+
   function findArtistById(id) {
     return artists.find(a => String(a.id) === String(id)) || DEMO_ARTISTS.find(a => String(a.id) === String(id));
   }
@@ -21927,6 +22012,16 @@ async function doProfilePasswordChange() {
     );
   }
 
+  function myLineupPlanIds(festId) {
+    const you = squad.find(r => r.isYou);
+    if (!you) return new Set();
+    return new Set(
+      raverArtistPlans
+        .filter(s => String(s.raver_id) === String(you.id) && String(s.festival_id) === String(festId))
+        .map(s => String(s.artist_id))
+    );
+  }
+
   function canEditFestLineup(festId) {
     return festivalGoers(festId).some(g => g.isYou);
   }
@@ -21967,6 +22062,8 @@ async function doProfilePasswordChange() {
       !(String(a.festival_id) === String(festId) && String(a.artist_id) === String(artistId)));
     raverArtistSightings = raverArtistSightings.filter(s =>
       !(String(s.festival_id) === String(festId) && String(s.artist_id) === String(artistId)));
+    raverArtistPlans = raverArtistPlans.filter(s =>
+      !(String(s.festival_id) === String(festId) && String(s.artist_id) === String(artistId)));
     return true;
   }
 
@@ -21990,6 +22087,26 @@ async function doProfilePasswordChange() {
     renderFestivalLineupSection(festId);
   }
 
+  async function dbToggleArtistPlan(festId, artistId) {
+    if (String(festId).startsWith('temp_')) { showToast('Still saving — try again in a moment'); return; }
+    const you = squad.find(r => r.isYou);
+    if (!you) return;
+    const planned = myLineupPlanIds(festId).has(String(artistId));
+    if (planned) {
+      const { error } = await sb.from('raver_artist_plans')
+        .delete().eq('raver_id', you.id).eq('festival_id', festId).eq('artist_id', artistId);
+      if (error) { console.error('raver_artist_plans delete error', error); showToast('⚠️ Could not update — try again'); return; }
+      raverArtistPlans = raverArtistPlans.filter(s =>
+        !(String(s.raver_id) === String(you.id) && String(s.festival_id) === String(festId) && String(s.artist_id) === String(artistId)));
+    } else {
+      const { error } = await sb.from('raver_artist_plans')
+        .insert({ raver_id: you.id, artist_id: artistId, festival_id: festId });
+      if (error) { console.error('raver_artist_plans insert error', error); showToast('⚠️ Could not update — try again'); return; }
+      raverArtistPlans.push({ raver_id: you.id, artist_id: artistId, festival_id: festId });
+    }
+    renderFestivalLineupSection(festId);
+  }
+
   function renderFestivalLineupSection(festId) {
     const box = document.getElementById('lineup-section');
     if (!box) return;
@@ -21999,6 +22116,7 @@ async function doProfilePasswordChange() {
     const rows = lineupArtistsFor(festId);
     const achieved = isFestAchieved(f);
     const mySightings = achieved ? myLineupSightingIds(festId) : new Set();
+    const myPlans = !achieved ? myLineupPlanIds(festId) : new Set();
 
     const chipHtml = rows.map(a => {
       const artist = findArtistById(a.artist_id);
@@ -22007,11 +22125,15 @@ async function doProfilePasswordChange() {
       const seenBtn = achieved && canEdit
         ? `<button type="button" class="lineup-seen-btn${seen ? ' seen' : ' missed'}" title="${seen ? 'You saw this — tap if you missed it' : 'Marked as missed — tap if you actually caught them'}" onclick="dbToggleArtistSighting('${festId}','${a.artist_id}')">${seen ? '✅' : '❌'}</button>`
         : '';
+      const planned = myPlans.has(String(a.artist_id));
+      const planBtn = !achieved && canEdit
+        ? `<button type="button" class="lineup-plan-btn${planned ? ' planned' : ''}" title="${planned ? "Planning to catch them — tap to unmark" : 'Tap if you plan to catch their set'}" onclick="dbToggleArtistPlan('${festId}','${a.artist_id}')">${planned ? '⭐' : '☆'}</button>`
+        : '';
       const removeBtn = canEdit
         ? `<button type="button" class="tag-remove-btn" title="Remove ${escHtml(artist.name)}" aria-label="Remove ${escHtml(artist.name)}" onclick="lineupRemoveArtist('${festId}','${a.artist_id}')">&nbsp;✕</button>`
         : '';
       const hl = a.is_headliner ? ' 🌟' : '';
-      return `<span class="fav-chip" style="--chip-col:${artistColor(artist.name)};">${escHtml(artist.name)}${hl}${seenBtn}${removeBtn}</span>`;
+      return `<span class="fav-chip" style="--chip-col:${artistColor(artist.name)};">${escHtml(artist.name)}${hl}${seenBtn}${planBtn}${removeBtn}</span>`;
     }).join('');
     const chipsOrEmpty = chipHtml || `<span class="fest-empty" style="font-size:0.78rem;">No lineup tagged yet${canEdit ? ' — who played?' : ''}</span>`;
 
@@ -22025,7 +22147,9 @@ async function doProfilePasswordChange() {
 
     const sightingHint = achieved && canEdit && rows.length
       ? `<div class="fest-empty" style="font-size:0.72rem;margin-top:6px;">👁️ Tap an artist to mark whether you personally caught their set</div>`
-      : (!canEdit && rows.length === 0 ? `<div class="fest-empty" style="font-size:0.72rem;margin-top:6px;">RSVP to this rave to tag its lineup</div>` : '');
+      : (!achieved && canEdit && rows.length
+        ? `<div class="fest-empty" style="font-size:0.72rem;margin-top:6px;">⭐ Tap an artist to mark who you're planning to see</div>`
+        : (!canEdit && rows.length === 0 ? `<div class="fest-empty" style="font-size:0.72rem;margin-top:6px;">RSVP to this rave to tag its lineup</div>` : ''));
 
     box.innerHTML = `<div class="fav-chip-row" id="lineup-chip-wrap">${chipsOrEmpty}</div>${addHtml}${sightingHint}`;
   }
@@ -22118,28 +22242,73 @@ async function doProfilePasswordChange() {
   }
 
   function pickFestVenue(venueId) {
+    captureCurrentLocation();
     editingVenueId = venueId;
     renderFestVenuePicker();
-    autoFillLocationFromVenue(venueId);
-  }
-
-  // Only fills Location when it's still empty — never clobbers a location
-  // the user already typed or picked themselves.
-  function autoFillLocationFromVenue(venueId) {
-    const locInput = document.getElementById('fe-loc');
-    if (!locInput || locInput.value.trim()) return;
-    const venue = findVenueById(venueId);
-    if (!venue || !venue.location) return;
-    locInput.value = venue.location;
-    const latInp = document.getElementById('fe-lat');
-    const lngInp = document.getElementById('fe-lng');
-    if (latInp && venue.lat != null) latInp.value = venue.lat;
-    if (lngInp && venue.lng != null) lngInp.value = venue.lng;
+    renderFestLocationField();
   }
 
   function clearFestVenue() {
+    captureCurrentLocation();
     editingVenueId = null;
     renderFestVenuePicker();
+    renderFestLocationField();
+  }
+
+  // Snapshots whatever's currently sitting in #fe-loc/#fe-lat/#fe-lng —
+  // hand-typed, or resolved live from a linked venue — into
+  // editRaveLastLocation before the Location field re-renders, so picking a
+  // venue with no location of its own, or unlinking a venue, reappears
+  // pre-filled with the last effective value instead of blank.
+  function captureCurrentLocation() {
+    const locInput = document.getElementById('fe-loc');
+    if (!locInput) return;
+    const latRaw = document.getElementById('fe-lat')?.value;
+    const lngRaw = document.getElementById('fe-lng')?.value;
+    editRaveLastLocation = {
+      location: locInput.value || '',
+      lat: latRaw ? parseFloat(latRaw) : null,
+      lng: lngRaw ? parseFloat(lngRaw) : null,
+    };
+  }
+
+  // Owns #fe-loc-group the same way renderFestVenuePicker() owns
+  // #fe-venue-picker. When the linked venue has its own location, the field
+  // becomes a read-only line mirroring it live (re-evaluated on every call,
+  // so an edit to the venue's address is reflected the next time this
+  // renders — never a stale copy); otherwise it falls back to the normal
+  // editable/autocomplete input, pre-filled from editRaveLastLocation.
+  function renderFestLocationField() {
+    const box = document.getElementById('fe-loc-group');
+    if (!box) return;
+    const f = editingFestivalId ? getFestival(editingFestivalId) : null;
+    const canEditFest = !f || festivalPerms(f).canEdit;
+    const venue = editingVenueId ? findVenueById(editingVenueId) : null;
+    if (venue && venue.location) {
+      box.innerHTML = `
+        <label class="form-label">Location</label>
+        <div class="fe-loc-from-venue">📍 ${escHtml(venue.location)}</div>
+        <div class="field-help">Pulled from ${escHtml(venue.name)}'s listing — <a href="#" onclick="event.preventDefault(); closeRaveEditor(); openEditVenueModal('${venue.id}');">edit it there</a> to change it here too.</div>
+        <input type="hidden" id="fe-loc" value="${escHtml(venue.location)}">
+        <input type="hidden" id="fe-lat" value="${venue.lat ?? ''}">
+        <input type="hidden" id="fe-lng" value="${venue.lng ?? ''}">
+      `;
+      return;
+    }
+    box.innerHTML = `
+      <label class="form-label">Location</label>
+      <div class="loc-autocomplete-wrap">
+        <input class="form-input" id="fe-loc" value="${escHtml(editRaveLastLocation.location || '')}"
+          placeholder="e.g. Amsterdam, NL" autocomplete="off" maxlength="100"
+          oninput="locSearchDebounce(this.value); clearLocCoords()"
+          onkeydown="locKeydown(event)"
+          onblur="setTimeout(closeLoc,200)" ${canEditFest ? '' : 'disabled'}>
+        <input type="hidden" id="fe-lat" value="${editRaveLastLocation.lat ?? ''}">
+        <input type="hidden" id="fe-lng" value="${editRaveLastLocation.lng ?? ''}">
+        <div class="loc-dropdown" id="loc-dropdown"></div>
+      </div>
+      ${venue ? `<div class="field-help">${escHtml(venue.name)} doesn't have a location set yet — add one here, or edit the venue's own listing.</div>` : ''}
+    `;
   }
 
   async function addNewVenueFromSearch(name) {
@@ -23265,7 +23434,7 @@ async function doProfilePasswordChange() {
         data.festIds = r.festIds;
         const fest = getFestival(pendingFest);
         showToast(`✅ ${r.name.split(' ')[0]} added and linked to ${fest?.name || 'the rave'}`);
-        openRaveEditor(pendingFest);
+        openRaveFocus(pendingFest);
       } else if (isOnboarding) {
         maybeAdvanceOnboarding(r.name);
       } else if (pendingCrew) {
@@ -23401,6 +23570,53 @@ async function doProfilePasswordChange() {
     return squad.filter(p => (p.interestedFestIds || []).some(fid => String(fid) === String(festId)));
   }
 
+  // "Who's in" block — avatars with vibe bubbles/rings + going/interested count
+  // chips. Shared by the Raves tab marquee card and the Rave Focus popup.
+  function raveCrewSectionHTML(f, goers, interestedPeople) {
+    const you = squad.find(r => r.isYou);
+    const d = festDate(f);
+    const isUpcoming = d && d >= TODAY;
+    const youGoing = you && (you.festIds || []).some(fid => String(fid) === String(f.id));
+
+    // Going and interested share one row — a colored ring (not a separate
+    // labeled section) carries who's confirmed vs. just watching.
+    const crewEntries = [
+      ...goers.map(w => ({ w, ring: 'ring-going', showVibes: true })),
+      ...interestedPeople.map(w => ({ w, ring: 'ring-interested', showVibes: false })),
+    ];
+    const crewAvatarsHTML = crewEntries.map(({ w, ring, showVibes }, idx) => {
+      const dn = displayName(w);
+      const bg = w.avatarUrl ? 'transparent;overflow:hidden;padding:0' : extractFirstColor(w.gradient);
+      const inner = w.avatarUrl
+        ? `<img src="${escHtml(w.avatarUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${escHtml(initials(dn))}">`
+        : initials(dn).toUpperCase();
+      const isLast = idx === crewEntries.length - 1;
+      let badgeHtml = '', bubbleHtml = '';
+      if (showVibes) {
+        const vibe = (festVibesCache[String(f.id)] || []).find(v => String(v.raverId) === String(w.id));
+        const isMeW = you && String(w.id) === String(you.id);
+        if (vibe) {
+          badgeHtml = `<div class="vibe-emoji-badge">${vibe.emoji}</div>`;
+          const captionHtml = vibe.caption ? `<span class="going-vibe-caption">${escHtml(vibe.caption)}</span>` : '';
+          const cls = `going-vibe-bubble${isMeW ? ' is-mine' : ''}`;
+          const click = isMeW ? `onclick="event.stopPropagation(); openVibePicker('${f.id}')"` : '';
+          bubbleHtml = `<div class="${cls}" ${click}>${vibe.emoji}${captionHtml}</div>`;
+        }
+      }
+      return `<div class="avatar going-avatar ${ring}${isLast ? ' row-end' : ''}" style="background:${bg};" data-raver-id="${w.id}" onclick="event.stopPropagation(); openProfile(this.dataset.raverId, false, 'members')" title="${escHtml(dn)}">${inner}${bubbleHtml}${badgeHtml}</div>`;
+    }).join('');
+
+    const countChips = [];
+    if (goers.length) countChips.push(`<span class="going-count-inline ${youGoing ? 'green' : 'muted'}">${goers.length} ${isUpcoming ? 'going' : 'sent it'}</span>`);
+    if (interestedPeople.length) countChips.push(`<span class="going-count-inline cyan">${interestedPeople.length} interested</span>`);
+    return crewEntries.length
+      ? `<div class="marquee-crew">
+          <div class="marquee-crew-label">Who's in</div>
+          <div class="going-avatars">${crewAvatarsHTML}${countChips.join('')}</div>
+         </div>`
+      : `<div class="marquee-crew"><span class="fest-empty" style="font-size:0.74rem;">Nobody from the tribe yet</span></div>`;
+  }
+
   // ===== Rave weather (Open-Meteo — free, keyless) =====
   // Forecasts are only meteorologically meaningful ~15 days out, so we only
   // fetch/render for upcoming events inside that horizon.
@@ -23415,10 +23631,10 @@ async function doProfilePasswordChange() {
     try { localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify(cache)); } catch(e) {}
   }
   function weatherCacheKey(f) {
-    return `${(f.location || '').toLowerCase().trim()}|${f._d.toISOString().slice(0,10)}`;
+    return `${(festivalLocationSource(f).location || '').toLowerCase().trim()}|${f._d.toISOString().slice(0,10)}`;
   }
   function weatherEligible(f) {
-    if (!f._d || !f.location) return false;
+    if (!f._d || !festivalLocationSource(f).location) return false;
     const n = daysUntil(f._d);
     return n !== null && n >= 0 && n <= WEATHER_FORECAST_HORIZON_DAYS;
   }
@@ -23443,7 +23659,7 @@ async function doProfilePasswordChange() {
     return `<span class="marquee-weather-slot" data-fest-id="${f.id}"></span>`;
   }
   async function fetchFestWeather(f) {
-    const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(f.location)}&count=1`);
+    const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(festivalLocationSource(f).location)}&count=1`);
     const geo = await geoRes.json();
     const loc = geo.results && geo.results[0];
     if (!loc) return null;
@@ -23626,15 +23842,29 @@ async function doProfilePasswordChange() {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
+  // Whichever location should actually govern this festival — the linked
+  // venue's (resolved fresh from the live `venues` array, never a stale
+  // copy) when one is set and has a location, else the festival's own
+  // stored location. Every functional reader of location/lat/lng (distance,
+  // geocoding, weather, display) should go through this instead of reading
+  // f.location/f.lat/f.lng directly, so a venue's address staying current
+  // (even after the fact, or on raves saved before it had one) "just works".
+  function festivalLocationSource(f) {
+    const venue = f.venueId ? findVenueById(f.venueId) : null;
+    if (venue && venue.location) return { location: venue.location, lat: venue.lat ?? null, lng: venue.lng ?? null, fromVenue: true };
+    return { location: f.location || '', lat: f.lat ?? null, lng: f.lng ?? null, fromVenue: false };
+  }
+
   function festGeocodeCacheKey(f) {
-    return (f.location || '').toLowerCase().trim();
+    return (festivalLocationSource(f).location || '').toLowerCase().trim();
   }
 
   // Coordinates picked at save time (app.html ~22390, pickLoc) win; otherwise fall back to the
   // same Nominatim geocode cache the "Cities Hit" map uses (rf_city_geocode_cache).
   function festivalCoords(f) {
-    if (f.lat != null && f.lng != null) return { lat: f.lat, lng: f.lng };
-    if (!f.location) return null;
+    const src = festivalLocationSource(f);
+    if (src.lat != null && src.lng != null) return { lat: src.lat, lng: src.lng };
+    if (!src.location) return null;
     const cache = loadGeocodeCache();
     return cache[festGeocodeCacheKey(f)] || null;
   }
@@ -23651,11 +23881,14 @@ async function doProfilePasswordChange() {
   // filter is active, and only against the currently-visible (pre-radius-cut) list.
   async function fetchMissingFestivalGeocodes(list) {
     const cache = loadGeocodeCache();
-    const targets = list.filter(f => f.lat == null && f.location && cache[festGeocodeCacheKey(f)] === undefined);
+    const targets = list.filter(f => {
+      const src = festivalLocationSource(f);
+      return src.lat == null && src.location && cache[festGeocodeCacheKey(f)] === undefined;
+    });
     if (!targets.length) return;
     let changed = false;
     for (const f of targets) {
-      const coords = await geocodeCity(f.location);
+      const coords = await geocodeCity(festivalLocationSource(f).location);
       cache[festGeocodeCacheKey(f)] = coords;
       changed = true;
       // Nominatim's usage policy caps public requests at ~1/sec.
@@ -23852,7 +24085,7 @@ async function doProfilePasswordChange() {
       const venue = findVenueById(f.venueId);
       const metaBits = [];
       if (durLabel) metaBits.push(`<span class="marquee-duration-badge">${escHtml(durLabel)}</span>`);
-      metaBits.push(`<span>📍 ${escHtml(f.location || 'Location TBD')}${distMi != null ? ` · ${Math.round(distMi)} mi away` : ''}</span>`);
+      metaBits.push(`<span>📍 ${escHtml(festivalLocationSource(f).location || 'Location TBD')}${distMi != null ? ` · ${Math.round(distMi)} mi away` : ''}</span>`);
       if (dateBit) metaBits.push(`<span>${escHtml(dateBit)}</span>`);
       const venueLine = venue ? `<div class="marquee-meta marquee-venue-line">🏛️ ${escHtml(venue.name)}</div>` : '';
       const weatherChip = weatherChipHTML(f, weatherCache);
@@ -23875,43 +24108,7 @@ async function doProfilePasswordChange() {
           ? `border-left:5px solid ${color}`
           : `border-left:5px solid ${color};box-shadow:-5px 0 20px rgba(${rgb},0.15),inset 3px 0 16px rgba(${rgb},0.04),0 4px 14px rgba(0,0,0,0.4)`;
 
-      // Going and interested now share one row — a colored ring (not a separate
-      // labeled section) carries who's confirmed vs. just watching.
-      const crewEntries = [
-        ...goers.map(w => ({ w, ring: 'ring-going', showVibes: true })),
-        ...interestedPeople.map(w => ({ w, ring: 'ring-interested', showVibes: false })),
-      ];
-      const crewAvatarsHTML = crewEntries.map(({ w, ring, showVibes }, idx) => {
-        const dn = displayName(w);
-        const bg = w.avatarUrl ? 'transparent;overflow:hidden;padding:0' : extractFirstColor(w.gradient);
-        const inner = w.avatarUrl
-          ? `<img src="${escHtml(w.avatarUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${escHtml(initials(dn))}">`
-          : initials(dn).toUpperCase();
-        const isLast = idx === crewEntries.length - 1;
-        let badgeHtml = '', bubbleHtml = '';
-        if (showVibes) {
-          const vibe = (festVibesCache[String(f.id)] || []).find(v => String(v.raverId) === String(w.id));
-          const isMeW = you && String(w.id) === String(you.id);
-          if (vibe) {
-            badgeHtml = `<div class="vibe-emoji-badge">${vibe.emoji}</div>`;
-            const captionHtml = vibe.caption ? `<span class="going-vibe-caption">${escHtml(vibe.caption)}</span>` : '';
-            const cls = `going-vibe-bubble${isMeW ? ' is-mine' : ''}`;
-            const click = isMeW ? `onclick="event.stopPropagation(); openVibePicker('${f.id}')"` : '';
-            bubbleHtml = `<div class="${cls}" ${click}>${vibe.emoji}${captionHtml}</div>`;
-          }
-        }
-        return `<div class="avatar going-avatar ${ring}${isLast ? ' row-end' : ''}" style="background:${bg};" data-raver-id="${w.id}" onclick="event.stopPropagation(); openProfile(this.dataset.raverId, false, 'members')" title="${escHtml(dn)}">${inner}${bubbleHtml}${badgeHtml}</div>`;
-      }).join('');
-
-      const countChips = [];
-      if (goers.length) countChips.push(`<span class="going-count-inline ${youGoing ? 'green' : 'muted'}">${goers.length} ${isUpcoming ? 'going' : 'sent it'}</span>`);
-      if (interestedPeople.length) countChips.push(`<span class="going-count-inline cyan">${interestedPeople.length} interested</span>`);
-      const crewSection = crewEntries.length
-        ? `<div class="marquee-crew">
-            <div class="marquee-crew-label">Who's in</div>
-            <div class="going-avatars">${crewAvatarsHTML}${countChips.join('')}</div>
-           </div>`
-        : `<div class="marquee-crew"><span style="font-size:0.74rem;color:var(--muted)">Nobody from the tribe yet</span></div>`;
+      const crewSection = raveCrewSectionHTML(f, goers, interestedPeople);
 
       const vibeRowContent = buildVibeRowHTML(f.id);
       const vibeSection = vibeRowContent
@@ -23921,12 +24118,12 @@ async function doProfilePasswordChange() {
       const cobweb = isUpcoming ? '' : COBWEB_SVG;
 
       return `
-        <div class="event-item event-item-clickable${stateClass}" data-fest-id="${f.id}" style="${cardStyle}" onclick="activeFestId=this.dataset.festId; openRaveEditor(this.dataset.festId)" title="Tap to edit ${escHtml(f.name)}">
+        <div class="event-item event-item-clickable${stateClass}" data-fest-id="${f.id}" style="${cardStyle}" onclick="openRaveFocus(this.dataset.festId)" title="Tap to view ${escHtml(f.name)}">
           ${cobweb}
           <div class="marquee-bulb-row top">${isUpcoming ? BULB_ROW_HTML : BULB_ROW_HTML_PAST}</div>
           <div class="marquee-body">
             <div class="marquee-countdown-stamp"><div class="n">${stamp.n}</div><div class="u">${stamp.u}</div></div>
-            <div class="marquee-name">${escHtml(f.name)} <span class="fest-edit-hint">✏️</span></div>
+            <div class="marquee-name">${escHtml(f.name)} <span class="fest-edit-hint">👁️</span></div>
             <div class="marquee-meta">${metaBits.join('<span class="marquee-dot">·</span>')}</div>
             ${venueLine}
             ${pillRow}
@@ -23954,9 +24151,10 @@ async function doProfilePasswordChange() {
       const dayNum = f._d ? f._d.getDate() : '–';
       const venue = findVenueById(f.venueId);
       const venueBit = venue ? `🏛️ ${escHtml(venue.name)} · ` : '';
+      const rowLocation = festivalLocationSource(f).location || 'Location TBD';
       const subLine = isUpcoming
-        ? `<span class="rave-row-cd">${countdownLabel(f._d)}</span> · ${venueBit}${escHtml(f.location || 'Location TBD')}${distMi != null ? ` · ${Math.round(distMi)} mi` : ''}`
-        : `📼 Happened in ${f._d ? f._d.getFullYear() : '—'} · ${venueBit}${escHtml(f.location || 'Location TBD')}`;
+        ? `<span class="rave-row-cd">${countdownLabel(f._d)}</span> · ${venueBit}${escHtml(rowLocation)}${distMi != null ? ` · ${Math.round(distMi)} mi` : ''}`
+        : `📼 Happened in ${f._d ? f._d.getFullYear() : '—'} · ${venueBit}${escHtml(rowLocation)}`;
       const allPeople = [...goers, ...interestedPeople];
       const shown = allPeople.slice(0, 3);
       const moreCount = allPeople.length - shown.length;
@@ -24113,6 +24311,12 @@ async function doProfilePasswordChange() {
   let pendingDeleteFestId = null;
   let editRaveColor = null;
   let editingVenueId = null;
+  // Session-scoped "manual location" memory for the current edit — whatever
+  // was last showing in #fe-loc/#fe-lat/#fe-lng (typed by hand, or resolved
+  // from a venue) before the field re-renders, so unlinking a venue or
+  // picking a venue with no location of its own reappears pre-filled
+  // instead of blank. See captureCurrentLocation()/renderFestLocationField().
+  let editRaveLastLocation = { location: '', lat: null, lng: null };
 
   function pickRaveColor(color) {
     editRaveColor = color;
@@ -24167,6 +24371,107 @@ async function doProfilePasswordChange() {
     }
   }
 
+  // ===== Rave Focus popup — RSVPs + lineup for an existing rave. Tapping a
+  // rave card opens this instead of the full editor; its own "Edit" button
+  // is the only way into openRaveEditor() from here. =====
+  function openRaveFocus(festId) {
+    const f = getFestival(festId);
+    if (!f) return;
+    activeFestId = festId;
+    editingFestivalId = festId;
+    document.getElementById('rave-focus-modal').innerHTML = raveFocusModalHTML(f);
+    document.getElementById('rave-focus-overlay').classList.add('open');
+    renderFestivalLineupSection(festId);
+  }
+
+  function closeRaveFocus() {
+    document.getElementById('rave-focus-overlay').classList.remove('open');
+    editingFestivalId = null;
+  }
+
+  // Re-render in place after a self RSVP toggle so the popup reflects the
+  // change immediately (toggleGoingToFest/toggleInterestedInFest already
+  // re-render the Raves tab itself, but not this popup).
+  function raveFocusToggleGoing(festId) { toggleGoingToFest(festId); openRaveFocus(festId); }
+  function raveFocusToggleInterested(festId) { toggleInterestedInFest(festId); openRaveFocus(festId); }
+
+  function raveFocusModalHTML(f) {
+    const you = squad.find(r => r.isYou);
+    const youGoing = you && (you.festIds || []).some(fid => String(fid) === String(f.id));
+    const youInterested = you && (you.interestedFestIds || []).some(fid => String(fid) === String(f.id));
+    const d = festDate(f);
+    const isUpcoming = d && d >= TODAY;
+    const dateBit = d ? `${d.getDate()} ${MON_SHORT[d.getMonth()]}${!isUpcoming ? ' ' + d.getFullYear() : ''}` : '';
+    const venue = findVenueById(f.venueId);
+    const goers = festivalGoers(f.id);
+    const interestedPeople = festivalInterestedGoers(f.id);
+
+    // Same info the marquee card shows (duration/location/distance/date,
+    // venue line, Lineup Explorer / map / weather pills) — the popup is the
+    // new primary "view this rave" surface, so it carries that over rather
+    // than dropping it.
+    const durLabel = raveDurationLabel(f);
+    const distMi = _raveFilters.distance != null ? festivalDistance(f, loadUserGeo()) : null;
+    const metaBits = [];
+    if (durLabel) metaBits.push(`<span class="marquee-duration-badge">${escHtml(durLabel)}</span>`);
+    metaBits.push(`<span>📍 ${escHtml(festivalLocationSource(f).location || 'Location TBD')}${distMi != null ? ` · ${Math.round(distMi)} mi away` : ''}</span>`);
+    if (dateBit) metaBits.push(`<span>${escHtml(dateBit)}</span>`);
+    const venueLine = venue ? `<div class="marquee-meta marquee-venue-line">🏛️ ${escHtml(venue.name)}</div>` : '';
+    const lineupUrl = getLineupExplorerUrl(f);
+    const lineupBtn = lineupUrl
+      ? `<a class="lineup-explorer-btn" href="${lineupUrl}" target="_blank" rel="noopener">🔭 Lineup Explorer</a>`
+      : '';
+    const mapUrlJs = String(f.mapUrl || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const mapBtn = f.mapUrl
+      ? `<button class="map-pill" onclick="openMapPinLightbox('${mapUrlJs}', null, null, null, null, null, null, null, null)">🗺️ View Map</button>`
+      : '';
+    const weatherChip = weatherChipHTML({ ...f, _d: d }, loadWeatherCache());
+    const pillRow = (lineupBtn || mapBtn || weatherChip) ? `<div class="pill-row">${lineupBtn}${mapBtn}${weatherChip}</div>` : '';
+
+    const goingLabel = isUpcoming ? 'Going' : 'Sent It';
+    const vibeBtn = `<button class="event-action-btn vibe-action" onclick="openVibePicker('${f.id}')">✦ Vibe</button>`;
+    const goingBtn = `<button class="event-action-btn going-action${youGoing ? ' active' : ''}" onclick="raveFocusToggleGoing('${f.id}')">${youGoing ? '🎟️ ' : '＋ '}${goingLabel}</button>`;
+    const interestedBtn = `<button class="event-action-btn interested-action${youInterested ? ' active' : ''}" onclick="raveFocusToggleInterested('${f.id}')">👀 Interested</button>`;
+    const rsvpButtonsHtml = youGoing ? [vibeBtn, goingBtn].join('') : youInterested ? [vibeBtn, interestedBtn].join('') : [vibeBtn, goingBtn, interestedBtn].join('');
+
+    const vibeRowContent = buildVibeRowHTML(f.id);
+    const vibeSection = vibeRowContent
+      ? `<div class="fest-vibe-row" style="padding:8px 0 0;">${vibeRowContent}</div>`
+      : `<div id="vibe-picker-${f.id}" style="display:none;padding:8px 0 0;"></div>`;
+
+    return `
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:4px;">
+        <div>
+          <div class="modal-title" style="margin-bottom:2px;">${escHtml(f.name)}</div>
+          <div class="marquee-meta" style="font-size:0.78rem;color:var(--muted);">${metaBits.join('<span class="marquee-dot">·</span>')}</div>
+          ${venueLine}
+          ${pillRow}
+        </div>
+        <button type="button" class="page-panel-back" style="flex-shrink:0;" onclick="closeRaveFocus()">✕</button>
+      </div>
+      <div class="event-action-bar" style="margin:10px 0 0;">${rsvpButtonsHtml}</div>
+      ${vibeSection}
+      <div style="margin-top:14px;">${raveCrewSectionHTML(f, goers, interestedPeople)}</div>
+      <div class="form-section-label">Tribe</div>
+      <div class="fest-goers-note" id="re-goers-note">${goers.length ? goers.length + ' tribe member' + (goers.length!==1?'s':'') + ' linked: ' + goers.map(g=>escHtml(g.name.split(' ')[0])).join(', ') : 'No tribe members linked yet'}</div>
+      <div class="fest-search-wrap" style="margin-top:8px;margin-bottom:4px;">
+        <input class="form-input" id="re-raver-search" placeholder="🔍 Search tribe to add…" autocomplete="off" style="font-size:16px;"
+          oninput="reSearch(this.value)"
+          onblur="setTimeout(()=>{const d=document.getElementById('re-raver-results');if(d)d.style.display='none';},200)">
+        <div id="re-raver-results" class="fest-search-dropdown" style="display:none;"></div>
+      </div>
+      <div class="field-help" style="margin:-2px 0 4px;">Add crew members who are also going.</div>
+      <div class="form-group">
+        <label class="form-label">🎧 Lineup</label>
+        <div id="lineup-section"></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:18px;">
+        <button class="btn btn-ghost" style="flex:1;" onclick="closeRaveFocus()">Close</button>
+        <button class="btn btn-primary" style="flex:1;" onclick="closeRaveFocus(); openRaveEditor('${f.id}')">✏️ Edit Rave</button>
+      </div>
+    `;
+  }
+
   function openRaveEditor(id) {
     const f = id ? getFestival(id) : null;
     // Editing details (name/date/location/etc.) is gated to the creator or a moderator,
@@ -24176,18 +24481,36 @@ async function doProfilePasswordChange() {
     editingFestivalId = id || null;
     activeFestId = id || null;
     editingVenueId = f?.venueId || null;
-    const goers = id ? festivalGoers(id) : [];
+    editRaveLastLocation = { location: f?.location || '', lat: f?.lat ?? null, lng: f?.lng ?? null };
     editRaveColor = f?.color || festColor(f || { id: 'new' });
     const swatchHtml = CARD_PALETTE.map(c =>
       `<div class="color-swatch${c === editRaveColor ? ' selected' : ''}" data-color="${c}" style="background:${c};" ${canEditFest ? `onclick="pickRaveColor('${c}')"` : 'style="pointer-events:none;opacity:0.6;"'}></div>`
     ).join('');
+    // Footer: primary row (Cancel + Save) stays visible; less-common actions
+    // (History, Unarchive, Delete, Report) tuck behind a kebab menu so the
+    // footer doesn't show up to 5 same-weight buttons at once.
+    const kebabRows = [
+      f && currentUser ? `<button type="button" class="kebab-menu-row" onclick="toggleKebabMenu('fe-kebab-menu'); showFestivalHistoryInModal('${f.id}')">📜 History</button>` : '',
+      f && f.archived && festivalPerms(f).canArchive ? `<button type="button" class="kebab-menu-row" onclick="toggleKebabMenu('fe-kebab-menu'); unarchiveFestival('${f.id}')">🗄️ Unarchive</button>` : '',
+      f && currentUser && !festivalPerms(f).canEdit ? `<button type="button" class="kebab-menu-row" onclick="toggleKebabMenu('fe-kebab-menu'); showReportModal('festival', '${f.id}')">🚩 Report</button>` : '',
+      f && festivalPerms(f).canEdit ? `<button type="button" class="kebab-menu-row danger" onclick="toggleKebabMenu('fe-kebab-menu'); showDeleteRaveConfirm()">🗑️ Delete</button>` : '',
+    ].filter(Boolean).join('');
+    const kebabHtml = kebabRows ? `
+      <div class="kebab-wrap" style="align-self:center;">
+        <button type="button" class="kebab-btn" onclick="toggleKebabMenu('fe-kebab-menu')" title="More">⋯</button>
+        <div id="fe-kebab-menu" class="kebab-menu" style="display:none;">${kebabRows}</div>
+      </div>` : '';
     document.getElementById('rave-edit-modal').innerHTML = `
       <div class="page-panel-header">
         <button type="button" class="page-panel-back" onclick="closeRaveEditor()">← Back</button>
-        <div class="modal-title">${f ? '✏️ Edit Rave' : '🎉 Add Rave'}</div>
+        <div>
+          <div class="modal-title" style="margin-bottom:0;">${f ? '✏️ Edit Rave' : '🎉 Add Rave'}</div>
+          ${f ? `<div style="font-size:0.76rem;color:var(--muted);">${escHtml(f.name)}</div>` : ''}
+        </div>
       </div>
       <div class="page-panel-body">
         ${!canEditFest ? `<p style="font-size:0.78rem;color:var(--muted);margin:-4px 0 12px;">🔒 Only the creator or a moderator can edit these details.</p>` : ''}
+        <div class="form-section-label">Details</div>
         ${fieldRow('Rave Name','fe-name', f?.name, 'e.g. Awakenings or Basement at Fabric this Friday', false, 100)}
         <div class="form-group">
           <label class="form-label">Date</label>
@@ -24196,59 +24519,36 @@ async function doProfilePasswordChange() {
         ${canEditFest ? `<div class="form-group">
           <label class="form-label">🏛️ Venue <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
           <div id="fe-venue-picker"></div>
+          <div class="field-help">Links this rave to a venue page and keeps its location in sync automatically.</div>
         </div>` : ''}
-        <div class="form-group">
-          <label class="form-label">Location</label>
-          <div class="loc-autocomplete-wrap">
-            <input class="form-input" id="fe-loc" value="${(f?.location||'').replace(/"/g,'&quot;')}"
-              placeholder="e.g. Amsterdam, NL" autocomplete="off" maxlength="100"
-              oninput="locSearchDebounce(this.value); clearLocCoords()"
-              onkeydown="locKeydown(event)"
-              onblur="setTimeout(closeLoc,200)" ${canEditFest ? '' : 'disabled'}>
-            <input type="hidden" id="fe-lat" value="${f?.lat ?? ''}">
-            <input type="hidden" id="fe-lng" value="${f?.lng ?? ''}">
-            <div class="loc-dropdown" id="loc-dropdown"></div>
-          </div>
-        </div>
+        <div class="form-group" id="fe-loc-group"></div>
         <div class="form-group">
           <label class="form-label">How Many Days? <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
           <input class="form-input" id="fe-days" type="number" min="1" max="14" value="${f?.days || ''}" placeholder="e.g. 3" style="max-width:120px;" ${canEditFest ? '' : 'disabled'}>
         </div>
+        <div class="form-section-label">Appearance</div>
         <div class="form-group">
           <label class="form-label">Card Colour</label>
           <div class="color-picker-grid" id="fe-color-grid">${swatchHtml}</div>
         </div>
         ${f && isModerator() ? `
+        <div class="form-section-label">Moderator Tools</div>
         <div class="form-group">
-          <label class="form-label">🗺️ Festival Map <span style="color:var(--muted);font-weight:400;">(moderators only — lets crew tap a spot on meetup pins)</span></label>
+          <label class="form-label">🗺️ Festival Map <span style="color:var(--muted);font-weight:400;">(lets crew tap a spot on meetup pins)</span></label>
           ${f.mapUrl ? `<img src="${escHtml(f.mapUrl)}" alt="Festival map" style="width:100%;border-radius:10px;margin-bottom:8px;max-height:220px;object-fit:cover;">` : ''}
           <input type="file" accept="image/*" onchange="handleFestivalMapUpload(event, '${f.id}')">
           ${f.mapUrl ? `<button class="btn btn-ghost" style="margin-top:8px;" onclick="removeFestivalMap('${f.id}')">Remove map</button>` : ''}
         </div>` : ''}
-        ${f ? `<div class="fest-goers-note" id="re-goers-note">${goers.length ? goers.length + ' tribe member' + (goers.length!==1?'s':'') + ' linked: ' + goers.map(g=>escHtml(g.name.split(' ')[0])).join(', ') : 'No tribe members linked yet'}</div>
-        <div class="fest-search-wrap" style="margin-top:8px;margin-bottom:4px;">
-          <input class="form-input" id="re-raver-search" placeholder="🔍 Search tribe to add…" autocomplete="off" style="font-size:16px;"
-            oninput="reSearch(this.value)"
-            onblur="setTimeout(()=>{const d=document.getElementById('re-raver-results');if(d)d.style.display='none';},200)">
-          <div id="re-raver-results" class="fest-search-dropdown" style="display:none;"></div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">🎧 Lineup</label>
-          <div id="lineup-section"></div>
-        </div>` : ''}
       </div>
       <div class="page-panel-footer">
-        ${f && currentUser ? `<button class="btn btn-ghost" onclick="showFestivalHistoryInModal('${f.id}')">📜 History</button>` : ''}
-        ${f && f.archived && festivalPerms(f).canArchive ? `<button class="btn btn-ghost" onclick="unarchiveFestival('${f.id}')">🗄️ Unarchive</button>` : ''}
-        ${f && festivalPerms(f).canEdit ? `<button class="btn btn-ghost" style="color:var(--neon-pink);" onclick="showDeleteRaveConfirm()">Delete</button>` : ''}
-        ${f && currentUser && !festivalPerms(f).canEdit ? `<button class="btn btn-ghost" onclick="showReportModal('festival', '${f.id}')">🚩 Report</button>` : ''}
+        ${kebabHtml}
         <button class="btn btn-ghost" onclick="closeRaveEditor()">Cancel</button>
         ${canEditFest ? `<button class="btn btn-primary" onclick="saveRave()">${f ? 'Save' : 'Add 🔥'}</button>` : ''}
       </div>
     `;
     document.getElementById('rave-edit-overlay').classList.add('open');
     if (canEditFest) renderFestVenuePicker();
-    if (f) renderFestivalLineupSection(f.id);
+    renderFestLocationField();
   }
 
   // Swaps the existing rave-edit modal body to a read-only History view for
@@ -24483,7 +24783,7 @@ async function doProfilePasswordChange() {
     const name = _reSearchQuery;
     const festId = editingFestivalId;
     _pendingAddToFest = festId;
-    closeRaveEditor();
+    closeRaveFocus();
     openProfileEditor();
     setTimeout(() => {
       const el = document.getElementById('pf-name');
@@ -26842,7 +27142,7 @@ async function doProfilePasswordChange() {
       ? `<div class="rlog-list">${sorted.map(f => {
           const d = festDate(f);
           const dateLabel = d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
-          return `<div class="rlog-item" data-fest-id="${escHtml(String(f.id))}" onclick="openRaveEditor(this.dataset.festId)" role="button" tabindex="0">
+          return `<div class="rlog-item" data-fest-id="${escHtml(String(f.id))}" onclick="openRaveFocus(this.dataset.festId)" role="button" tabindex="0">
             <span class="rlog-item-dot" style="background:${festColor(f)};"></span>
             <div class="rlog-item-main">
               <div class="rlog-item-name">${escHtml(f.name)}</div>
@@ -26881,7 +27181,7 @@ async function doProfilePasswordChange() {
           const d = festDate(f);
           const days = Math.ceil((d - TODAY) / 86400000);
           const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-          return `<div class="rlog-item" data-fest-id="${escHtml(String(f.id))}" onclick="openRaveEditor(this.dataset.festId)" role="button" tabindex="0">
+          return `<div class="rlog-item" data-fest-id="${escHtml(String(f.id))}" onclick="openRaveFocus(this.dataset.festId)" role="button" tabindex="0">
             <span class="rlog-item-dot" style="background:${festColor(f)};"></span>
             <div class="rlog-item-main">
               <div class="rlog-item-name">${escHtml(f.name)}</div>

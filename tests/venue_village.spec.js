@@ -220,25 +220,45 @@ test.describe('Venue Directory · rave linking', () => {
   });
 });
 
-test.describe('Venue Directory · location auto-fill', () => {
-  test('picking a venue with a saved location auto-fills an empty Location field', async ({ page }) => {
+test.describe('Venue Directory · location live-mirror', () => {
+  test('picking a venue with a saved location shows it as a read-only line, not an editable field', async ({ page }) => {
     await bootAuthedApp(page);
     const venueId = await page.evaluate(async () => (await dbAddVenue({ name: 'Auto Fill Venue', location: 'Miami, Florida, United States' })).id);
     await page.evaluate(() => openRaveEditor(null)); // new rave — Location starts empty
     await page.evaluate((id) => pickFestVenue(id), venueId);
-    expect(await page.locator('#fe-loc').inputValue()).toBe('Miami, Florida, United States');
+    await expect(page.locator('.fe-loc-from-venue')).toContainText('Miami, Florida, United States');
+    const locInput = page.locator('#fe-loc');
+    await expect(locInput).toHaveAttribute('type', 'hidden');
+    expect(await locInput.inputValue()).toBe('Miami, Florida, United States');
   });
 
-  test('picking a venue does not overwrite an already-typed Location', async ({ page }) => {
+  test('picking a venue with no location of its own falls back to an editable field', async ({ page }) => {
+    await bootAuthedApp(page);
+    const venueId = await page.evaluate(async () => (await dbAddVenue({ name: 'No Location Venue', location: '' })).id);
+    await page.evaluate(() => openRaveEditor(null));
+    await page.evaluate((id) => pickFestVenue(id), venueId);
+    await expect(page.locator('.fe-loc-from-venue')).toHaveCount(0);
+    await expect(page.locator('#fe-loc')).not.toHaveAttribute('type', 'hidden');
+  });
+
+  test('unlinking a venue restores whatever location was last showing — typed or from the venue', async ({ page }) => {
     await bootAuthedApp(page);
     const venueId = await page.evaluate(async () => (await dbAddVenue({ name: 'No Overwrite Venue', location: 'Miami, Florida, United States' })).id);
     await page.evaluate(() => openRaveEditor(null));
     await page.fill('#fe-loc', 'Custom Typed Location');
     await page.evaluate((id) => pickFestVenue(id), venueId);
-    expect(await page.locator('#fe-loc').inputValue()).toBe('Custom Typed Location');
+    await expect(page.locator('.fe-loc-from-venue')).toContainText('Miami, Florida, United States');
+
+    await page.evaluate(() => clearFestVenue());
+    const locInput = page.locator('#fe-loc');
+    await expect(locInput).not.toHaveAttribute('type', 'hidden');
+    // The last-effective value (the venue's, since that's what was showing right
+    // before unlinking) carries forward — nothing is lost, but nothing reverts
+    // further back than the most recent screen either.
+    expect(await locInput.inputValue()).toBe('Miami, Florida, United States');
   });
 
-  test('adding a new venue inline also auto-fills an empty Location', async ({ page }) => {
+  test('adding a new venue inline also mirrors its location as a read-only line', async ({ page }) => {
     await bootAuthedApp(page);
     await page.evaluate(() => openRaveEditor(null));
     await page.evaluate(async () => {
@@ -247,6 +267,19 @@ test.describe('Venue Directory · location auto-fill', () => {
       // created venue's location, same as addNewVenueFromSearch would.
       pickFestVenue(v.id);
     });
-    expect(await page.locator('#fe-loc').inputValue()).toBe('Denver, Colorado, United States');
+    await expect(page.locator('.fe-loc-from-venue')).toContainText('Denver, Colorado, United States');
+  });
+
+  test("reopening a rave reflects the linked venue's current location, even if it changed after linking", async ({ page }) => {
+    await bootAuthedApp(page, { data: seedWithOwnedFest() });
+    const venueId = await page.evaluate(async () => (await dbAddVenue({ name: 'Moving Venue', location: 'Old Address' })).id);
+    await page.evaluate(() => openRaveEditor('f1'));
+    await page.evaluate((id) => { pickFestVenue(id); saveRave(); }, venueId);
+
+    // The venue's own address gets corrected later — the rave is never resaved.
+    await page.evaluate((id) => dbUpdateVenue(id, { name: 'Moving Venue', location: 'New Corrected Address' }), venueId);
+
+    await page.evaluate(() => openRaveEditor('f1'));
+    await expect(page.locator('.fe-loc-from-venue')).toContainText('New Corrected Address');
   });
 });
