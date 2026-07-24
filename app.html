@@ -2589,10 +2589,16 @@
     padding: 16px 18px;
     box-shadow: 0 12px 40px rgba(0,0,0,0.45);
     z-index: 310;
-    transform: translateX(-50%) translateY(140%);
+    /* Fixed px offset (not a %), same trick the toast uses — the card starts
+       empty (no milestone fired yet) so its own height is just the padding
+       box, and a %-based transform wasn't enough to clear the viewport,
+       leaving a visible sliver over the bottom nav. pointer-events is belt
+       and suspenders so that sliver can't swallow taps either. */
+    transform: translateX(-50%) translateY(400px);
+    pointer-events: none;
     transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
   }
-  .micro-feedback-card.show { transform: translateX(-50%) translateY(0); }
+  .micro-feedback-card.show { transform: translateX(-50%) translateY(0); pointer-events: auto; }
   @media (max-width: 640px) { .micro-feedback-card { bottom: 84px; } }
   .micro-feedback-close { position: absolute; top: 10px; right: 12px; color: var(--muted); cursor: pointer; font-size: 0.8rem; padding: 4px; }
   .micro-feedback-eyebrow { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.66rem; text-transform: uppercase; letter-spacing: 1px; color: var(--neon-cyan); margin-bottom: 6px; }
@@ -7983,7 +7989,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.13.0';
+  const APP_VERSION = '1.13.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
