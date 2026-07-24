@@ -8198,7 +8198,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.19.0';
+  const APP_VERSION = '1.19.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -13242,14 +13242,17 @@ async function doProfilePasswordChange() {
         return;
       } catch (e) {
         if (e && e.name === 'AbortError') return;
+        console.error('crew share: text navigator.share failed', e);
       }
     }
     if (navigator.clipboard && navigator.clipboard.writeText) {
       try {
         await navigator.clipboard.writeText(text);
-        showToast('📋 Copied — paste it anywhere!');
+        showToast('📋 Copied — screenshot the card to share it too!');
         return;
-      } catch {}
+      } catch (e) {
+        console.error('crew share: clipboard.writeText failed', e);
+      }
     }
     showToast('📋 Screenshot this card to share!');
   }
@@ -13348,6 +13351,7 @@ async function doProfilePasswordChange() {
           return;
         } catch (e) {
           if (e && e.name === 'AbortError') return; // user closed the share sheet — not an error
+          console.error('crew share: image navigator.share failed', e);
           // fall through to the manual fallback below
         }
       }
@@ -13358,6 +13362,9 @@ async function doProfilePasswordChange() {
         // risks getting silently popup-blocked too — swap the overlay to
         // show the rendered image inline instead (no new window/tab
         // involved) so the user can reliably long-press to save/share it.
+        // This is just a DOM <img>, not a gesture-gated API, so it's the
+        // most reliable path left — if even THIS doesn't work, something
+        // beyond the Web Share API is going on (see the onerror handler).
         showCrewShareImageResult(url);
       } else {
         const a = document.createElement('a');
@@ -13365,7 +13372,9 @@ async function doProfilePasswordChange() {
         showToast('📥 Crew card downloaded!');
       }
       setTimeout(() => URL.revokeObjectURL(url), 60000);
-    } catch {
+    } catch (e) {
+      console.error('crew share: image path failed entirely', e);
+      showToast('📋 Screenshot this card to share!');
       await shareCrewTextFallback(crew);
     }
   }
@@ -13377,7 +13386,7 @@ async function doProfilePasswordChange() {
   // which iOS Safari honors reliably from this deep in an async chain.
   function showCrewShareImageResult(url) {
     document.querySelector('.crew-share-wrap').innerHTML = `
-      <img src="${url}" class="crew-share-result-img" alt="Crew share card">
+      <img src="${url}" class="crew-share-result-img" alt="Crew share card" onerror="console.error('crew share: result <img> failed to load blob URL'); showToast('⚠️ Could not display the image — screenshot this card instead');">
       <div class="crew-share-result-hint">📲 Long-press the image above to save or share it</div>
       <div class="crew-share-actions">
         <button class="wrapped-close-btn" style="flex:1;" onclick="closeCrewShareCard()">Done</button>
