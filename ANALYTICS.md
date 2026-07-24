@@ -87,6 +87,19 @@ Query a single crew: `select is_crew_activated('<crew-uuid>');` (requires
   not "claimed an invited crew spot," so it's deliberately not instrumented as
   `first_claim`.
 
+## Product Metrics dashboard
+
+The weekly funnel, the current activation rate, and the latest micro-feedback
+responses are now surfaced directly in the PM dashboard (📊 Product Metrics,
+super-admin only): a "Crew Activation Rate" KPI card, a "Crew Activation
+Funnel" chart, and a "Recent Feedback" list
+(`get_pm_dashboard_metrics()`, extended in
+`supabase/migrations/20260812000000_pm_dashboard_crew_activation.sql`;
+rendered in `app.html` via `renderPMDashBody()` /
+`pmRenderActivationChart()` / `pmFeedbackRows()`). The standalone query below
+still works and returns the same weekly shape, useful for ad hoc SQL-editor
+checks.
+
 ## Querying the weekly funnel
 
 `get_crew_activation_funnel()` (super-admin only, gated the same way as
