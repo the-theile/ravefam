@@ -8198,7 +8198,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.19.4';
+  const APP_VERSION = '1.19.5';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -13344,7 +13344,18 @@ async function doProfilePasswordChange() {
       // font readiness) — turned on deliberately for diagnosis; the prior
       // silent failures here were never actually logged anywhere.
       const canvas = await withTimeout(
-        html2canvas(card, { backgroundColor: '#050509', scale: 2, useCORS: true, logging: true }),
+        html2canvas(card, {
+          backgroundColor: '#050509', scale: 2, useCORS: true, logging: true,
+          // html2canvas clones the WHOLE document (not just `card`) to
+          // replicate CSS cascade correctly, so unrelated elements elsewhere
+          // on the page get cloned too. The QR-scanner <video> (tainted once
+          // a camera stream has been attached) blocks that entire clone step
+          // — found via the logging above: "Unable to clone video as it is
+          // tainted", followed by our own render timing out because the
+          // clone never finished. None of our card's own content is video,
+          // so skipping every <video> during cloning is always safe here.
+          ignoreElements: (el) => el.tagName === 'VIDEO',
+        }),
         15000, 'Rendering the card'
       );
       if (token !== _crewShareToken) return;
@@ -28082,7 +28093,11 @@ async function doProfilePasswordChange() {
     if (actions) actions.style.display = 'none';
     try {
       if (typeof html2canvas !== 'undefined') {
-        const canvas = await html2canvas(card, { backgroundColor: '#06000f', scale: 2, useCORS: true, logging: false });
+        // ignoreElements: html2canvas clones the whole document (not just
+        // `card`) to replicate CSS cascade — a tainted <video> elsewhere on
+        // the page (the QR-scanner) can block that entire clone step. See
+        // the crew share card's shareCrewCard for how this was diagnosed.
+        const canvas = await html2canvas(card, { backgroundColor: '#06000f', scale: 2, useCORS: true, logging: false, ignoreElements: (el) => el.tagName === 'VIDEO' });
         if (actions) actions.style.display = '';
         canvas.toBlob(async (blob) => {
           if (!blob) { showToast('⚠️ Could not generate image'); return; }
