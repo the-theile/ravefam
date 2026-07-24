@@ -75,7 +75,7 @@ test.describe('rave lineup tagging', () => {
 
   test('attending raver can add an artist to a rave lineup and it persists', async ({ page }) => {
     await bootAuthedApp(page); // seedData: r-you is going to f1
-    await page.evaluate(() => openRaveEditor('f1'));
+    await page.evaluate(() => openRaveFocus('f1'));
     await page.evaluate(() => lineupArtistSearchInput('f1', 'Charlotte'));
     await page.waitForFunction(() => document.querySelectorAll('#lu-artist-search-results .fest-search-item').length > 0);
     await page.evaluate(() => lineupPickFromSearch('f1', 'a1'));
@@ -89,7 +89,7 @@ test.describe('rave lineup tagging', () => {
 
   test('non-attending raver does not see the add-to-lineup control', async ({ page }) => {
     await bootAuthedApp(page); // seedData: r-you is only Interested in f2, not going
-    await page.evaluate(() => openRaveEditor('f2'));
+    await page.evaluate(() => openRaveFocus('f2'));
     await expect(page.locator('#lu-artist-search-input')).toHaveCount(0);
   });
 
@@ -97,7 +97,7 @@ test.describe('rave lineup tagging', () => {
     const d = seedData();
     d.artist_festival_appearances = [{ artist_id: 'a1', festival_id: 'f1' }];
     await bootAuthedApp(page, { data: d });
-    await page.evaluate(() => openRaveEditor('f1'));
+    await page.evaluate(() => openRaveFocus('f1'));
     await expect(page.locator('#lineup-section')).toContainText('Charlotte de Witte');
     await page.evaluate(() => lineupRemoveArtist('f1', 'a1'));
     await expect(page.locator('#lineup-section')).not.toContainText('Charlotte de Witte');
@@ -112,7 +112,7 @@ test.describe('rave lineup tagging', () => {
     const d = lineupData();
     d.artist_festival_appearances = [{ artist_id: 'a1', festival_id: 'f-past' }];
     await bootAuthedApp(page, { data: d });
-    await page.evaluate(() => openRaveEditor('f-past'));
+    await page.evaluate(() => openRaveFocus('f-past'));
     await expect(page.locator('.lineup-seen-btn')).toHaveCount(1);
     await page.evaluate(() => dbToggleArtistSighting('f-past', 'a1'));
     await expect(page.locator('.lineup-seen-btn.seen')).toHaveCount(1);
@@ -127,9 +127,33 @@ test.describe('rave lineup tagging', () => {
     const d = seedData();
     d.artist_festival_appearances = [{ artist_id: 'a1', festival_id: 'f1' }]; // f1 is dated 2099
     await bootAuthedApp(page, { data: d });
-    await page.evaluate(() => openRaveEditor('f1'));
+    await page.evaluate(() => openRaveFocus('f1'));
     await expect(page.locator('#lineup-section')).toContainText('Charlotte de Witte');
     await expect(page.locator('.lineup-seen-btn')).toHaveCount(0);
+  });
+
+  test('planning-to-see toggle appears for an upcoming rave, persists, and is replaced by the seen/missed toggle once achieved', async ({ page }) => {
+    const d = seedData();
+    d.artist_festival_appearances = [{ artist_id: 'a1', festival_id: 'f1' }]; // f1 is dated 2099
+    await bootAuthedApp(page, { data: d });
+    await page.evaluate(() => openRaveFocus('f1'));
+    await expect(page.locator('.lineup-plan-btn')).toHaveCount(1);
+    await expect(page.locator('.lineup-seen-btn')).toHaveCount(0);
+    await page.evaluate(() => dbToggleArtistPlan('f1', 'a1'));
+    await expect(page.locator('.lineup-plan-btn.planned')).toHaveCount(1);
+    const persisted = await page.evaluate(async () => {
+      const { data } = await sb.from('raver_artist_plans').select('*').eq('festival_id', 'f1');
+      return data;
+    });
+    expect(persisted.length).toBe(1);
+  });
+
+  test('planning-to-see toggle does not appear once the rave is achieved', async ({ page }) => {
+    const d = lineupData();
+    d.artist_festival_appearances = [{ artist_id: 'a1', festival_id: 'f-past' }];
+    await bootAuthedApp(page, { data: d });
+    await page.evaluate(() => openRaveFocus('f-past'));
+    await expect(page.locator('.lineup-plan-btn')).toHaveCount(0);
   });
 });
 

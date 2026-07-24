@@ -1324,6 +1324,13 @@
   }
   .lineup-seen-btn.seen { background: color-mix(in srgb, var(--neon-green) 22%, transparent); }
   .lineup-seen-btn.missed { background: color-mix(in srgb, var(--neon-pink) 22%, transparent); }
+  .lineup-plan-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; margin-left: 2px; border-radius: 50%; border: none;
+    background: rgba(255,255,255,0.08); cursor: pointer; font-size: 0.72rem; line-height: 1;
+    color: var(--muted);
+  }
+  .lineup-plan-btn.planned { background: color-mix(in srgb, var(--neon-cyan) 22%, transparent); }
   .profile-actions { display: flex; gap: 10px; margin: 4px 0 12px; }
 
   /* Connect row (IG / Call / Text) */
@@ -7182,6 +7189,13 @@
   </div>
 </div>
 
+<!-- Rave Focus Popup (RSVPs + lineup) -->
+<div class="modal-overlay" id="rave-focus-overlay" onclick="if(event.target===this)closeRaveFocus()">
+  <div class="modal" id="rave-focus-modal" style="max-height:88vh;overflow-y:auto;">
+    <!-- filled by JS -->
+  </div>
+</div>
+
 <!-- Rave Editor Page -->
 <div class="page-panel-overlay" id="rave-edit-overlay">
   <div class="page-panel" id="rave-edit-modal">
@@ -7905,7 +7919,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.10.0';
+  const APP_VERSION = '1.11.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -9714,6 +9728,7 @@ async function doProfilePasswordChange() {
     await dbLoadArtists().catch(() => {});
     await dbLoadArtistAppearances().catch(() => {});
     await dbLoadArtistSightings().catch(() => {});
+    await dbLoadArtistPlans().catch(() => {});
 
     // --- Venues (loaded at boot, not just on visiting Village, so the rave
     // editor's venue picker has data even if the user never opened Village) ---
@@ -19520,7 +19535,7 @@ async function doProfilePasswordChange() {
 
     const ravesHTML = raves.length
       ? `<div class="jam-cards-list" style="margin-top:8px;">
-          ${raves.map(f => `<div class="jam-card" style="cursor:pointer;" onclick="closeVenueDetail(); openRaveEditor('${escHtml(String(f.id))}')"><div class="jam-card-toprow"><span class="jam-title">${escHtml(f.name)}</span></div><div class="jam-meta">${escHtml(f.date || '')}</div></div>`).join('')}
+          ${raves.map(f => `<div class="jam-card" style="cursor:pointer;" onclick="closeVenueDetail(); openRaveFocus('${escHtml(String(f.id))}')"><div class="jam-card-toprow"><span class="jam-title">${escHtml(f.name)}</span></div><div class="jam-meta">${escHtml(f.date || '')}</div></div>`).join('')}
         </div>`
       : `<div class="jam-meta" style="margin-top:4px;">No raves linked here yet.</div>`;
 
@@ -21877,6 +21892,16 @@ async function doProfilePasswordChange() {
     if (data) raverArtistSightings = data;
   }
 
+  // Personal "artists I plan to see" checklist — pre-event sibling of
+  // raverArtistSightings, since sightings can only be marked once a rave is
+  // in the past (raver_artist_sightings RLS requires festivals.date < today).
+  let raverArtistPlans = [];
+
+  async function dbLoadArtistPlans() {
+    const { data } = await sb.from('raver_artist_plans').select('raver_id,artist_id,festival_id');
+    if (data) raverArtistPlans = data;
+  }
+
   function findArtistById(id) {
     return artists.find(a => String(a.id) === String(id)) || DEMO_ARTISTS.find(a => String(a.id) === String(id));
   }
@@ -21927,6 +21952,16 @@ async function doProfilePasswordChange() {
     );
   }
 
+  function myLineupPlanIds(festId) {
+    const you = squad.find(r => r.isYou);
+    if (!you) return new Set();
+    return new Set(
+      raverArtistPlans
+        .filter(s => String(s.raver_id) === String(you.id) && String(s.festival_id) === String(festId))
+        .map(s => String(s.artist_id))
+    );
+  }
+
   function canEditFestLineup(festId) {
     return festivalGoers(festId).some(g => g.isYou);
   }
@@ -21967,6 +22002,8 @@ async function doProfilePasswordChange() {
       !(String(a.festival_id) === String(festId) && String(a.artist_id) === String(artistId)));
     raverArtistSightings = raverArtistSightings.filter(s =>
       !(String(s.festival_id) === String(festId) && String(s.artist_id) === String(artistId)));
+    raverArtistPlans = raverArtistPlans.filter(s =>
+      !(String(s.festival_id) === String(festId) && String(s.artist_id) === String(artistId)));
     return true;
   }
 
@@ -21990,6 +22027,26 @@ async function doProfilePasswordChange() {
     renderFestivalLineupSection(festId);
   }
 
+  async function dbToggleArtistPlan(festId, artistId) {
+    if (String(festId).startsWith('temp_')) { showToast('Still saving — try again in a moment'); return; }
+    const you = squad.find(r => r.isYou);
+    if (!you) return;
+    const planned = myLineupPlanIds(festId).has(String(artistId));
+    if (planned) {
+      const { error } = await sb.from('raver_artist_plans')
+        .delete().eq('raver_id', you.id).eq('festival_id', festId).eq('artist_id', artistId);
+      if (error) { console.error('raver_artist_plans delete error', error); showToast('⚠️ Could not update — try again'); return; }
+      raverArtistPlans = raverArtistPlans.filter(s =>
+        !(String(s.raver_id) === String(you.id) && String(s.festival_id) === String(festId) && String(s.artist_id) === String(artistId)));
+    } else {
+      const { error } = await sb.from('raver_artist_plans')
+        .insert({ raver_id: you.id, artist_id: artistId, festival_id: festId });
+      if (error) { console.error('raver_artist_plans insert error', error); showToast('⚠️ Could not update — try again'); return; }
+      raverArtistPlans.push({ raver_id: you.id, artist_id: artistId, festival_id: festId });
+    }
+    renderFestivalLineupSection(festId);
+  }
+
   function renderFestivalLineupSection(festId) {
     const box = document.getElementById('lineup-section');
     if (!box) return;
@@ -21999,6 +22056,7 @@ async function doProfilePasswordChange() {
     const rows = lineupArtistsFor(festId);
     const achieved = isFestAchieved(f);
     const mySightings = achieved ? myLineupSightingIds(festId) : new Set();
+    const myPlans = !achieved ? myLineupPlanIds(festId) : new Set();
 
     const chipHtml = rows.map(a => {
       const artist = findArtistById(a.artist_id);
@@ -22007,11 +22065,15 @@ async function doProfilePasswordChange() {
       const seenBtn = achieved && canEdit
         ? `<button type="button" class="lineup-seen-btn${seen ? ' seen' : ' missed'}" title="${seen ? 'You saw this — tap if you missed it' : 'Marked as missed — tap if you actually caught them'}" onclick="dbToggleArtistSighting('${festId}','${a.artist_id}')">${seen ? '✅' : '❌'}</button>`
         : '';
+      const planned = myPlans.has(String(a.artist_id));
+      const planBtn = !achieved && canEdit
+        ? `<button type="button" class="lineup-plan-btn${planned ? ' planned' : ''}" title="${planned ? "Planning to catch them — tap to unmark" : 'Tap if you plan to catch their set'}" onclick="dbToggleArtistPlan('${festId}','${a.artist_id}')">${planned ? '⭐' : '☆'}</button>`
+        : '';
       const removeBtn = canEdit
         ? `<button type="button" class="tag-remove-btn" title="Remove ${escHtml(artist.name)}" aria-label="Remove ${escHtml(artist.name)}" onclick="lineupRemoveArtist('${festId}','${a.artist_id}')">&nbsp;✕</button>`
         : '';
       const hl = a.is_headliner ? ' 🌟' : '';
-      return `<span class="fav-chip" style="--chip-col:${artistColor(artist.name)};">${escHtml(artist.name)}${hl}${seenBtn}${removeBtn}</span>`;
+      return `<span class="fav-chip" style="--chip-col:${artistColor(artist.name)};">${escHtml(artist.name)}${hl}${seenBtn}${planBtn}${removeBtn}</span>`;
     }).join('');
     const chipsOrEmpty = chipHtml || `<span class="fest-empty" style="font-size:0.78rem;">No lineup tagged yet${canEdit ? ' — who played?' : ''}</span>`;
 
@@ -22025,7 +22087,9 @@ async function doProfilePasswordChange() {
 
     const sightingHint = achieved && canEdit && rows.length
       ? `<div class="fest-empty" style="font-size:0.72rem;margin-top:6px;">👁️ Tap an artist to mark whether you personally caught their set</div>`
-      : (!canEdit && rows.length === 0 ? `<div class="fest-empty" style="font-size:0.72rem;margin-top:6px;">RSVP to this rave to tag its lineup</div>` : '');
+      : (!achieved && canEdit && rows.length
+        ? `<div class="fest-empty" style="font-size:0.72rem;margin-top:6px;">⭐ Tap an artist to mark who you're planning to see</div>`
+        : (!canEdit && rows.length === 0 ? `<div class="fest-empty" style="font-size:0.72rem;margin-top:6px;">RSVP to this rave to tag its lineup</div>` : ''));
 
     box.innerHTML = `<div class="fav-chip-row" id="lineup-chip-wrap">${chipsOrEmpty}</div>${addHtml}${sightingHint}`;
   }
@@ -23265,7 +23329,7 @@ async function doProfilePasswordChange() {
         data.festIds = r.festIds;
         const fest = getFestival(pendingFest);
         showToast(`✅ ${r.name.split(' ')[0]} added and linked to ${fest?.name || 'the rave'}`);
-        openRaveEditor(pendingFest);
+        openRaveFocus(pendingFest);
       } else if (isOnboarding) {
         maybeAdvanceOnboarding(r.name);
       } else if (pendingCrew) {
@@ -23399,6 +23463,53 @@ async function doProfilePasswordChange() {
 
   function festivalInterestedGoers(festId) {
     return squad.filter(p => (p.interestedFestIds || []).some(fid => String(fid) === String(festId)));
+  }
+
+  // "Who's in" block — avatars with vibe bubbles/rings + going/interested count
+  // chips. Shared by the Raves tab marquee card and the Rave Focus popup.
+  function raveCrewSectionHTML(f, goers, interestedPeople) {
+    const you = squad.find(r => r.isYou);
+    const d = festDate(f);
+    const isUpcoming = d && d >= TODAY;
+    const youGoing = you && (you.festIds || []).some(fid => String(fid) === String(f.id));
+
+    // Going and interested share one row — a colored ring (not a separate
+    // labeled section) carries who's confirmed vs. just watching.
+    const crewEntries = [
+      ...goers.map(w => ({ w, ring: 'ring-going', showVibes: true })),
+      ...interestedPeople.map(w => ({ w, ring: 'ring-interested', showVibes: false })),
+    ];
+    const crewAvatarsHTML = crewEntries.map(({ w, ring, showVibes }, idx) => {
+      const dn = displayName(w);
+      const bg = w.avatarUrl ? 'transparent;overflow:hidden;padding:0' : extractFirstColor(w.gradient);
+      const inner = w.avatarUrl
+        ? `<img src="${escHtml(w.avatarUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${escHtml(initials(dn))}">`
+        : initials(dn).toUpperCase();
+      const isLast = idx === crewEntries.length - 1;
+      let badgeHtml = '', bubbleHtml = '';
+      if (showVibes) {
+        const vibe = (festVibesCache[String(f.id)] || []).find(v => String(v.raverId) === String(w.id));
+        const isMeW = you && String(w.id) === String(you.id);
+        if (vibe) {
+          badgeHtml = `<div class="vibe-emoji-badge">${vibe.emoji}</div>`;
+          const captionHtml = vibe.caption ? `<span class="going-vibe-caption">${escHtml(vibe.caption)}</span>` : '';
+          const cls = `going-vibe-bubble${isMeW ? ' is-mine' : ''}`;
+          const click = isMeW ? `onclick="event.stopPropagation(); openVibePicker('${f.id}')"` : '';
+          bubbleHtml = `<div class="${cls}" ${click}>${vibe.emoji}${captionHtml}</div>`;
+        }
+      }
+      return `<div class="avatar going-avatar ${ring}${isLast ? ' row-end' : ''}" style="background:${bg};" data-raver-id="${w.id}" onclick="event.stopPropagation(); openProfile(this.dataset.raverId, false, 'members')" title="${escHtml(dn)}">${inner}${bubbleHtml}${badgeHtml}</div>`;
+    }).join('');
+
+    const countChips = [];
+    if (goers.length) countChips.push(`<span class="going-count-inline ${youGoing ? 'green' : 'muted'}">${goers.length} ${isUpcoming ? 'going' : 'sent it'}</span>`);
+    if (interestedPeople.length) countChips.push(`<span class="going-count-inline cyan">${interestedPeople.length} interested</span>`);
+    return crewEntries.length
+      ? `<div class="marquee-crew">
+          <div class="marquee-crew-label">Who's in</div>
+          <div class="going-avatars">${crewAvatarsHTML}${countChips.join('')}</div>
+         </div>`
+      : `<div class="marquee-crew"><span style="font-size:0.74rem;color:var(--muted)">Nobody from the tribe yet</span></div>`;
   }
 
   // ===== Rave weather (Open-Meteo — free, keyless) =====
@@ -23875,43 +23986,7 @@ async function doProfilePasswordChange() {
           ? `border-left:5px solid ${color}`
           : `border-left:5px solid ${color};box-shadow:-5px 0 20px rgba(${rgb},0.15),inset 3px 0 16px rgba(${rgb},0.04),0 4px 14px rgba(0,0,0,0.4)`;
 
-      // Going and interested now share one row — a colored ring (not a separate
-      // labeled section) carries who's confirmed vs. just watching.
-      const crewEntries = [
-        ...goers.map(w => ({ w, ring: 'ring-going', showVibes: true })),
-        ...interestedPeople.map(w => ({ w, ring: 'ring-interested', showVibes: false })),
-      ];
-      const crewAvatarsHTML = crewEntries.map(({ w, ring, showVibes }, idx) => {
-        const dn = displayName(w);
-        const bg = w.avatarUrl ? 'transparent;overflow:hidden;padding:0' : extractFirstColor(w.gradient);
-        const inner = w.avatarUrl
-          ? `<img src="${escHtml(w.avatarUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${escHtml(initials(dn))}">`
-          : initials(dn).toUpperCase();
-        const isLast = idx === crewEntries.length - 1;
-        let badgeHtml = '', bubbleHtml = '';
-        if (showVibes) {
-          const vibe = (festVibesCache[String(f.id)] || []).find(v => String(v.raverId) === String(w.id));
-          const isMeW = you && String(w.id) === String(you.id);
-          if (vibe) {
-            badgeHtml = `<div class="vibe-emoji-badge">${vibe.emoji}</div>`;
-            const captionHtml = vibe.caption ? `<span class="going-vibe-caption">${escHtml(vibe.caption)}</span>` : '';
-            const cls = `going-vibe-bubble${isMeW ? ' is-mine' : ''}`;
-            const click = isMeW ? `onclick="event.stopPropagation(); openVibePicker('${f.id}')"` : '';
-            bubbleHtml = `<div class="${cls}" ${click}>${vibe.emoji}${captionHtml}</div>`;
-          }
-        }
-        return `<div class="avatar going-avatar ${ring}${isLast ? ' row-end' : ''}" style="background:${bg};" data-raver-id="${w.id}" onclick="event.stopPropagation(); openProfile(this.dataset.raverId, false, 'members')" title="${escHtml(dn)}">${inner}${bubbleHtml}${badgeHtml}</div>`;
-      }).join('');
-
-      const countChips = [];
-      if (goers.length) countChips.push(`<span class="going-count-inline ${youGoing ? 'green' : 'muted'}">${goers.length} ${isUpcoming ? 'going' : 'sent it'}</span>`);
-      if (interestedPeople.length) countChips.push(`<span class="going-count-inline cyan">${interestedPeople.length} interested</span>`);
-      const crewSection = crewEntries.length
-        ? `<div class="marquee-crew">
-            <div class="marquee-crew-label">Who's in</div>
-            <div class="going-avatars">${crewAvatarsHTML}${countChips.join('')}</div>
-           </div>`
-        : `<div class="marquee-crew"><span style="font-size:0.74rem;color:var(--muted)">Nobody from the tribe yet</span></div>`;
+      const crewSection = raveCrewSectionHTML(f, goers, interestedPeople);
 
       const vibeRowContent = buildVibeRowHTML(f.id);
       const vibeSection = vibeRowContent
@@ -23921,12 +23996,12 @@ async function doProfilePasswordChange() {
       const cobweb = isUpcoming ? '' : COBWEB_SVG;
 
       return `
-        <div class="event-item event-item-clickable${stateClass}" data-fest-id="${f.id}" style="${cardStyle}" onclick="activeFestId=this.dataset.festId; openRaveEditor(this.dataset.festId)" title="Tap to edit ${escHtml(f.name)}">
+        <div class="event-item event-item-clickable${stateClass}" data-fest-id="${f.id}" style="${cardStyle}" onclick="openRaveFocus(this.dataset.festId)" title="Tap to view ${escHtml(f.name)}">
           ${cobweb}
           <div class="marquee-bulb-row top">${isUpcoming ? BULB_ROW_HTML : BULB_ROW_HTML_PAST}</div>
           <div class="marquee-body">
             <div class="marquee-countdown-stamp"><div class="n">${stamp.n}</div><div class="u">${stamp.u}</div></div>
-            <div class="marquee-name">${escHtml(f.name)} <span class="fest-edit-hint">✏️</span></div>
+            <div class="marquee-name">${escHtml(f.name)} <span class="fest-edit-hint">👁️</span></div>
             <div class="marquee-meta">${metaBits.join('<span class="marquee-dot">·</span>')}</div>
             ${venueLine}
             ${pillRow}
@@ -24167,6 +24242,74 @@ async function doProfilePasswordChange() {
     }
   }
 
+  // ===== Rave Focus popup — RSVPs + lineup for an existing rave. Tapping a
+  // rave card opens this instead of the full editor; its own "Edit" button
+  // is the only way into openRaveEditor() from here. =====
+  function openRaveFocus(festId) {
+    const f = getFestival(festId);
+    if (!f) return;
+    activeFestId = festId;
+    editingFestivalId = festId;
+    document.getElementById('rave-focus-modal').innerHTML = raveFocusModalHTML(f);
+    document.getElementById('rave-focus-overlay').classList.add('open');
+    renderFestivalLineupSection(festId);
+  }
+
+  function closeRaveFocus() {
+    document.getElementById('rave-focus-overlay').classList.remove('open');
+    editingFestivalId = null;
+  }
+
+  // Re-render in place after a self RSVP toggle so the popup reflects the
+  // change immediately (toggleGoingToFest/toggleInterestedInFest already
+  // re-render the Raves tab itself, but not this popup).
+  function raveFocusToggleGoing(festId) { toggleGoingToFest(festId); openRaveFocus(festId); }
+  function raveFocusToggleInterested(festId) { toggleInterestedInFest(festId); openRaveFocus(festId); }
+
+  function raveFocusModalHTML(f) {
+    const you = squad.find(r => r.isYou);
+    const youGoing = you && (you.festIds || []).some(fid => String(fid) === String(f.id));
+    const youInterested = you && (you.interestedFestIds || []).some(fid => String(fid) === String(f.id));
+    const d = festDate(f);
+    const isUpcoming = d && d >= TODAY;
+    const dateBit = d ? `${d.getDate()} ${MON_SHORT[d.getMonth()]}${!isUpcoming ? ' ' + d.getFullYear() : ''}` : '';
+    const venue = findVenueById(f.venueId);
+    const goers = festivalGoers(f.id);
+    const interestedPeople = festivalInterestedGoers(f.id);
+
+    const goingLabel = isUpcoming ? 'Going' : 'Sent It';
+    const goingBtn = `<button class="event-action-btn going-action${youGoing ? ' active' : ''}" onclick="raveFocusToggleGoing('${f.id}')">${youGoing ? '🎟️ ' : '＋ '}${goingLabel}</button>`;
+    const interestedBtn = `<button class="event-action-btn interested-action${youInterested ? ' active' : ''}" onclick="raveFocusToggleInterested('${f.id}')">👀 Interested</button>`;
+    const rsvpButtonsHtml = youGoing ? goingBtn : youInterested ? interestedBtn : goingBtn + interestedBtn;
+
+    return `
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:4px;">
+        <div>
+          <div class="modal-title" style="margin-bottom:2px;">${escHtml(f.name)}</div>
+          <div style="font-size:0.78rem;color:var(--muted);">${[dateBit, venue ? '🏛️ ' + escHtml(venue.name) : (f.location ? '📍 ' + escHtml(f.location) : '')].filter(Boolean).join(' · ')}</div>
+        </div>
+        <button type="button" class="page-panel-back" style="flex-shrink:0;" onclick="closeRaveFocus()">✕</button>
+      </div>
+      <div class="event-action-bar" style="margin:10px 0 14px;">${rsvpButtonsHtml}</div>
+      ${raveCrewSectionHTML(f, goers, interestedPeople)}
+      <div class="fest-goers-note" id="re-goers-note" style="margin-top:14px;">${goers.length ? goers.length + ' tribe member' + (goers.length!==1?'s':'') + ' linked: ' + goers.map(g=>escHtml(g.name.split(' ')[0])).join(', ') : 'No tribe members linked yet'}</div>
+      <div class="fest-search-wrap" style="margin-top:8px;margin-bottom:4px;">
+        <input class="form-input" id="re-raver-search" placeholder="🔍 Search tribe to add…" autocomplete="off" style="font-size:16px;"
+          oninput="reSearch(this.value)"
+          onblur="setTimeout(()=>{const d=document.getElementById('re-raver-results');if(d)d.style.display='none';},200)">
+        <div id="re-raver-results" class="fest-search-dropdown" style="display:none;"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">🎧 Lineup</label>
+        <div id="lineup-section"></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:18px;">
+        <button class="btn btn-ghost" style="flex:1;" onclick="closeRaveFocus()">Close</button>
+        <button class="btn btn-primary" style="flex:1;" onclick="closeRaveFocus(); openRaveEditor('${f.id}')">✏️ Edit Rave</button>
+      </div>
+    `;
+  }
+
   function openRaveEditor(id) {
     const f = id ? getFestival(id) : null;
     // Editing details (name/date/location/etc.) is gated to the creator or a moderator,
@@ -24176,7 +24319,6 @@ async function doProfilePasswordChange() {
     editingFestivalId = id || null;
     activeFestId = id || null;
     editingVenueId = f?.venueId || null;
-    const goers = id ? festivalGoers(id) : [];
     editRaveColor = f?.color || festColor(f || { id: 'new' });
     const swatchHtml = CARD_PALETTE.map(c =>
       `<div class="color-swatch${c === editRaveColor ? ' selected' : ''}" data-color="${c}" style="background:${c};" ${canEditFest ? `onclick="pickRaveColor('${c}')"` : 'style="pointer-events:none;opacity:0.6;"'}></div>`
@@ -24225,17 +24367,6 @@ async function doProfilePasswordChange() {
           <input type="file" accept="image/*" onchange="handleFestivalMapUpload(event, '${f.id}')">
           ${f.mapUrl ? `<button class="btn btn-ghost" style="margin-top:8px;" onclick="removeFestivalMap('${f.id}')">Remove map</button>` : ''}
         </div>` : ''}
-        ${f ? `<div class="fest-goers-note" id="re-goers-note">${goers.length ? goers.length + ' tribe member' + (goers.length!==1?'s':'') + ' linked: ' + goers.map(g=>escHtml(g.name.split(' ')[0])).join(', ') : 'No tribe members linked yet'}</div>
-        <div class="fest-search-wrap" style="margin-top:8px;margin-bottom:4px;">
-          <input class="form-input" id="re-raver-search" placeholder="🔍 Search tribe to add…" autocomplete="off" style="font-size:16px;"
-            oninput="reSearch(this.value)"
-            onblur="setTimeout(()=>{const d=document.getElementById('re-raver-results');if(d)d.style.display='none';},200)">
-          <div id="re-raver-results" class="fest-search-dropdown" style="display:none;"></div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">🎧 Lineup</label>
-          <div id="lineup-section"></div>
-        </div>` : ''}
       </div>
       <div class="page-panel-footer">
         ${f && currentUser ? `<button class="btn btn-ghost" onclick="showFestivalHistoryInModal('${f.id}')">📜 History</button>` : ''}
@@ -24248,7 +24379,6 @@ async function doProfilePasswordChange() {
     `;
     document.getElementById('rave-edit-overlay').classList.add('open');
     if (canEditFest) renderFestVenuePicker();
-    if (f) renderFestivalLineupSection(f.id);
   }
 
   // Swaps the existing rave-edit modal body to a read-only History view for
@@ -24483,7 +24613,7 @@ async function doProfilePasswordChange() {
     const name = _reSearchQuery;
     const festId = editingFestivalId;
     _pendingAddToFest = festId;
-    closeRaveEditor();
+    closeRaveFocus();
     openProfileEditor();
     setTimeout(() => {
       const el = document.getElementById('pf-name');
@@ -26842,7 +26972,7 @@ async function doProfilePasswordChange() {
       ? `<div class="rlog-list">${sorted.map(f => {
           const d = festDate(f);
           const dateLabel = d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
-          return `<div class="rlog-item" data-fest-id="${escHtml(String(f.id))}" onclick="openRaveEditor(this.dataset.festId)" role="button" tabindex="0">
+          return `<div class="rlog-item" data-fest-id="${escHtml(String(f.id))}" onclick="openRaveFocus(this.dataset.festId)" role="button" tabindex="0">
             <span class="rlog-item-dot" style="background:${festColor(f)};"></span>
             <div class="rlog-item-main">
               <div class="rlog-item-name">${escHtml(f.name)}</div>
@@ -26881,7 +27011,7 @@ async function doProfilePasswordChange() {
           const d = festDate(f);
           const days = Math.ceil((d - TODAY) / 86400000);
           const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-          return `<div class="rlog-item" data-fest-id="${escHtml(String(f.id))}" onclick="openRaveEditor(this.dataset.festId)" role="button" tabindex="0">
+          return `<div class="rlog-item" data-fest-id="${escHtml(String(f.id))}" onclick="openRaveFocus(this.dataset.festId)" role="button" tabindex="0">
             <span class="rlog-item-dot" style="background:${festColor(f)};"></span>
             <div class="rlog-item-main">
               <div class="rlog-item-name">${escHtml(f.name)}</div>
