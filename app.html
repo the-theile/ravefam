@@ -8169,7 +8169,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.17.1';
+  const APP_VERSION = '1.18.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -19646,32 +19646,38 @@ async function doProfilePasswordChange() {
     return venues.find(v => String(v.id) === String(id)) || null;
   }
 
-  async function dbAddVenue({ name, description = '', websiteUrl = '', instagram = '', location = '' }) {
+  async function dbAddVenue({ name, description = '', websiteUrl = '', instagram = '', location = '', lat = null, lng = null }) {
     if (!currentUser) return null;
     const trimmedName = (name || '').trim().slice(0, 80);
     if (!trimmedName) { showToast('⚠️ Venue name is required'); return null; }
+    const trimmedLocation = location ? location.trim().slice(0, 100) : null;
     const { data, error } = await sb.from('venues').insert({
       created_by: currentUser.id,
       name: trimmedName,
       description: description ? description.trim().slice(0, 600) : null,
       website_url: websiteUrl ? websiteUrl.trim() : null,
       instagram: instagram ? instagram.trim() : null,
-      location: location ? location.trim().slice(0, 100) : null
+      location: trimmedLocation,
+      lat: trimmedLocation ? lat : null,
+      lng: trimmedLocation ? lng : null
     }).select().single();
     if (error) { console.error('venue insert error', error); showToast('⚠️ Could not add venue — try again'); return null; }
     venues.unshift(data);
     return data;
   }
 
-  async function dbUpdateVenue(venueId, { name, description, websiteUrl, instagram, location }) {
+  async function dbUpdateVenue(venueId, { name, description, websiteUrl, instagram, location, lat = null, lng = null }) {
     const venue = venues.find(v => v.id === venueId);
     if (!venue || !currentUser || (venue.created_by !== currentUser.id && !isModerator())) return null;
+    const trimmedLocation = location ? location.trim().slice(0, 100) : null;
     const { data, error } = await sb.from('venues').update({
       name: name.trim().slice(0, 80),
       description: description ? description.trim().slice(0, 600) : null,
       website_url: websiteUrl ? websiteUrl.trim() : null,
       instagram: instagram ? instagram.trim() : null,
-      location: location ? location.trim().slice(0, 100) : null
+      location: trimmedLocation,
+      lat: trimmedLocation ? lat : null,
+      lng: trimmedLocation ? lng : null
     }).eq('id', venueId).select().single();
     if (error) { console.error('venue update error', error); showToast('⚠️ Could not update venue — try again'); return null; }
     const idx = venues.findIndex(v => v.id === venueId);
@@ -19934,7 +19940,15 @@ async function doProfilePasswordChange() {
       </div>
       <div class="form-group">
         <label class="form-label">Location</label>
-        <input class="form-input" id="vn-submit-location" type="text" maxlength="100" placeholder="e.g. Manchester, UK">
+        <div class="loc-autocomplete-wrap">
+          <input class="form-input" id="vn-submit-location" type="text" maxlength="100" placeholder="e.g. Manchester, UK" autocomplete="off"
+            oninput="venueSubmitLocInput(this.value)"
+            onkeydown="venueSubmitLocKeydown(event)"
+            onblur="setTimeout(closeVenueLocDropdown,200)">
+          <input type="hidden" id="vn-submit-lat">
+          <input type="hidden" id="vn-submit-lng">
+          <div class="loc-dropdown" id="vn-submit-loc-dropdown"></div>
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">Description</label>
@@ -19975,8 +19989,12 @@ async function doProfilePasswordChange() {
     const description = document.getElementById('vn-submit-desc').value;
     const instagram = document.getElementById('vn-submit-instagram').value.trim();
     const location = document.getElementById('vn-submit-location').value.trim();
+    const latRaw = document.getElementById('vn-submit-lat').value;
+    const lngRaw = document.getElementById('vn-submit-lng').value;
+    const lat = latRaw ? parseFloat(latRaw) : null;
+    const lng = lngRaw ? parseFloat(lngRaw) : null;
 
-    const venue = await dbAddVenue({ name, description, websiteUrl, instagram, location });
+    const venue = await dbAddVenue({ name, description, websiteUrl, instagram, location, lat, lng });
     if (!venue) return;
 
     const file = document.getElementById('vn-submit-photo').files[0];
@@ -20018,7 +20036,15 @@ async function doProfilePasswordChange() {
       </div>
       <div class="form-group">
         <label class="form-label">Location</label>
-        <input class="form-input" id="vn-edit-location" type="text" maxlength="100" value="${escHtml(venue.location || '')}">
+        <div class="loc-autocomplete-wrap">
+          <input class="form-input" id="vn-edit-location" type="text" maxlength="100" value="${escHtml(venue.location || '')}" autocomplete="off"
+            oninput="venueEditLocInput(this.value)"
+            onkeydown="venueEditLocKeydown(event)"
+            onblur="setTimeout(closeVenueLocDropdown,200)">
+          <input type="hidden" id="vn-edit-lat" value="${venue.lat ?? ''}">
+          <input type="hidden" id="vn-edit-lng" value="${venue.lng ?? ''}">
+          <div class="loc-dropdown" id="vn-edit-loc-dropdown"></div>
+        </div>
         <div class="field-help">Raves linked to this venue mirror this address automatically.</div>
       </div>
       <div class="form-group">
@@ -20067,8 +20093,12 @@ async function doProfilePasswordChange() {
     const description = document.getElementById('vn-edit-desc').value;
     const instagram = document.getElementById('vn-edit-instagram').value.trim();
     const location = document.getElementById('vn-edit-location').value.trim();
+    const latRaw = document.getElementById('vn-edit-lat').value;
+    const lngRaw = document.getElementById('vn-edit-lng').value;
+    const lat = latRaw ? parseFloat(latRaw) : null;
+    const lng = lngRaw ? parseFloat(lngRaw) : null;
 
-    const venue = await dbUpdateVenue(venueId, { name, description, websiteUrl, instagram, location });
+    const venue = await dbUpdateVenue(venueId, { name, description, websiteUrl, instagram, location, lat, lng });
     if (!venue) return;
 
     const file = document.getElementById('vn-edit-photo').files[0];
@@ -24843,6 +24873,114 @@ async function doProfilePasswordChange() {
     items.forEach((el, i) => el.classList.toggle('loc-active', i === _locIdx));
     items[_locIdx]?.scrollIntoView({ block: 'nearest' });
   }
+
+  // ===== Venue location autocomplete (Nominatim / OpenStreetMap) =====
+  // Separate autocomplete instance from the rave-editor's locSearch/pickLoc above and the
+  // nearby-filter's userLocSearch (app.html ~24298) — same reasoning given there: independent
+  // per-surface state so a debounced lookup from one field can't land in another field's
+  // dropdown. Shared between the Add Venue panel and the Edit Venue modal (never interactive
+  // at the same time) by passing the target field ids through.
+  let _venueLocTimer = null;
+  let _venueLocIdx = -1;
+  let _venueLocItems = [];
+  const VENUE_SUBMIT_LOC_IDS = { input: 'vn-submit-location', lat: 'vn-submit-lat', lng: 'vn-submit-lng', dropdown: 'vn-submit-loc-dropdown' };
+  const VENUE_EDIT_LOC_IDS = { input: 'vn-edit-location', lat: 'vn-edit-lat', lng: 'vn-edit-lng', dropdown: 'vn-edit-loc-dropdown' };
+  let _venueLocActiveIds = VENUE_SUBMIT_LOC_IDS;
+
+  function venueLocSearchDebounce(q, ids) {
+    _venueLocActiveIds = ids;
+    clearTimeout(_venueLocTimer);
+    _venueLocIdx = -1;
+    if (q.length < 2) { closeVenueLocDropdown(); return; }
+    _venueLocTimer = setTimeout(() => venueLocSearch(q), 320);
+  }
+
+  async function venueLocSearch(q) {
+    const ids = _venueLocActiveIds;
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&addressdetails=1&limit=8&featuretype=city&accept-language=en`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const dropdown = document.getElementById(ids.dropdown);
+      if (!dropdown) return;
+
+      const seen = new Set();
+      const items = [];
+      for (const d of data) {
+        const a = d.address || {};
+        const city    = a.city || a.town || a.village || a.municipality || d.display_name.split(',')[0].trim();
+        const state   = a.state || a.region || '';
+        const country = a.country || '';
+        const label   = [city, state, country].filter(Boolean).join(', ');
+        if (!seen.has(label)) { seen.add(label); items.push({ label, lat: parseFloat(d.lat), lng: parseFloat(d.lon) }); }
+        if (items.length >= 6) break;
+      }
+
+      if (items.length === 0) { closeVenueLocDropdown(); return; }
+      _venueLocItems = items;
+      dropdown.style.display = 'block';
+      dropdown.innerHTML = items.map((item, i) =>
+        `<div class="loc-item" data-idx="${i}" onmousedown="pickVenueLoc(${i})">${escHtml(item.label)}</div>`
+      ).join('');
+      _venueLocIdx = -1;
+    } catch(e) { closeVenueLocDropdown(); }
+  }
+
+  function pickVenueLoc(idx) {
+    const ids = _venueLocActiveIds;
+    const item = _venueLocItems[idx];
+    if (!item) return;
+    const inp = document.getElementById(ids.input);
+    if (inp) inp.value = item.label;
+    const latInp = document.getElementById(ids.lat);
+    const lngInp = document.getElementById(ids.lng);
+    if (latInp) latInp.value = item.lat;
+    if (lngInp) lngInp.value = item.lng;
+    closeVenueLocDropdown();
+  }
+
+  function clearVenueLocCoords(ids) {
+    _venueLocActiveIds = ids;
+    const latInp = document.getElementById(ids.lat);
+    const lngInp = document.getElementById(ids.lng);
+    if (latInp) latInp.value = '';
+    if (lngInp) lngInp.value = '';
+  }
+
+  function closeVenueLocDropdown() {
+    const d = document.getElementById(_venueLocActiveIds.dropdown);
+    if (d) d.style.display = 'none';
+    _venueLocIdx = -1;
+  }
+
+  function venueLocKeydown(e, ids) {
+    _venueLocActiveIds = ids;
+    const dropdown = document.getElementById(ids.dropdown);
+    if (!dropdown || dropdown.style.display === 'none') return;
+    const items = dropdown.querySelectorAll('.loc-item');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      _venueLocIdx = Math.min(_venueLocIdx + 1, items.length - 1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      _venueLocIdx = Math.max(_venueLocIdx - 1, 0);
+    } else if (e.key === 'Enter' && _venueLocIdx >= 0) {
+      e.preventDefault();
+      items[_venueLocIdx]?.dispatchEvent(new MouseEvent('mousedown'));
+      return;
+    } else if (e.key === 'Escape') {
+      closeVenueLocDropdown(); return;
+    } else { return; }
+    items.forEach((el, i) => el.classList.toggle('loc-active', i === _venueLocIdx));
+    items[_venueLocIdx]?.scrollIntoView({ block: 'nearest' });
+  }
+
+  // Thin per-field wrappers so inline on* attributes only ever call a plain
+  // function name, same convention as every other handler in the markup.
+  function venueSubmitLocInput(q) { venueLocSearchDebounce(q, VENUE_SUBMIT_LOC_IDS); clearVenueLocCoords(VENUE_SUBMIT_LOC_IDS); }
+  function venueSubmitLocKeydown(e) { venueLocKeydown(e, VENUE_SUBMIT_LOC_IDS); }
+  function venueEditLocInput(q) { venueLocSearchDebounce(q, VENUE_EDIT_LOC_IDS); clearVenueLocCoords(VENUE_EDIT_LOC_IDS); }
+  function venueEditLocKeydown(e) { venueLocKeydown(e, VENUE_EDIT_LOC_IDS); }
 
   // ===== Rave editor (create / edit / delete a catalog item) =====
   let editingFestivalId = null;
