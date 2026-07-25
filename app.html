@@ -6287,6 +6287,55 @@
   .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #14141f; color: var(--text); }
   .leaflet-popup-content { font-family: 'Outfit', sans-serif; font-size: 0.78rem; }
 
+  /* ===== Raves on Your Radar — Radar Map ===== */
+  .radarmap-section-title {
+    font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: 0.82rem;
+    letter-spacing: 0.6px; color: var(--text); margin: 22px 0 12px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .radarmap { height: 320px; }
+  .radar-marker {
+    transform-box: fill-box; transform-origin: center;
+    transition: filter 0.15s ease-out;
+    animation: radarMarkerPulse 2.6s ease-in-out infinite;
+  }
+  .radar-marker-next { animation: radarMarkerPulseNext 1.7s ease-in-out infinite; }
+  @keyframes radarMarkerPulse { 0%,100% { opacity: 0.78; transform: scale(1); } 50% { opacity: 1; transform: scale(1.1); } }
+  @keyframes radarMarkerPulseNext { 0%,100% { opacity: 0.88; transform: scale(1); } 50% { opacity: 1; transform: scale(1.26); } }
+  .radar-marker-label {
+    background: none; border: none; box-shadow: none; padding: 0;
+    font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: 0.68rem;
+    color: #fff; text-shadow: 0 0 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.6);
+    pointer-events: none;
+  }
+  .radar-marker-label::before { display: none; }
+  .radar-sweep-canvas { position: absolute; inset: 0; z-index: 620; pointer-events: none; }
+  .radarmap-empty { position: relative; height: 100%; overflow: hidden; }
+  .radar-empty-avatar {
+    position: absolute; width: 34px; height: 34px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: 0.7rem; color: #fff;
+    box-shadow: 0 0 14px rgba(0,245,255,0.55); border: 2px solid rgba(255,255,255,0.85);
+    z-index: 610; margin: -17px 0 0 -17px;
+    animation: radarEmptyDrift 14s ease-in-out infinite;
+  }
+  /* left/top (not transform) so the drift is relative to the map container, not the avatar's own tiny box */
+  @keyframes radarEmptyDrift {
+    0%   { left: 20%; top: 60%; }
+    20%  { left: 55%; top: 30%; }
+    40%  { left: 75%; top: 68%; }
+    60%  { left: 40%; top: 78%; }
+    80%  { left: 15%; top: 40%; }
+    100% { left: 20%; top: 60%; }
+  }
+  .radarmap-empty-msg {
+    position: absolute; left: 50%; top: 14px; transform: translateX(-50%);
+    background: rgba(14,14,22,0.85); border: 1px solid rgba(0,245,255,0.3);
+    border-radius: 100px; padding: 7px 14px; z-index: 615;
+    font-size: 0.72rem; color: var(--text); white-space: nowrap; max-width: 90%;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+
   .stats-locked {
     position: relative;
     background: var(--surface);
@@ -8239,7 +8288,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.22.1';
+  const APP_VERSION = '1.23.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -28431,7 +28480,348 @@ async function doProfilePasswordChange() {
         <div class="section-title">Raves on Your Radar 📡</div>
       </div>
       ${body}
+      <div class="radarmap-section-title">🛰️ Radar Map</div>
+      <div id="ravesradar-map" class="citymap radarmap"><div class="citymap-loading">📡 Locating your raves…</div></div>
     `;
+
+    watchRadarPageLeave();
+    renderRavesRadarMap(upcoming);
+  }
+
+  // ===== Radar Map (Raves on Your Radar) =====
+  // Mirrors the Cities Hit map's dark CARTO/Leaflet setup, plus a canvas radar-sweep
+  // overlay. All mutable state lives in these module vars so cleanupRadarMap() can
+  // tear everything down (map, rAFs, observers) in one place when the page is left.
+  let radarMapInstance = null;
+  let radarRafId = null;
+  let radarPathRafId = null;
+  let radarResizeObserver = null;
+  let radarLeaveObserver = null;
+  let radarCanvasEl = null;
+
+  function cleanupRadarMap() {
+    if (radarRafId != null) { cancelAnimationFrame(radarRafId); radarRafId = null; }
+    if (radarPathRafId != null) { cancelAnimationFrame(radarPathRafId); radarPathRafId = null; }
+    if (radarResizeObserver) { radarResizeObserver.disconnect(); radarResizeObserver = null; }
+    if (radarCanvasEl) { radarCanvasEl.remove(); radarCanvasEl = null; }
+    if (radarMapInstance) { radarMapInstance.remove(); radarMapInstance = null; }
+  }
+
+  // Watches #page-raves-radar for its 'active' class dropping off (back button, bottom
+  // nav, browser back — any of the many page-switch call sites) and tears the map down
+  // then, regardless of which path was used to leave.
+  function watchRadarPageLeave() {
+    const page = document.getElementById('page-raves-radar');
+    if (!page) return;
+    if (radarLeaveObserver) radarLeaveObserver.disconnect();
+    radarLeaveObserver = new MutationObserver(() => {
+      if (!page.classList.contains('active')) {
+        cleanupRadarMap();
+        radarLeaveObserver.disconnect();
+        radarLeaveObserver = null;
+      }
+    });
+    radarLeaveObserver.observe(page, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  async function renderRavesRadarMap(upcoming) {
+    cleanupRadarMap();
+    const mapEl = document.getElementById('ravesradar-map');
+    if (!mapEl) return;
+
+    if (!upcoming.length) {
+      renderRadarMapEmptyState(mapEl);
+      return;
+    }
+
+    const cache = loadGeocodeCache();
+    const points = [];
+    for (const f of upcoming) {
+      if (!document.getElementById('page-raves-radar').classList.contains('active')) return;
+      let coords = festivalCoords(f);
+      if (!coords) {
+        const src = festivalLocationSource(f);
+        if (!src.location) continue;
+        const key = festGeocodeCacheKey(f);
+        coords = cache[key];
+        if (coords === undefined) {
+          coords = await geocodeCity(src.location);
+          cache[key] = coords;
+          saveGeocodeCache(cache);
+          // Nominatim's usage policy caps public requests at ~1/sec.
+          await new Promise(r => setTimeout(r, 1100));
+        }
+      }
+      if (coords) points.push({ fest: f, lat: coords.lat, lng: coords.lng, color: festColor(f) });
+    }
+
+    if (!document.getElementById('page-raves-radar').classList.contains('active')) return;
+    if (!points.length || typeof L === 'undefined') {
+      mapEl.innerHTML = `<div class="citymap-loading">Couldn't place any raves on the map right now — see the list above.</div>`;
+      return;
+    }
+
+    buildRadarMap(mapEl, points);
+  }
+
+  function renderRadarMapEmptyState(mapEl) {
+    mapEl.innerHTML = '';
+    if (typeof L === 'undefined') {
+      mapEl.innerHTML = `<div class="citymap-loading">No raves on the radar yet… time to find the next one 👀</div>`;
+      return;
+    }
+    // Florida Gulf Coast / Tampa Bay — a friendly default center while nothing's on the radar.
+    const map = L.map(mapEl, { scrollWheelZoom: false, zoomControl: true }).setView([27.9506, -82.4572], 9);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      maxZoom: 19
+    }).addTo(map);
+    radarMapInstance = map;
+
+    const me = squad.find(r => r.isYou);
+    const overlay = document.createElement('div');
+    overlay.className = 'radarmap-empty';
+    overlay.innerHTML = `
+      ${raverAvatarHTML(me?.avatarUrl, me?.gradient || 'linear-gradient(135deg,#FF2D78,#00F5FF)', me?.name || '?', 'radar-empty-avatar', '')}
+      <div class="radarmap-empty-msg">No raves on the radar yet… time to find the next one 👀</div>
+    `;
+    mapEl.appendChild(overlay);
+  }
+
+  function buildRadarMap(mapEl, points) {
+    mapEl.innerHTML = '';
+    const map = L.map(mapEl, { scrollWheelZoom: false, zoomControl: true }).setView([points[0].lat, points[0].lng], 4);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      maxZoom: 19
+    }).addTo(map);
+    radarMapInstance = map;
+
+    const markerEntries = points.map((p, i) => {
+      const isNext = i === 0;
+      const radius = isNext ? 14 : 11;
+      const marker = L.circleMarker([p.lat, p.lng], {
+        radius,
+        color: p.color,
+        weight: 2,
+        fillColor: p.color,
+        fillOpacity: 0.55,
+        className: 'radar-marker' + (isNext ? ' radar-marker-next' : '')
+      }).addTo(map);
+
+      const d = festDate(p.fest);
+      const days = Math.ceil((d - TODAY) / 86400000);
+      marker.bindPopup(`<strong>${escHtml(p.fest.name)}</strong><br>in ${days} day${days !== 1 ? 's' : ''}`);
+      marker.bindTooltip(String(i + 1), { permanent: true, direction: 'center', className: 'radar-marker-label', interactive: false });
+
+      const el = marker.getElement();
+      if (el) el.style.filter = `drop-shadow(0 0 ${isNext ? 10 : 7}px ${p.color})`;
+
+      return { marker, el, point: p, isNext };
+    });
+
+    const bounds = points.map(p => [p.lat, p.lng]);
+    if (bounds.length > 1) map.fitBounds(bounds, { padding: [36, 36] });
+
+    drawRadarPath(map, points);
+    startRadarSweepCanvas(map, markerEntries);
+  }
+
+  function lerpColor(a, b, t) {
+    const pa = parseInt(a.replace('#', ''), 16), pb = parseInt(b.replace('#', ''), 16);
+    const ar = (pa >> 16) & 255, ag = (pa >> 8) & 255, ab = pa & 255;
+    const br = (pb >> 16) & 255, bg = (pb >> 8) & 255, bb = pb & 255;
+    const r = Math.round(ar + (br - ar) * t), g = Math.round(ag + (bg - ag) * t), b2 = Math.round(ab + (bb - ab) * t);
+    return `#${((1 << 24) + (r << 16) + (g << 8) + b2).toString(16).slice(1)}`;
+  }
+
+  // Connecting polyline in chronological order, color-gradiented between each rave's
+  // radar-dot color by chopping every leg into small interpolated segments (Leaflet has
+  // no native per-vertex gradient stroke). Segments reveal progressively for the "draw-on".
+  function drawRadarPath(map, points) {
+    if (points.length < 2) return;
+    const SEGS = 18;
+    const segments = [];
+    for (let i = 0; i < points.length - 1; i++) {
+      const a = points[i], b = points[i + 1];
+      for (let s = 0; s < SEGS; s++) {
+        const t0 = s / SEGS, t1 = (s + 1) / SEGS;
+        const latlngs = [
+          [a.lat + (b.lat - a.lat) * t0, a.lng + (b.lng - a.lng) * t0],
+          [a.lat + (b.lat - a.lat) * t1, a.lng + (b.lng - a.lng) * t1]
+        ];
+        segments.push({ latlngs, color: lerpColor(a.color, b.color, (t0 + t1) / 2) });
+      }
+    }
+
+    const group = L.layerGroup().addTo(map);
+    const glow = segments.map(seg => L.polyline(seg.latlngs, { color: seg.color, weight: 9, opacity: 0.22, lineCap: 'round', interactive: false }));
+    const core = segments.map(seg => L.polyline(seg.latlngs, { color: seg.color, weight: 2.5, opacity: 0.95, lineCap: 'round', interactive: false }));
+
+    const DRAW_MS = 1300;
+    const start = performance.now();
+    let revealed = 0;
+    function frame(now) {
+      const raw = Math.min(1, (now - start) / DRAW_MS);
+      const eased = 1 - Math.pow(1 - raw, 3); // ease-out, similar feel to the app's cubic-bezier(0.32,0.72,0,1) transitions
+      const target = Math.floor(eased * segments.length);
+      for (; revealed < target; revealed++) { glow[revealed].addTo(group); core[revealed].addTo(group); }
+      if (raw < 1) {
+        radarPathRafId = requestAnimationFrame(frame);
+      } else {
+        for (; revealed < segments.length; revealed++) { glow[revealed].addTo(group); core[revealed].addTo(group); }
+        radarPathRafId = null;
+      }
+    }
+    radarPathRafId = requestAnimationFrame(frame);
+  }
+
+  function normalizeAngle(a) {
+    a = a % (Math.PI * 2);
+    if (a > Math.PI) a -= Math.PI * 2;
+    if (a < -Math.PI) a += Math.PI * 2;
+    return a;
+  }
+
+  // Briefly brightens a marker (sweep beam pass or ring hit), then eases back to its
+  // resting glow. Uses inline style rather than a CSS class since the resting glow color
+  // is per-marker (matches that rave's radar-dot color) and set the same way.
+  function flashRadarMarker(entry, strength) {
+    if (!entry.el) return;
+    const boost = 12 + 8 * strength;
+    entry.el.style.filter = `drop-shadow(0 0 ${boost}px ${entry.point.color}) brightness(${1.4 + 0.3 * strength})`;
+    clearTimeout(entry._hitTimeout);
+    entry._hitTimeout = setTimeout(() => {
+      if (entry.el) entry.el.style.filter = `drop-shadow(0 0 ${entry.isNext ? 10 : 7}px ${entry.point.color})`;
+    }, 220);
+  }
+
+  // Canvas overlay (rotating sweep wedge + expanding pings) layered on top of the Leaflet
+  // panes, pointer-events:none so it never blocks marker taps/popups. Runs a single rAF
+  // loop that also drives the "sweep/ring passes over a marker" brighten effect.
+  function startRadarSweepCanvas(map, markerEntries) {
+    const mapEl = map.getContainer();
+    const canvas = document.createElement('canvas');
+    canvas.className = 'radar-sweep-canvas';
+    mapEl.appendChild(canvas);
+    radarCanvasEl = canvas;
+    const ctx = canvas.getContext('2d');
+
+    function resize() {
+      const rect = mapEl.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.max(1, rect.width * dpr);
+      canvas.height = Math.max(1, rect.height * dpr);
+      canvas.style.width = rect.width + 'px';
+      canvas.style.height = rect.height + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    resize();
+    radarResizeObserver = new ResizeObserver(resize);
+    radarResizeObserver.observe(mapEl);
+
+    const SWEEP_COLOR = '#00F5FF';
+    const INTRO_MS = 3400; // ~1.5-2 rotations before settling
+    const INTRO_SPEED = (Math.PI * 2) / 2100; // rad/ms
+    const BASE_SPEED = (Math.PI * 2) / 9000;
+    const RING_INTERVAL = 1900;
+    const RING_INTRO_INTERVAL = 850;
+    const RING_MAX_AGE = 2600;
+
+    const start = performance.now();
+    let last = start;
+    let angle = 0;
+    let lastRing = start;
+    let rings = [];
+
+    function drawSweep(cx, cy, radius, intensity) {
+      const trail = Math.PI * 0.55;
+      ctx.save();
+      if (ctx.createConicGradient) {
+        const grad = ctx.createConicGradient(angle - trail, cx, cy);
+        grad.addColorStop(0, hexToRgba(SWEEP_COLOR, 0));
+        grad.addColorStop(0.85, hexToRgba(SWEEP_COLOR, 0.06 * intensity));
+        grad.addColorStop(1, hexToRgba(SWEEP_COLOR, 0.32 * intensity));
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, radius, angle - trail, angle);
+        ctx.closePath();
+        ctx.fillStyle = grad;
+        ctx.fill();
+      } else {
+        const steps = 14;
+        for (let i = 0; i < steps; i++) {
+          const a0 = angle - trail + (trail * i / steps);
+          const a1 = angle - trail + (trail * (i + 1) / steps);
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.arc(cx, cy, radius, a0, a1);
+          ctx.closePath();
+          ctx.fillStyle = hexToRgba(SWEEP_COLOR, 0.32 * intensity * (i / steps));
+          ctx.fill();
+        }
+      }
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + radius * Math.cos(angle), cy + radius * Math.sin(angle));
+      ctx.strokeStyle = hexToRgba(SWEEP_COLOR, 0.75 * intensity);
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 12 * intensity;
+      ctx.shadowColor = SWEEP_COLOR;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawRings(cx, cy) {
+      rings.forEach(r => {
+        const alpha = Math.max(0, 0.45 * (1 - r.age / r.maxAge));
+        if (alpha <= 0) return;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r.radius, 0, Math.PI * 2);
+        ctx.strokeStyle = hexToRgba(SWEEP_COLOR, alpha);
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      });
+    }
+
+    function frame(now) {
+      const dt = now - last;
+      last = now;
+      const elapsed = now - start;
+      const intro = elapsed < INTRO_MS;
+      angle += (intro ? INTRO_SPEED : BASE_SPEED) * dt;
+
+      const rect = canvas.getBoundingClientRect();
+      const w = rect.width, h = rect.height;
+      ctx.clearRect(0, 0, w, h);
+      if (w > 0 && h > 0) {
+        const cx = w / 2, cy = h / 2;
+        const radius = Math.hypot(w, h) / 2 + 20;
+        const intensity = intro ? 1.6 : 1;
+
+        drawSweep(cx, cy, radius, intensity);
+
+        if (now - lastRing > (intro ? RING_INTRO_INTERVAL : RING_INTERVAL)) {
+          rings.push({ born: now, age: 0, radius: 0, maxAge: RING_MAX_AGE });
+          lastRing = now;
+        }
+        rings.forEach(r => { r.age = now - r.born; r.radius = (r.age / r.maxAge) * radius; });
+        rings = rings.filter(r => r.age < r.maxAge);
+        drawRings(cx, cy);
+
+        markerEntries.forEach(entry => {
+          const pt = map.latLngToContainerPoint(entry.marker.getLatLng());
+          const dx = pt.x - cx, dy = pt.y - cy;
+          const dist = Math.hypot(dx, dy);
+          const markerAngle = Math.atan2(dy, dx);
+          if (Math.abs(normalizeAngle(angle - markerAngle)) < 0.1) flashRadarMarker(entry, intro ? 1.3 : 1);
+          else if (rings.some(r => Math.abs(r.radius - dist) < 6)) flashRadarMarker(entry, 0.7);
+        });
+      }
+
+      radarRafId = requestAnimationFrame(frame);
+    }
+    radarRafId = requestAnimationFrame(frame);
   }
 
   function openArtistsSeenPage() {
