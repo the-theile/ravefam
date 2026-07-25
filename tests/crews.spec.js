@@ -33,6 +33,36 @@ test.describe('crews', () => {
     expect(status).toBe('locked-in');
   });
 
+  test('opening a freshly-created crew to recruiting works after the temp id resolves', async ({ page }) => {
+    // Regression test: createCrew() renders the detail page immediately with a
+    // client-side temp id, then swaps in the real DB id once the insert
+    // resolves. If the detail page isn't re-rendered on that swap, the "Open
+    // the Crew to Recruiting" button keeps calling setStatus() with the
+    // stale temp id — getCrew() then finds nothing, and the (sole, actual)
+    // Crew Lead gets a misleading "Only the Crew Lead can change the status"
+    // toast.
+    await bootAuthedApp(page);
+
+    await page.evaluate(() => {
+      document.getElementById('crew-name-input').value = 'Our House';
+      createCrew();
+    });
+
+    // Wait for the temp -> real id swap (the async dbSaveCrew().then()) to land.
+    await expect
+      .poll(() => page.evaluate(() => crews.find(c => c.name === 'Our House')?.id))
+      .not.toMatch(/^temp_/);
+
+    // The lead is on the Roster tab — where the status control lives.
+    await page.locator('#page-crew-detail .stats-subtab', { hasText: 'Roster' }).click();
+    await page.locator('#page-crew-detail .btn-status-cta', { hasText: 'Open the Crew to Recruiting' }).click();
+    await page.locator('#status-warn-modal .btn-primary').click();
+
+    await expect(page.locator('#toast')).not.toContainText('Only the Crew Lead');
+    const status = await page.evaluate(() => crews.find(c => c.name === 'Our House')?.status);
+    expect(status).toBe('recruiting');
+  });
+
   test('deleting a crew removes it and its memberships', async ({ page }) => {
     await bootAuthedApp(page);
     await page.evaluate(async () => { await deleteCrew('c1', 'test cleanup'); });

@@ -8220,7 +8220,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.21.1';
+  const APP_VERSION = '1.21.2';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -20933,7 +20933,8 @@ async function doProfilePasswordChange() {
   // Full-view status set (Lead only) — shows confirmation first
   function setStatus(id, status) {
     const crew = getCrew(id);
-    if (!crew || !crewPerms(crew).canChangeStatus) { showToast('🔒 Only the Crew Lead can change the status'); return; }
+    if (!crew) return;
+    if (!crewPerms(crew).canChangeStatus) { showToast('🔒 Only the Crew Lead can change the status'); return; }
     if (crew.status === status) return;
     showStatusWarn(id, status);
   }
@@ -21440,7 +21441,30 @@ async function doProfilePasswordChange() {
           maybeAskMicroFeedback('crew_created', dbId);
           // Keep activeDetailId (and any pending-add reference) in sync so that
           // member lookups on this crew still work after the temp→real ID swap.
-          if (String(activeDetailId) === String(tempId)) activeDetailId = dbId;
+          if (String(activeDetailId) === String(tempId)) {
+            activeDetailId = dbId;
+            // The detail page's buttons (Open to Recruiting, Edit, Delete, etc.)
+            // have the stale temp id baked into their onclick handlers from the
+            // initial render — re-render now so they call through with the real
+            // id. Without this, tapping one of them right after crew creation
+            // looks up the temp id in `crews` (now gone, since newCrew.id was
+            // mutated above), getCrew() returns undefined, and the lead gets a
+            // misleading "Only the Crew Lead can change the status" toast.
+            // renderDetail() always redraws onto the Overview tab, so capture
+            // + restore whichever tab (Roster/Game Plan) the lead is actually
+            // looking at — likely Roster, since that's where the status toggle
+            // lives.
+            const wasRoster = document.getElementById('crew-detail-panel-roster')?.style.display !== 'none';
+            const wasGamePlan = document.getElementById('crew-detail-panel-gameplan')?.style.display !== 'none';
+            renderDetail(dbId);
+            if (wasRoster) {
+              const rosterTabBtn = document.querySelector('#page-crew-detail .stats-subtab:nth-child(2)');
+              if (rosterTabBtn) switchCrewDetailTab('roster', rosterTabBtn);
+            } else if (wasGamePlan) {
+              const gamePlanTabBtn = document.querySelector('#page-crew-detail .stats-subtab[data-tab="gameplan"]');
+              if (gamePlanTabBtn) switchCrewDetailTab('gameplan', gamePlanTabBtn);
+            }
+          }
           if (String(_pendingAddToCrew) === String(tempId)) _pendingAddToCrew = dbId;
           // Save ALL current members (not just 'you') — the user may have added
           // people via the detail modal while the DB save was in-flight.
