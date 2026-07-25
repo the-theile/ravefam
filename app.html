@@ -3785,6 +3785,13 @@
   }
   .avatar-photo-btn-remove { color: rgba(255,45,120,0.7); }
   .avatar-photo-btn-remove:hover { color: var(--neon-pink); background: rgba(255,45,120,0.08); }
+  .avatar-color-badge {
+    position: absolute; right: -2px; bottom: -2px;
+    width: 26px; height: 26px; border-radius: 50%;
+    background: #1a1a1a; border: 2px solid var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.75rem; pointer-events: none;
+  }
 
   /* Crew Totem (photo or icon) */
   .crew-totem-thumb {
@@ -7815,6 +7822,18 @@
   </div>
 </div>
 
+<!-- Raver Avatar Color Picker Modal (unclaimed profiles, creator only) -->
+<div class="modal-overlay" id="raver-color-overlay" onclick="if(event.target===this)closeRaverColorPicker()">
+  <div class="modal" style="max-width:340px;">
+    <div class="modal-title" style="margin-bottom:16px;">Avatar Color</div>
+    <div class="color-swatches" id="raver-color-swatches"></div>
+    <div class="modal-actions" style="margin-top:20px;">
+      <button class="btn btn-ghost" onclick="closeRaverColorPicker()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveRaverColor()">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- Change Password Modal -->
 <div class="modal-overlay" id="change-pw-overlay" onclick="if(event.target===this)closeChangePwModal()">
   <div class="modal" style="max-width:360px;">
@@ -8220,7 +8239,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.21.2';
+  const APP_VERSION = '1.22.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -11589,6 +11608,49 @@ async function doProfilePasswordChange() {
         showToast('Photo removed');
       }
     });
+  }
+
+  // ── Raver Avatar Color (unclaimed profiles, creator-only) ───────────────────
+
+  let _colorPickerRaverId = null;
+
+  function openRaverColorPicker(raverId) {
+    const r = getRaver(raverId);
+    if (!r) return;
+    _colorPickerRaverId = raverId;
+    const currentHex = extractFirstColor(r.gradient);
+    document.getElementById('raver-color-swatches').innerHTML = EDIT_SWATCH_COLORS.map(c =>
+      `<div class="color-swatch raver-color-swatch${c.toLowerCase() === (currentHex||'').toLowerCase() ? ' selected' : ''}" style="background:${c}" onclick="selectRaverColorSwatch(this)"></div>`
+    ).join('');
+    document.getElementById('raver-color-overlay').classList.add('open');
+  }
+
+  function closeRaverColorPicker() {
+    document.getElementById('raver-color-overlay').classList.remove('open');
+    _colorPickerRaverId = null;
+  }
+
+  function selectRaverColorSwatch(el) {
+    document.querySelectorAll('#raver-color-swatches .raver-color-swatch').forEach(s => s.classList.remove('selected'));
+    el.classList.add('selected');
+  }
+
+  async function saveRaverColor() {
+    const raverId = _colorPickerRaverId;
+    const r = getRaver(raverId);
+    const sel = document.querySelector('#raver-color-swatches .raver-color-swatch.selected');
+    if (!r || !sel) { closeRaverColorPicker(); return; }
+    const hex = rgbToHex(sel.style.background);
+    const gradient = CREW_GRADIENTS[hex] || `linear-gradient(135deg,${hex},${hex}88)`;
+    r.gradient = gradient;
+    closeRaverColorPicker();
+    renderSquad();
+    openProfile(r.id);
+    if (currentUser) {
+      const { error } = await sb.from('ravers').update({ gradient }).eq('id', String(raverId));
+      if (error) { console.error('raver color update error', error); showToast('⚠️ Could not save color — try again'); return; }
+    }
+    showToast('🎨 Avatar color updated');
   }
 
   // ── Crew Totem (photo or icon) ──────────────────────────────────────────────
@@ -22447,8 +22509,12 @@ async function doProfilePasswordChange() {
       ? `<div class="connect-row">${connectBtns.join('')}</div>`
       : (r.isYou ? '' : r.readOnly ? '' : `<div class="connect-empty">No contact info yet — add it in Edit Profile.</div>`);
 
-    // Profile avatar — show photo if set; upload button for own claimed profile
+    // Profile avatar — show photo if set; upload button for own claimed profile;
+    // color-swatch tap for an unclaimed profile, but only for the raver the
+    // *creator* stubbed in (matches ravers_update RLS: creator rights end at claim time).
     const showAvatarUpload = editMode && r.isYou && !!currentUser;
+    const canEditAvatarColor = editMode && !showAvatarUpload && !perms.isClaimed && !!currentUser
+      && !!(r.createdBy && String(r.createdBy) === String(currentUser.id));
     const avatarBg = r.avatarUrl ? 'transparent' : r.gradient;
     const avatarOverflow = r.avatarUrl ? 'overflow:hidden;padding:0;' : '';
     const avatarContent = r.avatarUrl
@@ -22467,6 +22533,14 @@ async function doProfilePasswordChange() {
              </label>
              ${r.avatarUrl ? `<button class="avatar-photo-btn avatar-photo-btn-remove" data-raver-id="${r.id}" onclick="removeProfilePhoto(this.dataset.raverId)">🗑️ Remove photo</button>` : ''}
            </div>
+         </div>`
+      : canEditAvatarColor
+      ? `<div class="avatar-col">
+           <div class="profile-avatar-ring paused" style="margin-top:0;" title="Tap to change avatar color" data-raver-id="${r.id}" onclick="openRaverColorPicker(this.dataset.raverId)">
+             <div class="profile-avatar" style="background:${avatarBg};${avatarOverflow}">${avatarContent}</div>
+             <div class="avatar-color-badge">🎨</div>
+           </div>
+           <button class="avatar-photo-btn" data-raver-id="${r.id}" onclick="openRaverColorPicker(this.dataset.raverId)">🎨 Change color</button>
          </div>`
       : `<div class="profile-avatar" style="background:${avatarBg};${avatarOverflow}">${avatarContent}</div>`;
 
