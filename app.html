@@ -8288,7 +8288,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.23.0';
+  const APP_VERSION = '1.23.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -13465,6 +13465,27 @@ async function doProfilePasswordChange() {
     await Promise.all(tasks);
   }
 
+  // html2canvas doesn't support CSS object-fit (see raverAvatarHTML's
+  // object-fit:cover <img>) — it just stretches the source image to fill
+  // the element's box, ignoring aspect ratio. That's invisible for square
+  // photos, but profile photos aren't cropped to square on upload (see
+  // doProfilePhotoUpload/compressImageToBlob, which only downscales), so a
+  // portrait/landscape avatar visibly squishes into the round avatar bubble
+  // in the exported PNG even though it displays perfectly fine live (real
+  // browsers honor object-fit). background-size:cover IS respected by
+  // html2canvas — the card's own totem-photo background already relies on
+  // it — so swap each avatar <img> for a background-image on its wrapper
+  // instead of fighting object-fit support.
+  function flattenAvatarImagesForCapture(card) {
+    card.querySelectorAll('.crew-share-avatar img').forEach(img => {
+      const wrap = img.parentElement;
+      wrap.style.backgroundImage = `url('${img.src}')`;
+      wrap.style.backgroundSize = 'cover';
+      wrap.style.backgroundPosition = 'center';
+      img.remove();
+    });
+  }
+
   function setShareButtonState(state) {
     const btn = document.querySelector('.crew-share-actions .wrapped-share-btn');
     if (!btn) return;
@@ -13500,6 +13521,7 @@ async function doProfilePasswordChange() {
       if (token !== _crewShareToken) return; // superseded by a newer render
       await inlineCardImagesAsBlobs(card, 8000);
       if (token !== _crewShareToken) return;
+      flattenAvatarImagesForCapture(card);
       // Generous timeouts are fine now that this runs ahead of the tap
       // instead of blocking it. logging:true surfaces html2canvas's own
       // internal step-by-step console output (image loads, cloning,
