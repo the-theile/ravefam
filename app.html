@@ -8288,7 +8288,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.23.0';
+  const APP_VERSION = '1.23.3';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -13465,6 +13465,27 @@ async function doProfilePasswordChange() {
     await Promise.all(tasks);
   }
 
+  // html2canvas doesn't support CSS object-fit (see raverAvatarHTML's
+  // object-fit:cover <img>) — it just stretches the source image to fill
+  // the element's box, ignoring aspect ratio. That's invisible for square
+  // photos, but profile photos aren't cropped to square on upload (see
+  // doProfilePhotoUpload/compressImageToBlob, which only downscales), so a
+  // portrait/landscape avatar visibly squishes into the round avatar bubble
+  // in the exported PNG even though it displays perfectly fine live (real
+  // browsers honor object-fit). background-size:cover IS respected by
+  // html2canvas — the card's own totem-photo background already relies on
+  // it — so swap each avatar <img> for a background-image on its wrapper
+  // instead of fighting object-fit support.
+  function flattenAvatarImagesForCapture(card) {
+    card.querySelectorAll('.crew-share-avatar img').forEach(img => {
+      const wrap = img.parentElement;
+      wrap.style.backgroundImage = `url('${img.src}')`;
+      wrap.style.backgroundSize = 'cover';
+      wrap.style.backgroundPosition = 'center';
+      img.remove();
+    });
+  }
+
   function setShareButtonState(state) {
     const btn = document.querySelector('.crew-share-actions .wrapped-share-btn');
     if (!btn) return;
@@ -13500,6 +13521,7 @@ async function doProfilePasswordChange() {
       if (token !== _crewShareToken) return; // superseded by a newer render
       await inlineCardImagesAsBlobs(card, 8000);
       if (token !== _crewShareToken) return;
+      flattenAvatarImagesForCapture(card);
       // Generous timeouts are fine now that this runs ahead of the tap
       // instead of blocking it. logging:true surfaces html2canvas's own
       // internal step-by-step console output (image loads, cloning,
@@ -21902,7 +21924,16 @@ async function doProfilePasswordChange() {
     const gradient = crewData.gradient || `linear-gradient(135deg,${color},${color})`;
     const name     = crewData.name || 'the crew';
     const count    = crewData.member_count ?? 0;
-    const you      = squad.find(r => r.isYou);
+    // Excludes temp_ ids — an onboarding raver still mid-save (optimistic
+    // client-side isYou:true before the DB insert resolves) isn't a real
+    // profile yet. Treating it as one here shows this section instead of
+    // the name/handle inputs, then confirmJoinCrew sends p_name:null —
+    // join_crew_via_invite can't find a matching is_you row server-side
+    // (it was never actually persisted) and bounces back "name_required"
+    // even though a profile section was shown. Mirrors the same guard used
+    // everywhere else "your own raver" is resolved for a server call (see
+    // commitClaim et al).
+    const you      = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
     const profileSection = you
       ? `<div style="display:flex;align-items:center;gap:12px;background:rgba(255,255,255,0.05);border-radius:12px;padding:12px 14px;margin-bottom:4px;">
            ${raverAvatarHTML(you.avatarUrl, you.gradient, you.name, 'avatar', 'margin:0;flex-shrink:0;')}
@@ -21946,7 +21977,7 @@ async function doProfilePasswordChange() {
     if (!navigator.onLine) { showToast('📡 No connection — try again when you\'re back online'); return; }
     const btn = document.getElementById('crew-join-confirm-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Joining…'; }
-    const you = squad.find(r => r.isYou);
+    const you = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
     // Guard: already a member of this crew (client-side check before hitting the RPC)
     if (you) {
       const alreadyIn = crews.some(c => (c.squadIds || []).some(id => String(id) === String(you.id)) && c.invite_token === token);
@@ -28479,9 +28510,9 @@ async function doProfilePasswordChange() {
       <div class="section-header" style="margin-bottom:14px;">
         <div class="section-title">Raves on Your Radar 📡</div>
       </div>
-      ${body}
       <div class="radarmap-section-title">🛰️ Radar Map</div>
       <div id="ravesradar-map" class="citymap radarmap"><div class="citymap-loading">📡 Locating your raves…</div></div>
+      ${body}
     `;
 
     watchRadarPageLeave();
@@ -28588,8 +28619,42 @@ async function doProfilePasswordChange() {
     mapEl.appendChild(overlay);
   }
 
-  function buildRadarMap(mapEl, points) {
+  // Fans out raves that would otherwise land on (or right next to) the same city-level
+  // geocode — several raves in Orlando all resolve to the same lat/lng, so their circle
+  // markers stack exactly on top of each other and their number labels become unreadable.
+  // Degree-based (not pixel-based) so it stays correct regardless of zoom: this map only
+  // ever sits at a regional/state zoom, never street level, so a fixed ~5km fan-out reads
+  // clearly without ever creeping into a genuinely distinct city's marker.
+  function declutterRadarPoints(points) {
+    const THRESHOLD = 0.05; // ~5.5km — anything closer than this is treated as "same city"
+    const OFFSET = 0.045;   // ~5km fan-out radius
+    const out = points.map(p => ({ ...p }));
+    const grouped = new Array(points.length).fill(false);
+    for (let i = 0; i < points.length; i++) {
+      if (grouped[i]) continue;
+      const group = [i];
+      for (let j = i + 1; j < points.length; j++) {
+        if (grouped[j]) continue;
+        const dLat = points[i].lat - points[j].lat, dLng = points[i].lng - points[j].lng;
+        if (Math.hypot(dLat, dLng) < THRESHOLD) { group.push(j); grouped[j] = true; }
+      }
+      grouped[i] = true;
+      if (group.length < 2) continue;
+      const cLat = group.reduce((s, k) => s + points[k].lat, 0) / group.length;
+      const cLng = group.reduce((s, k) => s + points[k].lng, 0) / group.length;
+      const lngScale = Math.cos(cLat * Math.PI / 180) || 1; // degrees-longitude shrink at this latitude
+      group.forEach((k, idx) => {
+        const angle = (Math.PI * 2 * idx) / group.length - Math.PI / 2;
+        out[k].lat = cLat + OFFSET * Math.sin(angle);
+        out[k].lng = cLng + (OFFSET * Math.cos(angle)) / lngScale;
+      });
+    }
+    return out;
+  }
+
+  function buildRadarMap(mapEl, rawPoints) {
     mapEl.innerHTML = '';
+    const points = declutterRadarPoints(rawPoints);
     const map = L.map(mapEl, { scrollWheelZoom: false, zoomControl: true }).setView([points[0].lat, points[0].lng], 4);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
@@ -28658,7 +28723,7 @@ async function doProfilePasswordChange() {
     const glow = segments.map(seg => L.polyline(seg.latlngs, { color: seg.color, weight: 9, opacity: 0.22, lineCap: 'round', interactive: false }));
     const core = segments.map(seg => L.polyline(seg.latlngs, { color: seg.color, weight: 2.5, opacity: 0.95, lineCap: 'round', interactive: false }));
 
-    const DRAW_MS = 1300;
+    const DRAW_MS = 2400;
     const start = performance.now();
     let revealed = 0;
     function frame(now) {
