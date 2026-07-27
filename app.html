@@ -8288,7 +8288,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.23.1';
+  const APP_VERSION = '1.23.2';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -21924,7 +21924,16 @@ async function doProfilePasswordChange() {
     const gradient = crewData.gradient || `linear-gradient(135deg,${color},${color})`;
     const name     = crewData.name || 'the crew';
     const count    = crewData.member_count ?? 0;
-    const you      = squad.find(r => r.isYou);
+    // Excludes temp_ ids — an onboarding raver still mid-save (optimistic
+    // client-side isYou:true before the DB insert resolves) isn't a real
+    // profile yet. Treating it as one here shows this section instead of
+    // the name/handle inputs, then confirmJoinCrew sends p_name:null —
+    // join_crew_via_invite can't find a matching is_you row server-side
+    // (it was never actually persisted) and bounces back "name_required"
+    // even though a profile section was shown. Mirrors the same guard used
+    // everywhere else "your own raver" is resolved for a server call (see
+    // commitClaim et al).
+    const you      = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
     const profileSection = you
       ? `<div style="display:flex;align-items:center;gap:12px;background:rgba(255,255,255,0.05);border-radius:12px;padding:12px 14px;margin-bottom:4px;">
            ${raverAvatarHTML(you.avatarUrl, you.gradient, you.name, 'avatar', 'margin:0;flex-shrink:0;')}
@@ -21968,7 +21977,7 @@ async function doProfilePasswordChange() {
     if (!navigator.onLine) { showToast('📡 No connection — try again when you\'re back online'); return; }
     const btn = document.getElementById('crew-join-confirm-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Joining…'; }
-    const you = squad.find(r => r.isYou);
+    const you = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
     // Guard: already a member of this crew (client-side check before hitting the RPC)
     if (you) {
       const alreadyIn = crews.some(c => (c.squadIds || []).some(id => String(id) === String(you.id)) && c.invite_token === token);
