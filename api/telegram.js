@@ -1,6 +1,7 @@
 'use strict';
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const ADMIN_CHAT_ID = process.env.TELEGRAM_ADMIN_CHAT_ID;
 
 const PLUR_REPLY = `Got it raver 💜
 Thanks for helping make RaveFAM better. The crew will look at this soon.
@@ -39,6 +40,19 @@ module.exports = async (req, res) => {
         reply_to_message_id: messageId,
       }),
     });
+
+    // Forward the original message (text + any screenshots) to the admin
+    if (ADMIN_CHAT_ID) {
+      await fetch(`https://api.telegram.org/bot${TOKEN}/forwardMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: ADMIN_CHAT_ID,
+          from_chat_id: chatId,
+          message_id: messageId,
+        }),
+      });
+    }
 
     return res.status(200).send('ok');
   } catch (err) {
