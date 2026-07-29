@@ -113,7 +113,7 @@ test.describe('huddle unread entries in the notification drawer', () => {
     expect(read).toBeTruthy();
   });
 
-  test('a festival-room drawer entry routes through that rave\'s Game Plan and clears the badge', async ({ page }) => {
+  test('a festival-room drawer entry routes through that rave\'s Rave Plan and clears the badge', async ({ page }) => {
     const data = seedWithHuddle();
     data.huddle_rooms = [
       { id: 'room-fest', crew_id: 'c1', room_key: 'festival:f1', kind: 'festival', name: 'Tomorrowland Huddle', festival_id: 'f1', created_by: TEST_UID, created_at: '2024-01-01T00:00:00Z' },
@@ -132,7 +132,7 @@ test.describe('huddle unread entries in the notification drawer', () => {
     await item.click();
     await page.waitForTimeout(400);
 
-    await expect(page.locator('#page-crew-detail .stats-subtab[data-tab="gameplan"]')).toHaveClass(/active/);
+    await expect(page.locator('.crew-feature-tile[data-feature="raveplan"]')).toHaveClass(/active/);
     await expect(page.locator('.huddle-cta-btn[data-crew-id="c1"]')).toHaveCount(0);
 
     const read = await page.evaluate(() =>

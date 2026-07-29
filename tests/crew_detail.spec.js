@@ -115,27 +115,27 @@ test.describe('crew detail · jams', () => {
 
 // Default seedData() already has r-you and r-sam (both members of c1) RSVP'd
 // to f1 — that's exactly the shared-attendance rule deriveCrewFestivalRooms
-// uses, so c1 qualifies for a Game Plan on f1 without any extra seeding.
+// uses, so c1 qualifies for a Rave Plan on f1 without any extra seeding.
 test.describe('crew detail · game plan', () => {
   async function openGamePlan(page) {
     await page.evaluate(async () => { await openDetail('c1', { tab: 'gameplan' }); });
-    await expect(page.locator('#crew-detail-panel-gameplan')).toBeVisible();
+    await expect(page.locator('#crew-feature-panel-raveplan')).toBeVisible();
   }
 
-  test('the Game Plan tab is offered for a shared upcoming rave', async ({ page }) => {
+  test('the Rave Plan tile is offered for a shared upcoming rave', async ({ page }) => {
     await bootAuthedApp(page);
     await openC1(page);
-    await expect(page.locator('#page-crew-detail .stats-subtab[data-tab="gameplan"]')).toContainText('Game Plan');
+    await expect(page.locator('.crew-feature-tile[data-feature="raveplan"]')).toContainText('Rave Plan');
   });
 
-  test('the Game Plan tab is NOT offered when no rave has shared attendance', async ({ page }) => {
+  test('the Rave Plan tile is NOT offered when no rave has shared attendance', async ({ page }) => {
     // Same deriveCrewFestivalRooms rule the per-rave Huddle room used to gate
     // on — strip r-sam's RSVP so only "you" is going to f1, no overlap.
     const data = seedData();
     data.raver_festivals = data.raver_festivals.filter(rf => rf.raver_id !== 'r-sam');
     await bootAuthedApp(page, { data });
     await openC1(page);
-    await expect(page.locator('#page-crew-detail .stats-subtab[data-tab="gameplan"]')).toHaveCount(0);
+    await expect(page.locator('.crew-feature-tile[data-feature="raveplan"]')).toHaveCount(0);
   });
 
   test('adding a checklist task shows it, persists, and can be toggled done', async ({ page }) => {
