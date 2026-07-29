@@ -557,6 +557,46 @@
     letter-spacing: 1.5px; color: rgba(27,23,32,0.5); margin-top: 5px;
   }
 
+  /* Crew Manifest (Roster tab) — the member list as another page of the
+     same Backstage Pass credential: cream stock, photo corners, a
+     barcode/ID footer. Status/Add Member/Edit/Delete stay in the app's
+     normal dark chrome since those are controls, not printed content. */
+  .crew-manifest {
+    position: relative;
+    margin: 16px 0 24px;
+    background: linear-gradient(160deg, #F4F1E8, #EDEAE2);
+    border-radius: 14px;
+    padding: 16px;
+    color: #1B1720;
+    box-shadow: 0 16px 30px -18px rgba(0,0,0,0.55);
+  }
+  .crew-manifest-corner { position: absolute; width: 14px; height: 14px; border-style: solid; border-color: rgba(20,17,24,0.25); pointer-events: none; }
+  .crew-manifest-corner.tl { top: 10px; left: 10px; border-width: 2px 0 0 2px; }
+  .crew-manifest-corner.br { bottom: 10px; right: 10px; border-width: 0 2px 2px 0; }
+  .crew-manifest-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+  .crew-manifest-eyebrow {
+    font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.7rem;
+    letter-spacing: 2px; text-transform: uppercase; color: #B2381F;
+  }
+  .crew-manifest-count { font-size: 0.68rem; color: #8a7d63; font-weight: 700; }
+  .crew-manifest-barcode {
+    height: 22px; border-radius: 2px; margin-top: 14px; opacity: 0.55;
+    background: repeating-linear-gradient(90deg, #1B1720 0 2px, transparent 2px 4px, #1B1720 4px 7px, transparent 7px 9px, #1B1720 9px 10px, transparent 10px 13px);
+  }
+  .crew-manifest-code {
+    font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; font-size: 0.6rem;
+    letter-spacing: 1.5px; color: rgba(27,23,32,0.5); margin-top: 5px;
+  }
+  .crew-manifest .detail-members { gap: 0; max-height: none; overflow-y: visible; }
+  .crew-manifest .detail-member { background: none; border-radius: 0; padding: 9px 2px; border-bottom: 1px dashed rgba(20,17,24,0.14); }
+  .crew-manifest .detail-members > .detail-member:last-child { border-bottom: none; }
+  .crew-manifest .detail-member-link { border-color: transparent; }
+  .crew-manifest .detail-member-link:hover { background: rgba(20,17,24,0.05); border-color: transparent; }
+  .crew-manifest .detail-member-arrow { color: #c2b8a3; }
+  .crew-manifest .detail-member-link:hover .detail-member-arrow { color: #B2381F; }
+  .crew-manifest .avatar { border: 2px solid #EDEAE2; }
+  .crew-manifest .claim-badge-unclaimed { color: #8a7d63; background: rgba(20,17,24,0.05); border-color: rgba(20,17,24,0.22); }
+
   /* Add crew card */
   .crew-add-card {
     background: transparent;
@@ -2567,7 +2607,6 @@
 
   .form-group { margin-bottom: 16px; }
   .crew-totem-section   { --banner-color: #FFE600; margin-top: 8px; margin-bottom: 40px; }
-  .crew-members-section { --banner-color: #BF00FF; margin-top: 8px; margin-bottom: 40px; }
   .dream-board-section  { --banner-color: #FF2D78; margin-top: 8px; margin-bottom: 40px; }
   .archive-section      { --banner-color: #FF7700; margin-top: 8px; margin-bottom: 40px; }
   .fam-poll-section     { --banner-color: #00F5FF; margin-top: 8px; margin-bottom: 40px; }
@@ -8643,7 +8682,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.27.0';
+  const APP_VERSION = '1.27.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -15757,9 +15796,15 @@ async function doProfilePasswordChange() {
         <span class="crew-invite-hint">Share with anyone — they can join straight from the link</span>` : ''}
       </div>
       ${addMemberControl}
-      <div class="form-group crew-members-section">
-        <div class="section-banner"><span class="banner-inner">Crew Members</span></div>
+      <div class="crew-manifest">
+        <div class="crew-manifest-corner tl"></div><div class="crew-manifest-corner br"></div>
+        <div class="crew-manifest-head">
+          <span class="crew-manifest-eyebrow">🎫 Crew Manifest</span>
+          <span class="crew-manifest-count">${crew.members.length} on this pass</span>
+        </div>
         <div class="detail-members">${memberList}</div>
+        <div class="crew-manifest-barcode" aria-hidden="true"></div>
+        <div class="crew-manifest-code">MANIFEST · ${escHtml(String(crew.id).slice(0, 8).toUpperCase())}</div>
       </div>
       <div class="crew-status-zone">
         <div class="crew-status-zone-header">
