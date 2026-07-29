@@ -229,12 +229,12 @@ test.describe('inline captions replacing old coachmarks', () => {
     await expect(page.locator('#coachmark')).not.toHaveClass(/show/);
   });
 
-  test('Roles/Logistics/Stay sections show the "claim a slot" hint inline instead of a coachmark', async ({ page }) => {
+  test('Roles/Rides/Stay sections show the "claim a slot" hint inline instead of a coachmark', async ({ page }) => {
     await bootAuthedApp(page, { sessionOver: { user_metadata: { guidance_dismissed: true } } });
     await openC1(page, { tab: 'gameplan' });
     await page.waitForTimeout(400);
     await page.evaluate(() => {
-      const btn = document.querySelector('#crew-detail-panel-gameplan .game-plan-section-tab[data-section="roles"]');
+      const btn = document.querySelector('#crew-feature-panel-raveplan .game-plan-section-tab[data-section="roles"]');
       switchGamePlanSection('roles', btn);
     });
 
