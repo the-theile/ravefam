@@ -5869,6 +5869,31 @@
   .ob-whatnow-chip-label { font-family:'Outfit',sans-serif; font-weight:700; font-size:0.9rem; color:var(--text); }
   .ob-whatnow-chip-sub   { font-size:0.75rem; color:var(--muted); margin-top:2px; }
 
+  .ob-checklist-title {
+    font-family:'Outfit',sans-serif; font-weight:700; font-size:0.7rem;
+    text-transform:uppercase; letter-spacing:1px; color:var(--muted);
+    margin-bottom:10px;
+  }
+  .ob-checklist { display:flex; flex-direction:column; gap:8px; }
+  .ob-checklist-item {
+    display:flex; align-items:center; gap:12px;
+    background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);
+    border-radius:14px; padding:12px 14px;
+    cursor:pointer; transition:background 0.15s, border-color 0.15s;
+    text-align:left;
+  }
+  .ob-checklist-item:hover { background:rgba(255,255,255,0.06); border-color:rgba(255,255,255,0.14); }
+  .ob-checklist-item.done { opacity:0.6; }
+  .ob-checklist-check {
+    flex-shrink:0; width:22px; height:22px; border-radius:50%;
+    border:1.5px solid rgba(255,255,255,0.25);
+    display:flex; align-items:center; justify-content:center;
+    font-size:0.75rem; color:var(--neon-green); font-weight:700;
+  }
+  .ob-checklist-item.done .ob-checklist-check { border-color:var(--neon-green); background:rgba(57,255,20,0.12); }
+  .ob-checklist-label { font-family:'Outfit',sans-serif; font-weight:700; font-size:0.88rem; color:var(--text); }
+  .ob-checklist-sub   { font-size:0.74rem; color:var(--muted); margin-top:2px; }
+
   /* ===== FAM PINS — Crew Achievements ===== */
   .fam-pins-header {
     font-family:'Outfit',sans-serif; font-weight:800; font-size:0.98rem;
@@ -7418,6 +7443,8 @@
           </div>
         </button>
       </div>
+      <div class="ob-checklist-title">A few more things worth a look</div>
+      <div class="ob-checklist" id="guidance-checklist"></div>
     </div>
 
     <!-- CREWS PAGE -->
@@ -8014,6 +8041,9 @@
         onmouseover="this.style.transform='translateY(-2px)';this.style.animationPlayState='paused';"
         onmouseout="this.style.transform='';this.style.animationPlayState='';"
         onclick="closeWelcomePopup()">Let's go! 🔥</button>
+      <div style="text-align:center;margin-top:12px;">
+        <a href="#" onclick="snoozeWelcomePopup();return false;" style="font-size:0.72rem;color:var(--muted);text-decoration:underline;">Don't show this again for a week</a>
+      </div>
     </div>
   </div>
 </div>
@@ -8487,7 +8517,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.25.0';
+  const APP_VERSION = '1.26.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -10513,9 +10543,16 @@ async function doProfilePasswordChange() {
     const me = squad.find(r => r.isYou);
     if (!me || !me.handle) return;
 
-    const todayKey = `ravefam_welcome_${currentUser.id}`;
-    if (sessionStorage.getItem(todayKey)) return;
-    sessionStorage.setItem(todayKey, '1');
+    // Once/day (not once/session — a browser restart later the same day
+    // shouldn't re-show it) plus an opt-in week-long snooze from the link
+    // in the modal. Both keyed per-user, in localStorage since they need
+    // to survive across sessions unlike the old sessionStorage flag.
+    const lastShownKey = `ravefam_welcome_last_${currentUser.id}`;
+    const snoozeKey = `ravefam_welcome_snooze_${currentUser.id}`;
+    const snoozeUntil = Number(localStorage.getItem(snoozeKey) || 0);
+    if (snoozeUntil && Date.now() < snoozeUntil) return;
+    if (Number(localStorage.getItem(lastShownKey) || 0) === TODAY.getTime()) return;
+    localStorage.setItem(lastShownKey, String(TODAY.getTime()));
 
     const [emoji, msg] = WBP_GREETINGS[Math.floor(Math.random() * WBP_GREETINGS.length)];
     document.getElementById('wbp-emoji').textContent = emoji;
@@ -10581,6 +10618,15 @@ async function doProfilePasswordChange() {
     showGuidanceBanner();
   }
 
+  function snoozeWelcomePopup() {
+    if (currentUser) {
+      const snoozeKey = `ravefam_welcome_snooze_${currentUser.id}`;
+      localStorage.setItem(snoozeKey, String(Date.now() + 7 * 86400000));
+    }
+    showToast("Won't pop up again for a week");
+    closeWelcomePopup();
+  }
+
   // ── Persistent "what's next" guidance banner ──────────
   // Shown right after onboarding finishes and again after the welcome-back
   // popup is dismissed, until the user explicitly closes it — then never
@@ -10600,11 +10646,42 @@ async function doProfilePasswordChange() {
       }
     }
     banner.style.display = '';
-    queueCoachmark('app_guide_nudge', {
-      targetEl: document.getElementById('app-guide-btn'),
-      title: '❔ Lost on the floor?',
-      body: "Tap here anytime — crews, Secret vs Recruiting, invites, it's all explained."
-    });
+    renderGuidanceChecklist();
+  }
+
+  // A handful of easy-to-miss features surfaced as a checkable list rather
+  // than one-shot popups the user can scroll/tap past — reuses the same
+  // seen_tips keys the old per-feature coachmarks used, so anyone who
+  // already saw one of these as a coachmark sees it pre-checked here too.
+  const GUIDANCE_CHECKLIST_ITEMS = [
+    { key: 'plur_points', icon: '✨', label: 'Earn PLUR Points', sub: 'Peace, Love, Unity, Respect — track your activity' },
+    { key: 'vendor_village_intro', icon: '🏪', label: 'Check out Vendor Village', sub: 'Local vendors your crew recommends' },
+    { key: 'privacy_controls', icon: '🕶️', label: 'Set your privacy', sub: 'Control what your crew (and randoms) can see' }
+  ];
+
+  function renderGuidanceChecklist() {
+    const wrap = document.getElementById('guidance-checklist');
+    if (!wrap) return;
+    wrap.innerHTML = GUIDANCE_CHECKLIST_ITEMS.map(it => `
+      <button type="button" class="ob-checklist-item${_seenTips[it.key] ? ' done' : ''}" id="checklist-${it.key}" onclick="goToChecklistItem('${it.key}')">
+        <span class="ob-checklist-check">${_seenTips[it.key] ? '✓' : ''}</span>
+        <div>
+          <div class="ob-checklist-label">${it.icon} ${it.label}</div>
+          <div class="ob-checklist-sub">${it.sub}</div>
+        </div>
+      </button>`).join('');
+  }
+
+  function goToChecklistItem(key) {
+    _seenTips[key] = true;
+    if (currentUser) sb.auth.updateUser({ data: { seen_tips: _seenTips } }).catch(() => {});
+    document.getElementById(`checklist-${key}`)?.classList.add('done');
+    const check = document.querySelector(`#checklist-${key} .ob-checklist-check`);
+    if (check) check.textContent = '✓';
+    const me = squad.find(r => r.isYou);
+    if (key === 'plur_points') { if (me) openPlurInfo(me.id); }
+    else if (key === 'vendor_village_intro') { switchTab('checklist'); renderVillage(); }
+    else if (key === 'privacy_controls') { if (me) openPrivacySettingsModal(me.id); }
   }
 
   function dismissGuidanceBanner() {
@@ -12992,6 +13069,7 @@ async function doProfilePasswordChange() {
   }
 
   function switchTab(page, el) {
+    _recheckCoachmarkTarget();
     const _now = Date.now();
     if (_lastTabTap.page === page && _now - _lastTabTap.time < 400
         && REFRESHABLE_TABS.has(page)) {
@@ -13012,13 +13090,6 @@ async function doProfilePasswordChange() {
     document.getElementById('page-' + page).classList.add('active');
     if (el) el.classList.add('active');
     else document.querySelector(`.nav-tab[onclick*="'${page}'"]`)?.classList.add('active');
-    if (page === 'members') {
-      queueCoachmark('unclaimed_badge', {
-        targetEl: document.querySelector('#members-grid .claim-badge-unclaimed'),
-        title: '◌ Not claimed yet',
-        body: "This profile's a placeholder until they scan their QR and claim it. Open their profile to grab it and share."
-      });
-    }
   }
 
   // Modal
@@ -14542,6 +14613,7 @@ async function doProfilePasswordChange() {
     }
   }
   function closeDetail() {
+    _recheckCoachmarkTarget();
     teardownHuddleLive();
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById('page-crews').classList.add('active');
@@ -15444,7 +15516,7 @@ async function doProfilePasswordChange() {
           const isClaimed = isLeader || p.claimedBy || p.isYou || p.status === 'claimed';
           const statusDot = isLeader ? '' : isClaimed
             ? `<span class="verified-badge" title="Claimed">✓</span>`
-            : `<span class="claim-badge claim-badge-unclaimed" title="Share QR to invite">◌ Unclaimed</span>`;
+            : `<span class="claim-badge claim-badge-unclaimed" title="Placeholder until they scan their QR and claim it — open their profile to grab it and share">◌ Unclaimed</span>`;
           const canRemove = canManageMembers && !p.isYou && !isLeader;
           let right;
           if (isLeader) {
@@ -15634,24 +15706,8 @@ async function doProfilePasswordChange() {
     // tear it down on every tab switch; openGamePlanTab re-subscribes below
     // if the Game Plan's active section happens to be Huddle.
     teardownHuddleLive();
-    if (tab === 'roster') {
-      const crew = getCrew(activeDetailId);
-      if (crew && crew.isLead) {
-        queueCoachmark('crew_visibility', {
-          targetEl: document.querySelector('#page-crew-detail .crew-status-zone'),
-          title: '🔴🟢 Secret vs Recruiting',
-          body: "Secret keeps your crew invisible while you set it up — flip to Recruiting when you're ready to let the tribe in. No going back to Secret once you do."
-        });
-      }
-    }
     if (tab === 'gameplan') {
-      openGamePlanTab(activeDetailId).then(() => {
-        queueCoachmark('game_plan_rooms', {
-          targetEl: document.querySelector('.game-plan-rave-picker'),
-          title: '🗺️ A Game Plan for every shared rave',
-          body: "Tap between raves you and your crew are both going to — each one gets its own Huddle, Checklist, Roles, Logistics, and Outfit board."
-        });
-      });
+      openGamePlanTab(activeDetailId);
     } else if (tab === 'overview') {
       // The Huddle tile may have been left open under Overview before the
       // teardown above ran — re-subscribe rather than leaving it stale.
@@ -16677,6 +16733,7 @@ async function doProfilePasswordChange() {
     if (_huddleChannel) { _huddleChannel.unsubscribe(); _huddleChannel = null; }
     if (_huddlePresenceChannel) { _huddlePresenceChannel.untrack(); _huddlePresenceChannel.unsubscribe(); _huddlePresenceChannel = null; }
     _huddlePresenceState = {};
+    _recheckCoachmarkTarget();
   }
 
   // ===== GAME PLAN =====
@@ -17005,17 +17062,6 @@ async function doProfilePasswordChange() {
     if (btnEl) btnEl.classList.add('active');
     if (leavingHuddle) teardownHuddleLive();
     if (section === 'huddle') openGamePlanHuddle(_gamePlanActiveCrewId, _gamePlanActiveFestivalId);
-    // Roles, Rides, and Stay all share the same "claim an open slot" pattern
-    // (driver/rider, host/guest) — it's the least self-explanatory part of
-    // Game Plan, so one shared tip covers whichever of the three is opened
-    // first rather than repeating it per tab.
-    if (['roles', 'logistics', 'stay'].includes(section)) {
-      queueCoachmark('game_plan_claim_slot', {
-        targetEl: document.querySelector(`#game-plan-section-${section} .section-banner`),
-        title: '🙋 Claim your spot',
-        body: "Tap an open slot to claim a role, seat, or place to stay — tap your own claim again to back out. Everyone can see who's covering what before the rave."
-      });
-    }
   }
 
   async function openGamePlanHuddle(crewId, festivalId) {
@@ -17071,6 +17117,7 @@ async function doProfilePasswordChange() {
     ).join('');
 
     return `
+      ${rooms.length > 1 ? `<div style="font-size:0.72rem;color:var(--muted);margin-bottom:8px;">Tap between raves you and your crew are both going to</div>` : ''}
       <div class="game-plan-rave-picker">${picker}</div>
       <div class="game-plan-shortcuts">
         <button class="btn btn-ghost" onclick="jumpToGamePlanJams('${escCrewId}','${escHtml(activeFestId)}')">🎧 Jams</button>
@@ -17341,6 +17388,7 @@ async function doProfilePasswordChange() {
     return `
       <div class="form-group">
         <div class="section-banner"><span class="banner-inner">🎭 Roles <span class="banner-subtitle">· who's doing what</span></span></div>
+        <div style="font-size:0.72rem;color:var(--muted);margin:-8px 0 14px;">🙋 Tap an open slot to claim it — tap your own claim again to back out</div>
         ${buildGamePlanCastCardHTML(crewId)}
         <p class="section-desc">One person can hold multiple roles, and a role can be shared by more than one person.</p>
         ${uid ? `
@@ -17481,6 +17529,7 @@ async function doProfilePasswordChange() {
     return `
       <div class="form-group">
         <div class="section-banner"><span class="banner-inner">🚗 Logistics <span class="banner-subtitle">· meetup + carpool</span></span></div>
+        <div style="font-size:0.72rem;color:var(--muted);margin:-8px 0 14px;">🙋 Tap an open seat to claim it — tap your own claim again to back out</div>
         ${countdownHTML}
         <div class="archive-add-area">
           <label class="form-label">Meetup time &amp; place</label>
@@ -17622,6 +17671,7 @@ async function doProfilePasswordChange() {
     return `
       <div class="form-group">
         <div class="section-banner"><span class="banner-inner">🏠 Stay <span class="banner-subtitle">· hotels &amp; airbnbs</span></span></div>
+        <div style="font-size:0.72rem;color:var(--muted);margin:-8px 0 14px;">🙋 Tap an open spot to claim it — tap your own claim again to back out</div>
         ${uid && !hostingRaverIds.has(String(myRaver?.id)) ? `
         <div class="archive-add-area">
           <input class="form-input" id="game-plan-stay-place" placeholder="Where are you staying? (hotel name, Airbnb address…)">
@@ -19786,11 +19836,6 @@ async function doProfilePasswordChange() {
     if (!root) return;
     root.innerHTML = vendorVillageShellHTML();
     loadVendorVillageData();
-    queueCoachmark('vendor_village_intro', {
-      targetEl: document.querySelector('.vv-subtabs'),
-      title: '🏪 Welcome to Vendor Village',
-      body: "Browse local vendors your crew recommends, save your favorites, and add your own — reviews and badges help everyone find the good stuff."
-    });
   }
 
   function vendorVillageShellHTML() {
@@ -22929,7 +22974,7 @@ async function doProfilePasswordChange() {
       const isClaimed = raverPerms(r).isClaimed;
       const claimBadge = r.isYou ? '' : isClaimed
         ? `<span class="verified-badge" title="Claimed">✓</span>`
-        : `<span class="claim-badge claim-badge-unclaimed">◌ Unclaimed</span>`;
+        : `<span class="claim-badge claim-badge-unclaimed" title="Placeholder until they scan their QR and claim it — open their profile to grab it and share">◌ Unclaimed</span>`;
 
       card.innerHTML = `
         <div class="member-avatar-ring${isClaimed ? '' : ' member-avatar-ring-unclaimed'}" style="background:${r.avatarUrl ? '#FFB800' : extractFirstColor(r.gradient)}">${raverAvatarHTML(r.avatarUrl, r.gradient, r.name, 'member-avatar', '')}</div>
@@ -23464,13 +23509,6 @@ async function doProfilePasswordChange() {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     profilePage.classList.add('active');
     window.scrollTo(0,0);
-    if (!editMode && r.isYou) {
-      queueCoachmark('privacy_controls', {
-        targetEl: document.querySelector('#page-profile button[title="Privacy & Permissions"]'),
-        title: '🕶️ Show only what you want',
-        body: 'Base location, RSVPs, vibe tags — you control what your crew (and randoms) can see.'
-      });
-    }
 
     // Async-load How We Met stories and Our Photos, refresh sections once loaded
     if (!editMode && !r.isYou && currentUser) {
@@ -23503,17 +23541,9 @@ async function doProfilePasswordChange() {
     // else's) — unlike How We Met, the points bar shows on every profile.
     if (!editMode && currentUser) {
       const _plurProfileId = r.id;
-      const _plurIsYou = r.isYou;
       loadPlurTotals(_plurProfileId).then(totals => {
         const wrap = document.getElementById('plur-bar-wrap');
         if (wrap) wrap.innerHTML = plurBarHTML(_plurProfileId, totals);
-        if (_plurIsYou) {
-          queueCoachmark('plur_points', {
-            targetEl: document.querySelector('#plur-bar-wrap .plur-bar-section'),
-            title: '✨ Earn PLUR Points',
-            body: "Peace, Love, Unity, Respect — real activity earns you points across all four, verified by RaveFAM. Tap to see how and check your milestones."
-          });
-        }
       }).catch(console.warn);
     }
   }
@@ -27361,11 +27391,18 @@ async function doProfilePasswordChange() {
 
   // ===== COACHMARKS =====
   // Lightweight "first time you hit this feature" tips — distinct from the
-  // signup-time onboarding wizard and the reopenable App Guide. Each tip
-  // fires once ever per user (tracked in user_metadata.seen_tips, mirrored
-  // locally in _seenTips since currentUser is never refetched after an
-  // updateUser() call), one bubble visible at a time via a queue, same
-  // fire-and-forget persistence pattern as `onboarded`/`guidance_dismissed`.
+  // signup-time onboarding wizard, the reopenable App Guide, and the
+  // post-onboarding guidance checklist. Most of the old per-feature tips
+  // were retired in favor of either the guidance checklist (see
+  // renderGuidanceChecklist) or a permanent inline caption next to the
+  // feature itself — a popup you can only ever see once is a bad fit for
+  // anything worth explaining more than once. `beacon` is the one
+  // survivor: it needs to interrupt at a specific moment (first time the
+  // Huddle is open) and has no natural inline home. Each tip fires once
+  // ever per user (tracked in user_metadata.seen_tips, mirrored locally in
+  // _seenTips since currentUser is never refetched after an updateUser()
+  // call), one bubble visible at a time via a queue, same fire-and-forget
+  // persistence pattern as `onboarded`/`guidance_dismissed`.
   let _coachmarkQueue = [];
   let _coachmarkShowing = false;
   let _coachmarkTipKey = null;
@@ -27430,6 +27467,35 @@ async function doProfilePasswordChange() {
     el.classList.add('placement-' + placement);
     el.style.left = `${left}px`;
     el.style.top = `${top}px`;
+  }
+
+  // Safety net for the bug where switching tabs/pages left a showing
+  // coachmark floating over stale coordinates (its target was hidden via
+  // display:none, not removed, so the queue's own isConnected/offsetParent
+  // check — which only runs when a *new* tip is about to show — never
+  // caught it). Call this from any navigation that can hide the current
+  // tip's target. Unlike dismissCoachmark(), this does NOT mark the tip as
+  // seen — the user didn't get a real look at it, so it's free to fire
+  // again next time they reach the same feature.
+  function _recheckCoachmarkTarget() {
+    if (!_coachmarkShowing || !_coachmarkTargetEl) return;
+    if (_coachmarkTargetEl.isConnected && _coachmarkTargetEl.offsetParent !== null) return;
+    const el = document.getElementById('coachmark');
+    if (el) el.classList.remove('show');
+    if (_coachmarkResizeHandler) {
+      window.removeEventListener('resize', _coachmarkResizeHandler);
+      window.removeEventListener('orientationchange', _coachmarkResizeHandler);
+      window.removeEventListener('scroll', _coachmarkResizeHandler, true);
+      _coachmarkResizeHandler = null;
+    }
+    // Not marked seen, so also drop the session dedupe guard — the user
+    // can hit the same feature again later this session and get another
+    // shot at the tip instead of it silently never showing again.
+    _coachmarkQueuedOrShown.delete(_coachmarkTipKey);
+    _coachmarkTipKey = null;
+    _coachmarkTargetEl = null;
+    _coachmarkShowing = false;
+    _showNextCoachmark();
   }
 
   function dismissCoachmark() {
