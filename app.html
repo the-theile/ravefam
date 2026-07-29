@@ -3205,7 +3205,7 @@
     background: none;
     border: 1.5px solid rgba(255,255,255,0.12);
     border-radius: 100px;
-    padding: 9px 12px;
+    padding: 9px 8px;
     color: var(--muted);
     font-family: 'Outfit', sans-serif;
     font-weight: 600;
@@ -8682,7 +8682,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.27.1';
+  const APP_VERSION = '1.27.3';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -13234,7 +13234,6 @@ async function doProfilePasswordChange() {
   }
 
   function switchTab(page, el) {
-    _recheckCoachmarkTarget();
     const _now = Date.now();
     if (_lastTabTap.page === page && _now - _lastTabTap.time < 400
         && REFRESHABLE_TABS.has(page)) {
@@ -13255,6 +13254,12 @@ async function doProfilePasswordChange() {
     document.getElementById('page-' + page).classList.add('active');
     if (el) el.classList.add('active');
     else document.querySelector(`.nav-tab[onclick*="'${page}'"]`)?.classList.add('active');
+    // Must run after the page swap above, not before -- it checks whether the
+    // showing coachmark's target is still visible, and the target (e.g. the
+    // Huddle beacon button) only actually becomes hidden once its page loses
+    // .active. Checking beforehand sees the old, still-visible page and
+    // wrongly leaves the bubble showing after we've already navigated away.
+    _recheckCoachmarkTarget();
   }
 
   // Modal
@@ -14783,13 +14788,16 @@ async function doProfilePasswordChange() {
     }
   }
   function closeDetail() {
-    _recheckCoachmarkTarget();
-    teardownHuddleLive();
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById('page-crews').classList.add('active');
     document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
     document.querySelector('.nav-tab[onclick*="crews"]')?.classList.add('active');
     activeDetailId = null;
+    // teardownHuddleLive's own _recheckCoachmarkTarget() call must see the
+    // page swap above already applied -- otherwise it still finds the old
+    // page (and the coachmark's target) visible and leaves the bubble
+    // showing after we've already navigated away from it.
+    teardownHuddleLive();
   }
   function closeDetailOutside(e) {
     if (e.target === document.getElementById('detail-overlay')) closeDetail();
@@ -16377,6 +16385,7 @@ async function doProfilePasswordChange() {
       ${huddleComposerHTML()}
     `;
     huddleScrollMessagesToBottom();
+    _rebindCoachmarkTarget('.huddle-beacon-fab-inline');
   }
 
   // ── Sending messages (optimistic UI: render immediately, reconcile on the DB round-trip) ──
@@ -27675,6 +27684,22 @@ async function doProfilePasswordChange() {
     _coachmarkTargetEl = null;
     _coachmarkShowing = false;
     _showNextCoachmark();
+  }
+
+  // Some panels (Huddle) replace their whole subtree on every re-render —
+  // new messages, presence sync, room switch — which detaches whatever
+  // element a currently-showing coachmark was anchored to. Without this,
+  // the tooltip keeps tracking the old (now disconnected) node, whose
+  // getBoundingClientRect() collapses to all-zero, so _positionCoachmark
+  // clamps it into the top-left corner instead of hiding or following the
+  // feature it's meant to point at. Call after any such re-render with the
+  // selector that would match the tip's target inside the fresh markup.
+  function _rebindCoachmarkTarget(selector) {
+    if (!_coachmarkShowing || !_coachmarkTargetEl || _coachmarkTargetEl.isConnected) return;
+    const fresh = document.querySelector(selector);
+    if (!fresh) return;
+    _coachmarkTargetEl = fresh;
+    _positionCoachmark(fresh);
   }
 
   function dismissCoachmark() {
