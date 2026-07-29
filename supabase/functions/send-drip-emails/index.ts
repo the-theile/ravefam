@@ -103,13 +103,13 @@ const TEMPLATES: Record<string, { subject: string; render: (ctx: { firstName: st
       ${button("Open Crew Jams", `${APP_ORIGIN}/app.html`)}`,
   },
   game_plan_intro: {
-    subject: "Your rave just got a Game Plan 🗺️",
+    subject: "Your rave just got a Rave Plan 🗺️",
     render: ({ firstName }) => `
       <h1 style="font-size:1.4rem;">${firstName}, stop planning your next rave over five different group chats</h1>
-      <p>Whenever you and a crewmate are both going to the same show, a <strong>Game Plan</strong> shows up automatically — one hub with a Huddle, a shared Checklist, Roles, Rides, Stay, and Outfit/Theme, all scoped to that one rave.</p>
-      ${feature("✅", "Checklist", "call out what needs doing before you go and claim it so it doesn't fall on one person", "game-plan.png", "A Game Plan Checklist with tasks, assignees, and a packing progress bar")}
+      <p>Whenever you and a crewmate are both going to the same show, a <strong>Rave Plan</strong> shows up automatically — one hub with a Huddle, a shared Tasks list, Roles, Rides, Stay, and Outfit/Theme, all scoped to that one rave.</p>
+      ${feature("✅", "Tasks", "call out what needs doing before you go and claim it so it doesn't fall on one person", "game-plan.png", "A Rave Plan Tasks list with tasks, assignees, and a packing progress bar")}
       <p>Find it under any crew you share an upcoming rave with.</p>
-      ${button("Open your Game Plan", `${APP_ORIGIN}/app.html`)}`,
+      ${button("Open your Rave Plan", `${APP_ORIGIN}/app.html`)}`,
   },
   plur_points_intro: {
     subject: "You've been earning points this whole time ✨",
