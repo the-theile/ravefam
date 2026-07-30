@@ -8691,7 +8691,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.28.2';
+  const APP_VERSION = '1.28.3';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -29426,7 +29426,8 @@ async function doProfilePasswordChange() {
   // zoom out much further than a single ~5km offset can survive.
   function declutterRadarPoints(map, points) {
     const PIXEL_THRESHOLD = 30; // marker centers rendering closer than this overlap
-    const PIXEL_RADIUS = 24;    // fan-out radius, in screen pixels, once decluttered
+    const PIXEL_RADIUS = 20;    // fan-out radius, in screen pixels, once decluttered
+    const PIXEL_RADIUS_MAX = 46; // cap so a big same-city cluster doesn't eat the whole map
     const out = points.map(p => ({ ...p }));
     const pixels = points.map(p => map.latLngToLayerPoint([p.lat, p.lng]));
     const grouped = new Array(points.length).fill(false);
@@ -29441,7 +29442,7 @@ async function doProfilePasswordChange() {
       if (group.length < 2) continue;
       const cx = group.reduce((s, k) => s + pixels[k].x, 0) / group.length;
       const cy = group.reduce((s, k) => s + pixels[k].y, 0) / group.length;
-      const radius = PIXEL_RADIUS * (1 + (group.length - 2) * 0.15); // wider ring for bigger clusters
+      const radius = Math.min(PIXEL_RADIUS_MAX, PIXEL_RADIUS + (group.length - 2) * 2.5); // wider ring for bigger clusters, capped
       group.forEach((k, idx) => {
         const angle = (Math.PI * 2 * idx) / group.length - Math.PI / 2;
         const latlng = map.layerPointToLatLng(L.point(cx + radius * Math.cos(angle), cy + radius * Math.sin(angle)));
@@ -29495,6 +29496,21 @@ async function doProfilePasswordChange() {
       // the fan-out arranges same-city raves in a circle and the path just traces that circle.
       drawRadarPath(map, rawPoints);
       startRadarPingCanvas(map, markerEntries);
+
+      // The fan-out offset is computed as a fixed lat/lng delta sized to look right in
+      // *pixels* at the zoom active when it was computed. Leaflet re-projects that fixed
+      // delta to more and more screen pixels the further the user zooms in afterward (the
+      // zoom controls are live), so without this the ring keeps growing on screen the more
+      // you zoom in instead of staying put. Recompute and reposition on every zoom change
+      // so the on-screen fan-out radius stays constant regardless of what zoom you're at.
+      map.on('zoomend', () => {
+        if (radarMapInstance !== map) return;
+        const repositioned = declutterRadarPoints(map, rawPoints);
+        markerEntries.forEach((entry, i) => {
+          entry.marker.setLatLng([repositioned[i].lat, repositioned[i].lng]);
+          entry.point = repositioned[i];
+        });
+      });
     }
 
     if (rawPoints.length > 1 && !prefersReducedMotion()) {
