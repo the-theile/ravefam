@@ -6483,6 +6483,15 @@
     letter-spacing: 0.6px; color: var(--text); margin: 22px 0 12px;
     display: flex; align-items: center; gap: 8px;
   }
+  .radarmap-replay-btn {
+    margin-left: auto; display: flex; align-items: center; gap: 5px;
+    background: rgba(0,245,255,0.08); border: 1px solid rgba(0,245,255,0.3); border-radius: 100px;
+    padding: 5px 12px; font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.68rem;
+    letter-spacing: normal; color: #00F5FF; cursor: pointer;
+    transition: background 0.15s ease-out, border-color 0.15s ease-out;
+  }
+  .radarmap-replay-btn:hover { background: rgba(0,245,255,0.16); border-color: rgba(0,245,255,0.5); }
+  .radarmap-replay-btn:active { transform: scale(0.96); }
   .radarmap { height: 320px; }
   .radar-marker {
     transform-box: fill-box; transform-origin: center;
@@ -8682,7 +8691,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.27.3';
+  const APP_VERSION = '1.28.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -29277,7 +29286,10 @@ async function doProfilePasswordChange() {
       <div class="section-header" style="margin-bottom:14px;">
         <div class="section-title">Raves on Your Radar 📡</div>
       </div>
-      <div class="radarmap-section-title">🛰️ Radar Map</div>
+      <div class="radarmap-section-title">
+        🛰️ Radar Map
+        <button id="radar-replay-btn" class="radarmap-replay-btn" onclick="restartRadarJourney()" style="display:none;">🔄 Replay</button>
+      </div>
       <div id="ravesradar-map" class="citymap radarmap"><div class="citymap-loading">📡 Locating your raves…</div></div>
       ${body}
     `;
@@ -29296,6 +29308,7 @@ async function doProfilePasswordChange() {
   let radarResizeObserver = null;
   let radarLeaveObserver = null;
   let radarCanvasEl = null;
+  let radarMapLastPoints = null; // resolved {fest,lat,lng,color} points from the last successful build, for the Replay button
 
   function cleanupRadarMap() {
     if (radarRafId != null) { cancelAnimationFrame(radarRafId); radarRafId = null; }
@@ -29324,6 +29337,9 @@ async function doProfilePasswordChange() {
 
   async function renderRavesRadarMap(upcoming) {
     cleanupRadarMap();
+    radarMapLastPoints = null;
+    const replayBtn = document.getElementById('radar-replay-btn');
+    if (replayBtn) replayBtn.style.display = 'none';
     const mapEl = document.getElementById('ravesradar-map');
     if (!mapEl) return;
 
@@ -29359,7 +29375,21 @@ async function doProfilePasswordChange() {
       return;
     }
 
+    radarMapLastPoints = points;
+    if (replayBtn && points.length > 1) replayBtn.style.display = '';
     buildRadarMap(mapEl, points);
+  }
+
+  // Re-runs the zoom-out journey (see flyThroughRadarPoints) for whoever missed it —
+  // tears down and rebuilds the map from the same resolved points rather than trying
+  // to rewind the live one, since decluttering/markers/path all key off the map's
+  // current state anyway.
+  function restartRadarJourney() {
+    const mapEl = document.getElementById('ravesradar-map');
+    if (!mapEl || !radarMapLastPoints || radarMapLastPoints.length < 2) return;
+    if (!document.getElementById('page-raves-radar').classList.contains('active')) return;
+    cleanupRadarMap();
+    buildRadarMap(mapEl, radarMapLastPoints);
   }
 
   function renderRadarMapEmptyState(mapEl) {
@@ -29389,31 +29419,34 @@ async function doProfilePasswordChange() {
   // Fans out raves that would otherwise land on (or right next to) the same city-level
   // geocode — several raves in Orlando all resolve to the same lat/lng, so their circle
   // markers stack exactly on top of each other and their number labels become unreadable.
-  // Degree-based (not pixel-based) so it stays correct regardless of zoom: this map only
-  // ever sits at a regional/state zoom, never street level, so a fixed ~5km fan-out reads
-  // clearly without ever creeping into a genuinely distinct city's marker.
-  function declutterRadarPoints(points) {
-    const THRESHOLD = 0.05; // ~5.5km — anything closer than this is treated as "same city"
-    const OFFSET = 0.045;   // ~5km fan-out radius
+  // Pixel-based (not degree-based) and run *after* fitBounds, so the fan-out radius is
+  // correct at whatever zoom the map actually lands on. A fixed degree offset looks fine
+  // when raves cluster in one region, but collapses back into an unreadable knot once the
+  // spread reaches continent scale (e.g. West Coast to the Caribbean) and the map has to
+  // zoom out much further than a single ~5km offset can survive.
+  function declutterRadarPoints(map, points) {
+    const PIXEL_THRESHOLD = 30; // marker centers rendering closer than this overlap
+    const PIXEL_RADIUS = 24;    // fan-out radius, in screen pixels, once decluttered
     const out = points.map(p => ({ ...p }));
+    const pixels = points.map(p => map.latLngToLayerPoint([p.lat, p.lng]));
     const grouped = new Array(points.length).fill(false);
     for (let i = 0; i < points.length; i++) {
       if (grouped[i]) continue;
       const group = [i];
       for (let j = i + 1; j < points.length; j++) {
         if (grouped[j]) continue;
-        const dLat = points[i].lat - points[j].lat, dLng = points[i].lng - points[j].lng;
-        if (Math.hypot(dLat, dLng) < THRESHOLD) { group.push(j); grouped[j] = true; }
+        if (pixels[i].distanceTo(pixels[j]) < PIXEL_THRESHOLD) { group.push(j); grouped[j] = true; }
       }
       grouped[i] = true;
       if (group.length < 2) continue;
-      const cLat = group.reduce((s, k) => s + points[k].lat, 0) / group.length;
-      const cLng = group.reduce((s, k) => s + points[k].lng, 0) / group.length;
-      const lngScale = Math.cos(cLat * Math.PI / 180) || 1; // degrees-longitude shrink at this latitude
+      const cx = group.reduce((s, k) => s + pixels[k].x, 0) / group.length;
+      const cy = group.reduce((s, k) => s + pixels[k].y, 0) / group.length;
+      const radius = PIXEL_RADIUS * (1 + (group.length - 2) * 0.15); // wider ring for bigger clusters
       group.forEach((k, idx) => {
         const angle = (Math.PI * 2 * idx) / group.length - Math.PI / 2;
-        out[k].lat = cLat + OFFSET * Math.sin(angle);
-        out[k].lng = cLng + (OFFSET * Math.cos(angle)) / lngScale;
+        const latlng = map.layerPointToLatLng(L.point(cx + radius * Math.cos(angle), cy + radius * Math.sin(angle)));
+        out[k].lat = latlng.lat;
+        out[k].lng = latlng.lng;
       });
     }
     return out;
@@ -29421,42 +29454,73 @@ async function doProfilePasswordChange() {
 
   function buildRadarMap(mapEl, rawPoints) {
     mapEl.innerHTML = '';
-    const points = declutterRadarPoints(rawPoints);
-    const map = L.map(mapEl, { scrollWheelZoom: false, zoomControl: true }).setView([points[0].lat, points[0].lng], 4);
+    const map = L.map(mapEl, { scrollWheelZoom: false, zoomControl: true }).setView([rawPoints[0].lat, rawPoints[0].lng], 4);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
       maxZoom: 19
     }).addTo(map);
     radarMapInstance = map;
 
-    const markerEntries = points.map((p, i) => {
-      const isNext = i === 0;
-      const radius = isNext ? 14 : 11;
-      const marker = L.circleMarker([p.lat, p.lng], {
-        radius,
-        color: p.color,
-        weight: 2,
-        fillColor: p.color,
-        fillOpacity: 0.55,
-        className: 'radar-marker' + (isNext ? ' radar-marker-next' : '')
-      }).addTo(map);
+    function settle() {
+      if (radarMapInstance !== map) return; // page left mid-animation
 
-      const d = festDate(p.fest);
-      const days = Math.ceil((d - TODAY) / 86400000);
-      marker.bindPopup(`<strong>${escHtml(p.fest.name)}</strong><br>in ${days} day${days !== 1 ? 's' : ''}`);
-      marker.bindTooltip(String(i + 1), { permanent: true, direction: 'center', className: 'radar-marker-label', interactive: false });
+      const points = declutterRadarPoints(map, rawPoints);
 
-      const el = marker.getElement();
-      if (el) el.style.filter = `drop-shadow(0 0 ${isNext ? 10 : 7}px ${p.color})`;
+      const markerEntries = points.map((p, i) => {
+        const isNext = i === 0;
+        const radius = isNext ? 14 : 11;
+        const marker = L.circleMarker([p.lat, p.lng], {
+          radius,
+          color: p.color,
+          weight: 2,
+          fillColor: p.color,
+          fillOpacity: 0.55,
+          className: 'radar-marker' + (isNext ? ' radar-marker-next' : '')
+        }).addTo(map);
 
-      return { marker, el, point: p, isNext };
-    });
+        const d = festDate(p.fest);
+        const days = Math.ceil((d - TODAY) / 86400000);
+        marker.bindPopup(`<strong>${escHtml(p.fest.name)}</strong><br>in ${days} day${days !== 1 ? 's' : ''}`);
+        marker.bindTooltip(String(i + 1), { permanent: true, direction: 'center', className: 'radar-marker-label', interactive: false });
 
-    const bounds = points.map(p => [p.lat, p.lng]);
-    if (bounds.length > 1) map.fitBounds(bounds, { padding: [36, 36] });
+        const el = marker.getElement();
+        if (el) el.style.filter = `drop-shadow(0 0 ${isNext ? 10 : 7}px ${p.color})`;
 
-    drawRadarPath(map, points);
-    startRadarSweepCanvas(map, markerEntries);
+        return { marker, el, point: p, isNext };
+      });
+
+      drawRadarPath(map, points);
+      startRadarPingCanvas(map, markerEntries);
+    }
+
+    if (rawPoints.length > 1 && !prefersReducedMotion()) {
+      flyThroughRadarPoints(map, rawPoints, settle);
+    } else {
+      if (rawPoints.length > 1) map.fitBounds(rawPoints.map(p => [p.lat, p.lng]), { padding: [36, 36] });
+      settle();
+    }
+  }
+
+  function prefersReducedMotion() {
+    return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  // Zooms the map out one rave at a time, in the same chronological order as the
+  // numbered markers (1, then 1-2, then 1-2-3, ...), before settling on the final
+  // view that fits them all — a satellite widening its scan rather than jumping
+  // straight to the full picture.
+  function flyThroughRadarPoints(map, rawPoints, onSettled) {
+    const stepMs = Math.max(220, Math.min(650, 3000 / (rawPoints.length - 1)));
+    let i = 1;
+    function step() {
+      if (radarMapInstance !== map) return; // page left mid-animation
+      const bounds = rawPoints.slice(0, i + 1).map(p => [p.lat, p.lng]);
+      const done = i + 1 >= rawPoints.length;
+      i++;
+      map.once('moveend', () => { if (done) onSettled(); else setTimeout(step, 40); });
+      map.flyToBounds(bounds, { padding: [36, 36], duration: stepMs / 1000 });
+    }
+    step();
   }
 
   function lerpColor(a, b, t) {
@@ -29508,16 +29572,9 @@ async function doProfilePasswordChange() {
     radarPathRafId = requestAnimationFrame(frame);
   }
 
-  function normalizeAngle(a) {
-    a = a % (Math.PI * 2);
-    if (a > Math.PI) a -= Math.PI * 2;
-    if (a < -Math.PI) a += Math.PI * 2;
-    return a;
-  }
-
-  // Briefly brightens a marker (sweep beam pass or ring hit), then eases back to its
-  // resting glow. Uses inline style rather than a CSS class since the resting glow color
-  // is per-marker (matches that rave's radar-dot color) and set the same way.
+  // Briefly brightens a marker (ring hit), then eases back to its resting glow. Uses
+  // inline style rather than a CSS class since the resting glow color is per-marker
+  // (matches that rave's radar-dot color) and set the same way.
   function flashRadarMarker(entry, strength) {
     if (!entry.el) return;
     const boost = 12 + 8 * strength;
@@ -29528,10 +29585,10 @@ async function doProfilePasswordChange() {
     }, 220);
   }
 
-  // Canvas overlay (rotating sweep wedge + expanding pings) layered on top of the Leaflet
-  // panes, pointer-events:none so it never blocks marker taps/popups. Runs a single rAF
-  // loop that also drives the "sweep/ring passes over a marker" brighten effect.
-  function startRadarSweepCanvas(map, markerEntries) {
+  // Canvas overlay (expanding circular pings) layered on top of the Leaflet panes,
+  // pointer-events:none so it never blocks marker taps/popups. Runs a single rAF loop
+  // that also drives the "ring passes over a marker" brighten effect.
+  function startRadarPingCanvas(map, markerEntries) {
     const mapEl = map.getContainer();
     const canvas = document.createElement('canvas');
     canvas.className = 'radar-sweep-canvas';
@@ -29552,57 +29609,15 @@ async function doProfilePasswordChange() {
     radarResizeObserver = new ResizeObserver(resize);
     radarResizeObserver.observe(mapEl);
 
-    const SWEEP_COLOR = '#00F5FF';
-    const INTRO_MS = 3400; // ~1.5-2 rotations before settling
-    const INTRO_SPEED = (Math.PI * 2) / 2100; // rad/ms
-    const BASE_SPEED = (Math.PI * 2) / 9000;
+    const RING_COLOR = '#00F5FF';
+    const INTRO_MS = 3400; // pings fire faster during this window before settling
     const RING_INTERVAL = 1900;
     const RING_INTRO_INTERVAL = 850;
     const RING_MAX_AGE = 2600;
 
     const start = performance.now();
-    let last = start;
-    let angle = 0;
     let lastRing = start;
     let rings = [];
-
-    function drawSweep(cx, cy, radius, intensity) {
-      const trail = Math.PI * 0.55;
-      ctx.save();
-      if (ctx.createConicGradient) {
-        const grad = ctx.createConicGradient(angle - trail, cx, cy);
-        grad.addColorStop(0, hexToRgba(SWEEP_COLOR, 0));
-        grad.addColorStop(0.85, hexToRgba(SWEEP_COLOR, 0.06 * intensity));
-        grad.addColorStop(1, hexToRgba(SWEEP_COLOR, 0.32 * intensity));
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.arc(cx, cy, radius, angle - trail, angle);
-        ctx.closePath();
-        ctx.fillStyle = grad;
-        ctx.fill();
-      } else {
-        const steps = 14;
-        for (let i = 0; i < steps; i++) {
-          const a0 = angle - trail + (trail * i / steps);
-          const a1 = angle - trail + (trail * (i + 1) / steps);
-          ctx.beginPath();
-          ctx.moveTo(cx, cy);
-          ctx.arc(cx, cy, radius, a0, a1);
-          ctx.closePath();
-          ctx.fillStyle = hexToRgba(SWEEP_COLOR, 0.32 * intensity * (i / steps));
-          ctx.fill();
-        }
-      }
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.lineTo(cx + radius * Math.cos(angle), cy + radius * Math.sin(angle));
-      ctx.strokeStyle = hexToRgba(SWEEP_COLOR, 0.75 * intensity);
-      ctx.lineWidth = 2;
-      ctx.shadowBlur = 12 * intensity;
-      ctx.shadowColor = SWEEP_COLOR;
-      ctx.stroke();
-      ctx.restore();
-    }
 
     function drawRings(cx, cy) {
       rings.forEach(r => {
@@ -29610,18 +29625,15 @@ async function doProfilePasswordChange() {
         if (alpha <= 0) return;
         ctx.beginPath();
         ctx.arc(cx, cy, r.radius, 0, Math.PI * 2);
-        ctx.strokeStyle = hexToRgba(SWEEP_COLOR, alpha);
+        ctx.strokeStyle = hexToRgba(RING_COLOR, alpha);
         ctx.lineWidth = 1.5;
         ctx.stroke();
       });
     }
 
     function frame(now) {
-      const dt = now - last;
-      last = now;
       const elapsed = now - start;
       const intro = elapsed < INTRO_MS;
-      angle += (intro ? INTRO_SPEED : BASE_SPEED) * dt;
 
       const rect = canvas.getBoundingClientRect();
       const w = rect.width, h = rect.height;
@@ -29629,9 +29641,6 @@ async function doProfilePasswordChange() {
       if (w > 0 && h > 0) {
         const cx = w / 2, cy = h / 2;
         const radius = Math.hypot(w, h) / 2 + 20;
-        const intensity = intro ? 1.6 : 1;
-
-        drawSweep(cx, cy, radius, intensity);
 
         if (now - lastRing > (intro ? RING_INTRO_INTERVAL : RING_INTERVAL)) {
           rings.push({ born: now, age: 0, radius: 0, maxAge: RING_MAX_AGE });
@@ -29645,9 +29654,7 @@ async function doProfilePasswordChange() {
           const pt = map.latLngToContainerPoint(entry.marker.getLatLng());
           const dx = pt.x - cx, dy = pt.y - cy;
           const dist = Math.hypot(dx, dy);
-          const markerAngle = Math.atan2(dy, dx);
-          if (Math.abs(normalizeAngle(angle - markerAngle)) < 0.1) flashRadarMarker(entry, intro ? 1.3 : 1);
-          else if (rings.some(r => Math.abs(r.radius - dist) < 6)) flashRadarMarker(entry, 0.7);
+          if (rings.some(r => Math.abs(r.radius - dist) < 6)) flashRadarMarker(entry, 0.7);
         });
       }
 
