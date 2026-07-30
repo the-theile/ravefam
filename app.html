@@ -6483,6 +6483,15 @@
     letter-spacing: 0.6px; color: var(--text); margin: 22px 0 12px;
     display: flex; align-items: center; gap: 8px;
   }
+  .radarmap-replay-btn {
+    margin-left: auto; display: flex; align-items: center; gap: 5px;
+    background: rgba(0,245,255,0.08); border: 1px solid rgba(0,245,255,0.3); border-radius: 100px;
+    padding: 5px 12px; font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.68rem;
+    letter-spacing: normal; color: #00F5FF; cursor: pointer;
+    transition: background 0.15s ease-out, border-color 0.15s ease-out;
+  }
+  .radarmap-replay-btn:hover { background: rgba(0,245,255,0.16); border-color: rgba(0,245,255,0.5); }
+  .radarmap-replay-btn:active { transform: scale(0.96); }
   .radarmap { height: 320px; }
   .radar-marker {
     transform-box: fill-box; transform-origin: center;
@@ -8682,7 +8691,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.28.0';
+  const APP_VERSION = '1.28.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -29277,7 +29286,10 @@ async function doProfilePasswordChange() {
       <div class="section-header" style="margin-bottom:14px;">
         <div class="section-title">Raves on Your Radar 📡</div>
       </div>
-      <div class="radarmap-section-title">🛰️ Radar Map</div>
+      <div class="radarmap-section-title">
+        🛰️ Radar Map
+        <button id="radar-replay-btn" class="radarmap-replay-btn" onclick="restartRadarJourney()" style="display:none;">🔄 Replay</button>
+      </div>
       <div id="ravesradar-map" class="citymap radarmap"><div class="citymap-loading">📡 Locating your raves…</div></div>
       ${body}
     `;
@@ -29296,6 +29308,7 @@ async function doProfilePasswordChange() {
   let radarResizeObserver = null;
   let radarLeaveObserver = null;
   let radarCanvasEl = null;
+  let radarMapLastPoints = null; // resolved {fest,lat,lng,color} points from the last successful build, for the Replay button
 
   function cleanupRadarMap() {
     if (radarRafId != null) { cancelAnimationFrame(radarRafId); radarRafId = null; }
@@ -29324,6 +29337,9 @@ async function doProfilePasswordChange() {
 
   async function renderRavesRadarMap(upcoming) {
     cleanupRadarMap();
+    radarMapLastPoints = null;
+    const replayBtn = document.getElementById('radar-replay-btn');
+    if (replayBtn) replayBtn.style.display = 'none';
     const mapEl = document.getElementById('ravesradar-map');
     if (!mapEl) return;
 
@@ -29359,7 +29375,21 @@ async function doProfilePasswordChange() {
       return;
     }
 
+    radarMapLastPoints = points;
+    if (replayBtn && points.length > 1) replayBtn.style.display = '';
     buildRadarMap(mapEl, points);
+  }
+
+  // Re-runs the zoom-out journey (see flyThroughRadarPoints) for whoever missed it —
+  // tears down and rebuilds the map from the same resolved points rather than trying
+  // to rewind the live one, since decluttering/markers/path all key off the map's
+  // current state anyway.
+  function restartRadarJourney() {
+    const mapEl = document.getElementById('ravesradar-map');
+    if (!mapEl || !radarMapLastPoints || radarMapLastPoints.length < 2) return;
+    if (!document.getElementById('page-raves-radar').classList.contains('active')) return;
+    cleanupRadarMap();
+    buildRadarMap(mapEl, radarMapLastPoints);
   }
 
   function renderRadarMapEmptyState(mapEl) {
