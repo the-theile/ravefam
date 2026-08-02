@@ -6333,6 +6333,18 @@
     margin-bottom: 14px;
     overflow: hidden;
   }
+  .stats-section-card.tappable {
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+  }
+  .stats-section-card.tappable:hover, .stats-section-card.tappable:focus-visible {
+    outline: none;
+    transform: translateY(-2px);
+    border-color: rgba(0,245,255,0.35);
+    box-shadow: 0 8px 22px -8px rgba(0,245,255,0.35);
+  }
+  .stats-section-card.tappable:active { transform: translateY(0); }
   .stats-section-card::before {
     content: '';
     position: absolute; top: 0; left: 0; right: 0; height: 2px;
@@ -7807,6 +7819,9 @@
     <!-- RAVES LOGGED PAGE (dedicated, full-view) -->
     <div class="page" id="page-raves-logged"><!-- rendered by JS --></div>
 
+    <!-- TICKET MIX PAGE (dedicated, full-view) -->
+    <div class="page" id="page-ticket-mix"><!-- rendered by JS --></div>
+
     <!-- DAYS RAVED STATS PAGE (dedicated, full-view) -->
     <div class="page" id="page-days-stats"><!-- rendered by JS --></div>
 
@@ -8750,7 +8765,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.31.0';
+  const APP_VERSION = '1.32.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -26884,6 +26899,10 @@ async function doProfilePasswordChange() {
   function closeGoingOptionsSheet() {
     document.getElementById('going-options-sheet-overlay').classList.remove('open');
     _goingOptionsFestId = null;
+    // Keep the Ticket Mix list (and the Stats page card underneath it) fresh
+    // if a ticket type changed while either was the visible page.
+    if (document.getElementById('page-ticket-mix')?.classList.contains('active')) renderTicketMixPage();
+    if (document.getElementById('page-stats')?.classList.contains('active')) loadStatsPage();
   }
 
   function goingOptionsShowOtherInput(festId) {
@@ -29129,8 +29148,9 @@ async function doProfilePasswordChange() {
       const type = ((you.ticketTypes || {})[f.id] || {}).type;
       if (type) { ticketMixCounts[type] = (ticketMixCounts[type] || 0) + 1; totalTicketed++; }
     });
-    html += `<div class="stats-section-card">
-      <div class="stats-section-title">🎫 Ticket Mix</div>`;
+    const ticketMixTappable = myFests.length > 0;
+    html += `<div class="stats-section-card${ticketMixTappable ? ' tappable' : ''}" ${ticketMixTappable ? `onclick="openTicketMixPage()" role="button" tabindex="0"` : ''}>
+      <div class="stats-section-title">🎫 Ticket Mix${ticketMixTappable ? '<span class="rlog-item-chevron" style="margin-left:auto;">›</span>' : ''}</div>`;
     if (totalTicketed) {
       const dominantKey = TICKET_TYPES.map(t => t.key).reduce((best, key) =>
         (ticketMixCounts[key] || 0) > (ticketMixCounts[best] || 0) ? key : best, 'ga');
@@ -29150,7 +29170,7 @@ async function doProfilePasswordChange() {
         <div class="stats-empty-state" style="padding:20px 0;">
           <div class="stats-empty-icon">🎫</div>
           <div class="stats-empty-title">No ticket types logged yet</div>
-          <div class="stats-empty-sub">Set your ticket type from a rave's RSVP to start tracking your mix.</div>
+          <div class="stats-empty-sub">${ticketMixTappable ? 'Tap here to set a ticket type for your past raves.' : "Set your ticket type from a rave's RSVP to start tracking your mix."}</div>
         </div>`;
     }
     html += `</div>`;
@@ -29549,6 +29569,62 @@ async function doProfilePasswordChange() {
       </div>
       ${body}
     `;
+  }
+
+  function openTicketMixPage() {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-ticket-mix').classList.add('active');
+    window.scrollTo(0, 0);
+    renderTicketMixPage();
+  }
+
+  // Every past RSVP with a one-tap way to set/change its ticket type — reuses
+  // the Going Options sheet (already handles "already going, tap a chip to
+  // change type" for any festival) rather than building a second editor.
+  function renderTicketMixPage() {
+    const you = squad.find(r => r.isYou);
+    const myFests = myAchievedFests().filter(f => f.date);
+    const sorted = [...myFests].sort((a, b) => festDate(b) - festDate(a));
+
+    const body = sorted.length
+      ? `<div class="rlog-list">${sorted.map(f => {
+          const d = festDate(f);
+          const dateLabel = d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+          const info = ticketTypeInfo((you?.ticketTypes || {})[f.id]);
+          const badge = info
+            ? `<span class="ticket-type-list-badge ${info.color}">${escHtml(info.label)}</span>`
+            : `<span class="ticket-type-list-badge" style="color:var(--muted);background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.12);">Not set</span>`;
+          return `<div class="rlog-item" data-fest-id="${escHtml(String(f.id))}" onclick="openGoingOptionsSheet(this.dataset.festId)" role="button" tabindex="0" title="Tap to set or change your ticket type">
+            <span class="rlog-item-dot" style="background:${festColor(f)};"></span>
+            <div class="rlog-item-main">
+              <div class="rlog-item-name">${escHtml(f.name)}</div>
+              <div class="rlog-item-sub">${escHtml(dateLabel)}</div>
+            </div>
+            ${badge}
+            <span class="rlog-item-chevron">›</span>
+          </div>`;
+        }).join('')}</div>`
+      : `<div class="stats-empty-state">
+          <div class="stats-empty-icon">🎫</div>
+          <div class="stats-empty-title">No raves logged yet</div>
+          <div class="stats-empty-sub">Add a rave with a date to start tracking your ticket types.</div>
+        </div>`;
+
+    document.getElementById('page-ticket-mix').innerHTML = `
+      <button class="profile-back cyan" onclick="backToStatsFromTicketMix()">← Rave Life</button>
+      <div class="section-header" style="margin-bottom:14px;">
+        <div class="section-title">Ticket Mix 🎫</div>
+      </div>
+      ${body}
+    `;
+  }
+
+  // Ticket types can change while this page is open — re-render the main
+  // Stats page underneath before returning so its Ticket Mix card doesn't
+  // show stale counts (backToStats() itself just swaps page visibility).
+  function backToStatsFromTicketMix() {
+    loadStatsPage();
+    backToStats();
   }
 
   function openRavesRadarPage() {
