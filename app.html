@@ -828,6 +828,22 @@
   /* Summary "N GA · N VIP …" chip row next to the Ticket Types section label */
   .ticket-mix-row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 
+  /* Going Options bottom sheet — ticket type picker chips */
+  .going-ticket-chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 16px 0; }
+  .going-ticket-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 10px 16px; border-radius: 12px; cursor: pointer;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.82rem;
+    border: 1.5px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.04);
+    color: var(--text); transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .going-ticket-chip:hover { transform: translateY(-2px); }
+  .going-ticket-chip.green  { border-color: rgba(57,255,20,0.35);  color: var(--neon-green); }
+  .going-ticket-chip.yellow { border-color: rgba(255,230,0,0.4);   color: var(--neon-yellow); }
+  .going-ticket-chip.purple { border-color: rgba(191,0,255,0.35);  color: var(--neon-purple); }
+  .going-ticket-chip.cyan   { border-color: rgba(0,245,255,0.35);  color: var(--neon-cyan); }
+  .going-ticket-chip.picked { background: rgba(255,255,255,0.1); box-shadow: 0 0 0 1.5px currentColor; }
+
   /* Bottom action bar */
   .event-action-bar { display: flex; border-top: 1px solid rgba(255,255,255,0.05); }
   .event-action-btn {
@@ -8189,6 +8205,13 @@
   </div>
 </div>
 
+<!-- Going Options Bottom Sheet -->
+<div class="bottom-sheet-overlay" id="going-options-sheet-overlay" onclick="if(event.target===this)closeGoingOptionsSheet()">
+  <div class="bottom-sheet">
+    <div id="going-options-sheet-content"></div>
+  </div>
+</div>
+
 <!-- Welcome Back Modal -->
 <div class="modal-overlay" id="welcome-back-overlay" onclick="if(event.target===this)closeWelcomePopup()">
   <div class="modal" id="welcome-back-modal" style="padding:0;overflow:hidden;max-width:400px;">
@@ -8727,7 +8750,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.30.0';
+  const APP_VERSION = '1.31.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -25984,7 +26007,7 @@ async function doProfilePasswordChange() {
     const actionBarHTML = (festId, youGoing, youInterested, isUpcoming) => {
       const goingLabel = isUpcoming ? 'Going' : 'Sent It';
       const vibeBtn = `<button class="event-action-btn vibe-action" onclick="event.stopPropagation(); openVibePicker('${festId}')">✦ Vibe</button>`;
-      const goingBtn = `<button class="event-action-btn going-action${youGoing ? ' active' : ''}" onclick="event.stopPropagation(); toggleGoingToFest('${festId}')">${youGoing ? '🎟️ ' : '＋ '}${goingLabel}</button>`;
+      const goingBtn = `<button class="event-action-btn going-action${youGoing ? ' active' : ''}" onclick="event.stopPropagation(); openGoingOptionsSheet('${festId}')">${youGoing ? '🎟️ ' : '＋ '}${goingLabel}</button>`;
       const interestedBtn = `<button class="event-action-btn interested-action${youInterested ? ' active' : ''}" onclick="event.stopPropagation(); toggleInterestedInFest('${festId}')">👀 Interested</button>`;
       const buttons = youGoing ? [vibeBtn, goingBtn] : youInterested ? [vibeBtn, interestedBtn] : [vibeBtn, goingBtn, interestedBtn];
       return `<div class="event-action-bar">${buttons.join('')}</div>`;
@@ -26089,7 +26112,7 @@ async function doProfilePasswordChange() {
         return `<div class="rave-row-avatar" style="background:${bg}">${inner}</div>`;
       }).join('') + (moreCount > 0 ? `<div class="rave-row-more">+${moreCount}</div>` : '');
       const ctaIcon = youGoing ? '🎟️' : '＋';
-      const ctaTitle = youGoing ? (isUpcoming ? 'Going — tap to remove' : 'Sent it — tap to remove') : 'Mark going';
+      const ctaTitle = youGoing ? (isUpcoming ? 'Going — tap to manage' : 'Sent it — tap to manage') : 'Mark going';
       const cobweb = isUpcoming ? '' : COBWEB_SVG_MINI;
 
       return `<div class="rave-row${isUpcoming ? '' : ' rave-row-past'}" data-fest-id="${f.id}" onclick="toggleRaveRowExpand('${f.id}')" title="Tap to expand ${escHtml(f.name)}">
@@ -26103,7 +26126,7 @@ async function doProfilePasswordChange() {
         </div>
         <div class="rave-row-right">
           <div class="rave-row-avatars">${avatarsHTML}</div>
-          <button class="rave-row-cta${youGoing ? ' active' : ''}" onclick="event.stopPropagation(); toggleGoingToFest('${f.id}')" title="${ctaTitle}">${ctaIcon}</button>
+          <button class="rave-row-cta${youGoing ? ' active' : ''}" onclick="event.stopPropagation(); openGoingOptionsSheet('${f.id}')" title="${ctaTitle}">${ctaIcon}</button>
           <span class="rave-row-chevron">${expanded ? '▲' : '▼'}</span>
         </div>
       </div>`;
@@ -26803,6 +26826,103 @@ async function doProfilePasswordChange() {
         logAnalyticsEvent('first_rsvp_updated', { raver_id: you.id, festival_id: festId, direction: 'interested' });
       }
     }
+  }
+
+  // ===== Going Options bottom sheet =====
+  // Replaces a bare toggle on the Rave card / list row: tapping Going always
+  // opens this sheet — to set a ticket type up front (before you're even
+  // marked going), change it later, or step back to Interested/Not Going.
+  // The Rave Focus popup's own Going button is intentionally left alone —
+  // it already has its own inline ticket-type picker once you're going.
+  let _goingOptionsFestId = null;
+
+  function openGoingOptionsSheet(festId) {
+    if (String(festId).startsWith('temp_')) { showToast('Still saving — try again in a moment'); return; }
+    const f = getFestival(festId);
+    const you = squad.find(r => r.isYou);
+    if (!f || !you) return;
+    _goingOptionsFestId = festId;
+    const youGoing = (you.festIds || []).some(fid => String(fid) === String(festId));
+    const d = festDate(f);
+    const isUpcoming = d && d >= TODAY;
+    const currentTicket = (you.ticketTypes || {})[festId];
+    const chipsHtml = TICKET_TYPES.map(t => {
+      const picked = currentTicket?.type === t.key;
+      const onclick = t.key === 'other' ? `goingOptionsShowOtherInput('${festId}')` : `goingOptionsPickTicketType('${festId}', '${t.key}')`;
+      return `<button type="button" class="going-ticket-chip ${t.color}${picked ? ' picked' : ''}" onclick="${onclick}">${escHtml(t.abbr)}</button>`;
+    }).join('');
+    const otherCurrentLabel = currentTicket?.type === 'other' ? (currentTicket.other || '') : '';
+    const title = youGoing
+      ? `🎟️ You're ${isUpcoming ? 'going' : 'in'} — set your ticket`
+      : `🎟️ Going to ${escHtml(f.name)}?`;
+    const subtitle = youGoing
+      ? 'Tap a ticket type to set it, or change your RSVP below.'
+      : "Pick a ticket type if you know it, or just confirm you're in.";
+    const footerButtons = youGoing
+      ? `<button class="btn btn-ghost" style="flex:1;" onclick="goingOptionsInterested('${festId}')">👀 Interested instead</button>
+         <button class="btn btn-ghost" style="flex:1;color:var(--neon-pink);" onclick="goingOptionsNotGoing('${festId}')">🙅 Not going</button>`
+      : `<button class="btn btn-primary" style="flex:1;" onclick="goingOptionsJustGoing('${festId}')">🎟️ I'm going</button>
+         <button class="btn btn-ghost" style="flex:1;" onclick="goingOptionsInterested('${festId}')">👀 Interested</button>`;
+    document.getElementById('going-options-sheet-content').innerHTML = `
+      <div style="display:flex;justify-content:flex-end;margin:-8px -8px 0;">
+        <button type="button" class="page-panel-back" onclick="closeGoingOptionsSheet()">✕</button>
+      </div>
+      <div style="text-align:center;padding:0 0 4px;">
+        <div class="modal-title" style="margin-bottom:4px;">${title}</div>
+        <p style="font-size:0.78rem;color:var(--muted);">${subtitle}</p>
+      </div>
+      <div class="going-ticket-chips">${chipsHtml}</div>
+      <div id="going-options-other-wrap" style="display:${currentTicket?.type === 'other' ? '' : 'none'};margin:0 0 14px;">
+        <input class="form-input" id="going-options-other-input" placeholder="e.g. Weekend Camping Pass" maxlength="40" value="${escHtml(otherCurrentLabel)}">
+        <button class="btn btn-primary" style="width:100%;margin-top:8px;" onclick="goingOptionsConfirmOther('${festId}')">Set ticket</button>
+      </div>
+      <div class="modal-actions">${footerButtons}</div>
+    `;
+    document.getElementById('going-options-sheet-overlay').classList.add('open');
+  }
+
+  function closeGoingOptionsSheet() {
+    document.getElementById('going-options-sheet-overlay').classList.remove('open');
+    _goingOptionsFestId = null;
+  }
+
+  function goingOptionsShowOtherInput(festId) {
+    const wrap = document.getElementById('going-options-other-wrap');
+    if (!wrap) return;
+    wrap.style.display = '';
+    document.getElementById('going-options-other-input')?.focus();
+  }
+
+  function goingOptionsPickTicketType(festId, type) {
+    const you = squad.find(r => r.isYou);
+    const wasGoing = you && (you.festIds || []).some(fid => String(fid) === String(festId));
+    if (!wasGoing) toggleGoingToFest(festId);
+    saveMyTicketType(festId, type, null);
+    closeGoingOptionsSheet();
+  }
+
+  function goingOptionsConfirmOther(festId) {
+    const value = (document.getElementById('going-options-other-input')?.value || '').trim();
+    const you = squad.find(r => r.isYou);
+    const wasGoing = you && (you.festIds || []).some(fid => String(fid) === String(festId));
+    if (!wasGoing) toggleGoingToFest(festId);
+    saveMyTicketType(festId, 'other', value);
+    closeGoingOptionsSheet();
+  }
+
+  function goingOptionsJustGoing(festId) {
+    toggleGoingToFest(festId);
+    closeGoingOptionsSheet();
+  }
+
+  function goingOptionsInterested(festId) {
+    toggleInterestedInFest(festId);
+    closeGoingOptionsSheet();
+  }
+
+  function goingOptionsNotGoing(festId) {
+    toggleGoingToFest(festId);
+    closeGoingOptionsSheet();
   }
 
   function closeRaveEditor() {
