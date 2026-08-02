@@ -807,6 +807,21 @@
   .going-count-inline.cyan  { color: var(--neon-cyan); }
   .going-count-inline.muted { color: var(--muted); }
 
+  /* Rave Focus popup — per-attendee ticket type list */
+  .ticket-type-list-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
+    font-family: 'Outfit', sans-serif; font-size: 0.78rem;
+  }
+  .ticket-type-list-row:last-child { border-bottom: none; }
+  .ticket-type-list-name { color: #fff; }
+  .ticket-type-list-badge {
+    font-size: 0.65rem; font-weight: 700; letter-spacing: 0.03em;
+    color: var(--neon-cyan); background: rgba(0,245,255,0.08);
+    border: 1px solid rgba(0,245,255,0.25); border-radius: 6px;
+    padding: 2px 8px;
+  }
+
   /* Bottom action bar */
   .event-action-bar { display: flex; border-top: 1px solid rgba(255,255,255,0.05); }
   .event-action-btn {
@@ -8691,7 +8706,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.28.3';
+  const APP_VERSION = '1.29.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -10554,6 +10569,7 @@ async function doProfilePasswordChange() {
           favArtistIds: r.fav_artist_ids || [],
           festIds: r.fest_ids || [],
           interestedFestIds: r.interested_fest_ids || [],
+          ticketTypes: r.fest_tickets || {},
           instagram: r.instagram || '',
           radiate: r.radiate || '',
           phone: r.phone || '',
@@ -10655,6 +10671,7 @@ async function doProfilePasswordChange() {
             favArtistIds: r.fav_artist_ids || [],
             festIds: r.fest_ids || [],
             interestedFestIds: r.interested_fest_ids || [],
+            ticketTypes: r.fest_tickets || {},
             instagram: r.instagram || '',
             radiate: r.radiate || '',
             phone: r.phone || '',
@@ -11588,6 +11605,16 @@ async function doProfilePasswordChange() {
     const { error } = await sb.from('raver_festivals').delete().eq('raver_id', raverId).eq('festival_id', festId);
     if (error) { console.error('raver_festivals remove error', error); showToast('⚠️ Could not update festival attendance'); }
     else logAudit({ action: 'festival.rsvp_remove', entityType: 'festival', entityId: festId, metadata: { raver_id: raverId } });
+  }
+
+  // Sets/clears the ticket type on an existing RSVP row. Unlike
+  // dbAddRaverFestival this is an UPDATE, not an upsert — the raver_festivals
+  // row must already exist (you have to be going before you can pick a ticket).
+  async function dbSetRaverFestivalTicketType(raverId, festId, ticketType, ticketTypeOther) {
+    const { error } = await sb.from('raver_festivals')
+      .update({ ticket_type: ticketType || null, ticket_type_other: ticketType === 'other' ? (ticketTypeOther || null) : null })
+      .eq('raver_id', raverId).eq('festival_id', festId);
+    if (error) { console.error('raver_festivals ticket_type update error', error); showToast('⚠️ Could not save ticket type'); }
   }
 
   async function dbAddRaverFestivalInterest(raverId, festId) {
@@ -25404,6 +25431,20 @@ async function doProfilePasswordChange() {
     </g>
   </svg>`;
 
+  // Ticket type a raver can pick once they're marked Going — optional, set
+  // from the Rave Focus popup. 'other' pairs with a free-text label.
+  const TICKET_TYPES = [
+    { key: 'ga', label: 'General Admission' },
+    { key: 'vip', label: 'VIP' },
+    { key: 'backstage', label: 'Backstage' },
+    { key: 'other', label: 'Other' }
+  ];
+  function ticketTypeLabel(tt) {
+    if (!tt || !tt.type) return null;
+    if (tt.type === 'other') return tt.other ? tt.other : 'Other';
+    return (TICKET_TYPES.find(t => t.key === tt.type) || {}).label || null;
+  }
+
   // Who from the tribe references a given festival id (String-coerced for UUID safety)
   function festivalGoers(festId) {
     return squad.filter(p => (p.festIds || []).some(fid => String(fid) === String(festId)));
@@ -26346,6 +26387,30 @@ async function doProfilePasswordChange() {
   function raveFocusToggleGoing(festId) { toggleGoingToFest(festId); openRaveFocus(festId); }
   function raveFocusToggleInterested(festId) { toggleInterestedInFest(festId); openRaveFocus(festId); }
 
+  // Sets/clears your own ticket type for a rave you're already Going to.
+  // Only reachable once youGoing is true (see raveFocusModalHTML), so the
+  // raver_festivals row this updates is guaranteed to already exist.
+  function saveMyTicketType(festId, type, other) {
+    const you = squad.find(r => r.isYou);
+    if (!you) return;
+    if (!you.ticketTypes) you.ticketTypes = {};
+    if (type) you.ticketTypes[festId] = { type, other: type === 'other' ? (other || '') : null };
+    else delete you.ticketTypes[festId];
+    if (currentUser) dbSetRaverFestivalTicketType(you.id, festId, type || null, other || null);
+  }
+
+  function onTicketTypeSelectChange(festId, value) {
+    const otherInput = document.getElementById(`ticket-type-other-${festId}`);
+    if (otherInput) otherInput.style.display = value === 'other' ? '' : 'none';
+    saveMyTicketType(festId, value || null, value === 'other' ? (otherInput?.value || '') : null);
+    if (value !== 'other') openRaveFocus(festId);
+  }
+
+  function saveTicketTypeOther(festId, value) {
+    saveMyTicketType(festId, 'other', value.trim());
+    openRaveFocus(festId);
+  }
+
   function raveFocusModalHTML(f) {
     const you = squad.find(r => r.isYou);
     const youGoing = you && (you.festIds || []).some(fid => String(fid) === String(f.id));
@@ -26385,6 +26450,30 @@ async function doProfilePasswordChange() {
     const interestedBtn = `<button class="event-action-btn interested-action${youInterested ? ' active' : ''}" onclick="raveFocusToggleInterested('${f.id}')">👀 Interested</button>`;
     const rsvpButtonsHtml = youGoing ? [vibeBtn, goingBtn].join('') : youInterested ? [vibeBtn, interestedBtn].join('') : [vibeBtn, goingBtn, interestedBtn].join('');
 
+    const yourTicket = youGoing ? (you.ticketTypes || {})[f.id] : null;
+    const ticketPickerHtml = youGoing ? `
+      <div class="form-group ticket-type-picker" style="margin-top:10px;margin-bottom:0;">
+        <label class="form-label" style="font-size:0.72rem;">🎫 Your ticket</label>
+        <select class="archive-fest-select" onchange="onTicketTypeSelectChange('${f.id}', this.value)">
+          <option value="">Ticket type (optional)</option>
+          ${TICKET_TYPES.map(t => `<option value="${t.key}" ${yourTicket?.type === t.key ? 'selected' : ''}>${escHtml(t.label)}</option>`).join('')}
+        </select>
+        <input class="form-input" id="ticket-type-other-${f.id}" style="margin-top:6px;${yourTicket?.type === 'other' ? '' : 'display:none;'}"
+          placeholder="e.g. Weekend Camping Pass" maxlength="40" value="${escHtml(yourTicket?.type === 'other' ? (yourTicket.other || '') : '')}"
+          onblur="saveTicketTypeOther('${f.id}', this.value)">
+      </div>` : '';
+
+    const goersWithTickets = goers.filter(g => ticketTypeLabel((g.ticketTypes || {})[f.id]));
+    const ticketListHtml = goersWithTickets.length ? `
+      <div class="ticket-type-list">
+        <div class="form-section-label" style="margin-top:10px;">🎟️ Ticket Types</div>
+        ${goersWithTickets.map(g => `
+          <div class="ticket-type-list-row">
+            <span class="ticket-type-list-name">${escHtml(displayName(g).split(' ')[0])}</span>
+            <span class="ticket-type-list-badge">${escHtml(ticketTypeLabel((g.ticketTypes || {})[f.id]))}</span>
+          </div>`).join('')}
+      </div>` : '';
+
     const vibeRowContent = buildVibeRowHTML(f.id);
     const vibeSection = vibeRowContent
       ? `<div class="fest-vibe-row" style="padding:8px 0 0;">${vibeRowContent}</div>`
@@ -26401,8 +26490,10 @@ async function doProfilePasswordChange() {
         <button type="button" class="page-panel-back" style="flex-shrink:0;" onclick="closeRaveFocus()">✕</button>
       </div>
       <div class="event-action-bar" style="margin:10px 0 0;">${rsvpButtonsHtml}</div>
+      ${ticketPickerHtml}
       ${vibeSection}
       <div style="margin-top:14px;">${raveCrewSectionHTML(f, goers, interestedPeople)}</div>
+      ${ticketListHtml}
       <button class="btn btn-ghost" style="width:100%;padding:10px;font-size:0.85rem;margin-top:10px;" onclick="openRaveShareCard('${f.id}')">📲 Share Rave Card</button>
       <div class="form-section-label">Tribe</div>
       <div class="fest-goers-note" id="re-goers-note">${goers.length ? goers.length + ' tribe member' + (goers.length!==1?'s':'') + ' linked: ' + goers.map(g=>escHtml(g.name.split(' ')[0])).join(', ') : 'No tribe members linked yet'}</div>

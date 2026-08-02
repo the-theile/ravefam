@@ -307,6 +307,10 @@ async function installSupabaseStub(page, opts = {}) {
             const festIds = (store.raver_festivals || []).filter(x => String(x.raver_id) === String(r.id)).map(x => x.festival_id);
             const interestedFestIds = (store.raver_festival_interest || []).filter(x => String(x.raver_id) === String(r.id)).map(x => x.festival_id);
             const favArtistIds = (store.raver_favorite_artists || []).filter(x => String(x.raver_id) === String(r.id)).map(x => x.artist_id);
+            const festTickets = {};
+            (store.raver_festivals || []).filter(x => String(x.raver_id) === String(r.id) && x.ticket_type).forEach(x => {
+              festTickets[String(x.festival_id)] = { type: x.ticket_type, other: x.ticket_type_other ?? null };
+            });
             const row = {
               id: r.id, name: r.name, handle: r.handle, created_by: r.created_by, is_you: r.is_you,
               base: baseVisible ? r.base : null,
@@ -314,6 +318,7 @@ async function installSupabaseStub(page, opts = {}) {
               fav_artist_ids: favArtistIds,
               fest_ids: rsvpVisible ? festIds : [],
               interested_fest_ids: rsvpVisible ? interestedFestIds : [],
+              fest_tickets: rsvpVisible ? festTickets : {},
               instagram: r.instagram, radiate: r.radiate,
               phone: (selfOrMod || r.phone_visible) ? r.phone : null,
               phone_visible: r.phone_visible, met_story: r.met_story, claimed_by: r.claimed_by, status: r.status,
