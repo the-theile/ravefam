@@ -819,8 +819,14 @@
     font-size: 0.65rem; font-weight: 700; letter-spacing: 0.03em;
     color: var(--neon-cyan); background: rgba(0,245,255,0.08);
     border: 1px solid rgba(0,245,255,0.25); border-radius: 6px;
-    padding: 2px 8px;
+    padding: 2px 8px; white-space: nowrap;
   }
+  .ticket-type-list-badge.green  { color: var(--neon-green);  background: rgba(57,255,20,0.08);  border-color: rgba(57,255,20,0.3); }
+  .ticket-type-list-badge.yellow { color: var(--neon-yellow); background: rgba(255,230,0,0.1);   border-color: rgba(255,230,0,0.32); }
+  .ticket-type-list-badge.purple { color: var(--neon-purple); background: rgba(191,0,255,0.08);  border-color: rgba(191,0,255,0.3); }
+  .ticket-type-list-badge.cyan   { color: var(--neon-cyan);   background: rgba(0,245,255,0.08);  border-color: rgba(0,245,255,0.25); }
+  /* Summary "N GA · N VIP …" chip row next to the Ticket Types section label */
+  .ticket-mix-row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 
   /* Bottom action bar */
   .event-action-bar { display: flex; border-top: 1px solid rgba(255,255,255,0.05); }
@@ -6345,6 +6351,21 @@
     border-color: rgba(0,245,255,0.3);
     color: var(--neon-cyan);
   }
+  .stats-pill.green {
+    background: rgba(57,255,20,0.08);
+    border-color: rgba(57,255,20,0.3);
+    color: var(--neon-green);
+  }
+  .stats-pill.yellow {
+    background: rgba(255,230,0,0.1);
+    border-color: rgba(255,230,0,0.32);
+    color: var(--neon-yellow);
+  }
+  .stats-pill.purple {
+    background: rgba(191,0,255,0.08);
+    border-color: rgba(191,0,255,0.3);
+    color: var(--neon-purple);
+  }
 
   .stats-personality {
     position: relative;
@@ -8706,7 +8727,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.29.0';
+  const APP_VERSION = '1.30.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -25432,18 +25453,35 @@ async function doProfilePasswordChange() {
   </svg>`;
 
   // Ticket type a raver can pick once they're marked Going — optional, set
-  // from the Rave Focus popup. 'other' pairs with a free-text label.
+  // from the Rave Focus popup. 'other' pairs with a free-text label. `color`
+  // is a .stats-pill/.ticket-type-list-badge modifier keyword — kept as one
+  // small palette so the type→color mapping stays identical everywhere it
+  // shows up (popup badges, the mix chip, the Stats page pills).
   const TICKET_TYPES = [
-    { key: 'ga', label: 'General Admission' },
-    { key: 'vip', label: 'VIP' },
-    { key: 'backstage', label: 'Backstage' },
-    { key: 'other', label: 'Other' }
+    { key: 'ga', label: 'General Admission', abbr: 'GA', color: 'green' },
+    { key: 'vip', label: 'VIP', abbr: 'VIP', color: 'yellow' },
+    { key: 'backstage', label: 'Backstage', abbr: 'Backstage', color: 'purple' },
+    { key: 'other', label: 'Other', abbr: 'Other', color: 'cyan' }
   ];
-  function ticketTypeLabel(tt) {
+  // Fun "Vibe DNA"-style badge for the Stats page Ticket Mix card — keyed by
+  // whichever ticket type you've logged the most of.
+  const TICKET_PERSONALITY = {
+    ga:        { emoji: '🎫', label: 'The GA General',  sub: 'First in line, boots on the ground' },
+    vip:       { emoji: '🥂', label: 'VIP Vanguard',    sub: 'Never met a rope line it could stop' },
+    backstage: { emoji: '🔑', label: 'Backstage Baron', sub: 'Access-all-areas energy' },
+    other:     { emoji: '🃏', label: 'The Wildcard',    sub: 'Your ticket, your rules' }
+  };
+  // Full info (label/abbr/color) for a {type, other} value, with the custom
+  // 'other' label swapped in as the display label when present.
+  function ticketTypeInfo(tt) {
     if (!tt || !tt.type) return null;
-    if (tt.type === 'other') return tt.other ? tt.other : 'Other';
-    return (TICKET_TYPES.find(t => t.key === tt.type) || {}).label || null;
+    const preset = TICKET_TYPES.find(t => t.key === tt.type);
+    if (!preset) return null;
+    return tt.type === 'other'
+      ? { ...preset, label: tt.other ? tt.other : preset.label }
+      : preset;
   }
+  function ticketTypeLabel(tt) { return ticketTypeInfo(tt)?.label || null; }
 
   // Who from the tribe references a given festival id (String-coerced for UUID safety)
   function festivalGoers(festId) {
@@ -26463,14 +26501,28 @@ async function doProfilePasswordChange() {
           onblur="saveTicketTypeOther('${f.id}', this.value)">
       </div>` : '';
 
-    const goersWithTickets = goers.filter(g => ticketTypeLabel((g.ticketTypes || {})[f.id]));
+    const goersWithTickets = goers
+      .map(g => ({ g, info: ticketTypeInfo((g.ticketTypes || {})[f.id]) }))
+      .filter(({ info }) => info);
+    // Grouped counts for the mix chip — "Other" custom labels all fold into
+    // one Other count here rather than each getting their own chip.
+    const ticketMixCounts = {};
+    goersWithTickets.forEach(({ g }) => {
+      const type = (g.ticketTypes[f.id] || {}).type;
+      if (type) ticketMixCounts[type] = (ticketMixCounts[type] || 0) + 1;
+    });
+    const ticketMixChipsHtml = TICKET_TYPES.map(t => ticketMixCounts[t.key]
+      ? `<span class="ticket-type-list-badge ${t.color}">${ticketMixCounts[t.key]} ${escHtml(t.abbr)}</span>` : '').join('');
     const ticketListHtml = goersWithTickets.length ? `
       <div class="ticket-type-list">
-        <div class="form-section-label" style="margin-top:10px;">🎟️ Ticket Types</div>
-        ${goersWithTickets.map(g => `
+        <div class="form-section-label ticket-mix-row" style="margin-top:10px;justify-content:space-between;">
+          <span>🎟️ Ticket Types</span>
+          <span class="ticket-mix-row">${ticketMixChipsHtml}</span>
+        </div>
+        ${goersWithTickets.map(({ g, info }) => `
           <div class="ticket-type-list-row">
             <span class="ticket-type-list-name">${escHtml(displayName(g).split(' ')[0])}</span>
-            <span class="ticket-type-list-badge">${escHtml(ticketTypeLabel((g.ticketTypes || {})[f.id]))}</span>
+            <span class="ticket-type-list-badge ${info.color}">${escHtml(info.label)}</span>
           </div>`).join('')}
       </div>` : '';
 
@@ -28945,6 +28997,43 @@ async function doProfilePasswordChange() {
         <div class="stats-progress-bar"><div class="stats-progress-fill" style="width:${pct}%"></div></div>
       </div>`;
     }
+
+    // Ticket Mix — lifetime GA/VIP/Backstage/Other split, from past raves
+    // only (matches Vibe DNA/Passport's "your history" framing). No 3-rave
+    // gate like Vibe DNA: ticket_type is a brand-new optional field, so
+    // requiring a minimum here would leave it locked for nearly everyone at
+    // launch — an empty state nudges instead.
+    const ticketMixCounts = {};
+    let totalTicketed = 0;
+    myFests.forEach(f => {
+      const type = ((you.ticketTypes || {})[f.id] || {}).type;
+      if (type) { ticketMixCounts[type] = (ticketMixCounts[type] || 0) + 1; totalTicketed++; }
+    });
+    html += `<div class="stats-section-card">
+      <div class="stats-section-title">🎫 Ticket Mix</div>`;
+    if (totalTicketed) {
+      const dominantKey = TICKET_TYPES.map(t => t.key).reduce((best, key) =>
+        (ticketMixCounts[key] || 0) > (ticketMixCounts[best] || 0) ? key : best, 'ga');
+      const badge = TICKET_PERSONALITY[dominantKey];
+      html += `
+        <div class="stats-personality">
+          <div class="stats-personality-emoji">${badge.emoji}</div>
+          <div>
+            <div class="stats-personality-label">${escHtml(badge.label)}</div>
+            <div class="stats-personality-sub">${escHtml(badge.sub)}</div>
+          </div>
+        </div>
+        <div style="margin-top:12px;">${TICKET_TYPES.map(t => ticketMixCounts[t.key]
+          ? `<span class="stats-pill ${t.color}">${t.abbr} · ${Math.round(ticketMixCounts[t.key] / totalTicketed * 100)}%</span>` : '').join('')}</div>`;
+    } else {
+      html += `
+        <div class="stats-empty-state" style="padding:20px 0;">
+          <div class="stats-empty-icon">🎫</div>
+          <div class="stats-empty-title">No ticket types logged yet</div>
+          <div class="stats-empty-sub">Set your ticket type from a rave's RSVP to start tracking your mix.</div>
+        </div>`;
+    }
+    html += `</div>`;
 
     // Rave Passport
     html += `<div class="stats-section-card">
