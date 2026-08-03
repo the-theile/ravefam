@@ -6673,6 +6673,24 @@
   }
   @keyframes statsProgressShimmer { 0%{ transform: translateX(-100%); } 100%{ transform: translateX(100%); } }
 
+  /* ===== Milestone badges (Cities Hit / Artists Seen / Miles Raved) ===== */
+  .milestone-badges-row { display: flex; gap: 8px; margin-bottom: 4px; }
+  .milestone-badge {
+    flex: 1; text-align: center; padding: 10px 4px;
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px; opacity: 0.4; transition: opacity 0.15s, border-color 0.15s;
+  }
+  .milestone-badge.unlocked {
+    opacity: 1; border-color: rgba(255,230,0,0.35); background: rgba(255,230,0,0.07);
+  }
+  .milestone-badge-icon { font-size: 1.15rem; margin-bottom: 2px; }
+  .milestone-badge-label {
+    font-size: 0.6rem; font-family: 'Outfit', sans-serif; font-weight: 700;
+    color: var(--muted); letter-spacing: 0.3px;
+  }
+  .milestone-badge.unlocked .milestone-badge-label { color: var(--neon-yellow); }
+  .milestone-progress-sub { font-size: 0.68rem; color: var(--muted); margin-top: 8px; }
+
   .stats-wrapped-btn {
     width: 100%;
     padding: 16px;
@@ -8907,7 +8925,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.36.0';
+  const APP_VERSION = '1.37.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -28907,6 +28925,43 @@ async function doProfilePasswordChange() {
       : fallbackHtml;
   }
 
+  const MILESTONE_TIER_NAMES = ['Bronze', 'Silver', 'Gold', 'Diamond'];
+  const MILESTONE_TIER_ICONS = ['🥉', '🥈', '🥇', '💎'];
+
+  // Renders a 4-tier badge row + progress bar toward the next unearned tier. Used by
+  // Cities Hit, Artists Seen Live, and the Miles Raved card — none of these gate the
+  // underlying stat (unlike the Wrapped/Vibe DNA lock screens), the badges are a purely
+  // additive "keep going" nudge layered on top of a number that's already always shown.
+  function milestoneBarHTML(icon, title, value, tiers, unit) {
+    const badgesHtml = tiers.map((t, i) => {
+      const unlocked = value >= t;
+      return `<div class="milestone-badge${unlocked ? ' unlocked' : ''}" title="${MILESTONE_TIER_NAMES[i]} — ${t.toLocaleString()}${unit ? ' ' + escHtml(unit) : ''}">
+        <div class="milestone-badge-icon">${MILESTONE_TIER_ICONS[i]}</div>
+        <div class="milestone-badge-label">${t.toLocaleString()}</div>
+      </div>`;
+    }).join('');
+
+    const nextIdx = tiers.findIndex(t => value < t);
+    let progressHtml;
+    if (nextIdx === -1) {
+      progressHtml = `<div class="milestone-progress-sub" style="color:var(--neon-yellow);font-weight:700;">🏆 All ${escHtml(title)} milestones unlocked!</div>`;
+    } else {
+      const prevTier = nextIdx > 0 ? tiers[nextIdx - 1] : 0;
+      const nextTier = tiers[nextIdx];
+      const pct = Math.max(0, Math.min(100, Math.round(((value - prevTier) / (nextTier - prevTier)) * 100)));
+      const remaining = nextTier - value;
+      progressHtml = `
+        <div class="stats-progress-bar" style="max-width:none;margin:0;"><div class="stats-progress-fill" style="width:${pct}%"></div></div>
+        <div class="milestone-progress-sub">${remaining.toLocaleString()} more ${escHtml(unit || '')} to unlock ${MILESTONE_TIER_ICONS[nextIdx]} ${MILESTONE_TIER_NAMES[nextIdx]}</div>`;
+    }
+
+    return `<div class="stats-section-card">
+      <div class="stats-section-title">${icon} ${escHtml(title)} Milestones</div>
+      <div class="milestone-badges-row">${badgesHtml}</div>
+      ${progressHtml}
+    </div>`;
+  }
+
   // Shared horizontal single-series bar config (Days/Cities/Artist-genre charts all use this shape).
   function statsHBarConfig(labels, data, color) {
     return {
@@ -29215,6 +29270,9 @@ async function doProfilePasswordChange() {
     </div>`;
     if (travelDist && travelDist.skipped > 0) {
       html += `<div style="font-size:0.62rem;color:var(--muted);margin:-10px 0 14px;">📍 ${travelDist.skipped} rave${travelDist.skipped!==1?'s':''} couldn't be mapped yet</div>`;
+    }
+    if (travelDist) {
+      html += milestoneBarHTML('✈️', 'Miles Raved', Math.round(travelDist.total), [500, 1000, 2500, 5000], 'miles');
     }
 
     // Raves on Your Radar — upcoming RSVPs, shown regardless of achieved-rave count
@@ -30517,6 +30575,7 @@ async function doProfilePasswordChange() {
         <div class="stats-hero-card"><div class="stats-hero-number">${seen.length}</div><div class="stats-hero-label">${filter ? escHtml(filter) + ' Artists' : 'Distinct Artists'}</div></div>
         ${seen.length ? `<div class="stats-hero-card"><div class="stats-hero-number" style="font-size:1.3rem;">${escHtml(seen[0].artist.name)}</div><div class="stats-hero-label">Most Seen (${seen[0].count}x)</div></div>` : ''}
       </div>
+      ${milestoneBarHTML('🎤', 'Artists Seen', allSeen.length, [10, 25, 50, 100], 'artists')}
       ${genreRows.length ? `
       <div class="stats-section-card">
         <div class="stats-section-title">🧬 Genre Breakdown</div>
@@ -30771,6 +30830,7 @@ async function doProfilePasswordChange() {
           </div>
         </div>
       </div>
+      ${milestoneBarHTML('🗺️', 'Cities Hit', cityList.length, [5, 10, 25, 50], 'cities')}
       <div id="citymap" class="citymap"><div class="citymap-loading">📍 Mapping your cities…</div></div>
       <div class="stats-section-card">
         <div class="stats-section-title">🌆 City Breakdown</div>

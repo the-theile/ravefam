@@ -282,6 +282,42 @@ test.describe('stats', () => {
     });
     await expect(page.locator('#stats-content .stats-hero-label').nth(5)).toHaveText('Miles Raved');
     await expect(page.locator('#stats-content .stats-hero-number').nth(5)).not.toHaveText('0');
+
+    // Detroit -> LA is ~1,980 miles: past the 500/1,000 badges, short of 2,500/5,000.
+    await page.evaluate(() => {
+      saveUserGeo({ lat: 34.0522, lng: -118.2437, label: 'Los Angeles, CA', source: 'manual' });
+      loadStatsPage();
+    });
+    const milesCard = page.locator('#stats-content .stats-section-card', { has: page.locator('.stats-section-title', { hasText: 'Miles Raved Milestones' }) });
+    await expect(milesCard.locator('.milestone-badge.unlocked')).toHaveCount(2);
+    await expect(milesCard).toContainText('more miles to unlock 🥇 Gold');
+  });
+
+  test('Cities Hit page shows milestone badges toward the next tier', async ({ page }) => {
+    const d = statsData(); // Detroit is city #1
+    ['Berlin, DE', 'London, UK', 'Amsterdam, NL', 'Tokyo, JP'].forEach((loc, i) => {
+      d.festivals.push({ id: `f-city${i}`, name: `City Fest ${i}`, date: `201${i}-06-01`, location: loc, color: '#39FF14', days: 1, deleted_at: null });
+      d.raver_festivals.push({ raver_id: 'r-you', festival_id: `f-city${i}` });
+    });
+    await bootAuthedApp(page, { data: d });
+    await page.evaluate(() => { switchTab('stats'); openCitiesMapPage(); });
+
+    const milestoneCard = page.locator('#page-cities-map .stats-section-card', { has: page.locator('.stats-section-title', { hasText: 'Cities Hit Milestones' }) });
+    // 5 distinct cities logged — Bronze (5) unlocked, Silver (10) is next.
+    await expect(milestoneCard.locator('.milestone-badge.unlocked')).toHaveCount(1);
+    await expect(milestoneCard).toContainText('5 more cities to unlock 🥈 Silver');
+  });
+
+  test('Artists Seen Live shows milestone badges toward the next tier', async ({ page }) => {
+    const d = statsData();
+    d.artist_festival_appearances = [{ artist_id: 'a1', festival_id: 'f-past' }];
+    d.raver_artist_sightings = [{ raver_id: 'r-you', artist_id: 'a1', festival_id: 'f-past' }];
+    await bootAuthedApp(page, { data: d });
+    await page.evaluate(() => { switchTab('stats'); openArtistsSeenPage(); });
+
+    const milestoneCard = page.locator('#page-artists-seen .stats-section-card', { has: page.locator('.stats-section-title', { hasText: 'Artists Seen Milestones' }) });
+    await expect(milestoneCard.locator('.milestone-badge.unlocked')).toHaveCount(0);
+    await expect(milestoneCard).toContainText('9 more artists to unlock 🥉 Bronze');
   });
 
   test('Crew Stats surfaces a Most Vibes Left award for the member with the most reactions', async ({ page }) => {
