@@ -6388,6 +6388,11 @@
     border-color: rgba(0,245,255,0.3);
     color: var(--neon-cyan);
   }
+  .stats-pill.active {
+    background: var(--neon-cyan);
+    border-color: var(--neon-cyan);
+    color: #06000f;
+  }
   .stats-pill.green {
     background: rgba(57,255,20,0.08);
     border-color: rgba(57,255,20,0.3);
@@ -6490,6 +6495,11 @@
     border-style: dashed;
     border-color: rgba(255,255,255,0.1);
     opacity: 0.4;
+    transition: opacity 0.15s, border-color 0.15s;
+  }
+  .stats-stamp.empty:hover {
+    opacity: 0.7;
+    border-color: rgba(255,255,255,0.28);
   }
   .stats-stamp.empty::before, .stats-stamp.empty::after { display: none; }
   .stats-stamp.empty .stats-stamp-name { color: var(--muted); }
@@ -8854,7 +8864,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.34.0';
+  const APP_VERSION = '1.35.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -29219,7 +29229,7 @@ async function doProfilePasswordChange() {
             <div class="stats-personality-sub">${escHtml(personality.sub || '')}</div>
           </div>
         </div>
-        ${genres.length ? `<div style="margin-top:12px;margin-bottom:3px;font-size:0.67rem;color:var(--muted);font-family:'Outfit',sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Genres</div><div>${genres.map(g => `<span class="stats-pill">${escHtml(g)}</span>`).join('')}</div>` : ''}
+        ${genres.length ? `<div style="margin-top:12px;margin-bottom:3px;font-size:0.67rem;color:var(--muted);font-family:'Outfit',sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Genres</div><div>${genres.map(g => `<span class="stats-pill" style="cursor:pointer;" onclick="openArtistsSeenPage('${g.replace(/'/g, "\\'")}')" title="See artists you've seen live in ${escHtml(g)}">${escHtml(g)}</span>`).join('')}</div>` : ''}
         ${topTags.length ? `<div style="margin-top:9px;margin-bottom:3px;font-size:0.67rem;color:var(--muted);font-family:'Outfit',sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Your Vibes</div><div>${topTags.map(t => { const p = getPreset(t); return `<span class="stats-pill cyan">${escHtml(p ? `${p.icon} ${p.label}` : t)}</span>`; }).join('')}</div>` : ''}
         ${topEmoji ? `<div style="margin-top:9px;margin-bottom:4px;font-size:0.67rem;color:var(--muted);font-family:'Outfit',sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Signature Emoji</div><span style="font-size:1.9rem;">${topEmoji}</span>` : ''}
       </div>`;
@@ -29278,13 +29288,13 @@ async function doProfilePasswordChange() {
       <div class="stats-passport-grid">
         ${passportFests.slice(0, PASSPORT_SLOTS).map((f, i) => {
           const year = f.date ? new Date(f.date + 'T12:00:00').getFullYear() : '';
-          return `<div class="stats-stamp">
+          return `<div class="stats-stamp" style="cursor:pointer;" onclick="openRaveFocus('${f.id}')" role="button" tabindex="0" title="Tap to view ${escHtml(f.name)}">
             <div class="stats-stamp-icon">${STAMP_ICONS[i % STAMP_ICONS.length]}</div>
             <div class="stats-stamp-name" title="${escHtml(f.name)}">${escHtml(f.name)}</div>
             <div class="stats-stamp-year">${year}</div>
           </div>`;
         }).join('')}
-        ${Array(emptySlots).fill(0).slice(0, PASSPORT_SLOTS).map(() => `<div class="stats-stamp empty">
+        ${Array(emptySlots).fill(0).slice(0, PASSPORT_SLOTS).map(() => `<div class="stats-stamp empty" style="cursor:pointer;" onclick="openNewRavePopup('${you.id}')" role="button" tabindex="0" title="Tap to log a rave">
           <div class="stats-stamp-icon" style="opacity:0.3;">➕</div>
           <div class="stats-stamp-name">Add a rave</div>
           <div class="stats-stamp-year">—</div>
@@ -30249,18 +30259,30 @@ async function doProfilePasswordChange() {
     radarRafId = requestAnimationFrame(frame);
   }
 
-  function openArtistsSeenPage() {
+  // Set by openArtistsSeenPage(genre) when arriving via a tappable genre pill
+  // (Vibe DNA or this page's own Genre Breakdown) — narrows the Full List below
+  // to artists tagged with that genre. Cleared by clearArtistsSeenGenreFilter().
+  let _artistsSeenGenreFilter = null;
+
+  function openArtistsSeenPage(genreFilter) {
+    _artistsSeenGenreFilter = genreFilter || null;
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById('page-artists-seen').classList.add('active');
     window.scrollTo(0, 0);
     renderArtistsSeenPage();
   }
 
+  function clearArtistsSeenGenreFilter() {
+    _artistsSeenGenreFilter = null;
+    renderArtistsSeenPage();
+  }
+
   async function renderArtistsSeenPage() {
     const page = document.getElementById('page-artists-seen');
-    const seen = myArtistsSeen();
+    const allSeen = myArtistsSeen();
 
-    if (!seen.length) {
+    if (!allSeen.length) {
+      _artistsSeenGenreFilter = null;
       page.innerHTML = `
         <button class="profile-back cyan" onclick="backToStats()">← Rave Life</button>
         <div class="section-header" style="margin-bottom:14px;"><div class="section-title">Artists Seen Live 🎤</div></div>
@@ -30275,30 +30297,28 @@ async function doProfilePasswordChange() {
     await loadChartJs().catch(() => {});
     if (!page.classList.contains('active')) return; // navigated away while Chart.js was loading
 
-    const top = seen[0];
-    // Genre breakdown counts each distinct artist once per genre — a headliner you've
-    // seen 5 times shouldn't drown out everyone else you've only caught once.
+    const filter = _artistsSeenGenreFilter;
+    const seen = filter
+      ? allSeen.filter(({ artist }) => (artist.genres || []).some(g => titleCaseGenre(g) === filter))
+      : allSeen;
+
+    // Genre breakdown always reflects the FULL (unfiltered) set — it doubles as a
+    // genre switcher, so narrowing it down to just the active filter would make it
+    // impossible to jump straight to a different genre without clearing first.
+    // Counts each distinct artist once per genre — a headliner you've seen 5 times
+    // shouldn't drown out everyone else you've only caught once.
     const genreCounts = {};
-    seen.forEach(({ artist }) => (artist.genres || []).forEach(g => {
+    allSeen.forEach(({ artist }) => (artist.genres || []).forEach(g => {
       const label = titleCaseGenre(g);
       genreCounts[label] = (genreCounts[label] || 0) + 1;
     }));
     const genreRows = Object.entries(genreCounts).sort((a, b) => b[1] - a[1]);
 
-    page.innerHTML = `
-      <button class="profile-back cyan" onclick="backToStats()">← Rave Life</button>
-      <div class="section-header" style="margin-bottom:14px;"><div class="section-title">Artists Seen Live 🎤</div></div>
-      <div class="stats-hero-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:18px;">
-        <div class="stats-hero-card"><div class="stats-hero-number">${seen.length}</div><div class="stats-hero-label">Distinct Artists</div></div>
-        <div class="stats-hero-card"><div class="stats-hero-number" style="font-size:1.3rem;">${escHtml(top.artist.name)}</div><div class="stats-hero-label">Most Seen (${top.count}x)</div></div>
-      </div>
-      ${genreRows.length ? `
-      <div class="stats-section-card">
-        <div class="stats-section-title">🧬 Genre Breakdown</div>
-        ${statsChartOrFallback('artists-genre-chart', genreRows.map(([g, c]) => `<span class="stats-pill cyan">${escHtml(g)} · ${c}</span>`).join(''), Math.max(140, genreRows.length * 34))}
-      </div>` : ''}
-      <div class="stats-section-card">
-        <div class="stats-section-title">🎧 Full List</div>
+    const titleHtml = filter
+      ? `<div><div class="section-title">${escHtml(filter)} Artists 🎤</div><button class="profile-back cyan" style="margin:2px 0 0;" onclick="clearArtistsSeenGenreFilter()">← all artists</button></div>`
+      : `<div class="section-title">Artists Seen Live 🎤</div>`;
+
+    const listBody = seen.length ? `
         <div class="rlog-list">
           ${seen.map(({ artist, count }) => `
             <div class="rlog-item" style="cursor:pointer;" onclick="openArtistSightingsModal('${artist.id}')" title="Tap to edit which raves you caught ${escHtml(artist.name)} at">
@@ -30310,7 +30330,24 @@ async function doProfilePasswordChange() {
               <span class="rlog-fav-indicator${isFavoriteArtist(artist.id) ? ' favorited' : ''}" title="${isFavoriteArtist(artist.id) ? 'One of your favorite artists' : 'Not a favorite artist yet'}">${isFavoriteArtist(artist.id) ? '⭐' : '☆'}</span>
               <span style="font-family:'Orbitron',sans-serif;font-weight:700;font-size:0.78rem;color:var(--neon-purple);">${count}x</span>
             </div>`).join('')}
-        </div>
+        </div>` : `
+        <div class="fest-empty">No ${escHtml(filter)} artists caught yet</div>`;
+
+    page.innerHTML = `
+      <button class="profile-back cyan" onclick="backToStats()">← Rave Life</button>
+      <div class="section-header" style="margin-bottom:14px;">${titleHtml}</div>
+      <div class="stats-hero-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:18px;">
+        <div class="stats-hero-card"><div class="stats-hero-number">${seen.length}</div><div class="stats-hero-label">${filter ? escHtml(filter) + ' Artists' : 'Distinct Artists'}</div></div>
+        ${seen.length ? `<div class="stats-hero-card"><div class="stats-hero-number" style="font-size:1.3rem;">${escHtml(seen[0].artist.name)}</div><div class="stats-hero-label">Most Seen (${seen[0].count}x)</div></div>` : ''}
+      </div>
+      ${genreRows.length ? `
+      <div class="stats-section-card">
+        <div class="stats-section-title">🧬 Genre Breakdown</div>
+        ${statsChartOrFallback('artists-genre-chart', genreRows.map(([g, c]) => `<span class="stats-pill cyan${g === filter ? ' active' : ''}" style="cursor:pointer;" onclick="openArtistsSeenPage('${g.replace(/'/g, "\\'")}')" title="Filter to ${escHtml(g)} artists">${escHtml(g)} · ${c}</span>`).join(''), Math.max(140, genreRows.length * 34))}
+      </div>` : ''}
+      <div class="stats-section-card">
+        <div class="stats-section-title">🎧 Full List</div>
+        ${listBody}
       </div>
     `;
 

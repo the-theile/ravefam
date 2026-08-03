@@ -28,6 +28,19 @@ test.describe('stats', () => {
     await expect(heroNumbers.nth(0)).toHaveText('0');       // 0 Raves Logged
   });
 
+  test('Rave Passport: tapping a filled stamp opens that rave, tapping an empty slot starts logging one', async ({ page }) => {
+    await bootAuthedApp(page, { data: statsData() });
+    await page.evaluate(() => { switchTab('stats'); loadStatsPage(); });
+
+    await page.locator('#stats-content .stats-stamp', { hasText: 'Past Fest' }).click();
+    await expect(page.locator('#rave-focus-overlay')).toHaveClass(/open/);
+    await expect(page.locator('#rave-focus-modal')).toContainText('Past Fest');
+    await page.evaluate(() => closeRaveFocus());
+
+    await page.locator('#stats-content .stats-stamp.empty').first().click();
+    await expect(page.locator('#new-rave-popup-overlay')).toHaveClass(/open/);
+  });
+
   test('switching to the Crew Stats subtab shows the crew panel', async ({ page }) => {
     await bootAuthedApp(page, { data: statsData() });
     await page.evaluate(() => { switchTab('stats'); loadStatsPage(); });
@@ -105,6 +118,58 @@ test.describe('stats', () => {
     await page.evaluate(() => openArtistsSeenPage());
     await expect(page.locator('#page-artists-seen .rlog-item-name')).toHaveText('Charlotte de Witte');
     await expect(page.locator('#page-artists-seen')).toContainText('Distinct Artists');
+  });
+
+  test('Artists Seen Live: genre pills filter the Full List and clear back to all artists', async ({ page }) => {
+    const d = statsData();
+    d.artists.push({ id: 'a2', name: 'Peggy Gou', genres: ['house'] });
+    d.artist_festival_appearances = [
+      { artist_id: 'a1', festival_id: 'f-past' },
+      { artist_id: 'a2', festival_id: 'f-past' },
+    ];
+    d.raver_artist_sightings = [
+      { raver_id: 'r-you', artist_id: 'a1', festival_id: 'f-past' },
+      { raver_id: 'r-you', artist_id: 'a2', festival_id: 'f-past' },
+    ];
+    await bootAuthedApp(page, { data: d });
+    await page.evaluate(() => { switchTab('stats'); openArtistsSeenPage(); });
+    await expect(page.locator('#page-artists-seen .rlog-item-name')).toHaveCount(2);
+
+    // Tap the Techno breakdown pill — Full List narrows to just Charlotte de Witte,
+    // and the page title/hero swap to reflect the active filter.
+    await page.locator('#page-artists-seen .stats-pill.cyan', { hasText: 'Techno' }).click();
+    await expect(page.locator('#page-artists-seen .section-title')).toHaveText('Techno Artists 🎤');
+    await expect(page.locator('#page-artists-seen .rlog-item-name')).toHaveCount(1);
+    await expect(page.locator('#page-artists-seen .rlog-item-name')).toHaveText('Charlotte de Witte');
+    await expect(page.locator('#page-artists-seen .stats-pill.cyan', { hasText: 'Techno' })).toHaveClass(/active/);
+
+    // Both breakdown pills stay visible while filtered, so switching genres
+    // doesn't require clearing first.
+    await page.locator('#page-artists-seen .stats-pill.cyan', { hasText: 'House' }).click();
+    await expect(page.locator('#page-artists-seen .rlog-item-name')).toHaveText('Peggy Gou');
+
+    // Clearing goes back to the full unfiltered list.
+    await page.locator('#page-artists-seen .profile-back', { hasText: 'all artists' }).click();
+    await expect(page.locator('#page-artists-seen .section-title')).toHaveText('Artists Seen Live 🎤');
+    await expect(page.locator('#page-artists-seen .rlog-item-name')).toHaveCount(2);
+  });
+
+  test('Vibe DNA genre pills open Artists Seen Live pre-filtered to that genre', async ({ page }) => {
+    const d = statsData();
+    // Vibe DNA only unlocks at 3+ logged raves — add two more past RSVPs on top
+    // of statsData()'s one so the section actually renders.
+    d.festivals.push({ id: 'f-past2', name: 'Second Past Fest', date: '2021-06-01', location: 'Berlin, DE', color: '#00F5FF', days: 1, deleted_at: null });
+    d.festivals.push({ id: 'f-past3', name: 'Third Past Fest', date: '2019-06-01', location: 'Berlin, DE', color: '#00F5FF', days: 1, deleted_at: null });
+    d.raver_festivals.push({ raver_id: 'r-you', festival_id: 'f-past2' }, { raver_id: 'r-you', festival_id: 'f-past3' });
+    d.artist_festival_appearances = [{ artist_id: 'a1', festival_id: 'f-past' }];
+    d.raver_artist_sightings = [{ raver_id: 'r-you', artist_id: 'a1', festival_id: 'f-past' }];
+    await bootAuthedApp(page, { data: d });
+    await page.evaluate(() => { switchTab('stats'); loadStatsPage(); });
+
+    const vibeDnaCard = page.locator('#stats-content .stats-section-card', { has: page.locator('.stats-section-title', { hasText: 'Vibe DNA' }) });
+    await vibeDnaCard.locator('.stats-pill', { hasText: 'Techno' }).click();
+    await expect(page.locator('#page-artists-seen')).toHaveClass(/active/);
+    await expect(page.locator('#page-artists-seen .section-title')).toHaveText('Techno Artists 🎤');
   });
 
   test('Artists Seen Live shows a dedicated empty state with no lineup data', async ({ page }) => {
