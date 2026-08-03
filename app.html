@@ -7000,6 +7000,45 @@
     position: relative; margin-bottom: 16px;
   }
 
+  /* ===== VIBE DNA SHARE CARD ===== */
+  /* Reuses .radar-share-header/-avatar/-eyebrow/-name/-footer (purely structural,
+     not radar-specific) and .wrapped-personality-block/.stats-pill for the body —
+     only the overlay/card shell and headline get their own rules. */
+  #vibedna-share-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 600;
+    background: rgba(0,0,0,0.88);
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    overflow-y: auto;
+  }
+  #vibedna-share-overlay.open { display: flex; }
+  #vibedna-share-card {
+    width: 100%;
+    max-width: 380px;
+    border-radius: 24px;
+    padding: 32px 26px 26px;
+    background: linear-gradient(160deg,#06000f,#12002a,#080018);
+    border: 1px solid rgba(255,45,120,0.28);
+    box-shadow: 0 0 80px rgba(255,45,120,0.18), 0 0 40px rgba(191,0,255,0.12);
+    position: relative;
+    overflow: hidden;
+    margin: auto;
+  }
+  .vibedna-share-headline {
+    font-family: 'Urbanist', sans-serif; font-weight: 900; font-size: 1.7rem; line-height: 1.05;
+    color: #fff; margin-bottom: 16px; position: relative;
+  }
+  .vibedna-share-headline span { color: var(--neon-pink); }
+  .vibedna-share-label {
+    font-size: 0.67rem; color: rgba(255,255,255,0.4); font-family: 'Outfit', sans-serif;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+    margin: 12px 0 4px; position: relative;
+  }
+
   /* ===== CREW SHARE CARD (Rave Pass / Laminate) ===== */
   #crew-share-overlay {
     display: none;
@@ -7949,6 +7988,10 @@
   <div id="radar-share-card"><!-- rendered by JS --></div>
 </div>
 
+<div id="vibedna-share-overlay" onclick="if(event.target===this)closeVibeDnaShareCard()">
+  <div id="vibedna-share-card"><!-- rendered by JS --></div>
+</div>
+
 <!-- Modal -->
 <div class="modal-overlay" id="modal-overlay" onclick="closeModalOutside(event)">
   <div class="modal">
@@ -8864,7 +8907,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.35.0';
+  const APP_VERSION = '1.36.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -29221,7 +29264,7 @@ async function doProfilePasswordChange() {
       const genres = you.genres || [];
       const topTags = allTags.slice(0, 6);
       html += `<div class="stats-section-card">
-        <div class="stats-section-title">🧬 Vibe DNA</div>
+        <div class="stats-section-title">🧬 Vibe DNA<button class="radarmap-replay-btn" style="margin-left:auto;" onclick="openVibeDnaShareCard()" title="Share your Vibe DNA" aria-label="Share your Vibe DNA">📲 Share</button></div>
         <div class="stats-personality">
           <div class="stats-personality-emoji">${personality.emoji}</div>
           <div>
@@ -29382,6 +29425,43 @@ async function doProfilePasswordChange() {
 
     let pairwiseHtml = '';
     const youInCrew = you && crewMembers.find(m => String(m.id) === String(you.id));
+
+    // Ticket Mix vs. Crew — your lifetime GA/VIP/Backstage/Other split next to the
+    // crew's aggregate across everyone's logged past raves, so you can see at a
+    // glance whether you're the odd one out. Mirrors the personal Ticket Mix card
+    // on the My Stats tab, just summed across every crew member instead of just you.
+    let ticketMixVsCrewHtml = '';
+    if (youInCrew) {
+      const crewTicketMixCounts = {};
+      let crewTotalTicketed = 0;
+      crewMembers.forEach(m => {
+        (m.festIds || []).forEach(fid => {
+          if (!achievedFestIds.has(String(fid))) return;
+          const type = ((m.ticketTypes || {})[fid] || {}).type;
+          if (type) { crewTicketMixCounts[type] = (crewTicketMixCounts[type] || 0) + 1; crewTotalTicketed++; }
+        });
+      });
+      const youTicketMixCounts = {};
+      let youTotalTicketed = 0;
+      myAchievedFests().forEach(f => {
+        const type = ((you.ticketTypes || {})[f.id] || {}).type;
+        if (type) { youTicketMixCounts[type] = (youTicketMixCounts[type] || 0) + 1; youTotalTicketed++; }
+      });
+      const ticketMixRow = (label, counts, total) => `<div style="margin-bottom:10px;">
+          <div style="font-size:0.65rem;color:var(--muted);font-family:'Outfit',sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;">${escHtml(label)}</div>
+          ${total ? `<div>${TICKET_TYPES.map(t => counts[t.key]
+            ? `<span class="stats-pill ${t.color}">${t.abbr} · ${Math.round(counts[t.key] / total * 100)}%</span>` : '').join('')}</div>`
+            : `<div style="font-size:0.72rem;color:var(--muted);">No ticket types logged yet</div>`}
+        </div>`;
+      if (youTotalTicketed || crewTotalTicketed) {
+        ticketMixVsCrewHtml = `<div class="stats-section-card">
+          <div class="stats-section-title">🎫 Ticket Mix vs. Crew</div>
+          ${ticketMixRow('You', youTicketMixCounts, youTotalTicketed)}
+          ${ticketMixRow(selectedCrew.name, crewTicketMixCounts, crewTotalTicketed)}
+        </div>`;
+      }
+    }
+
     if (youInCrew) {
       const pairs = crewMembers
         .filter(m => String(m.id) !== String(you.id))
@@ -29456,6 +29536,7 @@ async function doProfilePasswordChange() {
         ${statsChartOrFallback('crew-chart-genre', crewGenreRows.map(([g, c]) => `<span class="stats-pill cyan">${escHtml(g)} · ${c}</span>`).join(''), Math.max(140, crewGenreRows.length * 34))}
       </div>` : ''}
       <div id="plur-leaderboard-wrap">${plurLeaderboardCardHTML([], null, true)}</div>
+      ${ticketMixVsCrewHtml}
       ${pairwiseHtml}
     `;
 
@@ -29708,6 +29789,102 @@ async function doProfilePasswordChange() {
               const a = document.createElement('a');
               a.href = url; a.download = 'my-radar.png'; a.click();
               showToast('📥 Radar card downloaded!');
+            } finally {
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
+            }
+          }
+        }, 'image/png');
+      } else {
+        if (actions) actions.style.display = '';
+        showToast('📋 Screenshot this card to share!');
+      }
+    } catch {
+      if (actions) actions.style.display = '';
+      showToast('📋 Screenshot this card to share!');
+    }
+  }
+
+  // ===== Vibe DNA Share Card — same lightweight synchronous html2canvas
+  // approach as the Radar card (no remote photos to fetch, just text/pills). =====
+  function openVibeDnaShareCard() {
+    const you = squad.find(r => r.isYou);
+    if (!you) return;
+    const allTags = [...(you.vibeTags || []), ...(you.customVibeTags || [])];
+    const personality = getPersonalityLabel(you.genres || [], allTags);
+    const emojiCounts = {};
+    Object.keys(festVibesCache).forEach(fid => {
+      const mine = (festVibesCache[fid] || []).find(v => String(v.raverId) === String(you.id));
+      if (mine?.emoji) emojiCounts[mine.emoji] = (emojiCounts[mine.emoji] || 0) + 1;
+    });
+    const topEmoji = Object.entries(emojiCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+    renderVibeDnaShareCard(you, personality, you.genres || [], allTags.slice(0, 6), topEmoji);
+    document.getElementById('vibedna-share-overlay').classList.add('open');
+  }
+
+  function closeVibeDnaShareCard() {
+    document.getElementById('vibedna-share-overlay').classList.remove('open');
+  }
+
+  function renderVibeDnaShareCard(you, personality, genres, topTags, topEmoji) {
+    const genresHtml = genres.length
+      ? `<div class="vibedna-share-label">Genres</div><div>${genres.map(g => `<span class="stats-pill">${escHtml(g)}</span>`).join('')}</div>`
+      : '';
+    const tagsHtml = topTags.length
+      ? `<div class="vibedna-share-label">Your Vibes</div><div>${topTags.map(t => { const p = getPreset(t); return `<span class="stats-pill cyan">${escHtml(p ? `${p.icon} ${p.label}` : t)}</span>`; }).join('')}</div>`
+      : '';
+    const emojiHtml = topEmoji
+      ? `<div class="vibedna-share-label">Signature Emoji</div><div style="font-size:1.9rem;">${topEmoji}</div>`
+      : '';
+
+    document.getElementById('vibedna-share-card').innerHTML = `
+      <div class="radar-share-header">
+        <div class="radar-share-avatar" style="background:${you.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)'}">${initials(you.name).toUpperCase()}</div>
+        <div>
+          <div class="radar-share-eyebrow">myravefam.com</div>
+          <div class="radar-share-name">${escHtml(you.name)}</div>
+        </div>
+      </div>
+      <div class="vibedna-share-headline">Vibe <span>DNA</span> 🧬</div>
+      <div class="wrapped-personality-block">
+        <div class="wrapped-personality-emoji">${personality.emoji}</div>
+        <div>
+          <div class="wrapped-personality-label">${escHtml(personality.label)}</div>
+          <div class="wrapped-personality-sub">${escHtml(personality.sub || '')}</div>
+        </div>
+      </div>
+      ${genresHtml}
+      ${tagsHtml}
+      ${emojiHtml}
+      <div class="radar-share-footer" style="margin-top:16px;">myravefam.com · Track your rave life</div>
+      <div class="wrapped-actions">
+        <button class="wrapped-share-btn" onclick="shareVibeDnaCard()">📲 Share Card</button>
+        <button class="wrapped-close-btn" onclick="closeVibeDnaShareCard()">Close</button>
+      </div>
+    `;
+  }
+
+  async function shareVibeDnaCard() {
+    const card = document.getElementById('vibedna-share-card');
+    const actions = card.querySelector('.wrapped-actions');
+    if (actions) actions.style.display = 'none';
+    try {
+      if (typeof html2canvas !== 'undefined') {
+        const canvas = await html2canvas(card, { backgroundColor: '#06000f', scale: 2, useCORS: true, logging: false, ignoreElements: (el) => {
+          if (document.head.contains(el) || el === document.head) return false;
+          return el.tagName === 'VIDEO' || (el !== card && !card.contains(el) && !el.contains(card));
+        } });
+        if (actions) actions.style.display = '';
+        canvas.toBlob(async (blob) => {
+          if (!blob) { showToast('⚠️ Could not generate image'); return; }
+          const file = new File([blob], 'my-vibe-dna.png', { type: 'image/png' });
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            try { await navigator.share({ files: [file], title: 'My Vibe DNA — RaveFAM' }); } catch {}
+          } else {
+            const url = URL.createObjectURL(blob);
+            try {
+              const a = document.createElement('a');
+              a.href = url; a.download = 'my-vibe-dna.png'; a.click();
+              showToast('📥 Vibe DNA card downloaded!');
             } finally {
               setTimeout(() => URL.revokeObjectURL(url), 1000);
             }

@@ -28,6 +28,26 @@ test.describe('stats', () => {
     await expect(heroNumbers.nth(0)).toHaveText('0');       // 0 Raves Logged
   });
 
+  test('Vibe DNA share card opens with your genres, vibes and personality', async ({ page }) => {
+    const d = statsData();
+    // Vibe DNA only unlocks at 3+ logged raves.
+    d.festivals.push({ id: 'f-past2', name: 'Second Past Fest', date: '2021-06-01', location: 'Berlin, DE', color: '#00F5FF', days: 1, deleted_at: null });
+    d.festivals.push({ id: 'f-past3', name: 'Third Past Fest', date: '2019-06-01', location: 'Berlin, DE', color: '#00F5FF', days: 1, deleted_at: null });
+    d.raver_festivals.push({ raver_id: 'r-you', festival_id: 'f-past2' }, { raver_id: 'r-you', festival_id: 'f-past3' });
+    await bootAuthedApp(page, { data: d });
+    await page.evaluate(() => { switchTab('stats'); loadStatsPage(); });
+
+    const vibeDnaCard = page.locator('#stats-content .stats-section-card', { has: page.locator('.stats-section-title', { hasText: 'Vibe DNA' }) });
+    await vibeDnaCard.locator('button', { hasText: 'Share' }).click();
+
+    await expect(page.locator('#vibedna-share-overlay')).toHaveClass(/open/);
+    await expect(page.locator('#vibedna-share-card .radar-share-name')).toHaveText('Theile');
+    await expect(page.locator('#vibedna-share-card')).toContainText('Techno');
+    await expect(page.locator('#vibedna-share-card')).toContainText('House');
+    await page.evaluate(() => closeVibeDnaShareCard());
+    await expect(page.locator('#vibedna-share-overlay')).not.toHaveClass(/open/);
+  });
+
   test('Rave Passport: tapping a filled stamp opens that rave, tapping an empty slot starts logging one', async ({ page }) => {
     await bootAuthedApp(page, { data: statsData() });
     await page.evaluate(() => { switchTab('stats'); loadStatsPage(); });
@@ -50,6 +70,26 @@ test.describe('stats', () => {
     });
     await expect(page.locator('#stats-crew-panel')).toBeVisible();
     await expect(page.locator('#stats-my-panel')).toBeHidden();
+  });
+
+  test('Crew Stats shows your ticket mix next to the crew aggregate', async ({ page }) => {
+    const d = statsData();
+    // r-you already RSVP'd to f-past via statsData() — give that RSVP a ticket
+    // type, and add Kai's own RSVP+ticket so the crew aggregate has 2 tickets total.
+    d.raver_festivals.find(rf => rf.raver_id === 'r-you' && rf.festival_id === 'f-past').ticket_type = 'vip';
+    d.raver_festivals.push({ raver_id: 'r-kai', festival_id: 'f-past', ticket_type: 'ga' });
+    await bootAuthedApp(page, { data: d });
+    await page.evaluate(() => {
+      switchTab('stats');
+      loadStatsPage();
+      const tabs = document.querySelectorAll('.stats-subtab');
+      switchStatTab('crew', tabs[1]);
+    });
+
+    const card = page.locator('#stats-crew-content .stats-section-card', { has: page.locator('.stats-section-title', { hasText: 'Ticket Mix vs. Crew' }) });
+    await expect(card).toContainText('VIP · 100%'); // your mix: 1 vip / 1 total
+    await expect(card).toContainText('GA · 50%');    // crew aggregate: 1 vip + 1 ga = 50/50
+    await expect(card).toContainText('Bass Syndicate'); // selectedCrew.name label
   });
 
   test('Raves on Your Radar shows the next upcoming RSVP (f1 is 2099-dated)', async ({ page }) => {
