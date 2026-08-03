@@ -194,6 +194,32 @@ test.describe('stats', () => {
     await expect(page.locator('#page-artists-seen .rlog-item-name')).toHaveCount(2);
   });
 
+  test('Artists Seen Live: genre pills stay clickable even when Chart.js loads (statsChartOrFallback swaps in a canvas)', async ({ page }) => {
+    // Regression test: statsChartOrFallback() renders a <canvas> instead of the
+    // fallback HTML whenever window.Chart is defined — this sandbox blocks the
+    // Chart.js CDN so every other test only exercises the fallback branch. Real CI
+    // has internet access and Chart.js loads for real, so the genre pills must be
+    // rendered outside statsChartOrFallback's fallbackHtml, not inside it, or they
+    // silently vanish in production while every local/offline test stays green.
+    const d = statsData();
+    d.artists.push({ id: 'a2', name: 'Peggy Gou', genres: ['house'] });
+    d.artist_festival_appearances = [
+      { artist_id: 'a1', festival_id: 'f-past' },
+      { artist_id: 'a2', festival_id: 'f-past' },
+    ];
+    d.raver_artist_sightings = [
+      { raver_id: 'r-you', artist_id: 'a1', festival_id: 'f-past' },
+      { raver_id: 'r-you', artist_id: 'a2', festival_id: 'f-past' },
+    ];
+    await bootAuthedApp(page, { data: d });
+    await page.evaluate(() => { window.Chart = function () { this.destroy = () => {}; }; });
+    await page.evaluate(() => { switchTab('stats'); openArtistsSeenPage(); });
+
+    await expect(page.locator('#artists-genre-chart')).toBeAttached(); // proves the "Chart loaded" branch ran
+    await page.locator('#page-artists-seen .stats-pill.cyan', { hasText: 'Techno' }).click();
+    await expect(page.locator('#page-artists-seen .section-title')).toHaveText('Techno Artists 🎤');
+  });
+
   test('Vibe DNA genre pills open Artists Seen Live pre-filtered to that genre', async ({ page }) => {
     const d = statsData();
     // Vibe DNA only unlocks at 3+ logged raves — add two more past RSVPs on top
