@@ -8765,7 +8765,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.32.0';
+  const APP_VERSION = '1.32.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -20762,7 +20762,7 @@ async function doProfilePasswordChange() {
         </label>
         <span id="vv-review-photo-name" style="font-size:0.78rem;color:var(--muted);"></span>
       </div>
-      <button class="btn btn-primary" style="margin-top:8px;width:100%;" onclick="submitVendorReview('${escVid}')">${myReview ? 'Update review' : 'Post review'}</button>
+      <button class="btn btn-primary" id="vv-review-submit-btn" style="margin-top:8px;width:100%;" onclick="submitVendorReview('${escVid}')">${myReview ? 'Update review' : 'Post review'}</button>
     `;
   }
 
@@ -20797,6 +20797,10 @@ async function doProfilePasswordChange() {
 
   async function submitVendorReview(vendorId) {
     if (!_vendorDetailDraftRating) { showToast('⚠️ Pick a star rating first'); return; }
+    if (!navigator.onLine) { showToast('📡 No connection — try again when you\'re back online'); return; }
+    const btn = document.getElementById('vv-review-submit-btn');
+    const originalLabel = btn?.textContent;
+    if (btn) { btn.disabled = true; btn.textContent = 'Posting…'; }
     const body = document.getElementById('vv-review-body').value;
     const attributeTags = [..._vendorDetailDraftAttributeTags];
     const existingReview = (vendorReviewsCache[vendorId] || []).find(r => r.raver_id === currentUser?.id);
@@ -20812,7 +20816,7 @@ async function doProfilePasswordChange() {
       }
     }
     const ok = await dbUpsertVendorReview(vendorId, { rating: _vendorDetailDraftRating, body, photoUrl, attributeTags });
-    if (!ok) return;
+    if (!ok) { if (btn) { btn.disabled = false; btn.textContent = originalLabel; } return; }
     showToast('⭐ Review saved!');
     openVendorDetail(vendorId);
     if (vendorVillageTab === 'browse') renderVendorBrowsePanel();
@@ -21529,7 +21533,7 @@ async function doProfilePasswordChange() {
     return `
       <div class="poll-star-row" id="vn-review-stars">${stars}</div>
       <textarea class="form-input" id="vn-review-body" rows="2" maxlength="300" placeholder="Optional — what should other ravers know?">${escHtml(myReview?.body || '')}</textarea>
-      <button class="btn btn-primary" style="margin-top:8px;width:100%;" onclick="submitVenueReview('${escVid}')">${myReview ? 'Update review' : 'Post review'}</button>
+      <button class="btn btn-primary" id="vn-review-submit-btn" style="margin-top:8px;width:100%;" onclick="submitVenueReview('${escVid}')">${myReview ? 'Update review' : 'Post review'}</button>
     `;
   }
 
@@ -21552,9 +21556,13 @@ async function doProfilePasswordChange() {
 
   async function submitVenueReview(venueId) {
     if (!_venueDetailDraftRating) { showToast('⚠️ Pick a star rating first'); return; }
+    if (!navigator.onLine) { showToast('📡 No connection — try again when you\'re back online'); return; }
+    const btn = document.getElementById('vn-review-submit-btn');
+    const originalLabel = btn?.textContent;
+    if (btn) { btn.disabled = true; btn.textContent = 'Posting…'; }
     const body = document.getElementById('vn-review-body').value;
     const ok = await dbUpsertVenueReview(venueId, { rating: _venueDetailDraftRating, body });
-    if (!ok) return;
+    if (!ok) { if (btn) { btn.disabled = false; btn.textContent = originalLabel; } return; }
     showToast('⭐ Review saved!');
     openVenueDetail(venueId);
     if (venueVillageTab === 'browse') renderVenueBrowsePanel();
