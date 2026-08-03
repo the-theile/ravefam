@@ -1440,6 +1440,15 @@
     color: var(--muted);
   }
   .lineup-plan-btn.planned { background: color-mix(in srgb, var(--neon-cyan) 22%, transparent); }
+  .lineup-fav-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; margin-left: 8px; border-radius: 50%; border: none;
+    background: rgba(255,255,255,0.08); cursor: pointer; font-size: 0.9rem; line-height: 1;
+    color: var(--muted); vertical-align: middle;
+  }
+  .lineup-fav-btn.favorited { background: color-mix(in srgb, var(--neon-yellow) 22%, transparent); color: var(--neon-yellow); }
+  .rlog-fav-indicator { font-size: 0.78rem; color: var(--muted); margin-right: 6px; flex-shrink: 0; }
+  .rlog-fav-indicator.favorited { color: var(--neon-yellow); }
   .profile-actions { display: flex; gap: 10px; margin: 4px 0 12px; }
 
   /* Connect row (IG / Call / Text) */
@@ -8765,7 +8774,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.32.1';
+  const APP_VERSION = '1.33.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -30125,6 +30134,7 @@ async function doProfilePasswordChange() {
                 <div class="rlog-item-name">${escHtml(artist.name)}</div>
                 <div class="rlog-item-sub">${(artist.genres || []).map(titleCaseGenre).join(', ')}</div>
               </div>
+              <span class="rlog-fav-indicator${isFavoriteArtist(artist.id) ? ' favorited' : ''}" title="${isFavoriteArtist(artist.id) ? 'One of your favorite artists' : 'Not a favorite artist yet'}">${isFavoriteArtist(artist.id) ? '⭐' : '☆'}</span>
               <span style="font-family:'Orbitron',sans-serif;font-weight:700;font-size:0.78rem;color:var(--neon-purple);">${count}x</span>
             </div>`).join('')}
         </div>
@@ -30167,12 +30177,38 @@ async function doProfilePasswordChange() {
           <button type="button" class="lineup-seen-btn${seen ? ' seen' : ' missed'}" title="${seen ? 'You saw this — tap if you missed it' : 'Marked as missed — tap if you actually caught them'}" onclick="dbToggleArtistSighting('${f.id}','${artistId}').then(()=>renderArtistSightingsModalBody('${artistId}'))">${seen ? '✅' : '❌'}</button>
         </div>`;
     }).join('');
+    const isFav = isFavoriteArtist(artistId);
     modal.innerHTML = `
-      <div class="modal-title">${escHtml(artist.name)}</div>
+      <div class="modal-title">${escHtml(artist.name)}
+        <button type="button" class="lineup-fav-btn${isFav ? ' favorited' : ''}" title="${isFav ? 'Remove from favorite artists' : 'Add to favorite artists'}" onclick="dbToggleFavoriteArtist('${artistId}')">${isFav ? '⭐' : '☆'}</button>
+      </div>
       <div class="stats-empty-sub" style="margin-bottom:12px;">Tap a rave to toggle whether you caught them live</div>
       <div class="rlog-list">${rows || '<div class="fest-empty">No past raves with this artist tagged</div>'}</div>
       <div class="modal-actions"><button class="btn btn-ghost" onclick="closeArtistSightingsModal()">Close</button></div>
     `;
+  }
+
+  // Whether `you` currently has this artist marked as a favorite on their profile —
+  // backs both the read-only star indicator on the Full List (Artists Seen Live) rows
+  // and the toggle button inside the Artist Sightings modal.
+  function isFavoriteArtist(artistId) {
+    const you = squad.find(r => r.isYou);
+    return !!you && (you.favArtistIds || []).some(id => String(id) === String(artistId));
+  }
+
+  async function dbToggleFavoriteArtist(artistId) {
+    const you = squad.find(r => r.isYou);
+    if (!you || !currentUser) { showToast('⚠️ Sign in to save favorite artists'); return; }
+    const artistName = findArtistById(artistId)?.name || 'Artist';
+    const isFav = isFavoriteArtist(artistId);
+    const newIds = isFav
+      ? (you.favArtistIds || []).filter(id => String(id) !== String(artistId))
+      : [...(you.favArtistIds || []), String(artistId)];
+    you.favArtistIds = newIds;
+    await dbSaveRaverFavoriteArtists(you.id, newIds);
+    showToast(isFav ? `Removed ${artistName} from favorites` : `⭐ Added ${artistName} to favorites`);
+    if (document.getElementById('artist-sightings-overlay').classList.contains('open')) renderArtistSightingsModalBody(artistId);
+    if (document.getElementById('page-artists-seen').classList.contains('active')) renderArtistsSeenPage();
   }
 
   function openArtistSightingsModal(artistId) {
