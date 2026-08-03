@@ -6914,6 +6914,82 @@
     cursor: pointer;
   }
 
+  /* ===== RADAR SHARE CARD (upcoming raves at a glance) ===== */
+  #radar-share-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 600;
+    background: rgba(0,0,0,0.88);
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    overflow-y: auto;
+  }
+  #radar-share-overlay.open { display: flex; }
+  #radar-share-card {
+    width: 100%;
+    max-width: 380px;
+    border-radius: 24px;
+    padding: 32px 26px 26px;
+    background: linear-gradient(160deg,#06000f,#0a0020,#080018);
+    border: 1px solid rgba(0,245,255,0.28);
+    box-shadow: 0 0 80px rgba(0,245,255,0.16), 0 0 40px rgba(191,0,255,0.12);
+    position: relative;
+    overflow: hidden;
+    margin: auto;
+  }
+  .radar-share-header {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 20px; position: relative;
+  }
+  .radar-share-avatar {
+    width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.95rem; color: #fff;
+    background: linear-gradient(135deg,#FF2D78,#BF00FF);
+    overflow: hidden;
+  }
+  .radar-share-avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .radar-share-eyebrow {
+    font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.65rem;
+    color: rgba(255,255,255,0.4); letter-spacing: 2px; text-transform: uppercase;
+  }
+  .radar-share-name {
+    font-family: 'Fraunces', sans-serif; font-weight: 800; font-size: 1.05rem; color: #fff;
+  }
+  .radar-share-headline {
+    font-family: 'Urbanist', sans-serif; font-weight: 900; font-size: 1.7rem; line-height: 1.05;
+    color: #fff; margin-bottom: 4px; position: relative;
+  }
+  .radar-share-headline span { color: var(--neon-cyan); }
+  .radar-share-count {
+    font-size: 0.68rem; color: rgba(255,255,255,0.4); font-family: 'Outfit', sans-serif;
+    font-weight: 600; margin-bottom: 18px; position: relative;
+  }
+  .radar-share-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; position: relative; }
+  .radar-share-row {
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 12px; padding: 10px 12px;
+  }
+  .radar-share-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .radar-share-row-main { flex: 1; min-width: 0; }
+  .radar-share-row-name {
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.82rem; color: #fff;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .radar-share-row-sub { font-size: 0.65rem; color: rgba(255,255,255,0.4); margin-top: 2px; }
+  .radar-share-row-days {
+    font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: 0.68rem; color: var(--neon-cyan);
+    flex-shrink: 0; white-space: nowrap;
+  }
+  .radar-share-footer {
+    text-align: center; font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.6rem;
+    color: rgba(255,255,255,0.25); letter-spacing: 1px; text-transform: uppercase;
+    position: relative; margin-bottom: 16px;
+  }
+
   /* ===== CREW SHARE CARD (Rave Pass / Laminate) ===== */
   #crew-share-overlay {
     display: none;
@@ -7859,6 +7935,10 @@
   <div class="rave-share-wrap"><!-- rendered by JS: #rave-share-card + caption input + actions --></div>
 </div>
 
+<div id="radar-share-overlay" onclick="if(event.target===this)closeRadarShareCard()">
+  <div id="radar-share-card"><!-- rendered by JS --></div>
+</div>
+
 <!-- Modal -->
 <div class="modal-overlay" id="modal-overlay" onclick="closeModalOutside(event)">
   <div class="modal">
@@ -8774,7 +8854,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.33.0';
+  const APP_VERSION = '1.34.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -29086,7 +29166,7 @@ async function doProfilePasswordChange() {
 
     // Raves on Your Radar — upcoming RSVPs, shown regardless of achieved-rave count
     html += `<div class="stats-section-card">
-      <div class="stats-section-title">📡 Raves on Your Radar <span style="font-size:0.68rem;color:var(--muted);font-weight:400;margin-left:auto;">${upcomingFests.length} upcoming</span></div>
+      <div class="stats-section-title">📡 Raves on Your Radar <span style="font-size:0.68rem;color:var(--muted);font-weight:400;margin-left:auto;">${upcomingFests.length} upcoming</span>${upcomingFests.length ? `<button class="radarmap-replay-btn" onclick="openRadarShareCard()" title="Share your radar" aria-label="Share your radar">📲 Share</button>` : ''}</div>
       ${nextUp ? `
         <div class="stats-personality" style="background:linear-gradient(135deg, rgba(191,0,255,0.14), rgba(191,0,255,0.04));border-color:rgba(191,0,255,0.3);">
           <div class="stats-personality-emoji">⏳</div>
@@ -29541,6 +29621,98 @@ async function doProfilePasswordChange() {
     }
   }
 
+  // ===== Radar Share Card — "here's where I'm headed" at a glance =====
+  // Unlike the per-rave poster (openRaveShareCard) this isn't about one event —
+  // it's the raver's own upcoming schedule in one image. Built the same lightweight
+  // way as Rave Wrapped (synchronous html2canvas on tap, no pre-fetch/blob-inline
+  // pipeline) rather than the rave/crew card's elaborate image pipeline, since it
+  // has no remote photos to worry about — just text, solid colors and gradients,
+  // all of which html2canvas rasterizes fine on the first try.
+  function openRadarShareCard() {
+    const you = squad.find(r => r.isYou);
+    if (!you) return;
+    const upcoming = myUpcomingFests().filter(f => f.date).sort((a, b) => festDate(a) - festDate(b));
+    if (!upcoming.length) { showToast("📡 Nothing on your radar yet — RSVP to a rave first"); return; }
+    renderRadarShareCard(you, upcoming);
+    document.getElementById('radar-share-overlay').classList.add('open');
+  }
+
+  function closeRadarShareCard() {
+    document.getElementById('radar-share-overlay').classList.remove('open');
+  }
+
+  function renderRadarShareCard(you, upcoming) {
+    const rows = upcoming.map(f => {
+      const d = festDate(f);
+      const days = Math.ceil((d - TODAY) / 86400000);
+      const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      return `
+        <div class="radar-share-row">
+          <span class="radar-share-dot" style="background:${festColor(f)};"></span>
+          <div class="radar-share-row-main">
+            <div class="radar-share-row-name">${escHtml(f.name)}</div>
+            <div class="radar-share-row-sub">${escHtml(dateLabel)}${f.location ? ' · ' + escHtml(f.location) : ''}</div>
+          </div>
+          <span class="radar-share-row-days">${days <= 0 ? 'Today' : `${days}d`}</span>
+        </div>`;
+    }).join('');
+
+    document.getElementById('radar-share-card').innerHTML = `
+      <div class="radar-share-header">
+        <div class="radar-share-avatar" style="background:${you.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)'}">${initials(you.name).toUpperCase()}</div>
+        <div>
+          <div class="radar-share-eyebrow">myravefam.com</div>
+          <div class="radar-share-name">${escHtml(you.name)}</div>
+        </div>
+      </div>
+      <div class="radar-share-headline">My <span>Radar</span> 📡</div>
+      <div class="radar-share-count">${upcoming.length} rave${upcoming.length !== 1 ? 's' : ''} coming up</div>
+      <div class="radar-share-list">${rows}</div>
+      <div class="radar-share-footer">myravefam.com · Track your rave life</div>
+      <div class="wrapped-actions">
+        <button class="wrapped-share-btn" onclick="shareRadarCard()">📲 Share Card</button>
+        <button class="wrapped-close-btn" onclick="closeRadarShareCard()">Close</button>
+      </div>
+    `;
+  }
+
+  async function shareRadarCard() {
+    const card = document.getElementById('radar-share-card');
+    const actions = card.querySelector('.wrapped-actions');
+    if (actions) actions.style.display = 'none';
+    try {
+      if (typeof html2canvas !== 'undefined') {
+        const canvas = await html2canvas(card, { backgroundColor: '#06000f', scale: 2, useCORS: true, logging: false, ignoreElements: (el) => {
+          if (document.head.contains(el) || el === document.head) return false;
+          return el.tagName === 'VIDEO' || (el !== card && !card.contains(el) && !el.contains(card));
+        } });
+        if (actions) actions.style.display = '';
+        canvas.toBlob(async (blob) => {
+          if (!blob) { showToast('⚠️ Could not generate image'); return; }
+          const file = new File([blob], 'my-radar.png', { type: 'image/png' });
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            try { await navigator.share({ files: [file], title: 'My Radar — RaveFAM' }); } catch {}
+          } else {
+            const url = URL.createObjectURL(blob);
+            try {
+              const a = document.createElement('a');
+              a.href = url; a.download = 'my-radar.png'; a.click();
+              showToast('📥 Radar card downloaded!');
+            } finally {
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
+            }
+          }
+        }, 'image/png');
+      } else {
+        if (actions) actions.style.display = '';
+        showToast('📋 Screenshot this card to share!');
+      }
+    } catch {
+      if (actions) actions.style.display = '';
+      showToast('📋 Screenshot this card to share!');
+    }
+  }
+
   // ===== Stats sub-pages: Raves Logged / Days Raved / Cities Hit =====
 
   function backToStats() {
@@ -29678,6 +29850,7 @@ async function doProfilePasswordChange() {
       <button class="profile-back cyan" onclick="backToStats()">← Rave Life</button>
       <div class="section-header" style="margin-bottom:14px;">
         <div class="section-title">Raves on Your Radar 📡</div>
+        ${upcoming.length ? `<button class="radarmap-replay-btn" style="margin-left:0;" onclick="openRadarShareCard()" title="Share your radar" aria-label="Share your radar">📲 Share</button>` : ''}
       </div>
       <div class="radarmap-section-title">
         🛰️ Radar Map

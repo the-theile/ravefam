@@ -55,6 +55,36 @@ test.describe('stats', () => {
     await expect(page.locator('#stats-content .stats-empty-title', { hasText: 'Nothing on the radar yet' })).toBeVisible();
   });
 
+  test('Raves on Your Radar hides the share quick action when there are no upcoming RSVPs', async ({ page }) => {
+    const d = statsData();
+    d.raver_festivals = d.raver_festivals.filter(rf => rf.festival_id !== 'f1');
+    await bootAuthedApp(page, { data: d });
+    await page.evaluate(() => { switchTab('stats'); loadStatsPage(); });
+    const radarCard = page.locator('#stats-content .stats-section-title', { hasText: 'Raves on Your Radar' });
+    await expect(radarCard.locator('button', { hasText: 'Share' })).toHaveCount(0);
+  });
+
+  test('Radar share card lists every upcoming RSVP and opens from both entry points', async ({ page }) => {
+    await bootAuthedApp(page, { data: statsData() });
+    await page.evaluate(() => { switchTab('stats'); loadStatsPage(); });
+
+    // Quick action from the Stats home hero section
+    const homeShareBtn = page.locator('#stats-content .stats-section-title', { hasText: 'Raves on Your Radar' }).locator('button', { hasText: 'Share' });
+    await homeShareBtn.click();
+    await expect(page.locator('#radar-share-overlay')).toHaveClass(/open/);
+    await expect(page.locator('#radar-share-card .radar-share-row')).toHaveCount(1);
+    await expect(page.locator('#radar-share-card .radar-share-row-name')).toHaveText('Tomorrowland');
+    await expect(page.locator('#radar-share-card .radar-share-name')).toHaveText('Theile');
+    await page.evaluate(() => closeRadarShareCard());
+    await expect(page.locator('#radar-share-overlay')).not.toHaveClass(/open/);
+
+    // Same share card from the dedicated Raves on Your Radar page
+    await page.evaluate(() => openRavesRadarPage());
+    const pageShareBtn = page.locator('#page-raves-radar .section-header button', { hasText: 'Share' });
+    await pageShareBtn.click();
+    await expect(page.locator('#radar-share-overlay')).toHaveClass(/open/);
+  });
+
   test('Artists Seen Live tile counts distinct artists this raver personally checked off, not just the lineup', async ({ page }) => {
     const d = statsData();
     // Charlotte de Witte (a1) and a second artist both appeared at f-past, which
