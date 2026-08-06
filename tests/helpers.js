@@ -165,14 +165,40 @@ async function installSupabaseStub(page, opts = {}) {
           raver_achievements: ['raver_id', 'crew_id', 'badge_id'],
         };
 
+        // PostgREST ilike patterns: '%' is any run, '_' is one character, and
+        // '*' is accepted as an alias for '%'. Compiled to a case-insensitive
+        // regex so the stub matches the server's semantics closely enough for
+        // the Huddle search filters.
+        function ilikeRe(pattern) {
+          let out = '';
+          for (const ch of String(pattern)) {
+            if (ch === '%' || ch === '*') out += '[\\\\s\\\\S]*';
+            else if (ch === '_') out += '[\\\\s\\\\S]';
+            else out += ch.replace(/[.*+?^\${}()|[\\]\\\\]/g, '\\\\$&');
+          }
+          return new RegExp('^' + out + '$', 'i');
+        }
+
         function makeBuilder(table) {
-          const st = { table, op: 'select', sel: '*', payload: null, upsertOpts: null, filters: [], limit: null };
+          const st = { table, op: 'select', sel: '*', payload: null, upsertOpts: null, filters: [], limit: null, orders: [], range: null };
           const pred = row => st.filters.every(f => f(row));
           function exec() {
             const tbl = store[table] || (store[table] = []);
             if (st.op === 'select') {
               let rows = tbl.filter(pred);
+              if (st.orders.length) {
+                rows = rows.slice().sort((x, y) => {
+                  for (const o of st.orders) {
+                    const a = x[o.col], b2 = y[o.col];
+                    if (a === b2) continue;
+                    const cmp = a == null ? -1 : b2 == null ? 1 : (a < b2 ? -1 : 1);
+                    return o.asc ? cmp : -cmp;
+                  }
+                  return 0;
+                });
+              }
               if (st.limit != null) rows = rows.slice(0, st.limit);
+              if (st.range) rows = rows.slice(st.range[0], st.range[1] + 1);
               return { data: attach(rows, parseRelations(st.sel)), error: null };
             }
             if (st.op === 'insert') {
@@ -253,7 +279,11 @@ async function installSupabaseStub(page, opts = {}) {
               }));
               return b;
             },
-            order() { return b; }, limit(n) { st.limit = n; return b; }, range() { return b; }, abortSignal() { return b; },
+            ilike(c, pattern) { const re = ilikeRe(pattern); st.filters.push(r => r[c] != null && re.test(String(r[c]))); return b; },
+            order(c, o) { st.orders.push({ col: c, asc: !o || o.ascending !== false }); return b; },
+            limit(n) { st.limit = n; return b; },
+            range(from, to) { st.range = [from, to]; return b; },
+            abortSignal() { return b; },
             single() { const r = exec(); return Promise.resolve({ data: (r.data && r.data[0]) ?? null, error: r.error }); },
             maybeSingle() { const r = exec(); return Promise.resolve({ data: (r.data && r.data[0]) ?? null, error: r.error }); },
             then(f, j) { return Promise.resolve(exec()).then(f, j); },

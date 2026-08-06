@@ -3622,6 +3622,7 @@
   }
   .huddle-screen.open { opacity: 1; pointer-events: all; transform: none; }
   .huddle-screen-inner {
+    position: relative; /* anchors the search overlay (.hd-search-panel) */
     display: flex; flex-direction: column;
     width: 100%; max-width: 640px; margin: 0 auto;
     height: 100%; height: 100dvh; min-height: 0;
@@ -3952,6 +3953,82 @@
     cursor: pointer; box-shadow: 0 6px 18px rgba(0,0,0,0.5);
   }
   .hd-jump.show { display: flex; }
+
+  /* ── Search ──
+     Finding "where someone said that thing" means looking across rooms, not
+     just the one you happen to be in — so search is its own surface layered
+     over the whole chat screen (its own bar, filters and result list) rather
+     than a filter applied to the live stream. Tapping a result loads the
+     window of history around that message and jumps to it. */
+  .hd-search-btn {
+    flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%;
+    border: 1px solid rgba(0,245,255,0.4); background: rgba(0,245,255,0.08);
+    color: var(--neon-cyan); font-size: 0.85rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.25s, background 0.2s;
+  }
+  .hd-search-btn:hover { transform: scale(1.09); background: rgba(0,245,255,0.16); }
+  .hd-search-panel {
+    position: absolute; inset: 0; z-index: 8;
+    background: var(--bg);
+    display: flex; flex-direction: column;
+  }
+  .hd-search-bar {
+    flex-shrink: 0; display: flex; align-items: center; gap: 8px;
+    padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 10px;
+    background: var(--surface);
+    border-bottom: 1px solid rgba(0,245,255,0.22);
+  }
+  .hd-search-input {
+    flex: 1; min-width: 0;
+    padding: 8px 12px; font-size: 0.86rem; font-family: inherit;
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(0,245,255,0.25);
+    border-radius: 5px; color: var(--text);
+  }
+  .hd-search-input:focus { outline: none; border-color: var(--neon-cyan); }
+  .hd-search-clear { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 0.95rem; flex-shrink: 0; }
+  .hd-search-filters {
+    flex-shrink: 0; display: flex; align-items: center; gap: 6px;
+    padding: 9px 12px; overflow-x: auto;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+  }
+  .hd-search-filters .huddle-room-pill { padding: 5px 12px; font-size: 0.72rem; }
+  .hd-search-from {
+    flex-shrink: 0; margin-left: auto;
+    padding: 5px 8px; border-radius: 20px; cursor: pointer;
+    background: rgba(255,255,255,0.05); border: 1.5px solid rgba(255,255,255,0.1);
+    color: var(--muted); font-family: 'Outfit', sans-serif; font-size: 0.72rem; font-weight: 600;
+  }
+  .hd-search-from.filtered { border-color: var(--neon-purple); color: #fff; background: rgba(191,0,255,0.14); }
+  .hd-search-results { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 12px 16px; }
+  .hd-search-status {
+    font-family: var(--hd-mono); font-size: 0.62rem; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.5px; padding: 6px 2px 8px;
+  }
+  .hd-search-result {
+    display: block; width: 100%; text-align: left; cursor: pointer;
+    background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.08);
+    border-left: 2px solid var(--hd-accent, var(--neon-cyan));
+    border-radius: 6px; padding: 9px 11px; margin-bottom: 8px;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .hd-search-result:hover { background: rgba(0,245,255,0.07); border-color: rgba(0,245,255,0.4); }
+  .hd-search-result-head {
+    display: flex; align-items: baseline; gap: 6px;
+    font-family: var(--hd-mono); font-size: 0.6rem; text-transform: uppercase;
+    letter-spacing: 0.4px; color: var(--muted); margin-bottom: 4px;
+  }
+  .hd-search-who { color: var(--hd-accent, var(--neon-cyan)); font-weight: 700; }
+  .hd-search-room { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hd-search-when { flex-shrink: 0; }
+  .hd-search-snippet { font-size: 0.82rem; color: var(--text); line-height: 1.4; word-break: break-word; }
+  .hd-search-mark { background: rgba(255,230,0,0.28); color: #fff; border-radius: 2px; padding: 0 2px; }
+  .hd-search-more {
+    display: block; margin: 4px auto 0; padding: 6px 16px;
+    font-family: var(--hd-mono); font-size: 0.64rem; text-transform: uppercase;
+    color: var(--muted); background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; cursor: pointer;
+  }
 
   /* ── Composer ── */
   .hd-composer {
@@ -9144,7 +9221,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.39.0';
+  const APP_VERSION = '1.40.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -10848,8 +10925,11 @@ async function doProfilePasswordChange() {
   // reload. Unfiltered (RLS on huddle_messages already scopes delivery to
   // the viewer's own crews) since postgres_changes filters only support a
   // single eq(), not "crew_id in (...)".
+  // "Actively open" means actually watching the live end of the room —
+  // a stream parked on older history after a search jump (_huddleHasNewer)
+  // isn't showing the arriving message, so it must still count as unread.
   function isHuddleRoomActivelyOpen(roomId) {
-    return !!(roomId && _huddleScreenOpen && _huddleActiveRoomId === roomId);
+    return !!(roomId && _huddleScreenOpen && _huddleActiveRoomId === roomId && !_huddleHasNewer);
   }
 
   function handleHuddleMessageRealtimeInsert(payload) {
@@ -16486,6 +16566,12 @@ async function doProfilePasswordChange() {
   let _huddleTypingSentAt = 0;
   let _huddleMentionState = null;   // { start, query, matches, index } while the @ menu is open
   let _huddleHighlightId = null;    // message to flash after a "jump to quoted" tap
+  // True while the stream is parked on a window of older history (after a
+  // search jump) with newer messages deliberately not loaded. Everything that
+  // assumes "the bottom of the stream is the live end" — mark-as-read, the
+  // realtime append, ↓ LATEST, sending — checks this first.
+  let _huddleHasNewer = false;
+  let _huddleLoadingNewer = false;
 
   // Shared upcoming festivals for a crew, one entry per festival — sibling
   // to crewNextUp(crew, socialOnly=true) (which only returns the single
@@ -16679,6 +16765,7 @@ async function doProfilePasswordChange() {
     _huddleActiveRoomId = roomId;
     huddleMessages = [];
     _huddleHasMore = true;
+    _huddleHasNewer = false;
     _huddleReplyTo = null;
     _huddleTypingUsers = {};
     // Freeze the unread divider at wherever this room was last read, before
@@ -16728,6 +16815,39 @@ async function doProfilePasswordChange() {
     if (stream) stream.scrollTop = stream.scrollHeight - anchorFromBottom;
   }
 
+  // The forward twin of loadOlderHuddleMessages, used only when a search jump
+  // parked the stream mid-history. Appending below leaves scrollTop alone, so
+  // no anchoring is needed. Reaching the live end restores normal behaviour:
+  // realtime appends resume and the room is marked read.
+  async function loadNewerHuddleMessages() {
+    if (_huddleLoadingNewer || !_huddleHasNewer || !_huddleActiveRoomId) return;
+    const newest = huddleMessages.slice().reverse().find(m => !m._pending && !m._failed && m.created_at);
+    if (!newest) return;
+    _huddleLoadingNewer = true;
+    const btn = document.getElementById('hd-loadnewer');
+    if (btn) { btn.disabled = true; btn.textContent = '↓ LOADING…'; }
+
+    const { data, error } = await sb.from('huddle_messages')
+      .select('*').eq('room_id', _huddleActiveRoomId).is('deleted_at', null)
+      .gt('created_at', newest.created_at)
+      .order('created_at', { ascending: true }).limit(HUDDLE_PAGE_SIZE);
+    const page = error ? [] : (data || []);
+    _huddleHasNewer = page.length === HUDDLE_PAGE_SIZE;
+    const known = new Set(huddleMessages.map(m => m.id));
+    huddleMessages = huddleMessages.concat(page.filter(m => !known.has(m.id)));
+    _huddleLoadingNewer = false;
+    renderHuddleUI();
+    if (!_huddleHasNewer) markHuddleRoomRead(_huddleActiveRoomId, _huddleActiveCrewId);
+  }
+
+  // ↓ LATEST means "the live end of the room", which after a search jump is
+  // not the bottom of what's loaded — reload the room from scratch instead of
+  // scrolling to a false floor.
+  function huddleJumpToLatest() {
+    if (_huddleHasNewer && _huddleActiveRoomId) { switchHuddleRoom(_huddleActiveRoomId); return; }
+    huddleScrollMessagesToBottom(true);
+  }
+
   // ── Chat screen shell ──
   // Built once per open. The composer inside it is deliberately NOT part of
   // any re-render: the old panel rebuilt its entire root on every incoming
@@ -16746,6 +16866,11 @@ async function doProfilePasswordChange() {
     // collapsed into the same frame as the insert.
     requestAnimationFrame(() => screen.classList.add('open'));
     _huddleScreenOpen = true;
+    // The shell rebuild wipes the search overlay with it; its filters are
+    // crew-scoped, so a re-open starts clean rather than inheriting a scope
+    // or sender from whichever crew was open last.
+    _huddleSearchOpen = false;
+    _huddleSearchState = null;
     document.body.style.overflow = 'hidden';
 
     const stream = document.getElementById('hd-stream');
@@ -16766,6 +16891,11 @@ async function doProfilePasswordChange() {
     if (_huddleTypingSweeper) { clearInterval(_huddleTypingSweeper); _huddleTypingSweeper = null; }
     _huddleReplyTo = null;
     _huddleMentionState = null;
+    clearTimeout(_huddleSearchDebounce);
+    _huddleSearchOpen = false;
+    _huddleSearchState = null;
+    _huddleSearchRoomCache = {};
+    _huddleHasNewer = false;
     teardownHuddleLive();
     if (_huddleActiveCrewId) rerenderHuddleTilePreview(_huddleActiveCrewId);
   }
@@ -16778,7 +16908,7 @@ async function doProfilePasswordChange() {
         <div id="hd-beacon-slot"></div>
         <div class="hd-stream-wrap">
           <div class="hd-stream" id="hd-stream"></div>
-          <button type="button" class="hd-jump" id="hd-jump" onclick="huddleScrollMessagesToBottom(true)">↓ LATEST</button>
+          <button type="button" class="hd-jump" id="hd-jump" onclick="huddleJumpToLatest()">↓ LATEST</button>
         </div>
         <div id="hd-typing-slot"></div>
         <div id="huddle-recording-bar" class="huddle-recording-bar" style="display:none;">
@@ -16828,6 +16958,7 @@ async function doProfilePasswordChange() {
           <input type="file" id="huddle-photo-input" accept="image/*" style="display:none" onchange="handleHuddlePhotoInput(event)">
           <button type="submit" class="hd-send" title="Send">➤</button>
         </form>
+        <div id="hd-search-panel" class="hd-search-panel" style="display:none;"></div>
       </div>`;
   }
 
@@ -16872,6 +17003,7 @@ async function doProfilePasswordChange() {
         <div class="hd-sub">${escHtml(crew.name)}${online ? ` · ${online} online` : ''}</div>
       </div>
       <div class="hd-presence">${huddlePresenceAvatarsHTML()}</div>
+      <button type="button" class="hd-search-btn" title="Search the Huddle" aria-label="Search messages" onclick="openHuddleSearch()">🔍</button>
       <button type="button" class="huddle-beacon-fab-inline" title="Send an urgent Beacon to your crew" onclick="toggleHuddleBeaconForm()">📡</button>`;
     _rebindCoachmarkTarget('.huddle-beacon-fab-inline');
 
@@ -17206,6 +17338,9 @@ async function doProfilePasswordChange() {
       if (m._pending) group.pending = true;
     });
     flush();
+    if (_huddleHasNewer) {
+      html += `<button type="button" class="hd-loadmore" id="hd-loadnewer" onclick="loadNewerHuddleMessages()">↓ LOAD NEWER</button>`;
+    }
     return html;
   }
 
@@ -17225,9 +17360,11 @@ async function doProfilePasswordChange() {
 
   function handleHuddleStreamScroll() {
     const jump = document.getElementById('hd-jump');
-    if (jump && huddleAtBottom()) jump.classList.remove('show');
+    if (jump && huddleAtBottom() && !_huddleHasNewer) jump.classList.remove('show');
     const el = document.getElementById('hd-stream');
-    if (el && el.scrollTop < 40) loadOlderHuddleMessages();
+    if (!el) return;
+    if (el.scrollTop < 40) loadOlderHuddleMessages();
+    if (_huddleHasNewer && huddleAtBottom()) loadNewerHuddleMessages();
   }
 
   function scrollToHuddleMessage(messageId) {
@@ -17237,6 +17374,355 @@ async function doProfilePasswordChange() {
     _huddleHighlightId = messageId;
     el.classList.add('hd-bub-highlight');
     setTimeout(() => { _huddleHighlightId = null; el.classList.remove('hd-bub-highlight'); }, 1700);
+  }
+
+  // ── Search ──
+  // "Where did someone say that?" is a cross-room question — the answer is
+  // usually in a rave room you left three weeks ago, not the one you have
+  // open. So search spans rooms (and optionally every crew you're in), and a
+  // result loads the surrounding history rather than just the message: you
+  // land inside the conversation it came from and can read both directions.
+  const HUDDLE_SEARCH_PAGE_SIZE = 25;
+  let _huddleSearchOpen = false;
+  let _huddleSearchDebounce = null;
+  let _huddleSearchSeq = 0;          // guards against a slow query overwriting a newer one
+  let _huddleSearchRoomCache = {};   // roomId -> room row, for rooms outside the open crew
+  let _huddleSearchState = null;
+
+  function huddleSearchDefaultState() {
+    return { term: '', scope: 'crew', senderId: '', results: [], offset: 0, hasMore: false, loading: false, ran: false, failed: false };
+  }
+
+  function openHuddleSearch() {
+    const panel = document.getElementById('hd-search-panel');
+    if (!panel || !_huddleActiveCrewId) return;
+    if (!_huddleSearchState) _huddleSearchState = huddleSearchDefaultState();
+    _huddleSearchOpen = true;
+    hideHuddleRoomMenu();
+    panel.style.display = 'flex';
+    panel.innerHTML = huddleSearchPanelHTML();
+    renderHuddleSearchFilters();
+    renderHuddleSearchResults();
+    const input = document.getElementById('hd-search-input');
+    if (input) { input.value = _huddleSearchState.term; setTimeout(() => input.focus(), 60); }
+  }
+
+  function closeHuddleSearch() {
+    clearTimeout(_huddleSearchDebounce);
+    _huddleSearchOpen = false;
+    const panel = document.getElementById('hd-search-panel');
+    if (panel) { panel.style.display = 'none'; panel.innerHTML = ''; }
+  }
+
+  function huddleSearchPanelHTML() {
+    return `
+      <div class="hd-search-bar">
+        <button type="button" class="hd-back" onclick="closeHuddleSearch()" aria-label="Close search">‹</button>
+        <input type="search" id="hd-search-input" class="hd-search-input" placeholder="Search messages…"
+          autocomplete="off" maxlength="120"
+          oninput="handleHuddleSearchInput(this)" onkeydown="handleHuddleSearchKeydown(event)">
+        <button type="button" class="hd-search-clear" onclick="clearHuddleSearch()" aria-label="Clear">✕</button>
+      </div>
+      <div class="hd-search-filters" id="hd-search-filters"></div>
+      <div class="hd-search-results" id="hd-search-results"></div>`;
+  }
+
+  // Scope widens outward: the room you're in, every room this crew has, or —
+  // for people in more than one crew — everything you can see.
+  function huddleSearchScopeOptions() {
+    const opts = [{ key: 'room', label: 'This room' }, { key: 'crew', label: 'All rooms' }];
+    if ((crews || []).length > 1) opts.push({ key: 'all', label: 'All crews' });
+    return opts;
+  }
+
+  // Sender filter candidates: the claimed members of whichever crews the
+  // current scope covers (unclaimed placeholder ravers never send messages).
+  function huddleSearchSenderOptions() {
+    const scopeCrews = _huddleSearchState && _huddleSearchState.scope === 'all'
+      ? (crews || [])
+      : [getCrew(_huddleActiveCrewId)].filter(Boolean);
+    const byUid = new Map();
+    scopeCrews.forEach(c => crewSquad(c).forEach(p => {
+      if (p.claimedBy && !byUid.has(p.claimedBy)) byUid.set(p.claimedBy, displayName(p));
+    }));
+    return Array.from(byUid.entries())
+      .map(([uid, name]) => ({ uid, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  function renderHuddleSearchFilters() {
+    const el = document.getElementById('hd-search-filters');
+    if (!el || !_huddleSearchState) return;
+    const st = _huddleSearchState;
+    const pills = huddleSearchScopeOptions().map(o =>
+      `<button type="button" class="huddle-room-pill${o.key === st.scope ? ' active' : ''}" data-scope="${o.key}"
+        onclick="setHuddleSearchScope(this.dataset.scope)">${escHtml(o.label)}</button>`).join('');
+    const senders = huddleSearchSenderOptions().map(s =>
+      `<option value="${escHtml(s.uid)}"${s.uid === st.senderId ? ' selected' : ''}>${escHtml(s.name)}</option>`).join('');
+    el.innerHTML = `${pills}
+      <select class="hd-search-from${st.senderId ? ' filtered' : ''}" id="hd-search-from" aria-label="Filter by sender"
+        onchange="setHuddleSearchSender(this.value)">
+        <option value="">From: anyone</option>${senders}
+      </select>`;
+  }
+
+  function setHuddleSearchScope(scope) {
+    if (!_huddleSearchState) return;
+    _huddleSearchState.scope = scope;
+    // A sender who only exists in the crew we just narrowed to may be gone
+    // from the new candidate list — drop a filter that can no longer be shown.
+    if (_huddleSearchState.senderId && !huddleSearchSenderOptions().some(s => s.uid === _huddleSearchState.senderId)) {
+      _huddleSearchState.senderId = '';
+    }
+    renderHuddleSearchFilters();
+    runHuddleSearch(false);
+  }
+
+  function setHuddleSearchSender(uid) {
+    if (!_huddleSearchState) return;
+    _huddleSearchState.senderId = uid || '';
+    renderHuddleSearchFilters();
+    runHuddleSearch(false);
+  }
+
+  function clearHuddleSearch() {
+    if (!_huddleSearchState) return;
+    _huddleSearchState.term = '';
+    _huddleSearchState.results = [];
+    _huddleSearchState.ran = false;
+    const input = document.getElementById('hd-search-input');
+    if (input) { input.value = ''; input.focus(); }
+    renderHuddleSearchResults();
+  }
+
+  function handleHuddleSearchInput(el) {
+    if (!_huddleSearchState) return;
+    _huddleSearchState.term = el.value;
+    clearTimeout(_huddleSearchDebounce);
+    _huddleSearchDebounce = setTimeout(() => runHuddleSearch(false), 280);
+  }
+
+  function handleHuddleSearchKeydown(event) {
+    if (event.key === 'Escape') { event.preventDefault(); closeHuddleSearch(); return; }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      clearTimeout(_huddleSearchDebounce);
+      runHuddleSearch(false);
+    }
+  }
+
+  // PostgREST treats `*`, `%` and `_` inside an ilike pattern as wildcards and
+  // gives no escape hatch, so those characters are widened to `_` (matches any
+  // single character, including themselves) and the exact substring test is
+  // re-applied client-side on the rows that come back.
+  function huddleSearchPattern(term) {
+    return '%' + term.replace(/[%_*]/g, '_') + '%';
+  }
+
+  async function runHuddleSearch(append) {
+    const st = _huddleSearchState;
+    if (!st) return;
+    const term = st.term.trim();
+    if (term.length < 2) {
+      clearTimeout(_huddleSearchDebounce);
+      st.results = []; st.ran = false; st.loading = false; st.failed = false; st.hasMore = false;
+      renderHuddleSearchResults();
+      return;
+    }
+    const seq = ++_huddleSearchSeq;
+    st.loading = true; st.failed = false;
+    renderHuddleSearchResults();
+
+    // Auto-posted Game Plan activity lines are excluded: they aren't something
+    // a crewmate said, and they render as system rows with no bubble to jump to.
+    let q = sb.from('huddle_messages').select('*')
+      .is('deleted_at', null).neq('kind', 'system')
+      .ilike('body', huddleSearchPattern(term));
+    if (st.scope === 'room' && _huddleActiveRoomId) q = q.eq('room_id', _huddleActiveRoomId);
+    else if (st.scope !== 'all' && _huddleActiveCrewId) q = q.eq('crew_id', _huddleActiveCrewId);
+    if (st.senderId) q = q.eq('sender_id', st.senderId);
+    const offset = append ? st.offset : 0;
+    const { data, error } = await q
+      .order('created_at', { ascending: false })
+      .range(offset, offset + HUDDLE_SEARCH_PAGE_SIZE - 1);
+    if (seq !== _huddleSearchSeq) return; // a newer query already owns the panel
+
+    const page = data || [];
+    const needle = term.toLowerCase();
+    const exact = page.filter(m => String(m.body || '').toLowerCase().includes(needle));
+    st.failed = !!error;
+    st.hasMore = !error && page.length === HUDDLE_SEARCH_PAGE_SIZE;
+    st.offset = offset + page.length;
+    st.results = append ? st.results.concat(exact) : exact;
+    await ensureHuddleSearchRoomLabels(st.results);
+    if (seq !== _huddleSearchSeq) return;
+    st.loading = false;
+    st.ran = true;
+    renderHuddleSearchResults();
+  }
+
+  // Results can point at rooms the open crew's switcher doesn't hold (another
+  // crew, under the "All crews" scope) — fetch just those rows so every result
+  // can name where it came from. Same batched-lookup shape as the Huddle
+  // entries in the notification drawer.
+  async function ensureHuddleSearchRoomLabels(rows) {
+    const missing = Array.from(new Set(rows
+      .map(m => m.room_id)
+      .filter(id => id && !huddleRooms.some(r => String(r.id) === String(id)) && !_huddleSearchRoomCache[id])));
+    if (!missing.length) return;
+    const { data } = await sb.from('huddle_rooms').select('id, crew_id, name, kind, festival_id').in('id', missing);
+    (data || []).forEach(r => { _huddleSearchRoomCache[r.id] = r; });
+  }
+
+  function huddleSearchRoomFor(roomId) {
+    return huddleRooms.find(r => String(r.id) === String(roomId)) || _huddleSearchRoomCache[roomId] || null;
+  }
+
+  // Plain room name — unlike the switcher's label, a result row is about where
+  // a message was said, so the room's live countdown is just noise there.
+  function huddleSearchRoomName(room) {
+    if (!room) return 'Huddle';
+    if (room.kind === 'festival' && room.festival_id) {
+      const fest = festivals.find(f => String(f.id) === String(room.festival_id));
+      if (fest) return escHtml(fest.name);
+    }
+    return escHtml(room.name);
+  }
+
+  // A window of the body centred on the hit, so the match is visible in the
+  // result row instead of being cut off by a long message's opening words.
+  function huddleSearchSnippetHTML(m, term) {
+    const text = String(m.body || huddleMessageSnippetText(m));
+    const idx = text.toLowerCase().indexOf(term.toLowerCase());
+    if (idx < 0) return escHtml(text.slice(0, 140));
+    const start = Math.max(0, idx - 42);
+    const end = Math.min(text.length, idx + term.length + 68);
+    const pre = (start > 0 ? '…' : '') + text.slice(start, idx);
+    const post = text.slice(idx + term.length, end) + (end < text.length ? '…' : '');
+    return `${escHtml(pre)}<mark class="hd-search-mark">${escHtml(text.slice(idx, idx + term.length))}</mark>${escHtml(post)}`;
+  }
+
+  function huddleSearchResultHTML(m, term) {
+    const isYou = m.sender_id === currentUser?.id;
+    const accent = isYou ? 'var(--neon-pink)' : huddleSenderColor(m.sender_id);
+    const room = huddleSearchRoomFor(m.room_id);
+    const crew = getCrew(m.crew_id);
+    const showCrew = _huddleSearchState.scope === 'all' && crew && String(crew.id) !== String(_huddleActiveCrewId);
+    const where = `${showCrew ? escHtml(crew.name) + ' · ' : ''}${huddleSearchRoomName(room)}`;
+    return `
+      <button type="button" class="hd-search-result" style="--hd-accent:${accent};"
+        data-crew-id="${escHtml(String(m.crew_id))}" data-room-id="${escHtml(String(m.room_id))}"
+        data-mid="${escHtml(String(m.id))}" data-at="${escHtml(String(m.created_at))}"
+        onclick="jumpToHuddleSearchResult(this.dataset.crewId, this.dataset.roomId, this.dataset.mid, this.dataset.at)">
+        <span class="hd-search-result-head">
+          <span class="hd-search-who">${escHtml(huddleSenderName(m.sender_id))}</span>
+          <span class="hd-search-room">${where}</span>
+          <span class="hd-search-when">${escHtml(relativeTime(huddleTimeOf(m)))}</span>
+        </span>
+        <span class="hd-search-snippet">${huddleSearchSnippetHTML(m, term)}</span>
+      </button>`;
+  }
+
+  function renderHuddleSearchResults() {
+    const el = document.getElementById('hd-search-results');
+    const st = _huddleSearchState;
+    if (!el || !st) return;
+    const term = st.term.trim();
+
+    if (term.length < 2) {
+      el.innerHTML = `
+        <div class="es-block">
+          <div class="es-icon">🔍</div>
+          <div class="es-headline">Find it again</div>
+          <div class="es-sub">Search what your crew said — across every Huddle room — and jump straight to it.</div>
+        </div>`;
+      return;
+    }
+    if (st.loading && !st.results.length) {
+      el.innerHTML = `<div class="hd-search-status">Searching…</div>`;
+      return;
+    }
+    if (st.failed && !st.results.length) {
+      el.innerHTML = `
+        <div class="es-block">
+          <div class="es-icon">⚠️</div>
+          <div class="es-headline">Search didn't go through</div>
+          <div class="es-sub">Try again in a moment.</div>
+        </div>`;
+      return;
+    }
+    if (!st.results.length) {
+      el.innerHTML = `
+        <div class="es-block">
+          <div class="es-icon">🕳️</div>
+          <div class="es-headline">Nothing matches “${escHtml(term)}”</div>
+          <div class="es-sub">Try fewer words, or widen the search to more rooms.</div>
+        </div>`;
+      return;
+    }
+    const scopeLabel = (huddleSearchScopeOptions().find(o => o.key === st.scope) || {}).label || '';
+    const count = `${st.results.length}${st.hasMore ? '+' : ''} match${st.results.length === 1 && !st.hasMore ? '' : 'es'}`;
+    el.innerHTML = `
+      <div class="hd-search-status">${escHtml(count)} · ${escHtml(scopeLabel)}</div>
+      ${st.results.map(m => huddleSearchResultHTML(m, term)).join('')}
+      ${st.hasMore ? `<button type="button" class="hd-search-more" ${st.loading ? 'disabled' : ''} onclick="runHuddleSearch(true)">${st.loading ? 'Loading…' : 'Load more results'}</button>` : ''}`;
+  }
+
+  // ── Jumping to a result ──
+  // Opens the result's room (switching crews if the match came from another
+  // one) positioned on the message, with history loaded either side of it.
+  async function jumpToHuddleSearchResult(crewId, roomId, messageId, createdAt) {
+    closeHuddleSearch();
+    if (String(crewId) !== String(_huddleActiveCrewId)) {
+      _huddleActiveCrewId = crewId;
+      await ensureHuddleRooms(crewId);
+    } else if (!huddleRooms.some(r => String(r.id) === String(roomId))) {
+      await ensureHuddleRooms(crewId);
+    }
+    await switchHuddleRoomAtMessage(roomId, messageId, createdAt);
+  }
+
+  // Sibling of switchHuddleRoom that lands mid-history instead of at the live
+  // end: half a page of older messages (through the target) plus half a page
+  // of newer ones. If newer messages remain unloaded the room is left flagged
+  // (_huddleHasNewer) so nothing pretends this is the live end.
+  async function switchHuddleRoomAtMessage(roomId, messageId, createdAt) {
+    teardownHuddleLive();
+    _huddleActiveRoomId = roomId;
+    huddleMessages = [];
+    _huddleHasMore = true;
+    _huddleHasNewer = false;
+    _huddleReplyTo = null;
+    _huddleTypingUsers = {};
+    const priorRead = _huddleReadMap && _huddleReadMap[roomId];
+    _huddleUnreadAnchorAt = priorRead || null;
+    hideHuddleRoomMenu();
+    renderHuddleUI();
+
+    const half = Math.max(10, Math.round(HUDDLE_PAGE_SIZE / 2));
+    const [olderRes, newerRes] = await Promise.all([
+      sb.from('huddle_messages').select('*').eq('room_id', roomId).is('deleted_at', null)
+        .lte('created_at', createdAt).order('created_at', { ascending: false }).limit(half),
+      sb.from('huddle_messages').select('*').eq('room_id', roomId).is('deleted_at', null)
+        .gt('created_at', createdAt).order('created_at', { ascending: true }).limit(half),
+    ]);
+    const older = (olderRes.error ? [] : (olderRes.data || [])).slice().reverse();
+    const newer = newerRes.error ? [] : (newerRes.data || []);
+    _huddleHasMore = older.length === half;
+    _huddleHasNewer = newer.length === half;
+    const seen = new Set();
+    huddleMessages = older.concat(newer).filter(m => {
+      if (seen.has(m.id)) return false;
+      seen.add(m.id);
+      return true;
+    });
+    await loadHuddleActiveBeacon();
+    renderHuddleUI();
+    subscribeHuddleRealtime(roomId);
+    trackHuddlePresence(roomId);
+    // Only a stream sitting at the live end has actually shown you everything.
+    if (!_huddleHasNewer) markHuddleRoomRead(roomId, _huddleActiveCrewId);
+    requestAnimationFrame(() => scrollToHuddleMessage(messageId));
   }
 
   // Re-renders only what changed. The composer is never touched, so a draft
@@ -17251,12 +17737,17 @@ async function doProfilePasswordChange() {
     stream.innerHTML = huddleStreamHTML(crew);
     renderHuddleTyping();
     renderHuddleReplyBar();
-    if (wasAtBottom) huddleScrollMessagesToBottom();
+    // Stick-to-bottom only means something when the bottom IS the live end.
+    // Parked on older history after a search jump, it would fight the jump.
+    if (wasAtBottom && !_huddleHasNewer) huddleScrollMessagesToBottom();
   }
 
   // ── Sending messages (optimistic UI: render immediately, reconcile on the DB round-trip) ──
   async function sendHuddleMessage(fields) {
     if (!currentUser || !_huddleActiveRoomId || !_huddleActiveCrewId) return;
+    // Never post into a historical window left by a search jump: the new
+    // message would render directly after messages it doesn't actually follow.
+    if (_huddleHasNewer) await switchHuddleRoom(_huddleActiveRoomId);
     const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).slice(2);
     const optimistic = {
       id: tempId, room_id: _huddleActiveRoomId, crew_id: _huddleActiveCrewId,
@@ -17904,6 +18395,12 @@ async function doProfilePasswordChange() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'huddle_messages', filter: `room_id=eq.${roomId}` }, payload => {
         const row = payload.new;
         if (huddleMessages.some(m => m.id === row.id)) return;
+        // Parked on older history after a search jump: appending would fake
+        // adjacency across the unloaded gap. The ↓ LATEST pill reloads instead.
+        if (_huddleHasNewer) {
+          if (row.sender_id !== currentUser?.id) document.getElementById('hd-jump')?.classList.add('show');
+          return;
+        }
         const wasAtBottom = huddleAtBottom();
         huddleMessages.push(row);
         if (row.kind === 'beacon' && !row.deleted_at) _huddleActiveBeacon = row;
@@ -28734,6 +29231,9 @@ async function doProfilePasswordChange() {
       a: "Your crew's real-time group chat — one for the crew overall, plus a dedicated one per rave inside its Rave Plan." },
     { id: 'beacon-intro', category: 'huddle', q: "What's a Beacon?",
       a: "An urgent ping that cuts through the chat when it actually matters — lost at the fest, meetup change, whatever. Tap the beacon button inside Huddle to send one." },
+    { id: 'huddle-search', category: 'huddle', q: 'How do I find something someone said?',
+      a: "Tap the 🔍 in the Huddle header. Search runs across every room the crew has (or every crew you're in), and you can narrow it to one room or one person. Tapping a result drops you into that room right at the message, with the conversation around it loaded.",
+      keywords: ['search', 'find', 'history', 'lookup', 'scroll back'] },
     { id: 'plur-points-intro', category: 'plur-points', q: 'What are PLUR Points?',
       a: 'Real activity earns you points across Peace, Love, Unity, and Respect — verified by RaveFAM. Tap the PLUR bar on any profile to see exactly what earns points and check your milestones.',
       keywords: ['peace', 'love', 'unity', 'respect', 'milestones'] },
