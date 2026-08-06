@@ -138,6 +138,45 @@ test.describe('stats', () => {
     await expect(page.locator('#radar-share-overlay')).toHaveClass(/open/);
   });
 
+  test('Radar share card lets you leave raves off it and put them back', async ({ page }) => {
+    const d = statsData();
+    d.raver_festivals.push({ raver_id: 'r-you', festival_id: 'f2' }); // second upcoming rave: Awakenings
+    await bootAuthedApp(page, { data: d });
+    await page.evaluate(() => { switchTab('stats'); loadStatsPage(); });
+    await page.evaluate(() => openRadarShareCard());
+
+    const card = page.locator('#radar-share-card');
+    await expect(card.locator('.radar-share-row')).toHaveCount(2);
+    await expect(card.locator('.radar-share-count')).toHaveText('2 raves coming up');
+
+    // Drop Tomorrowland — the card narrows to Awakenings and offers it back
+    await card.locator('.radar-share-row', { hasText: 'Tomorrowland' }).locator('.radar-share-remove').click();
+    await expect(card.locator('.radar-share-row-name')).toHaveText('Awakenings');
+    await expect(card.locator('.radar-share-count')).toHaveText('1 rave coming up');
+    await expect(card.locator('.radar-share-hidden-chip')).toHaveText('+ Tomorrowland');
+
+    // The last remaining rave can't be dropped
+    await card.locator('.radar-share-row .radar-share-remove').click();
+    await expect(card.locator('.radar-share-row')).toHaveCount(1);
+
+    await card.locator('.radar-share-hidden-chip').click();
+    await expect(card.locator('.radar-share-row')).toHaveCount(2);
+    await expect(card.locator('.radar-share-hidden-bar')).toHaveCount(0);
+
+    // Reopening the card starts from the full radar again
+    await card.locator('.radar-share-row', { hasText: 'Tomorrowland' }).locator('.radar-share-remove').click();
+    await expect(card.locator('.radar-share-row')).toHaveCount(1);
+    await page.evaluate(() => { closeRadarShareCard(); openRadarShareCard(); });
+    await expect(card.locator('.radar-share-row')).toHaveCount(2);
+  });
+
+  test('Radar share card hides the remove control when there is only one upcoming rave', async ({ page }) => {
+    await bootAuthedApp(page, { data: statsData() });
+    await page.evaluate(() => { switchTab('stats'); loadStatsPage(); openRadarShareCard(); });
+    await expect(page.locator('#radar-share-card .radar-share-row')).toHaveCount(1);
+    await expect(page.locator('#radar-share-card .radar-share-remove')).toHaveCount(0);
+  });
+
   test('Artists Seen Live tile counts distinct artists this raver personally checked off, not just the lineup', async ({ page }) => {
     const d = statsData();
     // Charlotte de Witte (a1) and a second artist both appeared at f-past, which

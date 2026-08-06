@@ -7194,6 +7194,36 @@
     font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: 0.68rem; color: var(--neon-cyan);
     flex-shrink: 0; white-space: nowrap;
   }
+  /* Trim controls — every .radar-share-edit-only element is hidden while the card
+     is rasterized, so the shared image shows only the curated list. */
+  .radar-share-remove {
+    flex-shrink: 0; width: 22px; height: 22px; padding: 0; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.14);
+    color: rgba(255,255,255,0.5); font-size: 0.7rem; line-height: 1; cursor: pointer;
+  }
+  .radar-share-remove:hover { background: rgba(255,45,120,0.18); border-color: rgba(255,45,120,0.5); color: #fff; }
+  .radar-share-remove:active { transform: scale(0.9); }
+  .radar-share-hint {
+    font-family: 'Outfit', sans-serif; font-size: 0.6rem; color: rgba(255,255,255,0.3);
+    margin: -8px 0 14px; position: relative;
+  }
+  .radar-share-hidden-bar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    margin: -8px 0 14px; position: relative;
+  }
+  .radar-share-hidden-label {
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.58rem;
+    color: rgba(255,255,255,0.3); letter-spacing: 1px; text-transform: uppercase;
+  }
+  .radar-share-hidden-chip {
+    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.62rem;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    background: rgba(0,245,255,0.08); border: 1px solid rgba(0,245,255,0.28);
+    color: rgba(255,255,255,0.65); border-radius: 999px; padding: 4px 9px; cursor: pointer;
+  }
+  .radar-share-hidden-chip:hover { background: rgba(0,245,255,0.16); color: #fff; }
+  .radar-share-hidden-chip:active { transform: scale(0.96); }
   .radar-share-footer {
     text-align: center; font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.6rem;
     color: rgba(255,255,255,0.25); letter-spacing: 1px; text-transform: uppercase;
@@ -9114,7 +9144,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.38.0';
+  const APP_VERSION = '1.39.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -30573,11 +30603,20 @@ async function doProfilePasswordChange() {
   // pipeline) rather than the rave/crew card's elaborate image pipeline, since it
   // has no remote photos to worry about — just text, solid colors and gradients,
   // all of which html2canvas rasterizes fine on the first try.
+  // The upcoming raves this card was opened with, plus the ones the raver chose to
+  // leave off it. Both are per-opening state — trimming the card is a decision about
+  // one share ("just the summer ones"), not a saved preference, so it starts fresh
+  // every time the card opens.
+  let radarShareUpcoming = [];
+  let radarShareOmitted = new Set();
+
   function openRadarShareCard() {
     const you = squad.find(r => r.isYou);
     if (!you) return;
     const upcoming = myUpcomingFests().filter(f => f.date).sort((a, b) => festDate(a) - festDate(b));
     if (!upcoming.length) { showToast("📡 Nothing on your radar yet — RSVP to a rave first"); return; }
+    radarShareUpcoming = upcoming;
+    radarShareOmitted = new Set();
     renderRadarShareCard(you, upcoming);
     document.getElementById('radar-share-overlay').classList.add('open');
   }
@@ -30586,8 +30625,39 @@ async function doProfilePasswordChange() {
     document.getElementById('radar-share-overlay').classList.remove('open');
   }
 
+  // Leave one rave off the card. The card always keeps at least one row — an empty
+  // radar isn't worth sharing, and it'd leave no way back other than reopening.
+  function omitRaveFromRadarCard(id) {
+    if (radarShareUpcoming.filter(f => !radarShareOmitted.has(String(f.id))).length <= 1) {
+      showToast('📡 Keep at least one rave on the card');
+      return;
+    }
+    radarShareOmitted.add(String(id));
+    rerenderRadarShareCard();
+  }
+
+  function restoreRaveToRadarCard(id) {
+    radarShareOmitted.delete(String(id));
+    rerenderRadarShareCard();
+  }
+
+  function resetRadarShareCard() {
+    radarShareOmitted.clear();
+    rerenderRadarShareCard();
+  }
+
+  function rerenderRadarShareCard() {
+    const you = squad.find(r => r.isYou);
+    if (you) renderRadarShareCard(you, radarShareUpcoming);
+  }
+
   function renderRadarShareCard(you, upcoming) {
-    const rows = upcoming.map(f => {
+    const omitted = radarShareOmitted;
+    const shown = upcoming.filter(f => !omitted.has(String(f.id)));
+    const hidden = upcoming.filter(f => omitted.has(String(f.id)));
+    const canTrim = upcoming.length > 1;
+
+    const rows = shown.map(f => {
       const d = festDate(f);
       const days = Math.ceil((d - TODAY) / 86400000);
       const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -30599,8 +30669,19 @@ async function doProfilePasswordChange() {
             <div class="radar-share-row-sub">${escHtml(dateLabel)}${f.location ? ' · ' + escHtml(f.location) : ''}</div>
           </div>
           <span class="radar-share-row-days">${days <= 0 ? 'Today' : `${days}d`}</span>
+          ${canTrim ? `<button class="radar-share-remove radar-share-edit-only" onclick="omitRaveFromRadarCard('${escHtml(f.id)}')" title="Leave ${escHtml(f.name)} off the card" aria-label="Leave ${escHtml(f.name)} off the card">✕</button>` : ''}
         </div>`;
     }).join('');
+
+    const hint = canTrim && !hidden.length
+      ? `<div class="radar-share-hint radar-share-edit-only">Tap ✕ to leave a rave off the card</div>`
+      : '';
+    const hiddenBar = hidden.length ? `
+      <div class="radar-share-hidden-bar radar-share-edit-only">
+        <span class="radar-share-hidden-label">Left off</span>
+        ${hidden.map(f => `<button class="radar-share-hidden-chip" onclick="restoreRaveToRadarCard('${escHtml(f.id)}')" title="Put ${escHtml(f.name)} back on the card">+ ${escHtml(f.name)}</button>`).join('')}
+        ${hidden.length > 1 ? `<button class="radar-share-hidden-chip" onclick="resetRadarShareCard()">Add all back</button>` : ''}
+      </div>` : '';
 
     document.getElementById('radar-share-card').innerHTML = `
       <div class="radar-share-header">
@@ -30611,8 +30692,9 @@ async function doProfilePasswordChange() {
         </div>
       </div>
       <div class="radar-share-headline">My <span>Radar</span> 📡</div>
-      <div class="radar-share-count">${upcoming.length} rave${upcoming.length !== 1 ? 's' : ''} coming up</div>
+      <div class="radar-share-count">${shown.length} rave${shown.length !== 1 ? 's' : ''} coming up</div>
       <div class="radar-share-list">${rows}</div>
+      ${hint}${hiddenBar}
       <div class="radar-share-footer">myravefam.com · Track your rave life</div>
       <div class="wrapped-actions">
         <button class="wrapped-share-btn" onclick="shareRadarCard()">📲 Share Card</button>
@@ -30623,15 +30705,17 @@ async function doProfilePasswordChange() {
 
   async function shareRadarCard() {
     const card = document.getElementById('radar-share-card');
-    const actions = card.querySelector('.wrapped-actions');
-    if (actions) actions.style.display = 'none';
+    // Buttons and trim controls are for the raver, not for the image.
+    const chrome = [...card.querySelectorAll('.wrapped-actions, .radar-share-edit-only')];
+    const showChrome = () => chrome.forEach(el => { el.style.display = ''; });
+    chrome.forEach(el => { el.style.display = 'none'; });
     try {
       if (typeof html2canvas !== 'undefined') {
         const canvas = await html2canvas(card, { backgroundColor: '#06000f', scale: 2, useCORS: true, logging: false, ignoreElements: (el) => {
           if (document.head.contains(el) || el === document.head) return false;
           return el.tagName === 'VIDEO' || (el !== card && !card.contains(el) && !el.contains(card));
         } });
-        if (actions) actions.style.display = '';
+        showChrome();
         canvas.toBlob(async (blob) => {
           if (!blob) { showToast('⚠️ Could not generate image'); return; }
           const file = new File([blob], 'my-radar.png', { type: 'image/png' });
@@ -30649,11 +30733,11 @@ async function doProfilePasswordChange() {
           }
         }, 'image/png');
       } else {
-        if (actions) actions.style.display = '';
+        showChrome();
         showToast('📋 Screenshot this card to share!');
       }
     } catch {
-      if (actions) actions.style.display = '';
+      showChrome();
       showToast('📋 Screenshot this card to share!');
     }
   }
