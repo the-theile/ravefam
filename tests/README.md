@@ -52,6 +52,12 @@ Per-domain flow coverage:
   from other viewers when opted out; the Privacy & Permissions modal is
   owner-only, its toggles persist, and both entry points (notification drawer,
   own profile view) open it.
+- **`huddle_search.spec.js`** — searching the Huddle spans every room the crew
+  has, labels which room each hit came from, and narrows by room or sender;
+  tapping a result opens that room on the message with history loaded either
+  side of it. The mid-history state it leaves behind is covered too: newer
+  messages page in, the room isn't marked read until the stream reaches the
+  live end, and sending snaps back to that end first.
 
 ## Running
 
