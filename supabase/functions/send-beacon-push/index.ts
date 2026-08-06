@@ -14,12 +14,43 @@ import webpush from "npm:web-push@3.6.7";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const VAPID_PUBLIC_KEY = Deno.env.get("VAPID_PUBLIC_KEY")!;
-const VAPID_PRIVATE_KEY = Deno.env.get("VAPID_PRIVATE_KEY")!;
+const VAPID_PUBLIC_KEY = Deno.env.get("VAPID_PUBLIC_KEY");
+const VAPID_PRIVATE_KEY = Deno.env.get("VAPID_PRIVATE_KEY");
 const VAPID_SUBJECT = Deno.env.get("VAPID_SUBJECT") ?? "mailto:hello@myravefam.com";
 
 const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+
+// VAPID setup is deliberately NOT done at module scope. web-push throws if a
+// key is missing or malformed, and a throw during module evaluation takes the
+// whole worker down with an opaque `WORKER_ERROR` before any handler runs.
+//
+// This is not hypothetical: a malformed VAPID_PUBLIC_KEY secret (stored with
+// base64 padding web-push rejects) left this function dead in production from
+// the day it shipped. Every invocation 500'd at boot, so no row was ever
+// written to huddle_beacon_push_log explaining why -- the failure was
+// completely silent. Initialising lazily turns that into a specific,
+// greppable error on a request that actually had work to do.
+let vapidReady = false;
+let vapidError: string | null = null;
+function ensureVapid(): string | null {
+  if (vapidReady) return null;
+  if (vapidError) return vapidError;
+  const missing: string[] = [];
+  if (!VAPID_PUBLIC_KEY) missing.push("VAPID_PUBLIC_KEY");
+  if (!VAPID_PRIVATE_KEY) missing.push("VAPID_PRIVATE_KEY");
+  if (missing.length) {
+    vapidError = `missing secrets: ${missing.join(", ")}`;
+    return vapidError;
+  }
+  try {
+    webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY!, VAPID_PRIVATE_KEY!);
+    vapidReady = true;
+    return null;
+  } catch (err) {
+    vapidError = String((err as Error)?.message ?? err);
+    return vapidError;
+  }
+}
 
 async function logOutcome(userId: string, messageId: string, status: "sent" | "skipped" | "failed", error?: string) {
   await sb.from("huddle_beacon_push_log").upsert(
@@ -42,6 +73,15 @@ Deno.serve(async (req) => {
 
   if (!message || message.kind !== "beacon" || message.deleted_at) {
     return new Response(JSON.stringify({ skipped: "not_an_active_beacon" }), { status: 200 });
+  }
+
+  const vapidFailure = ensureVapid();
+  if (vapidFailure) {
+    console.error(`send-beacon-push: VAPID config unusable -- ${vapidFailure}`);
+    return new Response(JSON.stringify({ error: "vapid_config", detail: vapidFailure }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
   const { data: crew } = await sb.from("crews").select("name").eq("id", message.crew_id).maybeSingle();
