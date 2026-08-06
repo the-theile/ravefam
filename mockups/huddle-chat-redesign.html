@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Huddle Chat — Visual Directions</title>
+<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@800;900&family=Outfit:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --neon-pink: #FF2D78;
+    --neon-cyan: #00F5FF;
+    --neon-yellow: #FFE600;
+    --neon-purple: #BF00FF;
+    --neon-green: #39FF14;
+    --neon-indigo: #5B6EFF;
+    --bg: #050509;
+    --surface: #0E0E16;
+    --surface2: #16161F;
+    --text: #F0EEFF;
+    --muted: #8585A5;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #08080D;
+    color: var(--text);
+    font-family: 'DM Sans', system-ui, sans-serif;
+    padding: 32px 24px 64px;
+  }
+  .page-head { max-width: 1280px; margin: 0 auto 32px; }
+  .page-head h1 {
+    font-family: 'Urbanist', system-ui, sans-serif; font-weight: 900;
+    font-size: 1.9rem; margin: 0 0 8px; letter-spacing: -0.5px;
+  }
+  .page-head p { color: var(--muted); margin: 0; font-size: 0.94rem; line-height: 1.5; max-width: 760px; }
+  .page-head .shared {
+    margin-top: 16px; padding: 12px 16px;
+    background: rgba(0,245,255,0.06); border: 1px solid rgba(0,245,255,0.2);
+    border-radius: 12px; font-size: 0.84rem; color: var(--text); line-height: 1.6;
+  }
+  .page-head .shared strong { color: var(--neon-cyan); font-family: 'Outfit', sans-serif; }
+
+  .rail { display: flex; gap: 28px; overflow-x: auto; padding-bottom: 20px; justify-content: flex-start; }
+  @media (min-width: 1340px) { .rail { justify-content: center; } }
+  .col { flex: 0 0 auto; width: 372px; }
+  .col-head { margin-bottom: 14px; }
+  .col-head .tag {
+    display: inline-block; font-family: 'Outfit', sans-serif; font-weight: 800;
+    font-size: 0.64rem; letter-spacing: 1.2px; text-transform: uppercase;
+    padding: 3px 9px; border-radius: 20px; margin-bottom: 8px;
+  }
+  .col-head h2 { font-family: 'Urbanist', sans-serif; font-weight: 800; font-size: 1.16rem; margin: 0 0 6px; }
+  .col-head p { color: var(--muted); font-size: 0.82rem; margin: 0; line-height: 1.5; }
+
+  /* ── Phone frame ── */
+  .phone {
+    height: 1085px; border-radius: 30px; overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.13);
+    box-shadow: 0 18px 50px rgba(0,0,0,0.6);
+    display: flex; flex-direction: column;
+    background: var(--surface2);
+  }
+  .statusbar {
+    flex-shrink: 0; display: flex; justify-content: space-between; align-items: center;
+    padding: 9px 18px 5px; font-size: 0.68rem; color: var(--muted);
+    font-family: 'Outfit', sans-serif; font-weight: 600;
+  }
+
+  /* ── Chat header (shared skeleton) ── */
+  .chead {
+    flex-shrink: 0; display: flex; align-items: center; gap: 10px;
+    padding: 8px 14px 10px; border-bottom: 1px solid rgba(255,255,255,0.07);
+  }
+  .cback { background: none; border: none; color: var(--muted); font-size: 1.15rem; cursor: pointer; padding: 2px 2px 2px 0; }
+  .ctitle { min-width: 0; flex: 1; }
+  .croom {
+    display: flex; align-items: center; gap: 5px;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.93rem; color: #fff;
+  }
+  .croom .caret { font-size: 0.6rem; color: var(--muted); }
+  .csub { font-size: 0.68rem; color: var(--muted); margin-top: 1px; }
+  .cpresence { display: flex; align-items: center; }
+  .cpresence .av { margin-left: -7px; border: 2px solid var(--surface2); }
+  .cpresence .av:first-child { margin-left: 0; }
+  .cbeacon {
+    flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; font-size: 0.86rem;
+  }
+
+  /* ── Avatars ── */
+  .av {
+    width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.62rem; color: #fff;
+  }
+  .av-k { background: linear-gradient(135deg,#00F5FF,#5B6EFF); }
+  .av-n { background: linear-gradient(135deg,#BF00FF,#FF2D78); }
+  .av-r { background: linear-gradient(135deg,#39FF14,#00F5FF); color: #04040A; }
+  .av-y { background: linear-gradient(135deg,#FF2D78,#FFE600); }
+
+  /* ── Scroll body ── */
+  .stream {
+    flex: 1; overflow-y: auto; padding: 10px 12px 6px;
+    display: flex; flex-direction: column;
+  }
+  .stream::-webkit-scrollbar { width: 4px; }
+  .stream::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
+
+  .loadmore {
+    align-self: center; margin: 2px 0 12px; padding: 4px 14px;
+    font-size: 0.68rem; font-family: 'Outfit', sans-serif; font-weight: 600;
+    color: var(--muted); background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; cursor: pointer;
+  }
+
+  /* Day separator */
+  .daysep { display: flex; align-items: center; gap: 10px; margin: 12px 2px 10px; }
+  .daysep::before, .daysep::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.08); }
+  .daysep span {
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.64rem;
+    letter-spacing: 0.8px; text-transform: uppercase; color: var(--muted);
+  }
+
+  /* Unread divider */
+  .unread { display: flex; align-items: center; gap: 8px; margin: 14px 2px 10px; }
+  .unread::before, .unread::after { content: ''; flex: 1; height: 1px; background: rgba(255,45,120,0.45); }
+  .unread span {
+    font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.6rem;
+    letter-spacing: 1px; text-transform: uppercase; color: var(--neon-pink);
+  }
+
+  /* Message group */
+  .grp { display: flex; gap: 7px; margin-bottom: 10px; align-items: flex-end; }
+  .grp-you { flex-direction: row-reverse; }
+  .grp .stack { display: flex; flex-direction: column; gap: 2px; min-width: 0; max-width: 252px; }
+  .grp-you .stack { align-items: flex-end; }
+  .sender {
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.66rem;
+    margin-bottom: 1px; padding-left: 2px;
+  }
+  .bub { padding: 7px 11px; font-size: 0.83rem; line-height: 1.42; word-break: break-word; position: relative; }
+  .meta {
+    font-size: 0.6rem; color: var(--muted); font-family: 'Outfit', sans-serif;
+    margin-top: 2px; padding: 0 3px; display: flex; gap: 4px; align-items: center;
+  }
+  .grp-you .meta { justify-content: flex-end; }
+  .tick { color: var(--neon-cyan); font-size: 0.62rem; }
+
+  /* Reply quote */
+  .quote {
+    border-left: 2px solid; padding: 3px 0 3px 7px; margin-bottom: 5px;
+    font-size: 0.72rem; line-height: 1.35; opacity: 0.85;
+  }
+  .quote b { font-family: 'Outfit', sans-serif; font-weight: 700; display: block; font-size: 0.66rem; margin-bottom: 1px; }
+
+  /* Mention */
+  .mention { font-weight: 600; padding: 0 3px; border-radius: 4px; }
+
+  /* Reactions — now attached under bubble, compact */
+  .rx { display: flex; gap: 4px; margin-top: 3px; padding: 0 2px; }
+  .grp-you .rx { justify-content: flex-end; }
+  .rx span {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-size: 0.68rem; padding: 1px 6px; border-radius: 20px;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.09); color: var(--muted);
+  }
+  .rx span.on { border-color: rgba(255,45,120,0.45); background: rgba(255,45,120,0.12); color: #fff; }
+
+  /* Photo + voice + meetup */
+  .ph { width: 190px; height: 116px; border-radius: 12px; display: block; object-fit: cover;
+        background: linear-gradient(135deg,#3A1D52,#0E2440 55%,#4A1030);
+        position: relative; overflow: hidden; }
+  .ph::after {
+    content: '📸 Main stage, 11pm'; position: absolute; left: 0; right: 0; bottom: 0;
+    padding: 14px 8px 5px; font-size: 0.62rem; color: #fff;
+    background: linear-gradient(transparent, rgba(0,0,0,0.75));
+  }
+  .voice { display: flex; align-items: center; gap: 8px; }
+  .vplay {
+    width: 27px; height: 27px; border-radius: 50%; border: none; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 0.66rem; cursor: pointer;
+  }
+  .wave { display: flex; align-items: center; gap: 2px; height: 20px; flex: 1; }
+  .wave i { width: 2px; border-radius: 2px; display: block; }
+  .vdur { font-size: 0.68rem; color: var(--muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .meetup { display: flex; flex-direction: column; gap: 5px; }
+  .meetup .mtitle { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.8rem; }
+  .meetup .mwhen { font-size: 0.68rem; color: var(--muted); }
+  .mmap {
+    width: 190px; height: 84px; border-radius: 9px; position: relative; overflow: hidden;
+    background:
+      repeating-linear-gradient(45deg, rgba(255,255,255,0.03) 0 8px, transparent 8px 16px),
+      linear-gradient(135deg, #12233A, #1E1233);
+  }
+  .mmap .pin {
+    position: absolute; left: 52%; top: 46%; transform: translate(-50%,-100%);
+    width: 17px; height: 17px; border-radius: 50%; border: 2px solid #fff;
+    background: linear-gradient(135deg,#00F5FF,#5B6EFF);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.6);
+  }
+
+  /* Typing indicator */
+  .typing { display: flex; align-items: center; gap: 7px; padding: 2px 2px 8px; }
+  .tdots { display: flex; gap: 3px; padding: 7px 11px; }
+  .tdots i {
+    width: 5px; height: 5px; border-radius: 50%; background: var(--muted);
+    animation: blink 1.3s infinite ease-in-out;
+  }
+  .tdots i:nth-child(2) { animation-delay: 0.18s; }
+  .tdots i:nth-child(3) { animation-delay: 0.36s; }
+  @keyframes blink { 0%,60%,100% { opacity: 0.28; } 30% { opacity: 1; } }
+  .tlabel { font-size: 0.68rem; color: var(--muted); }
+
+  /* System note — taped paper (already in app) */
+  .sysnote {
+    align-self: center; text-align: center; font-size: 0.68rem; font-weight: 600;
+    color: #1B1720; background: linear-gradient(160deg, #F4F1E8, #EDEAE2);
+    border-radius: 4px; padding: 5px 12px; margin: 4px auto 12px; max-width: 82%;
+    box-shadow: 0 3px 8px -2px rgba(0,0,0,0.4); transform: rotate(-0.8deg);
+  }
+
+  /* Pinned strip */
+  .pinned {
+    flex-shrink: 0; display: flex; align-items: center; gap: 7px;
+    padding: 7px 14px; font-size: 0.74rem; line-height: 1.3;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+  }
+  .pinned .ptxt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ── Composer ── */
+  .composer {
+    flex-shrink: 0; display: flex; align-items: flex-end; gap: 7px;
+    padding: 9px 12px 13px; border-top: 1px solid rgba(255,255,255,0.07);
+  }
+  .cplus, .csend {
+    width: 33px; height: 33px; border-radius: 50%; border: none; flex-shrink: 0; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; font-size: 0.95rem;
+  }
+  .cinput {
+    flex: 1; min-width: 0; padding: 8px 13px; font-size: 0.83rem;
+    font-family: 'DM Sans', sans-serif; color: var(--muted);
+  }
+  .replybar {
+    flex-shrink: 0; display: flex; align-items: center; gap: 8px;
+    padding: 6px 13px; font-size: 0.72rem; border-top: 1px solid rgba(255,255,255,0.07);
+  }
+  .replybar .rl { border-left: 2px solid; padding-left: 7px; flex: 1; min-width: 0; line-height: 1.3; }
+  .replybar .rl b { font-family: 'Outfit', sans-serif; font-size: 0.66rem; display: block; }
+  .replybar .rl span { color: var(--muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .replybar .rx-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 0.9rem; }
+
+  /* Notes list under each phone */
+  .notes { margin-top: 16px; padding-left: 0; list-style: none; }
+  .notes li {
+    font-size: 0.79rem; color: var(--muted); line-height: 1.5; padding: 5px 0 5px 20px;
+    position: relative; border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .notes li::before { content: '◆'; position: absolute; left: 2px; font-size: 0.6rem; top: 8px; }
+  .notes li b { color: var(--text); font-family: 'Outfit', sans-serif; font-weight: 600; }
+
+  /* ══════════════ VARIANT A — Neon Tight ══════════════ */
+  .v-a { background: var(--surface2); }
+  .v-a .tag, .col-a .tag { background: rgba(255,45,120,0.14); color: var(--neon-pink); }
+  .v-a .cbeacon {
+    background: linear-gradient(135deg, var(--neon-yellow), var(--neon-pink)); color: #000;
+    box-shadow: 0 0 0 0 rgba(255,230,0,0.35), 0 3px 12px rgba(255,230,0,0.28);
+  }
+  .v-a .pinned { background: rgba(255,255,255,0.04); }
+  .v-a .sender { color: var(--neon-cyan); }
+  .v-a .sender.s-nova { color: var(--neon-purple); }
+  .v-a .sender.s-rae { color: var(--neon-green); }
+  .v-a .bub {
+    background: var(--surface); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 15px; color: #fff;
+  }
+  .v-a .stack .bub:not(:last-of-type) { border-bottom-left-radius: 6px; }
+  .v-a .stack .bub:not(:first-of-type) { border-top-left-radius: 6px; }
+  .v-a .grp-you .bub {
+    background: rgba(255,45,120,0.1); border-color: rgba(255,45,120,0.45);
+    box-shadow: 0 0 18px rgba(255,45,120,0.12);
+  }
+  .v-a .grp-you .stack .bub:not(:last-of-type) { border-bottom-right-radius: 6px; border-bottom-left-radius: 15px; }
+  .v-a .grp-you .stack .bub:not(:first-of-type) { border-top-right-radius: 6px; border-top-left-radius: 15px; }
+  .v-a .quote { border-color: var(--neon-cyan); }
+  .v-a .quote b { color: var(--neon-cyan); }
+  .v-a .mention { color: var(--neon-cyan); background: rgba(0,245,255,0.13); }
+  .v-a .vplay { background: linear-gradient(135deg,#00F5FF,#39FF14); color: #000; }
+  .v-a .wave i { background: rgba(0,245,255,0.5); }
+  .v-a .wave i.p { background: var(--neon-cyan); }
+  .v-a .meetup .mtitle { color: var(--neon-pink); }
+  .v-a .tdots { background: var(--surface); border: 1px solid rgba(255,255,255,0.08); border-radius: 15px; }
+  .v-a .cinput {
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 18px;
+  }
+  .v-a .cplus { background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.1); color: var(--text); }
+  .v-a .csend { background: linear-gradient(135deg, var(--neon-pink), var(--neon-purple)); color: #fff; }
+  .v-a .replybar { background: rgba(0,245,255,0.05); }
+  .v-a .replybar .rl { border-color: var(--neon-cyan); }
+  .v-a .replybar .rl b { color: var(--neon-cyan); }
+
+  /* ══════════════ VARIANT B — Calm Canvas ══════════════ */
+  .v-b { background: #101018; }
+  .col-b .tag { background: rgba(0,245,255,0.13); color: var(--neon-cyan); }
+  .v-b .chead { background: #14141D; }
+  .v-b .cbeacon { background: rgba(255,230,0,0.14); border: 1px solid rgba(255,230,0,0.4); color: var(--neon-yellow); }
+  .v-b .pinned { background: rgba(255,255,255,0.03); }
+  .v-b .sender { color: #9C9CC0; }
+  .v-b .sender.s-nova { color: #B98BD6; }
+  .v-b .sender.s-rae { color: #7FBF9A; }
+  .v-b .bub { background: #1D1D28; border: none; border-radius: 14px; color: #EDEBF7; }
+  .v-b .stack .bub:not(:last-of-type) { border-bottom-left-radius: 5px; }
+  .v-b .stack .bub:not(:first-of-type) { border-top-left-radius: 5px; }
+  .v-b .grp-you .bub { background: #37203A; color: #FBEAF2; }
+  .v-b .grp-you .stack .bub:not(:last-of-type) { border-bottom-right-radius: 5px; border-bottom-left-radius: 14px; }
+  .v-b .grp-you .stack .bub:not(:first-of-type) { border-top-right-radius: 5px; border-top-left-radius: 14px; }
+  .v-b .quote { border-color: #5E5E7A; }
+  .v-b .quote b { color: #A9A9C8; }
+  .v-b .mention { color: var(--neon-cyan); background: rgba(0,245,255,0.1); }
+  .v-b .vplay { background: var(--neon-cyan); color: #06060C; }
+  .v-b .wave i { background: rgba(255,255,255,0.22); }
+  .v-b .wave i.p { background: var(--neon-cyan); }
+  .v-b .meetup .mtitle { color: var(--neon-pink); }
+  .v-b .mmap { border: 1px solid rgba(255,45,120,0.3); }
+  .v-b .tdots { background: #1D1D28; border-radius: 14px; }
+  .v-b .cinput { background: #1D1D28; border: none; border-radius: 18px; }
+  .v-b .cplus { background: #1D1D28; color: var(--text); }
+  .v-b .csend { background: var(--neon-pink); color: #fff; }
+  .v-b .replybar { background: rgba(255,255,255,0.03); }
+  .v-b .replybar .rl { border-color: var(--neon-pink); }
+  .v-b .replybar .rl b { color: var(--neon-pink); }
+  .v-b .rx span.on { border-color: rgba(255,45,120,0.5); background: rgba(255,45,120,0.14); }
+
+  /* ══════════════ VARIANT C — Comms Channel ══════════════ */
+  .v-c { background: #0A0A10; }
+  .col-c .tag { background: rgba(255,230,0,0.13); color: var(--neon-yellow); }
+  .v-c .chead {
+    background: #0E0E16;
+    border-bottom: 1px solid rgba(0,245,255,0.22);
+  }
+  .v-c .croom { font-family: 'Outfit', sans-serif; letter-spacing: 0.3px; }
+  .v-c .csub { font-family: 'JetBrains Mono', monospace; font-size: 0.62rem; letter-spacing: -0.2px; }
+  .v-c .cbeacon { background: rgba(255,230,0,0.12); border: 1px solid var(--neon-yellow); color: var(--neon-yellow); }
+  .v-c .pinned { background: rgba(255,230,0,0.06); border-bottom-color: rgba(255,230,0,0.2); }
+  .v-c .stream {
+    background-image: repeating-linear-gradient(0deg, transparent 0 3px, rgba(255,255,255,0.012) 3px 4px);
+  }
+  .v-c .daysep span {
+    font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--neon-cyan);
+    border: 1px solid rgba(0,245,255,0.3); padding: 2px 10px; border-radius: 3px;
+    background: rgba(0,245,255,0.06);
+  }
+  .v-c .sender { font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--neon-cyan); font-size: 0.62rem; letter-spacing: -0.3px; }
+  .v-c .sender.s-nova { color: var(--neon-purple); }
+  .v-c .sender.s-rae { color: var(--neon-green); }
+  .v-c .bub {
+    background: rgba(255,255,255,0.045); border-radius: 4px; color: #EFEDFB;
+    border-left: 2px solid rgba(0,245,255,0.5);
+  }
+  .v-c .grp-you .bub { border-left: none; border-right: 2px solid var(--neon-pink); background: rgba(255,45,120,0.09); }
+  .v-c .meta { font-family: 'JetBrains Mono', monospace; font-size: 0.58rem; }
+  .v-c .quote { border-color: var(--neon-purple); }
+  .v-c .quote b { color: var(--neon-purple); font-family: 'JetBrains Mono', monospace; }
+  .v-c .mention { color: var(--neon-yellow); background: rgba(255,230,0,0.12); font-family: 'JetBrains Mono', monospace; }
+  .v-c .vplay { background: var(--neon-green); color: #04040A; border-radius: 4px; }
+  .v-c .wave i { background: rgba(57,255,20,0.4); }
+  .v-c .wave i.p { background: var(--neon-green); }
+  .v-c .meetup .mtitle { color: var(--neon-yellow); font-family: 'JetBrains Mono', monospace; }
+  .v-c .mmap { border: 1px solid rgba(0,245,255,0.28); border-radius: 4px; }
+  .v-c .tdots { background: rgba(255,255,255,0.045); border-radius: 4px; border-left: 2px solid rgba(0,245,255,0.5); }
+  .v-c .tlabel { font-family: 'JetBrains Mono', monospace; font-size: 0.62rem; }
+  .v-c .cinput { background: rgba(255,255,255,0.05); border: 1px solid rgba(0,245,255,0.25); border-radius: 5px; }
+  .v-c .cplus { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: var(--text); border-radius: 6px; }
+  .v-c .csend { background: var(--neon-cyan); color: #04040A; border-radius: 6px; }
+  .v-c .replybar { background: rgba(191,0,255,0.07); }
+  .v-c .replybar .rl { border-color: var(--neon-purple); }
+  .v-c .replybar .rl b { color: var(--neon-purple); font-family: 'JetBrains Mono', monospace; }
+  .v-c .unread span { font-family: 'JetBrains Mono', monospace; }
+  .v-c .loadmore { border-radius: 4px; font-family: 'JetBrains Mono', monospace; }
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <h1>Huddle Chat — three visual directions</h1>
+  <p>
+    Same structure in all three: a full-screen chat surface replacing the accordion panel, with the
+    conversation owning the viewport. Only the visual treatment differs. Pick one (or mix — e.g. "B's bubbles,
+    A's composer") and I'll build it into <code>app.html</code>.
+  </p>
+  <div class="shared">
+    <strong>Shared across all three:</strong>
+    sticky header with room switcher + presence · pinned strip · “Load earlier” pagination ·
+    day separators · sender grouping (one avatar per run) · per-message timestamps · delivery ticks ·
+    “New messages” unread divider · reply-with-quote · @mentions · typing indicator ·
+    one-line composer <code>[+] [input] [➤]</code> · reactions tucked under the bubble ·
+    per-person sender colours · fixed voice-note duration (<code>1:24</code>, not <code>0:84</code>).
+  </div>
+</div>
+
+<div class="rail">
+
+  <!-- ══════════════ VARIANT A ══════════════ -->
+  <div class="col col-a">
+    <div class="col-head">
+      <span class="tag">Direction A</span>
+      <h2>Neon Tight</h2>
+      <p>Today's palette, kept. Pink glow on your bubbles, cyan sender names — just denser, grouped, and with the per-bubble chrome removed.</p>
+    </div>
+
+    <div class="phone v-a">
+      <div class="statusbar"><span>23:14</span><span>▮▮▮ ᯤ 41%</span></div>
+
+      <div class="chead">
+        <button class="cback">‹</button>
+        <div class="ctitle">
+          <div class="croom">Main Huddle <span class="caret">▾</span></div>
+          <div class="csub">Bass Syndicate · 3 online</div>
+        </div>
+        <div class="cpresence">
+          <div class="av av-k">K</div><div class="av av-n">N</div><div class="av av-r">R</div>
+        </div>
+        <button class="cbeacon">📡</button>
+      </div>
+
+      <div class="pinned">
+        <span>📌</span>
+        <span class="ptxt">Gate B opens 6pm — bring the wristbands</span>
+      </div>
+
+      <div class="stream">
+        <button class="loadmore">↑ Load earlier</button>
+
+        <div class="daysep"><span>Yesterday</span></div>
+
+        <div class="grp">
+          <div class="av av-k">K</div>
+          <div class="stack">
+            <div class="sender">Kai</div>
+            <div class="bub">who's driving tmr? i can take 4 if someone chips in for gas</div>
+            <div class="bub">also i still have Nova's glowsticks 🙃</div>
+            <div class="rx"><span class="on">🙌 2</span><span>🔥 1</span></div>
+            <div class="meta">23:02</div>
+          </div>
+        </div>
+
+        <div class="grp grp-you">
+          <div class="stack">
+            <div class="bub">
+              <div class="quote"><b>Kai</b>who's driving tmr? i can take 4 if…</div>
+              i'll ride with you — got you on gas
+            </div>
+            <div class="meta">23:04 <span class="tick">✓✓</span></div>
+          </div>
+        </div>
+
+        <div class="sysnote">Nova is going to Lost Lands 🎪</div>
+
+        <div class="grp">
+          <div class="av av-n">N</div>
+          <div class="stack">
+            <div class="sender s-nova">Nova</div>
+            <div class="bub" style="padding:4px;"><div class="ph"></div></div>
+            <div class="bub voice">
+              <button class="vplay">▶</button>
+              <div class="wave">
+                <i class="p" style="height:6px"></i><i class="p" style="height:13px"></i><i class="p" style="height:9px"></i>
+                <i style="height:17px"></i><i style="height:11px"></i><i style="height:19px"></i><i style="height:8px"></i>
+                <i style="height:14px"></i><i style="height:6px"></i><i style="height:12px"></i><i style="height:16px"></i>
+                <i style="height:7px"></i><i style="height:11px"></i><i style="height:5px"></i>
+              </div>
+              <span class="vdur">1:24</span>
+            </div>
+            <div class="meta">23:09</div>
+          </div>
+        </div>
+
+        <div class="unread"><span>New messages</span></div>
+
+        <div class="grp">
+          <div class="av av-r">R</div>
+          <div class="stack">
+            <div class="sender s-rae">Rae</div>
+            <div class="bub meetup">
+              <span class="mtitle">📍 Sound booth, main stage</span>
+              <span class="mwhen">Sat 10:30 PM</span>
+              <div class="mmap"><div class="pin"></div></div>
+            </div>
+            <div class="meta">23:12</div>
+          </div>
+        </div>
+
+        <div class="grp">
+          <div class="av av-k">K</div>
+          <div class="stack">
+            <div class="sender">Kai</div>
+            <div class="bub"><span class="mention">@you</span> don't be late this time 😤</div>
+            <div class="meta">23:13</div>
+          </div>
+        </div>
+
+        <div class="typing">
+          <div class="av av-n">N</div>
+          <div class="tdots"><i></i><i></i><i></i></div>
+          <span class="tlabel">Nova is typing…</span>
+        </div>
+      </div>
+
+      <div class="replybar">
+        <div class="rl"><b>Replying to Kai</b><span>@you don't be late this time 😤</span></div>
+        <button class="rx-close">✕</button>
+      </div>
+      <div class="composer">
+        <button class="cplus">＋</button>
+        <div class="cinput">Say something to the crew…</div>
+        <button class="csend">➤</button>
+      </div>
+    </div>
+
+    <ul class="notes">
+      <li><b>Familiar</b> — nothing about the brand changes, it just stops looking like a card feed.</li>
+      <li><b>Risk:</b> pink glow on every one of your bubbles still competes for attention in a long thread.</li>
+      <li>Grouped bubbles share a flattened corner so a run reads as one turn.</li>
+    </ul>
+  </div>
+
+  <!-- ══════════════ VARIANT B ══════════════ -->
+  <div class="col col-b">
+    <div class="col-head">
+      <span class="tag">Direction B</span>
+      <h2>Calm Canvas</h2>
+      <p>Neutral bubbles, no glow. Neon is spent only where it means something: Beacons, meetup pins, mentions, reactions, send.</p>
+    </div>
+
+    <div class="phone v-b">
+      <div class="statusbar"><span>23:14</span><span>▮▮▮ ᯤ 41%</span></div>
+
+      <div class="chead">
+        <button class="cback">‹</button>
+        <div class="ctitle">
+          <div class="croom">Main Huddle <span class="caret">▾</span></div>
+          <div class="csub">Bass Syndicate · 3 online</div>
+        </div>
+        <div class="cpresence">
+          <div class="av av-k">K</div><div class="av av-n">N</div><div class="av av-r">R</div>
+        </div>
+        <button class="cbeacon">📡</button>
+      </div>
+
+      <div class="pinned">
+        <span>📌</span>
+        <span class="ptxt">Gate B opens 6pm — bring the wristbands</span>
+      </div>
+
+      <div class="stream">
+        <button class="loadmore">↑ Load earlier</button>
+
+        <div class="daysep"><span>Yesterday</span></div>
+
+        <div class="grp">
+          <div class="av av-k">K</div>
+          <div class="stack">
+            <div class="sender">Kai</div>
+            <div class="bub">who's driving tmr? i can take 4 if someone chips in for gas</div>
+            <div class="bub">also i still have Nova's glowsticks 🙃</div>
+            <div class="rx"><span class="on">🙌 2</span><span>🔥 1</span></div>
+            <div class="meta">23:02</div>
+          </div>
+        </div>
+
+        <div class="grp grp-you">
+          <div class="stack">
+            <div class="bub">
+              <div class="quote"><b>Kai</b>who's driving tmr? i can take 4 if…</div>
+              i'll ride with you — got you on gas
+            </div>
+            <div class="meta">23:04 <span class="tick">✓✓</span></div>
+          </div>
+        </div>
+
+        <div class="sysnote">Nova is going to Lost Lands 🎪</div>
+
+        <div class="grp">
+          <div class="av av-n">N</div>
+          <div class="stack">
+            <div class="sender s-nova">Nova</div>
+            <div class="bub" style="padding:4px;"><div class="ph"></div></div>
+            <div class="bub voice">
+              <button class="vplay">▶</button>
+              <div class="wave">
+                <i class="p" style="height:6px"></i><i class="p" style="height:13px"></i><i class="p" style="height:9px"></i>
+                <i style="height:17px"></i><i style="height:11px"></i><i style="height:19px"></i><i style="height:8px"></i>
+                <i style="height:14px"></i><i style="height:6px"></i><i style="height:12px"></i><i style="height:16px"></i>
+                <i style="height:7px"></i><i style="height:11px"></i><i style="height:5px"></i>
+              </div>
+              <span class="vdur">1:24</span>
+            </div>
+            <div class="meta">23:09</div>
+          </div>
+        </div>
+
+        <div class="unread"><span>New messages</span></div>
+
+        <div class="grp">
+          <div class="av av-r">R</div>
+          <div class="stack">
+            <div class="sender s-rae">Rae</div>
+            <div class="bub meetup">
+              <span class="mtitle">📍 Sound booth, main stage</span>
+              <span class="mwhen">Sat 10:30 PM</span>
+              <div class="mmap"><div class="pin"></div></div>
+            </div>
+            <div class="meta">23:12</div>
+          </div>
+        </div>
+
+        <div class="grp">
+          <div class="av av-k">K</div>
+          <div class="stack">
+            <div class="sender">Kai</div>
+            <div class="bub"><span class="mention">@you</span> don't be late this time 😤</div>
+            <div class="meta">23:13</div>
+          </div>
+        </div>
+
+        <div class="typing">
+          <div class="av av-n">N</div>
+          <div class="tdots"><i></i><i></i><i></i></div>
+          <span class="tlabel">Nova is typing…</span>
+        </div>
+      </div>
+
+      <div class="replybar">
+        <div class="rl"><b>Replying to Kai</b><span>@you don't be late this time 😤</span></div>
+        <button class="rx-close">✕</button>
+      </div>
+      <div class="composer">
+        <button class="cplus">＋</button>
+        <div class="cinput">Say something to the crew…</div>
+        <button class="csend">➤</button>
+      </div>
+    </div>
+
+    <ul class="notes">
+      <li><b>Most readable</b> at length — long threads stay calm, and a Beacon actually stands out because nothing else glows.</li>
+      <li><b>Risk:</b> reads closer to a generic messenger; less obviously "RaveFAM" than A or C.</li>
+      <li>The taped-paper system note and neon meetup pin still carry the brand.</li>
+    </ul>
+  </div>
+
+  <!-- ══════════════ VARIANT C ══════════════ -->
+  <div class="col col-c">
+    <div class="col-head">
+      <span class="tag">Direction C</span>
+      <h2>Comms Channel</h2>
+      <p>The chat as festival radio. Mono timestamps, scanline field, ticket-stub day markers, speaker-coded edge bars instead of rounded bubbles.</p>
+    </div>
+
+    <div class="phone v-c">
+      <div class="statusbar"><span>23:14</span><span>▮▮▮ ᯤ 41%</span></div>
+
+      <div class="chead">
+        <button class="cback">‹</button>
+        <div class="ctitle">
+          <div class="croom">MAIN HUDDLE <span class="caret">▾</span></div>
+          <div class="csub">BASS SYNDICATE · 3 ONLINE</div>
+        </div>
+        <div class="cpresence">
+          <div class="av av-k">K</div><div class="av av-n">N</div><div class="av av-r">R</div>
+        </div>
+        <button class="cbeacon">📡</button>
+      </div>
+
+      <div class="pinned">
+        <span>📌</span>
+        <span class="ptxt">Gate B opens 6pm — bring the wristbands</span>
+      </div>
+
+      <div class="stream">
+        <button class="loadmore">↑ LOAD EARLIER</button>
+
+        <div class="daysep"><span>YESTERDAY</span></div>
+
+        <div class="grp">
+          <div class="av av-k">K</div>
+          <div class="stack">
+            <div class="sender">KAI</div>
+            <div class="bub">who's driving tmr? i can take 4 if someone chips in for gas</div>
+            <div class="bub">also i still have Nova's glowsticks 🙃</div>
+            <div class="rx"><span class="on">🙌 2</span><span>🔥 1</span></div>
+            <div class="meta">23:02</div>
+          </div>
+        </div>
+
+        <div class="grp grp-you">
+          <div class="stack">
+            <div class="bub">
+              <div class="quote"><b>KAI</b>who's driving tmr? i can take 4 if…</div>
+              i'll ride with you — got you on gas
+            </div>
+            <div class="meta">23:04 <span class="tick">✓✓</span></div>
+          </div>
+        </div>
+
+        <div class="sysnote">Nova is going to Lost Lands 🎪</div>
+
+        <div class="grp">
+          <div class="av av-n">N</div>
+          <div class="stack">
+            <div class="sender s-nova">NOVA</div>
+            <div class="bub" style="padding:4px;"><div class="ph"></div></div>
+            <div class="bub voice">
+              <button class="vplay">▶</button>
+              <div class="wave">
+                <i class="p" style="height:6px"></i><i class="p" style="height:13px"></i><i class="p" style="height:9px"></i>
+                <i style="height:17px"></i><i style="height:11px"></i><i style="height:19px"></i><i style="height:8px"></i>
+                <i style="height:14px"></i><i style="height:6px"></i><i style="height:12px"></i><i style="height:16px"></i>
+                <i style="height:7px"></i><i style="height:11px"></i><i style="height:5px"></i>
+              </div>
+              <span class="vdur">1:24</span>
+            </div>
+            <div class="meta">23:09</div>
+          </div>
+        </div>
+
+        <div class="unread"><span>NEW MESSAGES</span></div>
+
+        <div class="grp">
+          <div class="av av-r">R</div>
+          <div class="stack">
+            <div class="sender s-rae">RAE</div>
+            <div class="bub meetup">
+              <span class="mtitle">📍 SOUND BOOTH, MAIN STAGE</span>
+              <span class="mwhen">Sat 10:30 PM</span>
+              <div class="mmap"><div class="pin"></div></div>
+            </div>
+            <div class="meta">23:12</div>
+          </div>
+        </div>
+
+        <div class="grp">
+          <div class="av av-k">K</div>
+          <div class="stack">
+            <div class="sender">KAI</div>
+            <div class="bub"><span class="mention">@you</span> don't be late this time 😤</div>
+            <div class="meta">23:13</div>
+          </div>
+        </div>
+
+        <div class="typing">
+          <div class="av av-n">N</div>
+          <div class="tdots"><i></i><i></i><i></i></div>
+          <span class="tlabel">NOVA IS TYPING…</span>
+        </div>
+      </div>
+
+      <div class="replybar">
+        <div class="rl"><b>REPLYING TO KAI</b><span>@you don't be late this time 😤</span></div>
+        <button class="rx-close">✕</button>
+      </div>
+      <div class="composer">
+        <button class="cplus">＋</button>
+        <div class="cinput">Transmit to the crew…</div>
+        <button class="csend">➤</button>
+      </div>
+    </div>
+
+    <ul class="notes">
+      <li><b>Most distinctive</b> — nothing else looks like this, and it fits a festival-comms product.</li>
+      <li><b>Risk:</b> the mono/uppercase treatment is loud; it may fight the app's existing Outfit/DM Sans voice elsewhere.</li>
+      <li>Left/right edge bars colour-code the speaker without needing a filled bubble.</li>
+    </ul>
+  </div>
+
+</div>
+
+</body>
+</html>
