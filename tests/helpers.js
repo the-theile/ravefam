@@ -267,6 +267,8 @@ async function installSupabaseStub(page, opts = {}) {
           on() { return channel; }, subscribe() { return channel; }, unsubscribe() { return Promise.resolve('ok'); },
           track() { return Promise.resolve('ok'); }, untrack() { return Promise.resolve('ok'); },
           presenceState() { return {}; },
+          // Huddle typing indicators ride the presence channel as broadcasts.
+          send() { return Promise.resolve('ok'); },
         };
 
         // Re-implements the handful of security-definer RPCs the client

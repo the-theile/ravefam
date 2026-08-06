@@ -113,7 +113,11 @@ test.describe('huddle unread entries in the notification drawer', () => {
     expect(read).toBeTruthy();
   });
 
-  test('a festival-room drawer entry routes through that rave\'s Rave Plan and clears the badge', async ({ page }) => {
+  // Per-rave rooms used to be reachable only through that rave's Rave Plan
+  // tile, so this asserted the tile opened. Every room kind now lives behind
+  // the one Huddle switcher, so the drawer entry opens the chat directly on
+  // the target room instead.
+  test('a festival-room drawer entry opens the Huddle on that rave\'s room and clears the badge', async ({ page }) => {
     const data = seedWithHuddle();
     data.huddle_rooms = [
       { id: 'room-fest', crew_id: 'c1', room_key: 'festival:f1', kind: 'festival', name: 'Tomorrowland Huddle', festival_id: 'f1', created_by: TEST_UID, created_at: '2024-01-01T00:00:00Z' },
@@ -132,8 +136,9 @@ test.describe('huddle unread entries in the notification drawer', () => {
     await item.click();
     await page.waitForTimeout(400);
 
-    await expect(page.locator('.crew-feature-tile[data-feature="raveplan"]')).toHaveClass(/active/);
-    await expect(page.locator('.huddle-cta-btn[data-crew-id="c1"]')).toHaveCount(0);
+    await expect(page.locator('#huddle-screen')).toHaveClass(/open/);
+    await expect(page.locator('.hd-room-name')).toContainText('Tomorrowland');
+    expect(await page.evaluate(() => _huddleActiveRoomId)).toBe('room-fest');
 
     const read = await page.evaluate(() =>
       (window.__store.huddle_room_reads || []).find(r => r.room_id === 'room-fest' && String(r.user_id) === 'test-user-id'));
