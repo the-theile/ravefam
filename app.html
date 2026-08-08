@@ -72,6 +72,25 @@
     overflow-x: hidden;
   }
 
+  /* iOS Safari zooms the viewport whenever a focused text control renders
+     below 16px, and our viewport meta carries no maximum-scale (deliberate —
+     pinch-zoom has to stay available), so it never zooms back out on blur.
+     The app's type scale puts most inputs at 0.82–0.9rem, which used to get
+     patched field by field with inline font-size:16px. This enforces the
+     floor once, for every text-entry control.
+
+     Scoped to touch devices so the desktop type scale is untouched, and
+     limited to types that actually take text — file/range/checkbox size off
+     font-size in Safari and must keep the scale they're designed at.
+     !important is needed to beat the inline font-size a few inputs carry. */
+  @media (hover: none) and (pointer: coarse) {
+    input:not([type]),
+    input[type="text"], input[type="search"], input[type="email"],
+    input[type="url"], input[type="tel"], input[type="number"],
+    input[type="password"], input[type="date"], input[type="datetime-local"],
+    textarea, select { font-size: 16px !important; }
+  }
+
   /* Animated background blobs */
   .bg-blobs {
     position: fixed;
@@ -1356,8 +1375,6 @@
   .profile-edit-hero-input:focus { border-color: var(--neon-cyan); }
   .profile-edit-hero-input.handle-input { font-weight: 400; color: var(--muted); }
   .profile-edit-hero-input.base-input { font-weight: 400; color: var(--text); }
-  /* Profile page form-input override: 16px minimum to prevent iOS Safari zoom */
-  #page-profile .form-input { font-size: 16px; }
   /* Touch targets for interactive chips */
   .vibe-preset { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; }
   .genre-preset { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; }
@@ -8477,16 +8494,16 @@
     <div class="modal-title">🎉 Add New Rave</div>
     <div class="form-group" style="position:relative;">
       <label class="form-label">Rave Name</label>
-      <input class="form-input" id="nrp-name" placeholder="e.g. Dekmantel" autocomplete="off" style="font-size:16px;" oninput="nrpNameSuggest(this.value)">
+      <input class="form-input" id="nrp-name" placeholder="e.g. Dekmantel" autocomplete="off" oninput="nrpNameSuggest(this.value)">
       <div id="nrp-name-results" class="fest-search-dropdown" style="display:none;"></div>
     </div>
     <div class="form-group">
       <label class="form-label">Date</label>
-      <input class="form-input" id="nrp-date" type="date" style="color-scheme:dark;font-size:16px;">
+      <input class="form-input" id="nrp-date" type="date" style="color-scheme:dark;">
     </div>
     <div class="form-group">
       <label class="form-label">Location</label>
-      <input class="form-input" id="nrp-loc" placeholder="e.g. Berlin, DE" style="font-size:16px;">
+      <input class="form-input" id="nrp-loc" placeholder="e.g. Berlin, DE">
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeNewRavePopup()">Cancel</button>
@@ -8506,7 +8523,7 @@
         <input class="form-input" id="nearby-loc-input" placeholder="e.g. Berlin, DE" autocomplete="off"
           oninput="userLocSearchDebounce(this.value)"
           onkeydown="userLocKeydown(event)"
-          onblur="setTimeout(closeUserLocDropdown,200)" style="font-size:16px;">
+          onblur="setTimeout(closeUserLocDropdown,200)">
         <div class="loc-dropdown" id="nearby-loc-dropdown"></div>
       </div>
     </div>
@@ -9221,7 +9238,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.40.0';
+  const APP_VERSION = '1.40.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -15456,7 +15473,7 @@ async function doProfilePasswordChange() {
             <div class="event-name">${escHtml(a.name)}</div>
             <div style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;">${chips}</div>
             <div class="fest-search-wrap" style="margin-bottom:8px;">
-              <input class="form-input" id="mod-genre-input-${a.id}" placeholder="🔍 Type a genre…" autocomplete="off" style="font-size:16px;"
+              <input class="form-input" id="mod-genre-input-${a.id}" placeholder="🔍 Type a genre…" autocomplete="off"
                 oninput="modGenreSearchInput(${a.id}, this.value)" onfocus="modGenreSearchInput(${a.id}, this.value)"
                 onkeydown="if(event.key==='Enter'){event.preventDefault();modGenrePick(${a.id}, this.value);}"
                 onblur="setTimeout(()=>{const d=document.getElementById('mod-genre-results-${a.id}');if(d)d.style.display='none';},200)">
@@ -25528,7 +25545,7 @@ async function doProfilePasswordChange() {
 
     const addHtml = canEdit ? `
       <div class="fest-search-wrap" style="margin-top:8px;">
-        <input class="form-input" id="lu-artist-search-input" placeholder="🔍 Add an artist to the lineup…" autocomplete="off" style="font-size:16px;"
+        <input class="form-input" id="lu-artist-search-input" placeholder="🔍 Add an artist to the lineup…" autocomplete="off"
           oninput="lineupArtistSearchInput('${festId}', this.value)" onfocus="lineupArtistSearchInput('${festId}', this.value)"
           onblur="setTimeout(()=>{const d=document.getElementById('lu-artist-search-results');if(d)d.style.display='none';},200)">
         <div id="lu-artist-search-results" class="fest-search-dropdown" style="display:none;"></div>
@@ -25597,7 +25614,7 @@ async function doProfilePasswordChange() {
     box.innerHTML = `
       <div class="fav-chip-row" id="fe-venue-sel-wrap" style="margin-bottom:8px;">${selHtml}</div>
       <div class="fest-search-wrap">
-        <input class="form-input" id="fe-venue-search" placeholder="🔍 Search venues…" autocomplete="off" style="font-size:16px;"
+        <input class="form-input" id="fe-venue-search" placeholder="🔍 Search venues…" autocomplete="off"
           oninput="festVenueSearchInput(this.value)" onfocus="festVenueSearchInput(this.value)"
           onblur="setTimeout(()=>{const d=document.getElementById('fe-venue-search-results');if(d)d.style.display='none';},200)">
         <div id="fe-venue-search-results" class="fest-search-dropdown" style="display:none;"></div>
@@ -25905,7 +25922,7 @@ async function doProfilePasswordChange() {
       <div class="fest-section-label">🔜 Upcoming</div>
       <div class="fest-quick-cloud">${upHtml}</div>
       <div class="fest-search-wrap">
-        <input class="form-input" id="fest-search-input" placeholder="🔍 Search all raves…" autocomplete="off" style="font-size:16px;"
+        <input class="form-input" id="fest-search-input" placeholder="🔍 Search all raves…" autocomplete="off"
           oninput="festSearchInput(this.value)" onfocus="festSearchInput(this.value)"
           onblur="setTimeout(()=>{const d=document.getElementById('fest-search-results');if(d)d.style.display='none';},200)">
         <div id="fest-search-results" class="fest-search-dropdown" style="display:none;"></div>
@@ -25920,7 +25937,7 @@ async function doProfilePasswordChange() {
     box.innerHTML = `
       <div class="fav-chip-row" id="artist-sel-wrap"></div>
       <div class="fest-search-wrap" style="margin-top:8px;">
-        <input class="form-input" id="artist-search-input" placeholder="🔍 Search artists…" autocomplete="off" style="font-size:16px;"
+        <input class="form-input" id="artist-search-input" placeholder="🔍 Search artists…" autocomplete="off"
           oninput="artistSearchInput(this.value)" onfocus="artistSearchInput(this.value)"
           onkeydown="if(event.key==='Backspace'&&!this.value)removeLastFavArtist();"
           onblur="setTimeout(()=>{const d=document.getElementById('artist-search-results');if(d)d.style.display='none';},200)">
@@ -26259,7 +26276,7 @@ async function doProfilePasswordChange() {
       <div class="fest-section-label" style="margin-top:4px;">🔜 Upcoming — tap to add</div>
       <div class="fest-quick-cloud">${upHtml}</div>
       <div class="fest-search-wrap" style="margin-top:8px;">
-        <input class="form-input" id="ifp-search-${raverId}" placeholder="🔍 Search all raves…" autocomplete="off" style="font-size:16px;"
+        <input class="form-input" id="ifp-search-${raverId}" placeholder="🔍 Search all raves…" autocomplete="off"
           oninput="ifpSearch('${raverId}',this.value)" onfocus="ifpSearch('${raverId}',this.value)"
           onblur="setTimeout(()=>{const d=document.getElementById('ifp-results-${raverId}');if(d)d.style.display='none';},200)">
         <div id="ifp-results-${raverId}" class="fest-search-dropdown" style="display:none;"></div>
@@ -28048,7 +28065,7 @@ async function doProfilePasswordChange() {
       <div class="form-section-label">Tribe</div>
       <div class="fest-goers-note" id="re-goers-note">${goers.length ? goers.length + ' tribe member' + (goers.length!==1?'s':'') + ' linked: ' + goers.map(g=>escHtml(g.name.split(' ')[0])).join(', ') : 'No tribe members linked yet'}</div>
       <div class="fest-search-wrap" style="margin-top:8px;margin-bottom:4px;">
-        <input class="form-input" id="re-raver-search" placeholder="🔍 Search tribe to add…" autocomplete="off" style="font-size:16px;"
+        <input class="form-input" id="re-raver-search" placeholder="🔍 Search tribe to add…" autocomplete="off"
           oninput="reSearch(this.value)"
           onblur="setTimeout(()=>{const d=document.getElementById('re-raver-results');if(d)d.style.display='none';},200)">
         <div id="re-raver-results" class="fest-search-dropdown" style="display:none;"></div>
