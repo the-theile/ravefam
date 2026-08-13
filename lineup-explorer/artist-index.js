@@ -67,6 +67,7 @@ window.ARTIST_INDEX = [
   { name: "ARTBAT", name_lower: "artbat", festivals: [{ slug: "dreamstate-socal-2026", title: "Dreamstate SoCal 2026" }, { slug: "edc-colombia-2026", title: "EDC Colombia 2026" }] },
   { name: "Artifakts", name_lower: "artifakts", festivals: [{ slug: "carolina-open-air-2026", title: "Carolina Open Air 2026" }, { slug: "lights-all-night-2026", title: "Lights All Night 2026" }] },
   { name: "Astrix", name_lower: "astrix", festivals: [{ slug: "dreamstate-socal-2026", title: "Dreamstate SoCal 2026" }, { slug: "edc-colombia-2026", title: "EDC Colombia 2026" }] },
+  { name: "Asydequest", name_lower: "asydequest", festivals: [{ slug: "hulaween-2026", title: "Hulaween 2026" }] },
   { name: "ATLiens", name_lower: "atliens", festivals: [{ slug: "bass-canyon-2026", title: "Bass Canyon 2026" }, { slug: "edc-orlando-2026", title: "EDC Orlando 2026" }, { slug: "lights-all-night-2026", title: "Lights All Night 2026" }] },
   { name: "Atmozfears", name_lower: "atmozfears", festivals: [{ slug: "wasteland-2026", title: "Wasteland 2026" }] },
   { name: "ATRIP", name_lower: "atrip", festivals: [{ slug: "hard-summer-2026", title: "Hard Summer 2026" }] },
