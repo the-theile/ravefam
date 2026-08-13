@@ -709,7 +709,7 @@ window.ARTIST_INDEX = [
   { name: "Riink", name_lower: "riink", festivals: [{ slug: "breakaway-michigan-2026", title: "Breakaway Michigan 2026" }] },
   { name: "Riordan", name_lower: "riordan", festivals: [{ slug: "breakaway-houston-2026", title: "Breakaway Houston 2026" }, { slug: "hulaween-2026", title: "Hulaween 2026" }] },
   { name: "RIOT", name_lower: "riot", festivals: [{ slug: "nocturnal-wonderland-2026", title: "Nocturnal Wonderland 2026" }] },
-  { name: "Riotten", name_lower: "riotten", festivals: [{ slug: "dancefestopia-2026", title: "Dancefestopia 2026" }] },
+  { name: "Riot Ten", name_lower: "riot ten", festivals: [{ slug: "dancefestopia-2026", title: "Dancefestopia 2026" }] },
   { name: "Rising Dust", name_lower: "rising dust", festivals: [{ slug: "dreamstate-socal-2026", title: "Dreamstate SoCal 2026" }] },
   { name: "RL Grime", name_lower: "rl grime", festivals: [{ slug: "cyclops-cove-4-2026", title: "Cyclops Cove 4" }, { slug: "eternal-nye-2026", title: "Eternal NYE 2026" }, { slug: "hard-summer-2026", title: "Hard Summer 2026" }] },
   { name: "RLPZ", name_lower: "rlpz", festivals: [{ slug: "breakaway-philadelphia-2026", title: "Breakaway Philadelphia 2026" }] },
