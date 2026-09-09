@@ -1,9 +1,12 @@
-const CACHE = 'ravefam-v8';
+const CACHE = 'ravefam-v9';
+// jsQR is no longer precached — the app fetches it on demand, and only on
+// browsers without BarcodeDetector, so precaching it cost every install ~250KB
+// for a decoder most never use. The cache-first handler below still stores it
+// the first time someone actually opens the scanner.
 const PRECACHE = [
   '/',
   '/app.html',
   '/qrcode.min.js',
-  '/jsQR.min.js',
   '/manifest.json',
 ];
 

@@ -38,13 +38,14 @@
 
 <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@800;900&family=Outfit:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,700;9..144,800&family=DM+Sans:wght@300;400;500&family=Orbitron:wght@600;700;800;900&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet">
+<!-- supabase-js stays blocking: the main script block calls createClient() at
+     parse time, so it must already be defined. The rest are deferred (nothing
+     touches them until a handler runs), and jsQR / Leaflet / eruda are fetched
+     on first use instead — see loadJsQR / loadLeaflet / maybeInitEruda. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="jsQR.min.js"></script>
-<script src="qrcode.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script defer src="qrcode.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
 <style>
   :root {
     --neon-pink: #FF2D78;
@@ -8885,7 +8886,7 @@
 <div id="update-banner"><span>✨ A new version of RaveFAM is ready</span><button id="update-banner-btn">Update now</button></div>
 
 <!-- Toast -->
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <!-- Micro-feedback card — floating, no backdrop, shown once per milestone per user -->
 <div class="micro-feedback-card" id="micro-feedback-card"></div>
@@ -9238,7 +9239,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.40.1';
+  const APP_VERSION = '1.40.2';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -9781,14 +9782,60 @@ async function doProfilePasswordChange() {
     // onAuthStateChange will fire SIGNED_OUT and flip back to auth screen
   }
 
+  // ===== LAZY VENDOR LOADING =====
+  // The QR scanner, the Radar map and the debug console are all reachable only
+  // by a tap, so their libraries are fetched on first use rather than blocking
+  // the boot parse. Each URL is requested at most once and every later caller
+  // shares that promise; a failed load is forgotten so a retry can succeed.
+  const _lazyAssets = {};
+  function loadScriptOnce(url) {
+    if (_lazyAssets[url]) return _lazyAssets[url];
+    _lazyAssets[url] = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = url;
+      s.async = true;
+      s.onload = () => resolve();
+      s.onerror = () => { delete _lazyAssets[url]; reject(new Error(`Failed to load ${url}`)); };
+      document.head.appendChild(s);
+    });
+    return _lazyAssets[url];
+  }
+  // Stylesheets resolve either way — a missing map theme shouldn't block the map.
+  function loadStylesheetOnce(url) {
+    if (_lazyAssets[url]) return _lazyAssets[url];
+    _lazyAssets[url] = new Promise(resolve => {
+      const l = document.createElement('link');
+      l.rel = 'stylesheet';
+      l.href = url;
+      l.onload = l.onerror = () => resolve();
+      document.head.appendChild(l);
+    });
+    return _lazyAssets[url];
+  }
+
+  const LEAFLET_JS  = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';
+  const LEAFLET_CSS = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';
+  const ERUDA_JS    = 'https://cdn.jsdelivr.net/npm/eruda';
+
+  function loadJsQR() {
+    return window.jsQR ? Promise.resolve() : loadScriptOnce('jsQR.min.js');
+  }
+  // Callers keep their existing `typeof L === 'undefined'` fallbacks, so a
+  // failed load degrades to the "couldn't place any pins" message as before.
+  function loadLeaflet() {
+    if (window.L) return Promise.resolve();
+    return Promise.all([loadStylesheetOnce(LEAFLET_CSS), loadScriptOnce(LEAFLET_JS)]);
+  }
+
   // ===== APP SHOW / HIDE =====
-  // Debug console (eruda) is loaded for everyone but only *shown* to the
-  // maintainer — gated by account email, with a localStorage escape hatch
-  // (set rf_eruda=1) for debugging on a specific device / before login.
+  // Debug console (eruda) is only *shown* to the maintainer — gated by account
+  // email, with a localStorage escape hatch (set rf_eruda=1) for debugging on a
+  // specific device / before login. The gate also decides whether to download
+  // it at all: it's ~1MB, and almost nobody passes.
   const ERUDA_ALLOWED_EMAILS = ['theile.secure@proton.me'];
   let _erudaInited = false;
-  function maybeInitEruda() {
-    if (_erudaInited || !window.eruda) return;
+  async function maybeInitEruda() {
+    if (_erudaInited) return;
     const email = (currentUser?.email || '').toLowerCase();
     const inFamTesters = crews.some(c =>
       c.name.toLowerCase() === 'fam testers' &&
@@ -9799,6 +9846,9 @@ async function doProfilePasswordChange() {
       || inFamTesters;
     if (allowed) {
       try {
+        await loadScriptOnce(ERUDA_JS);
+        // Two callers race this (boot, then again once crew data lands).
+        if (_erudaInited || !window.eruda) return;
         eruda.init();
         _erudaInited = true;
         // Default OFF: hide unless user has explicitly enabled it
@@ -10131,6 +10181,11 @@ async function doProfilePasswordChange() {
     _scanHandled = false;
     const statusEl = document.getElementById('camera-status');
     if (statusEl) statusEl.textContent = 'Starting camera…';
+    // Only browsers without BarcodeDetector need the jsQR fallback, so most
+    // never fetch it. Kicked off here rather than in tickScan, which runs once
+    // per animation frame. Failure is fine — tickScan already handles neither
+    // decoder being available.
+    if (!window.BarcodeDetector) loadJsQR().catch(() => {});
     try {
       // Try back camera first, fall back to any camera
       try {
@@ -10246,6 +10301,8 @@ async function doProfilePasswordChange() {
         const codes = await bd.detect(bitmap);
         if (codes.length) { handleRawScan(codes[0].rawValue); return; }
       }
+      // Falls through to jsQR when BarcodeDetector is missing or found nothing.
+      await loadJsQR().catch(() => {});
       if (window.jsQR) {
         const id = ctx.getImageData(0, 0, c.width, c.height);
         const res = window.jsQR(id.data, id.width, id.height, { inversionAttempts: 'attemptBoth' });
@@ -13139,21 +13196,25 @@ async function doProfilePasswordChange() {
 
   // ── Inline field editing (for non-own ravers) ─────────────────────────────
 
-  function startInlineEdit(raverId, fieldKey, currentValue) {
+  // Field values are always read back out of state (getRaver) rather than passed
+  // through the markup. Round-tripping them through an inline handler argument
+  // let a quote or a `${...}` in someone's own profile field break out of the
+  // attribute and run in a crewmate's session.
+  function startInlineEdit(raverId, fieldKey) {
     const wrap = document.getElementById(`ief-wrap-${raverId}-${fieldKey}`);
     if (!wrap) return;
-    const escaped = (currentValue || '').replace(/"/g, '&quot;');
+    const cur = getRaver(raverId)?.[fieldKey] || '';
     wrap.innerHTML = `
-      <input id="ief-input-${raverId}-${fieldKey}" class="ief-input" value="${escaped}" placeholder="${fieldKey}" style="flex:1;min-width:0;">
+      <input id="ief-input-${raverId}-${fieldKey}" class="ief-input" value="${escHtml(cur)}" placeholder="${escHtml(fieldKey)}" style="flex:1;min-width:0;">
       <button class="ief-btn ief-ok" onclick="commitInlineEdit('${raverId}','${fieldKey}')">✓</button>
-      <button class="ief-btn ief-cancel" onclick="cancelInlineEdit('${raverId}','${fieldKey}',\`${escaped}\`)">✕</button>`;
+      <button class="ief-btn ief-cancel" onclick="cancelInlineEdit('${raverId}','${fieldKey}')">✕</button>`;
     document.getElementById(`ief-input-${raverId}-${fieldKey}`)?.focus();
   }
 
-  function cancelInlineEdit(raverId, fieldKey, oldValue) {
+  function cancelInlineEdit(raverId, fieldKey) {
     const wrap = document.getElementById(`ief-wrap-${raverId}-${fieldKey}`);
     if (!wrap) return;
-    wrap.innerHTML = inlineEditDisplay(raverId, fieldKey, oldValue);
+    wrap.innerHTML = inlineEditDisplay(raverId, fieldKey, getRaver(raverId)?.[fieldKey] || '');
   }
 
   async function commitInlineEdit(raverId, fieldKey, isNickname) {
@@ -13170,7 +13231,7 @@ async function doProfilePasswordChange() {
   function inlineEditDisplay(raverId, fieldKey, value) {
     const display = value ? escHtml(value) : `<span style="color:var(--muted);font-size:0.8rem;">—</span>`;
     return `<span class="ief-value">${display}</span>
-      <button class="ief-btn ief-edit" onclick="startInlineEdit('${raverId}','${fieldKey}',\`${(value||'').replace(/`/g,'\\`')}\`)">✏️</button>`;
+      <button class="ief-btn ief-edit" onclick="startInlineEdit('${raverId}','${fieldKey}')">✏️</button>`;
   }
 
   function inlineEditNicknameDisplay(raverId, currentNickname) {
@@ -13178,25 +13239,27 @@ async function doProfilePasswordChange() {
     const display = val
       ? `<span class="ief-value nickname-value">${escHtml(val)}</span>`
       : `<span class="ief-add-nickname">+ Add nickname</span>`;
-    const pencil = val ? ` <button class="ief-btn ief-edit" onclick="startNicknameEdit('${raverId}','${val.replace(/'/g,"\\'")}')">✏️</button>` : '';
+    const pencil = val ? ` <button class="ief-btn ief-edit" onclick="startNicknameEdit('${raverId}')">✏️</button>` : '';
     return display + pencil;
   }
 
-  function startNicknameEdit(raverId, currentValue) {
+  // Nickname reads from nicknameCache for the same reason startInlineEdit reads
+  // from getRaver — the value never travels through the markup.
+  function startNicknameEdit(raverId) {
     const fieldKey = 'nickname';
     const wrap = document.getElementById(`ief-wrap-${raverId}-${fieldKey}`);
     if (!wrap) return;
-    const escaped = (currentValue || '').replace(/"/g, '&quot;');
+    const cur = nicknameCache[String(raverId)] || '';
     wrap.innerHTML = `
-      <input id="ief-input-${raverId}-${fieldKey}" class="ief-input" value="${escaped}" placeholder="Nickname…" maxlength="30" style="flex:1;min-width:0;">
+      <input id="ief-input-${raverId}-${fieldKey}" class="ief-input" value="${escHtml(cur)}" placeholder="Nickname…" maxlength="30" style="flex:1;min-width:0;">
       <button class="ief-btn ief-ok" onclick="commitInlineEdit('${raverId}','${fieldKey}',true)">✓</button>
-      <button class="ief-btn ief-cancel" onclick="cancelNicknameEdit('${raverId}','${escaped}')">✕</button>`;
+      <button class="ief-btn ief-cancel" onclick="cancelNicknameEdit('${raverId}')">✕</button>`;
     document.getElementById(`ief-input-${raverId}-${fieldKey}`)?.focus();
   }
 
-  function cancelNicknameEdit(raverId, oldValue) {
+  function cancelNicknameEdit(raverId) {
     const wrap = document.getElementById(`ief-wrap-${raverId}-nickname`);
-    if (wrap) wrap.innerHTML = inlineEditNicknameDisplay(raverId, oldValue);
+    if (wrap) wrap.innerHTML = inlineEditNicknameDisplay(raverId, nicknameCache[String(raverId)] || '');
   }
 
   async function saveFieldForRaver(raverId, fieldKey, value) {
@@ -13206,26 +13269,48 @@ async function doProfilePasswordChange() {
     const colMap = { name: 'name', base: 'base', instagram: 'instagram', radiate: 'radiate', phone: 'phone' };
     const col = colMap[fieldKey];
     if (!col) return;
+    const prev = r[fieldKey];
     r[fieldKey] = value;
-    showToast('✅ Saved');
     // Re-render the inline field display
     const wrap = document.getElementById(`ief-wrap-${raverId}-${fieldKey}`);
     if (wrap) wrap.innerHTML = inlineEditDisplay(raverId, fieldKey, value);
     renderSquad();
     if (currentUser) {
       const { error } = await sb.from('ravers').update({ [col]: value }).eq('id', String(raverId));
-      if (error) { console.error('saveFieldForRaver error', error); showToast('⚠️ Save failed'); }
+      // Roll the optimistic edit back on failure. Leaving it on screen meant the
+      // user saw "✅ Saved" then "⚠️ Save failed", with a value the DB rejected
+      // surviving until the next reload — and any later write building on it.
+      if (error) {
+        console.error('saveFieldForRaver error', error);
+        r[fieldKey] = prev;
+        const back = document.getElementById(`ief-wrap-${raverId}-${fieldKey}`);
+        if (back) back.innerHTML = inlineEditDisplay(raverId, fieldKey, prev);
+        renderSquad();
+        showToast('⚠️ Save failed — check your connection');
+        return;
+      }
     }
+    showToast('✅ Saved');
   }
 
-  function startPrivatePhoneEdit(raverId, currentValue) {
+  // Single source for the saved-number row — the value comes from
+  // privatePhoneCache, never from a handler argument. Used by the profile
+  // render and by both edit exits below.
+  function privatePhoneDisplay(raverId) {
+    const pv = privatePhoneCache[String(raverId)] || '';
+    const display = pv ? escHtml(pv) : `<span style="color:var(--muted);font-size:0.8rem;">—</span>`;
+    return `<span class="ief-value">${display}</span>
+      <button class="ief-btn ief-edit" onclick="startPrivatePhoneEdit('${raverId}')">✏️</button>`;
+  }
+
+  function startPrivatePhoneEdit(raverId) {
     const wrap = document.getElementById(`ief-wrap-${raverId}-private-phone`);
     if (!wrap) return;
-    const escaped = (currentValue || '').replace(/"/g, '&quot;');
+    const cur = privatePhoneCache[String(raverId)] || '';
     wrap.innerHTML = `
-      <input id="ief-input-${raverId}-private-phone" class="ief-input" value="${escaped}" placeholder="+44 7700…" style="flex:1;min-width:0;" type="tel">
+      <input id="ief-input-${raverId}-private-phone" class="ief-input" value="${escHtml(cur)}" placeholder="+44 7700…" style="flex:1;min-width:0;" type="tel">
       <button class="ief-btn ief-ok" onclick="commitPrivatePhoneEdit('${raverId}')">✓</button>
-      <button class="ief-btn ief-cancel" onclick="cancelPrivatePhoneEdit('${raverId}',\`${escaped}\`)">✕</button>`;
+      <button class="ief-btn ief-cancel" onclick="cancelPrivatePhoneEdit('${raverId}')">✕</button>`;
     document.getElementById(`ief-input-${raverId}-private-phone`)?.focus();
   }
 
@@ -13236,22 +13321,14 @@ async function doProfilePasswordChange() {
     await savePrivatePhone(raverId, value);
     // Refresh the display
     const wrap = document.getElementById(`ief-wrap-${raverId}-private-phone`);
-    if (wrap) {
-      const pv = value;
-      const escaped = pv.replace(/`/g,'\\`');
-      const display = pv || `<span style="color:var(--muted);font-size:0.8rem;">—</span>`;
-      wrap.innerHTML = `<span class="ief-value">${display}</span>
-        <button class="ief-btn ief-edit" onclick="startPrivatePhoneEdit('${raverId}',\`${escaped}\`)">✏️</button>`;
-    }
+    if (wrap) wrap.innerHTML = privatePhoneDisplay(raverId);
     showToast('✅ Saved');
   }
 
-  function cancelPrivatePhoneEdit(raverId, oldValue) {
+  function cancelPrivatePhoneEdit(raverId) {
     const wrap = document.getElementById(`ief-wrap-${raverId}-private-phone`);
     if (!wrap) return;
-    const display = oldValue || `<span style="color:var(--muted);font-size:0.8rem;">—</span>`;
-    wrap.innerHTML = `<span class="ief-value">${display}</span>
-      <button class="ief-btn ief-edit" onclick="startPrivatePhoneEdit('${raverId}',\`${oldValue}\`)">✏️</button>`;
+    wrap.innerHTML = privatePhoneDisplay(raverId);
   }
 
   function removeBeenTo(raverId, festId) {
@@ -15464,7 +15541,7 @@ async function doProfilePasswordChange() {
   function missingGenreCardHTML(a) {
     const draft = modGenreDrafts[a.id] || [];
     const chips = draft.length
-      ? draft.map(g => `<span class="stats-pill cyan" style="cursor:pointer;" title="Remove" onclick="removeDraftGenre(${a.id},'${escHtml(g)}')">${escHtml(g)} ✕</span>`).join('')
+      ? draft.map((g, i) => `<span class="stats-pill cyan" style="cursor:pointer;" title="Remove" onclick="removeDraftGenre(${a.id},${i})">${escHtml(g)} ✕</span>`).join('')
       : `<span style="font-size:0.76rem;color:var(--muted);opacity:0.7;">No genres picked yet</span>`;
     return `
       <div class="event-item">
@@ -15521,10 +15598,13 @@ async function doProfilePasswordChange() {
     rerenderMissingGenresBody(artistId);
   }
 
-  function removeDraftGenre(artistId, genre) {
+  // Takes the chip's index, not its text — a community-submitted genre name
+  // interpolated into the onclick could break out of the JS string (escHtml
+  // escapes for HTML text, and the attribute is decoded before the JS parses).
+  function removeDraftGenre(artistId, index) {
     const list = modGenreDrafts[artistId];
-    if (!list) return;
-    modGenreDrafts[artistId] = list.filter(g => g !== genre);
+    if (!list || index < 0 || index >= list.length) return;
+    list.splice(index, 1);
     rerenderMissingGenresBody(artistId);
   }
 
@@ -25044,7 +25124,7 @@ async function doProfilePasswordChange() {
             ${!r.isYou && currentUser ? `
               <div class="profile-nickname-row">
                 <span style="font-size:0.7rem;color:var(--muted);">🏷️</span>
-                <span id="ief-wrap-${r.id}-nickname" class="ief-wrap" onclick="if(!event.target.closest('button,input'))startNicknameEdit('${r.id}','${(nicknameCache[String(r.id)]||'').replace(/'/g,"\\'")}')" style="cursor:pointer;">
+                <span id="ief-wrap-${r.id}-nickname" class="ief-wrap" onclick="if(!event.target.closest('button,input'))startNicknameEdit('${r.id}')" style="cursor:pointer;">
                   ${inlineEditNicknameDisplay(r.id, nicknameCache[String(r.id)] || '')}
                 </span>
               </div>` : ''}
@@ -25220,13 +25300,7 @@ async function doProfilePasswordChange() {
                 : '');
           const myPhone = `<div class="contact-row">
               <div class="contact-your-label">Saved number (private)</div>
-              <div class="contact-their-phone"><span id="ief-wrap-${r.id}-private-phone" class="ief-wrap">${(() => {
-                const pv = privatePhoneCache[String(r.id)] || '';
-                const escaped = pv.replace(/`/g,'\\`');
-                const display = pv ? escHtml(pv) : `<span style="color:var(--muted);font-size:0.8rem;">—</span>`;
-                return `<span class="ief-value">${display}</span>
-                  <button class="ief-btn ief-edit" onclick="startPrivatePhoneEdit('${r.id}',\`${escaped}\`)">✏️</button>`;
-              })()}</span></div>
+              <div class="contact-their-phone"><span id="ief-wrap-${r.id}-private-phone" class="ief-wrap">${privatePhoneDisplay(r.id)}</span></div>
             </div>`;
           if (!theirInstagram && !theirRadiate && !theirPhone && !perms.isClaimed) return '';
           return `<div class="profile-section" style="${sg(1)}">
@@ -31551,7 +31625,12 @@ async function doProfilePasswordChange() {
     const mapEl = document.getElementById('ravesradar-map');
     if (!mapEl) return;
 
+    // Started here so Leaflet downloads alongside the geocoding loop below,
+    // which is slow by design (Nominatim caps us at ~1 request/sec).
+    const leafletReady = loadLeaflet().catch(() => {});
+
     if (!upcoming.length) {
+      await leafletReady;
       renderRadarMapEmptyState(mapEl);
       return;
     }
@@ -31577,6 +31656,7 @@ async function doProfilePasswordChange() {
       if (coords) points.push({ fest: f, lat: coords.lat, lng: coords.lng, color: festColor(f) });
     }
 
+    await leafletReady;
     if (!document.getElementById('page-raves-radar').classList.contains('active')) return;
     if (!points.length || typeof L === 'undefined') {
       mapEl.innerHTML = `<div class="citymap-loading">Couldn't place any raves on the map right now — see the list above.</div>`;
@@ -32269,6 +32349,8 @@ async function doProfilePasswordChange() {
   }
 
   async function geocodeAndRenderCityMap(cityList) {
+    // As in renderRavesRadarMap: overlap the library fetch with the geocoding.
+    const leafletReady = loadLeaflet().catch(() => {});
     const cache = loadGeocodeCache();
     const points = [];
     for (const c of cityList) {
@@ -32284,6 +32366,7 @@ async function doProfilePasswordChange() {
       if (coords) points.push({ ...c, ...coords });
     }
 
+    await leafletReady;
     // Bail if the user navigated away while we were geocoding.
     if (!document.getElementById('page-cities-map').classList.contains('active')) return;
     const mapEl = document.getElementById('citymap');
@@ -32390,7 +32473,6 @@ async function doProfilePasswordChange() {
 </script>
 <script defer src="/_vercel/insights/script.js"></script>
 <script defer src="/_vercel/speed-insights/script.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
 <script>try { if (typeof maybeInitEruda === 'function') maybeInitEruda(); } catch (e) {}</script>
 </body>
 </html>
