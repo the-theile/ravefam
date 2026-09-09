@@ -57,6 +57,36 @@ const VENDOR_GLOBALS = {
   Chart: 'readonly',
 };
 
+/**
+ * Blank out JS comments inside <script> blocks, keeping length and line breaks
+ * so every offset still maps to the original file.
+ *
+ * The handler scan reads raw HTML, so an attribute written inside a comment —
+ * `// onclick="fn('HERE')" does not escape` — looked like a real handler and was
+ * reported as calling an undefined function. Comments are not code.
+ */
+function blankScriptComments(html) {
+  const out = html.split('');
+  const keep = (ch) => (ch === '\n' ? '\n' : ' ');
+  let m;
+  SCRIPT_RE.lastIndex = 0;
+  while ((m = SCRIPT_RE.exec(html)) !== null) {
+    if (!isJavaScript(m[1])) continue;
+    const start = m.index + m[0].indexOf('>') + 1;
+    const body = m[2];
+    // Only comments that begin a line. Matching // or /* anywhere is not safe
+    // without a real tokenizer: a `/*` inside a string or regex literal opens a
+    // comment that never closes where you expect, and blanking runs on through
+    // hundreds of lines of genuine markup. Restricting to line-leading comments
+    // covers the case that motivated this (a standalone explanatory line) and
+    // cannot run away.
+    for (const c of body.matchAll(/^[ \t]*\/\/[^\n]*/gm)) {
+      for (let i = start + c.index; i < start + c.index + c[0].length; i++) out[i] = keep(out[i]);
+    }
+  }
+  return out.join('');
+}
+
 /** Extract inline scripts into a buffer where each line keeps its source line number. */
 function extractScripts(html) {
   const lines = new Array(html.split('\n').length).fill('');
@@ -166,11 +196,14 @@ function collectDeclaredGlobals(code) {
 async function lintFile(file) {
   const html = fs.readFileSync(file, 'utf8');
   const code = extractScripts(html);
+  // Handler scanning runs over a copy with JS comments blanked; ESLint still
+  // sees the real source.
+  const scanHtml = blankScriptComments(html);
   if (!code.trim()) {
     console.log(`${file}: no inline scripts`);
     return 0;
   }
-  const handlerNames = collectHandlerNames(html);
+  const handlerNames = collectHandlerNames(scanHtml);
   const windowGlobals = collectWindowGlobals(code);
 
   const eslint = new ESLint({
@@ -262,7 +295,7 @@ async function lintFile(file) {
       ...declared, ...windowGlobals, ...Object.keys(VENDOR_GLOBALS), ...BROWSER_CALLABLES,
     ]);
     const seen = new Set();
-    for (const { name, line } of collectHandlerCalls(html)) {
+    for (const { name, line } of collectHandlerCalls(scanHtml)) {
       if (known.has(name) || seen.has(name)) continue;
       seen.add(name);
       deadHandlers++;
