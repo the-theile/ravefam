@@ -9241,7 +9241,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.41.0';
+  const APP_VERSION = '1.42.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -11092,6 +11092,16 @@ async function doProfilePasswordChange() {
     }
   }
 
+  // Background loads are deliberately non-blocking, but `.catch(() => {})` also
+  // made a persistently failing fetch invisible: the app just renders
+  // incomplete, forever, with no signal anywhere. logClientError already feeds
+  // the PM dashboard's Client Errors panel and dedupes per page load, so a
+  // repeatedly-broken load costs one row, not a flood.
+  function reportBackgroundFailure(what) {
+    return (err) => logClientError(`${what}: ${err && err.message ? err.message : err}`,
+                                   err && err.stack);
+  }
+
   async function loadAllData() {
     const uid = currentUser.id;
 
@@ -11106,22 +11116,22 @@ async function doProfilePasswordChange() {
     // instead of one-at-a-time and let them resolve whenever — previously
     // each of these was its own awaited round trip *before* the data the
     // Crews page actually needs even started loading.
-    dbLoadModerators().catch(() => {}).then(() => {
+    dbLoadModerators().catch(reportBackgroundFailure('dbLoadModerators')).then(() => {
       updateModBadge();
-      return isModerator() ? dbLoadFlags().catch(() => {}) : null;
+      return isModerator() ? dbLoadFlags().catch(reportBackgroundFailure('dbLoadFlags')) : null;
     }).then(updateModBadge);
-    dbLoadSuperAdmin().catch(() => {}).then(updatePMDashBadge);
-    dbLoadMyVendorBadges().catch(() => {});
-    dbLoadArtists().catch(() => {});
-    dbLoadArtistAppearances().catch(() => {});
-    dbLoadArtistSightings().catch(() => {});
-    dbLoadArtistPlans().catch(() => {});
-    dbLoadVenues().catch(() => {});
+    dbLoadSuperAdmin().catch(reportBackgroundFailure('dbLoadSuperAdmin')).then(updatePMDashBadge);
+    dbLoadMyVendorBadges().catch(reportBackgroundFailure('dbLoadMyVendorBadges'));
+    dbLoadArtists().catch(reportBackgroundFailure('dbLoadArtists'));
+    dbLoadArtistAppearances().catch(reportBackgroundFailure('dbLoadArtistAppearances'));
+    dbLoadArtistSightings().catch(reportBackgroundFailure('dbLoadArtistSightings'));
+    dbLoadArtistPlans().catch(reportBackgroundFailure('dbLoadArtistPlans'));
+    dbLoadVenues().catch(reportBackgroundFailure('dbLoadVenues'));
     // "Our Photos" only feeds the profile detail modal (opened on demand,
     // never on first paint) — likewise non-blocking.
-    loadAllOurPhotos().catch(() => {});
+    loadAllOurPhotos().catch(reportBackgroundFailure('loadAllOurPhotos'));
     // Fest vibe bubbles only show on the Raves tab, not Crews/Squad.
-    loadAllFestVibes().catch(() => {});
+    loadAllFestVibes().catch(reportBackgroundFailure('loadAllFestVibes'));
 
     // --- Critical path for first paint: festivals, ravers, crews, nicknames.
     // These used to run as four separate sequential awaits; the festivals/
@@ -11136,7 +11146,7 @@ async function doProfilePasswordChange() {
       sb.from('festivals').select('*').is('deleted_at', null).order('date', { ascending: true }),
       sb.rpc('get_own_and_created_ravers'),
       sb.from('crews').select('*, crew_members(raver_id, added_at, deleted_at)').is('deleted_at', null).order('created_at', { ascending: true }),
-      loadNicknames().catch(() => {}),
+      loadNicknames().catch(reportBackgroundFailure('loadNicknames')),
     ]);
 
     if (!fErr && dbFests) {
@@ -11315,12 +11325,12 @@ async function doProfilePasswordChange() {
     }
 
     // Load community genre pool (non-blocking)
-    dbLoadCommunityGenres().catch(() => {});
+    dbLoadCommunityGenres().catch(reportBackgroundFailure('dbLoadCommunityGenres'));
 
     // Load private phones and viewer notes into cache (non-blocking) — these
     // only matter once a detail view is opened, not for first-paint cards.
-    loadPrivatePhones().catch(() => {});
-    loadViewerNotes().catch(() => {});
+    loadPrivatePhones().catch(reportBackgroundFailure('loadPrivatePhones'));
+    loadViewerNotes().catch(reportBackgroundFailure('loadViewerNotes'));
   }
 
   // ===== WELCOME BACK POPUP =====
@@ -29542,6 +29552,53 @@ async function doProfilePasswordChange() {
     if (e.key !== 'Escape' || e.defaultPrevented) return;
     if (closeTopOverlayOnEscape()) e.preventDefault();
   });
+
+  // ── Focus containment ─────────────────────────────────────────────────────
+  // Focus used to walk straight out of an open sheet and into the page behind
+  // it, which was still fully tabbable. Every overlay is a sibling of #main-app
+  // (the shell closes before the first overlay in the markup), so marking the
+  // shell inert while one is open takes the whole page underneath out of the
+  // tab order AND the accessibility tree — one attribute, and no need to touch
+  // the ~40 functions that open overlays.
+  const INERT_SHELL_IDS = ['main-app', 'auth-screen'];
+  let _lastShellFocus = null;
+
+  function inertShells() {
+    return INERT_SHELL_IDS.map(id => document.getElementById(id)).filter(Boolean);
+  }
+
+  // Tracked continuously so focus can go back where it was when the last
+  // overlay closes — by then the overlay has usually taken focus itself, so
+  // there is nothing left to read off activeElement.
+  document.addEventListener('focusin', (e) => {
+    if (inertShells().some(s => s.contains(e.target))) _lastShellFocus = e.target;
+  });
+
+  function syncOverlayInert() {
+    const shells = inertShells();
+    if (!shells.length) return;
+    const anyOpen = [...document.querySelectorAll(OVERLAY_ROOT_SELECTOR)].some(isOverlayOpen);
+    if (anyOpen === shells[0].inert) return;   // nothing changed
+
+    shells.forEach(el => { el.inert = anyOpen; });
+    if (!anyOpen && _lastShellFocus && _lastShellFocus.isConnected) {
+      // Without this, closing an overlay drops focus on <body> and a keyboard
+      // user restarts from the top of the page.
+      try { _lastShellFocus.focus({ preventScroll: true }); } catch (e) {}
+    }
+  }
+
+  // Overlays toggle either a class or an inline display depending on which
+  // pattern they follow (see isOverlayOpen), so watch both. Deliberately does
+  // not move focus into the overlay: most already focus their own field, and
+  // stealing that would pop or dismiss the mobile keyboard.
+  (function watchOverlaysForInert() {
+    const roots = document.querySelectorAll(OVERLAY_ROOT_SELECTOR);
+    if (!roots.length) return;
+    const obs = new MutationObserver(syncOverlayInert);
+    roots.forEach(el => obs.observe(el, { attributes: true, attributeFilter: ['class', 'style'] }));
+    syncOverlayInert();
+  })();
 
   // ===== COACHMARKS =====
   // Lightweight "first time you hit this feature" tips — distinct from the
