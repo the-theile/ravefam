@@ -6,6 +6,26 @@ on:
   pull_request:
 
 jobs:
+  # Separate from the browser tests: it needs no Chromium download, so it
+  # finishes in seconds and tells you about a dead inline handler long before
+  # the Playwright job is done.
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint inline scripts
+        run: npm run lint
+
   playwright:
     runs-on: ubuntu-latest
     timeout-minutes: 15

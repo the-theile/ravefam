@@ -1,9 +1,12 @@
-const CACHE = 'ravefam-v8';
+const CACHE = 'ravefam-v9';
+// jsQR is no longer precached — the app fetches it on demand, and only on
+// browsers without BarcodeDetector, so precaching it cost every install ~250KB
+// for a decoder most never use. The cache-first handler below still stores it
+// the first time someone actually opens the scanner.
 const PRECACHE = [
   '/',
   '/app.html',
   '/qrcode.min.js',
-  '/jsQR.min.js',
   '/manifest.json',
 ];
 
@@ -26,14 +29,29 @@ function isHTMLRequest(req) {
     (req.headers.get('accept') || '').includes('text/html');
 }
 
+const PASSTHROUGH_HOSTS = [
+  'supabase.co',
+  'nominatim.openstreetmap.org',
+  'open-meteo.com',
+];
+
+// Always go to network for the Supabase API and external resources — includes
+// Nominatim (rave location autocomplete + geocoding) and Open-Meteo (rave
+// weather chips), whose responses shouldn't be served from the SW cache.
+// Matched on the parsed hostname: testing the whole URL for 'cdn.' also matched
+// same-origin URLs that merely mentioned it in a path or query string, quietly
+// taking them out of the cache.
+function isPassthrough(url) {
+  let host;
+  try { host = new URL(url).hostname; } catch (e) { return false; }
+  if (host.startsWith('fonts.') || host.startsWith('cdn.')) return true;
+  return PASSTHROUGH_HOSTS.some(h => host === h || host.endsWith('.' + h));
+}
+
 self.addEventListener('fetch', e => {
   const req = e.request;
   const url = req.url;
-  // Always go to network for Supabase API and external resources — includes
-  // Nominatim (rave location autocomplete + geocoding) and Open-Meteo (rave
-  // weather chips), whose responses shouldn't be served from the SW cache.
-  if (url.includes('supabase.co') || url.includes('fonts.') || url.includes('cdn.')
-      || url.includes('nominatim.openstreetmap.org') || url.includes('open-meteo.com')) return;
+  if (isPassthrough(url)) return;
   if (req.method !== 'GET') return;
 
   // Network-first for HTML/navigation: the whole app lives in app.html,
@@ -93,12 +111,28 @@ function logPushClick(messageId, crewId) {
 
 self.addEventListener('notificationclick', e => {
   e.notification.close();
-  const url = '/app.html';
-  const { messageId, crewId } = e.notification.data || {};
+  const { messageId, crewId, roomId } = e.notification.data || {};
+
+  // Carry the notification's target through to the app. A cold start gets it as
+  // query params; an already-open window gets it by postMessage, because
+  // focusing a client doesn't navigate it — which is why tapping a push used to
+  // drop you wherever you happened to be.
+  const params = new URLSearchParams();
+  if (crewId)    params.set('crew', crewId);
+  if (roomId)    params.set('room', roomId);
+  if (messageId) params.set('msg', messageId);
+  const qs = params.toString();
+  const url = qs ? `/app.html?${qs}` : '/app.html';
+
   e.waitUntil(Promise.all([
     logPushClick(messageId, crewId),
     clients.matchAll({ type: 'window' }).then(list => {
-      for (const c of list) if ('focus' in c) return c.focus();
+      for (const c of list) {
+        if ('focus' in c) {
+          if (crewId) c.postMessage({ type: 'rf-huddle-deeplink', crewId, roomId, messageId });
+          return c.focus();
+        }
+      }
       return clients.openWindow(url);
     })
   ]));

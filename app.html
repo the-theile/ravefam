@@ -38,13 +38,14 @@
 
 <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@800;900&family=Outfit:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,700;9..144,800&family=DM+Sans:wght@300;400;500&family=Orbitron:wght@600;700;800;900&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet">
+<!-- supabase-js stays blocking: the main script block calls createClient() at
+     parse time, so it must already be defined. The rest are deferred (nothing
+     touches them until a handler runs), and jsQR / Leaflet / eruda are fetched
+     on first use instead — see loadJsQR / loadLeaflet / maybeInitEruda. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="jsQR.min.js"></script>
-<script src="qrcode.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script defer src="qrcode.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
 <style>
   :root {
     --neon-pink: #FF2D78;
@@ -4995,7 +4996,9 @@
   .tag-search-icon { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); font-size: 0.85rem; opacity: 0.6; }
 
   .tag-accordion { border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; overflow: hidden; margin-bottom: 8px; }
-  .tag-acc-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; cursor: pointer; background: rgba(255,255,255,0.02); transition: background 0.15s; }
+  /* A real <button> so it takes focus and fires on Enter/Space; the resets keep
+     it rendering exactly as the <div> it replaced. */
+  .tag-acc-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; cursor: pointer; background: rgba(255,255,255,0.02); transition: background 0.15s; width: 100%; border: 0; margin: 0; font: inherit; color: inherit; text-align: left; }
   .tag-acc-header:hover { background: rgba(255,255,255,0.05); }
   .tag-acc-title { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.82rem; display: flex; align-items: center; gap: 8px; }
   .tag-acc-badge { font-size: 0.68rem; font-weight: 700; color: var(--neon-cyan); background: rgba(0,245,255,0.12); border-radius: 100px; padding: 1px 8px; }
@@ -7948,11 +7951,11 @@
 
     <div id="auth-login-form">
       <div class="form-group">
-        <label class="form-label">Email</label>
+        <label for="login-email" class="form-label">Email</label>
         <input class="form-input" id="login-email" type="email" placeholder="you@example.com" autocomplete="email">
       </div>
       <div class="form-group">
-        <label class="form-label" style="display:flex;justify-content:space-between;align-items:center;">
+        <label class="form-label" for="login-password" style="display:flex;justify-content:space-between;align-items:center;">
           Password
           <a href="#" onclick="doForgotPassword();return false;" style="font-size:0.75rem;color:var(--neon-pink);text-decoration:none;font-weight:600;">Forgot password?</a>
         </label>
@@ -7972,19 +7975,19 @@
 
     <div id="auth-signup-form" style="display:none;">
       <div class="form-group">
-        <label class="form-label">Your Name</label>
+        <label for="signup-name" class="form-label">Your Name</label>
         <input class="form-input" id="signup-name" type="text" placeholder="e.g. Jamie D." autocomplete="name">
       </div>
       <div class="form-group">
-        <label class="form-label">Phone Number <span style="color:var(--muted);font-weight:400;">— so your crew can reach you</span></label>
+        <label class="form-label" for="signup-phone">Phone Number <span style="color:var(--muted);font-weight:400;">— so your crew can reach you</span></label>
         <input class="form-input" id="signup-phone" type="tel" placeholder="+1 (555) 000-0000" autocomplete="tel">
       </div>
       <div class="form-group">
-        <label class="form-label">Email <span style="color:var(--muted);font-weight:400;">(backup)</span></label>
+        <label class="form-label" for="signup-email">Email <span style="color:var(--muted);font-weight:400;">(backup)</span></label>
         <input class="form-input" id="signup-email" type="email" placeholder="you@example.com" autocomplete="email">
       </div>
       <div class="form-group">
-        <label class="form-label">Password</label>
+        <label for="signup-password" class="form-label">Password</label>
         <input class="form-input" id="signup-password" type="password" placeholder="min 6 characters" autocomplete="new-password">
       </div>
       <button class="auth-btn" id="signup-btn" onclick="doSignup()">Create Account 🎉</button>
@@ -8000,11 +8003,11 @@
     <div id="auth-reset-form" style="display:none;">
       <p style="text-align:center;margin:0 0 20px;font-size:0.9rem;color:var(--muted);">Choose a new password for your account.</p>
       <div class="form-group">
-        <label class="form-label">New Password</label>
+        <label for="reset-password" class="form-label">New Password</label>
         <input class="form-input" id="reset-password" type="password" placeholder="min 6 characters" autocomplete="new-password">
       </div>
       <div class="form-group">
-        <label class="form-label">Confirm Password</label>
+        <label for="reset-password-confirm" class="form-label">Confirm Password</label>
         <input class="form-input" id="reset-password-confirm" type="password" placeholder="repeat new password" autocomplete="new-password">
       </div>
       <button class="auth-btn" id="reset-btn" onclick="doUpdatePassword()">Update Password 🔐</button>
@@ -8159,7 +8162,7 @@
       </div>
       <div class="crew-search-wrap">
         <span class="crew-search-icon">🔍</span>
-        <input class="crew-search" id="crew-search" type="text" placeholder="Search crews…" oninput="renderCrews()" autocomplete="off">
+        <input class="crew-search" id="crew-search" aria-label="Search crews" type="text" placeholder="Search crews…" oninput="renderCrews()" autocomplete="off">
       </div>
       <div class="crew-grid" id="crew-grid">
         <!-- Crew cards rendered by JS -->
@@ -8182,7 +8185,7 @@
       <div class="rave-time-tabs" id="rave-time-tabs"><!-- rendered by JS --></div>
       <div class="rave-search-wrap">
         <span class="rave-search-icon">🔍</span>
-        <input class="rave-search" id="rave-search" type="text" placeholder="Search raves…" oninput="renderEvents()" autocomplete="off">
+        <input class="rave-search" id="rave-search" aria-label="Search raves" type="text" placeholder="Search raves…" oninput="renderEvents()" autocomplete="off">
         <div class="rave-sort-btn" id="rave-sort-btn" title="Sort raves">
           <span aria-hidden="true">⇅</span>
           <select id="rave-sort-select" onchange="setRaveSort(this.value)" aria-label="Sort raves by"><!-- rendered by JS --></select>
@@ -8203,7 +8206,7 @@
       </div>
       <div class="raver-search-wrap">
         <span class="raver-search-icon">🔍</span>
-        <input class="raver-search" id="raver-search" type="text" placeholder="Search ravers…" oninput="renderSquad()" autocomplete="off">
+        <input class="raver-search" id="raver-search" aria-label="Search ravers" type="text" placeholder="Search ravers…" oninput="renderSquad()" autocomplete="off">
       </div>
       <div class="members-grid" id="members-grid">
         <!-- rendered by JS -->
@@ -8321,11 +8324,11 @@
   <div class="modal">
     <div class="modal-title">🎉 Create New Crew</div>
     <div class="form-group">
-      <label class="form-label">Crew Name</label>
+      <label for="crew-name-input" class="form-label">Crew Name</label>
       <input class="form-input" type="text" placeholder="e.g. The Underground" id="crew-name-input">
     </div>
     <div class="form-group">
-      <label class="form-label">Crew Vibe <span style="font-weight:400;color:var(--muted);font-size:0.8rem;">optional</span></label>
+      <label class="form-label" for="crew-desc-input">Crew Vibe <span style="font-weight:400;color:var(--muted);font-size:0.8rem;">optional</span></label>
       <textarea class="form-input" id="crew-desc-input" rows="2" maxlength="120" placeholder="" style="resize:none;line-height:1.5;"></textarea>
     </div>
     <div class="form-group">
@@ -8465,7 +8468,7 @@
     </div>
     <div class="totem-crop-zoom-row">
       <span style="font-size:0.9rem;">🔍</span>
-      <input type="range" id="totem-crop-zoom" min="0" max="2" step="0.01" value="0" oninput="totemCropZoom(this.value)">
+      <input type="range" id="totem-crop-zoom" aria-label="Zoom" min="0" max="2" step="0.01" value="0" oninput="totemCropZoom(this.value)">
     </div>
     <div style="display:flex;gap:10px;margin-top:18px;">
       <button class="btn btn-ghost" style="flex:1;" onclick="closeTotemCropper()">Cancel</button>
@@ -8493,16 +8496,16 @@
   <div class="modal" style="max-width:400px;">
     <div class="modal-title">🎉 Add New Rave</div>
     <div class="form-group" style="position:relative;">
-      <label class="form-label">Rave Name</label>
+      <label for="nrp-name" class="form-label">Rave Name</label>
       <input class="form-input" id="nrp-name" placeholder="e.g. Dekmantel" autocomplete="off" oninput="nrpNameSuggest(this.value)">
       <div id="nrp-name-results" class="fest-search-dropdown" style="display:none;"></div>
     </div>
     <div class="form-group">
-      <label class="form-label">Date</label>
+      <label for="nrp-date" class="form-label">Date</label>
       <input class="form-input" id="nrp-date" type="date" style="color-scheme:dark;">
     </div>
     <div class="form-group">
-      <label class="form-label">Location</label>
+      <label for="nrp-loc" class="form-label">Location</label>
       <input class="form-input" id="nrp-loc" placeholder="e.g. Berlin, DE">
     </div>
     <div class="modal-actions">
@@ -8518,7 +8521,7 @@
     <div class="modal-title">📍 Set Your Location</div>
     <p style="font-size:0.82rem;color:var(--muted);margin:-14px 0 16px;">Enter a city so we can show raves near you.</p>
     <div class="form-group" style="position:relative;">
-      <label class="form-label">City</label>
+      <label for="nearby-loc-input" class="form-label">City</label>
       <div class="loc-autocomplete-wrap">
         <input class="form-input" id="nearby-loc-input" placeholder="e.g. Berlin, DE" autocomplete="off"
           oninput="userLocSearchDebounce(this.value)"
@@ -8561,7 +8564,7 @@
     <div class="modal-title" id="confirm-title"></div>
     <p id="confirm-body" style="font-size:0.88rem;color:var(--muted);margin-bottom:24px;line-height:1.6;"></p>
     <div class="form-group" id="confirm-reason-wrap" style="display:none;text-align:left;">
-      <label class="form-label" id="confirm-reason-label">Why?</label>
+      <label for="confirm-reason-input" class="form-label" id="confirm-reason-label">Why?</label>
       <textarea id="confirm-reason-input" class="form-input" rows="2" maxlength="200" oninput="document.getElementById('confirm-ok-btn').disabled = !this.value.trim()"></textarea>
       <p style="font-size:0.72rem;color:var(--muted);margin-top:4px;">This helps moderators understand what happened, later.</p>
     </div>
@@ -8642,7 +8645,7 @@
       </div>
     </div>
     <div id="guide-tab-faq" style="display:none;">
-      <input type="text" class="help-search-input" id="help-search-input" placeholder="Search for help… (e.g. &quot;carpool&quot;, &quot;locked in&quot;)" oninput="renderHelpFAQ(this.value)" autocomplete="off">
+      <input type="text" class="help-search-input" id="help-search-input" aria-label="Search help" placeholder="Search for help… (e.g. &quot;carpool&quot;, &quot;locked in&quot;)" oninput="renderHelpFAQ(this.value)" autocomplete="off">
       <div id="help-faq-results"></div>
     </div>
     <div style="margin-top:18px;border-top:1px solid rgba(255,255,255,0.08);padding-top:16px;">
@@ -8800,16 +8803,16 @@
   <div class="modal" style="max-width:380px;">
     <div class="modal-title" style="margin-bottom:16px;">Edit Profile</div>
     <div class="form-group">
-      <label class="form-label">Name</label>
+      <label for="edit-unclaimed-name" class="form-label">Name</label>
       <input class="form-input" id="edit-unclaimed-name" placeholder="Full name">
     </div>
     <div class="form-group">
       <label class="form-label">Handle <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
-      <input class="form-input" id="edit-unclaimed-handle" placeholder="@handle">
+      <input class="form-input" id="edit-unclaimed-handle" aria-label="Handle" placeholder="@handle">
     </div>
     <div class="form-group">
       <label class="form-label">Note <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
-      <input class="form-input" id="edit-unclaimed-note" placeholder="e.g. met at Coachella">
+      <input class="form-input" id="edit-unclaimed-note" aria-label="How you met" placeholder="e.g. met at Coachella">
     </div>
     <div class="modal-actions" style="margin-top:8px;justify-content:space-between;">
       <button class="btn btn-ghost" style="color:var(--neon-pink);border-color:rgba(255,45,120,0.25);padding:10px 14px;font-size:0.8rem;" onclick="deleteUnclaimedProfile(_editUnclaimedRaverId)">🗑️ Delete</button>
@@ -8838,8 +8841,8 @@
   <div class="modal" style="max-width:360px;">
     <div class="modal-title">🔑 Change Password</div>
     <p style="font-size:0.82rem;color:var(--muted);margin-bottom:18px;line-height:1.5;">Choose a new password for your account.</p>
-    <input class="form-input" id="pf-new-password" type="password" placeholder="New password (min 6 chars)" autocomplete="new-password" style="margin-bottom:8px;">
-    <input class="form-input" id="pf-confirm-password" type="password" placeholder="Confirm new password" autocomplete="new-password" style="margin-bottom:16px;">
+    <input class="form-input" id="pf-new-password" aria-label="New password" type="password" placeholder="New password (min 6 chars)" autocomplete="new-password" style="margin-bottom:8px;">
+    <input class="form-input" id="pf-confirm-password" aria-label="Confirm new password" type="password" placeholder="Confirm new password" autocomplete="new-password" style="margin-bottom:16px;">
     <div id="eruda-toggle-row" style="display:none;border-top:1px solid var(--border);padding-top:14px;margin-bottom:16px;">
       <div style="display:flex;align-items:center;justify-content:space-between;">
         <span style="font-size:0.82rem;color:var(--muted);">🛠️ Dev console</span>
@@ -8885,7 +8888,7 @@
 <div id="update-banner"><span>✨ A new version of RaveFAM is ready</span><button id="update-banner-btn">Update now</button></div>
 
 <!-- Toast -->
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <!-- Micro-feedback card — floating, no backdrop, shown once per milestone per user -->
 <div class="micro-feedback-card" id="micro-feedback-card"></div>
@@ -8939,7 +8942,7 @@
   </div>
   <div class="map-pin-lightbox-zoom-wrap">
     <span class="map-pin-lightbox-zoom-icon">−</span>
-    <input id="map-pin-lightbox-zoom" class="map-pin-lightbox-zoom" type="range" min="100" max="500" value="100">
+    <input id="map-pin-lightbox-zoom" aria-label="Zoom" class="map-pin-lightbox-zoom" type="range" min="100" max="500" value="100">
     <span class="map-pin-lightbox-zoom-icon">+</span>
   </div>
 </div>
@@ -8951,7 +8954,7 @@
     <div id="photo-crop-viewport" class="photo-crop-viewport">
       <img id="photo-crop-img" class="photo-crop-img" draggable="false" alt="">
     </div>
-    <input id="photo-crop-zoom" class="photo-crop-zoom" type="range" min="100" max="300" value="100">
+    <input id="photo-crop-zoom" aria-label="Zoom" class="photo-crop-zoom" type="range" min="100" max="300" value="100">
     <div class="photo-crop-actions">
       <button type="button" class="photo-crop-cancel" onclick="cancelPhotoCrop()">Cancel</button>
       <button type="button" class="photo-crop-save" onclick="confirmPhotoCrop()">Use Photo</button>
@@ -8967,7 +8970,7 @@
       <img id="meetup-map-img" class="photo-crop-img" draggable="false" alt="Festival map">
       <div id="meetup-map-marker" style="display:none;position:absolute;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:var(--neon-pink);border:2px solid #fff;pointer-events:none;z-index:2;"></div>
     </div>
-    <input id="meetup-map-zoom" class="photo-crop-zoom" type="range" min="100" max="400" value="100">
+    <input id="meetup-map-zoom" aria-label="Zoom" class="photo-crop-zoom" type="range" min="100" max="400" value="100">
     <div class="photo-crop-actions">
       <button type="button" class="photo-crop-cancel" onclick="cancelMeetupMapPin()">Cancel</button>
       <button type="button" class="photo-crop-save" onclick="confirmMeetupMapPin()">Use Spot</button>
@@ -9019,12 +9022,12 @@
       <div class="code-input-label">Enter your invite code</div>
       <div class="code-input-hint">Ask your crew leader for the 6-character code — enter it below to join instantly</div>
       <div class="otp-boxes" id="otp-boxes">
-        <input class="otp-box" maxlength="1" data-idx="0" oninput="otpInput(this)" onkeydown="otpKeydown(event,this)" autocomplete="off" inputmode="text" spellcheck="false">
-        <input class="otp-box" maxlength="1" data-idx="1" oninput="otpInput(this)" onkeydown="otpKeydown(event,this)" autocomplete="off" inputmode="text" spellcheck="false">
-        <input class="otp-box" maxlength="1" data-idx="2" oninput="otpInput(this)" onkeydown="otpKeydown(event,this)" autocomplete="off" inputmode="text" spellcheck="false">
-        <input class="otp-box" maxlength="1" data-idx="3" oninput="otpInput(this)" onkeydown="otpKeydown(event,this)" autocomplete="off" inputmode="text" spellcheck="false">
-        <input class="otp-box" maxlength="1" data-idx="4" oninput="otpInput(this)" onkeydown="otpKeydown(event,this)" autocomplete="off" inputmode="text" spellcheck="false">
-        <input class="otp-box" maxlength="1" data-idx="5" oninput="otpInput(this)" onkeydown="otpKeydown(event,this)" autocomplete="off" inputmode="text" spellcheck="false">
+        <input class="otp-box" aria-label="Claim code digit 1 of 6" maxlength="1" data-idx="0" oninput="otpInput(this)" onkeydown="otpKeydown(event,this)" autocomplete="off" inputmode="text" spellcheck="false">
+        <input class="otp-box" aria-label="Claim code digit 2 of 6" maxlength="1" data-idx="1" oninput="otpInput(this)" onkeydown="otpKeydown(event,this)" autocomplete="off" inputmode="text" spellcheck="false">
+        <input class="otp-box" aria-label="Claim code digit 3 of 6" maxlength="1" data-idx="2" oninput="otpInput(this)" onkeydown="otpKeydown(event,this)" autocomplete="off" inputmode="text" spellcheck="false">
+        <input class="otp-box" aria-label="Claim code digit 4 of 6" maxlength="1" data-idx="3" oninput="otpInput(this)" onkeydown="otpKeydown(event,this)" autocomplete="off" inputmode="text" spellcheck="false">
+        <input class="otp-box" aria-label="Claim code digit 5 of 6" maxlength="1" data-idx="4" oninput="otpInput(this)" onkeydown="otpKeydown(event,this)" autocomplete="off" inputmode="text" spellcheck="false">
+        <input class="otp-box" aria-label="Claim code digit 6 of 6" maxlength="1" data-idx="5" oninput="otpInput(this)" onkeydown="otpKeydown(event,this)" autocomplete="off" inputmode="text" spellcheck="false">
       </div>
       <button class="btn-claim" id="code-submit-btn" onclick="submitInviteCode()" style="max-width:340px;" disabled>Look up code →</button>
       <div id="code-error" style="text-align:center;font-size:0.78rem;color:var(--neon-pink);margin-top:10px;min-height:20px;font-family:'Outfit',sans-serif;font-weight:600;"></div>
@@ -9151,12 +9154,12 @@
     </div>
     <div class="onboard-title">Drop your identity 🪩</div>
     <div class="onboard-sub">Your name and tag — so your crew can find you in the wild. Everything else you can fill in later.</div>
-    <input class="ob-inline-field" id="ob-name-input" type="text"
+    <input class="ob-inline-field" id="ob-name-input" aria-label="Your name" type="text"
       placeholder="Your name" autocomplete="off" spellcheck="false" maxlength="80"
       oninput="obCheckStep2Ready()" style="margin-bottom:10px;">
     <div class="ob-handle-wrap">
       <span class="ob-at">@</span>
-      <input class="ob-inline-field" id="ob-handle-input" type="text"
+      <input class="ob-inline-field" id="ob-handle-input" aria-label="Your tag" type="text"
         placeholder="your_tag" autocomplete="off" autocorrect="off"
         autocapitalize="none" spellcheck="false" maxlength="30"
         oninput="obHandleInput(this.value)"
@@ -9209,7 +9212,7 @@
     <span class="hp-at">@</span>
     <input
       type="text"
-      id="hp-input"
+      id="hp-input" aria-label="Your tag"
       placeholder="your_tag"
       autocomplete="off"
       autocorrect="off"
@@ -9238,7 +9241,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.40.1';
+  const APP_VERSION = '1.42.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -9781,14 +9784,60 @@ async function doProfilePasswordChange() {
     // onAuthStateChange will fire SIGNED_OUT and flip back to auth screen
   }
 
+  // ===== LAZY VENDOR LOADING =====
+  // The QR scanner, the Radar map and the debug console are all reachable only
+  // by a tap, so their libraries are fetched on first use rather than blocking
+  // the boot parse. Each URL is requested at most once and every later caller
+  // shares that promise; a failed load is forgotten so a retry can succeed.
+  const _lazyAssets = {};
+  function loadScriptOnce(url) {
+    if (_lazyAssets[url]) return _lazyAssets[url];
+    _lazyAssets[url] = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = url;
+      s.async = true;
+      s.onload = () => resolve();
+      s.onerror = () => { delete _lazyAssets[url]; reject(new Error(`Failed to load ${url}`)); };
+      document.head.appendChild(s);
+    });
+    return _lazyAssets[url];
+  }
+  // Stylesheets resolve either way — a missing map theme shouldn't block the map.
+  function loadStylesheetOnce(url) {
+    if (_lazyAssets[url]) return _lazyAssets[url];
+    _lazyAssets[url] = new Promise(resolve => {
+      const l = document.createElement('link');
+      l.rel = 'stylesheet';
+      l.href = url;
+      l.onload = l.onerror = () => resolve();
+      document.head.appendChild(l);
+    });
+    return _lazyAssets[url];
+  }
+
+  const LEAFLET_JS  = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';
+  const LEAFLET_CSS = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';
+  const ERUDA_JS    = 'https://cdn.jsdelivr.net/npm/eruda';
+
+  function loadJsQR() {
+    return window.jsQR ? Promise.resolve() : loadScriptOnce('jsQR.min.js');
+  }
+  // Callers keep their existing `typeof L === 'undefined'` fallbacks, so a
+  // failed load degrades to the "couldn't place any pins" message as before.
+  function loadLeaflet() {
+    if (window.L) return Promise.resolve();
+    return Promise.all([loadStylesheetOnce(LEAFLET_CSS), loadScriptOnce(LEAFLET_JS)]);
+  }
+
   // ===== APP SHOW / HIDE =====
-  // Debug console (eruda) is loaded for everyone but only *shown* to the
-  // maintainer — gated by account email, with a localStorage escape hatch
-  // (set rf_eruda=1) for debugging on a specific device / before login.
+  // Debug console (eruda) is only *shown* to the maintainer — gated by account
+  // email, with a localStorage escape hatch (set rf_eruda=1) for debugging on a
+  // specific device / before login. The gate also decides whether to download
+  // it at all: it's ~1MB, and almost nobody passes.
   const ERUDA_ALLOWED_EMAILS = ['theile.secure@proton.me'];
   let _erudaInited = false;
-  function maybeInitEruda() {
-    if (_erudaInited || !window.eruda) return;
+  async function maybeInitEruda() {
+    if (_erudaInited) return;
     const email = (currentUser?.email || '').toLowerCase();
     const inFamTesters = crews.some(c =>
       c.name.toLowerCase() === 'fam testers' &&
@@ -9799,6 +9848,9 @@ async function doProfilePasswordChange() {
       || inFamTesters;
     if (allowed) {
       try {
+        await loadScriptOnce(ERUDA_JS);
+        // Two callers race this (boot, then again once crew data lands).
+        if (_erudaInited || !window.eruda) return;
         eruda.init();
         _erudaInited = true;
         // Default OFF: hide unless user has explicitly enabled it
@@ -9835,7 +9887,10 @@ async function doProfilePasswordChange() {
 
   function showAuthScreen() {
     currentUser = null;
-    if (_realtimeChannel) { _realtimeChannel.unsubscribe(); _realtimeChannel = null; }
+    // removeChannel, not unsubscribe: the latter closes the subscription but
+    // leaves the channel in the client's registry, so they pile up over a
+    // session's worth of re-syncs and room switches.
+    if (_realtimeChannel) { sb.removeChannel(_realtimeChannel); _realtimeChannel = null; }
     clearTimeout(_reloadDebounce);
     squad.length = 0; crews.length = 0; festivals.length = 0; dreamPins = []; archiveLinks = [];
     crewPolls = []; crewJams = []; crewJamVibes = [];
@@ -10131,6 +10186,11 @@ async function doProfilePasswordChange() {
     _scanHandled = false;
     const statusEl = document.getElementById('camera-status');
     if (statusEl) statusEl.textContent = 'Starting camera…';
+    // Only browsers without BarcodeDetector need the jsQR fallback, so most
+    // never fetch it. Kicked off here rather than in tickScan, which runs once
+    // per animation frame. Failure is fine — tickScan already handles neither
+    // decoder being available.
+    if (!window.BarcodeDetector) loadJsQR().catch(() => {});
     try {
       // Try back camera first, fall back to any camera
       try {
@@ -10246,6 +10306,8 @@ async function doProfilePasswordChange() {
         const codes = await bd.detect(bitmap);
         if (codes.length) { handleRawScan(codes[0].rawValue); return; }
       }
+      // Falls through to jsQR when BarcodeDetector is missing or found nothing.
+      await loadJsQR().catch(() => {});
       if (window.jsQR) {
         const id = ctx.getImageData(0, 0, c.width, c.height);
         const res = window.jsQR(id.data, id.width, id.height, { inversionAttempts: 'attemptBoth' });
@@ -10847,7 +10909,10 @@ async function doProfilePasswordChange() {
   let _realtimeChannel = null;
   function setupRealtimeSync() {
     if (!currentUser) return;
-    if (_realtimeChannel) { _realtimeChannel.unsubscribe(); _realtimeChannel = null; }
+    // removeChannel, not unsubscribe: the latter closes the subscription but
+    // leaves the channel in the client's registry, so they pile up over a
+    // session's worth of re-syncs and room switches.
+    if (_realtimeChannel) { sb.removeChannel(_realtimeChannel); _realtimeChannel = null; }
     const scheduleReload = () => {
       clearTimeout(_reloadDebounce);
       _reloadDebounce = setTimeout(async () => {
@@ -10990,11 +11055,18 @@ async function doProfilePasswordChange() {
     // Load persisted notifications from DB
     dbLoadNotifications();
     setupRealtimeSync();
+    // A push notification opened us cold — go to the room it was about before
+    // anything else claims the screen.
+    const deepLink = _pendingHuddleDeepLink;
+    _pendingHuddleDeepLink = null;
+    if (deepLink) await openHuddleDeepLink(deepLink);
     // Launch first-time setup (genre/handle wizard) unless a claim/join is still
     // pending — in that case the claim preview is showing and setup runs after
     // the claim completes (see closeSuccessScreen → runFirstTimeSetup).
+    // A deep link means the user asked for a specific room, so no welcome popup
+    // over the top of it either.
     if (!_pendingClaimToken && !_pendingCrewJoinToken) {
-      runFirstTimeSetup({ allowWelcome: true });
+      runFirstTimeSetup({ allowWelcome: !deepLink });
     }
   }
 
@@ -11020,6 +11092,16 @@ async function doProfilePasswordChange() {
     }
   }
 
+  // Background loads are deliberately non-blocking, but `.catch(() => {})` also
+  // made a persistently failing fetch invisible: the app just renders
+  // incomplete, forever, with no signal anywhere. logClientError already feeds
+  // the PM dashboard's Client Errors panel and dedupes per page load, so a
+  // repeatedly-broken load costs one row, not a flood.
+  function reportBackgroundFailure(what) {
+    return (err) => logClientError(`${what}: ${err && err.message ? err.message : err}`,
+                                   err && err.stack);
+  }
+
   async function loadAllData() {
     const uid = currentUser.id;
 
@@ -11034,22 +11116,22 @@ async function doProfilePasswordChange() {
     // instead of one-at-a-time and let them resolve whenever — previously
     // each of these was its own awaited round trip *before* the data the
     // Crews page actually needs even started loading.
-    dbLoadModerators().catch(() => {}).then(() => {
+    dbLoadModerators().catch(reportBackgroundFailure('dbLoadModerators')).then(() => {
       updateModBadge();
-      return isModerator() ? dbLoadFlags().catch(() => {}) : null;
+      return isModerator() ? dbLoadFlags().catch(reportBackgroundFailure('dbLoadFlags')) : null;
     }).then(updateModBadge);
-    dbLoadSuperAdmin().catch(() => {}).then(updatePMDashBadge);
-    dbLoadMyVendorBadges().catch(() => {});
-    dbLoadArtists().catch(() => {});
-    dbLoadArtistAppearances().catch(() => {});
-    dbLoadArtistSightings().catch(() => {});
-    dbLoadArtistPlans().catch(() => {});
-    dbLoadVenues().catch(() => {});
+    dbLoadSuperAdmin().catch(reportBackgroundFailure('dbLoadSuperAdmin')).then(updatePMDashBadge);
+    dbLoadMyVendorBadges().catch(reportBackgroundFailure('dbLoadMyVendorBadges'));
+    dbLoadArtists().catch(reportBackgroundFailure('dbLoadArtists'));
+    dbLoadArtistAppearances().catch(reportBackgroundFailure('dbLoadArtistAppearances'));
+    dbLoadArtistSightings().catch(reportBackgroundFailure('dbLoadArtistSightings'));
+    dbLoadArtistPlans().catch(reportBackgroundFailure('dbLoadArtistPlans'));
+    dbLoadVenues().catch(reportBackgroundFailure('dbLoadVenues'));
     // "Our Photos" only feeds the profile detail modal (opened on demand,
     // never on first paint) — likewise non-blocking.
-    loadAllOurPhotos().catch(() => {});
+    loadAllOurPhotos().catch(reportBackgroundFailure('loadAllOurPhotos'));
     // Fest vibe bubbles only show on the Raves tab, not Crews/Squad.
-    loadAllFestVibes().catch(() => {});
+    loadAllFestVibes().catch(reportBackgroundFailure('loadAllFestVibes'));
 
     // --- Critical path for first paint: festivals, ravers, crews, nicknames.
     // These used to run as four separate sequential awaits; the festivals/
@@ -11064,7 +11146,7 @@ async function doProfilePasswordChange() {
       sb.from('festivals').select('*').is('deleted_at', null).order('date', { ascending: true }),
       sb.rpc('get_own_and_created_ravers'),
       sb.from('crews').select('*, crew_members(raver_id, added_at, deleted_at)').is('deleted_at', null).order('created_at', { ascending: true }),
-      loadNicknames().catch(() => {}),
+      loadNicknames().catch(reportBackgroundFailure('loadNicknames')),
     ]);
 
     if (!fErr && dbFests) {
@@ -11243,12 +11325,12 @@ async function doProfilePasswordChange() {
     }
 
     // Load community genre pool (non-blocking)
-    dbLoadCommunityGenres().catch(() => {});
+    dbLoadCommunityGenres().catch(reportBackgroundFailure('dbLoadCommunityGenres'));
 
     // Load private phones and viewer notes into cache (non-blocking) — these
     // only matter once a detail view is opened, not for first-paint cards.
-    loadPrivatePhones().catch(() => {});
-    loadViewerNotes().catch(() => {});
+    loadPrivatePhones().catch(reportBackgroundFailure('loadPrivatePhones'));
+    loadViewerNotes().catch(reportBackgroundFailure('loadViewerNotes'));
   }
 
   // ===== WELCOME BACK POPUP =====
@@ -13139,21 +13221,25 @@ async function doProfilePasswordChange() {
 
   // ── Inline field editing (for non-own ravers) ─────────────────────────────
 
-  function startInlineEdit(raverId, fieldKey, currentValue) {
+  // Field values are always read back out of state (getRaver) rather than passed
+  // through the markup. Round-tripping them through an inline handler argument
+  // let a quote or a `${...}` in someone's own profile field break out of the
+  // attribute and run in a crewmate's session.
+  function startInlineEdit(raverId, fieldKey) {
     const wrap = document.getElementById(`ief-wrap-${raverId}-${fieldKey}`);
     if (!wrap) return;
-    const escaped = (currentValue || '').replace(/"/g, '&quot;');
+    const cur = getRaver(raverId)?.[fieldKey] || '';
     wrap.innerHTML = `
-      <input id="ief-input-${raverId}-${fieldKey}" class="ief-input" value="${escaped}" placeholder="${fieldKey}" style="flex:1;min-width:0;">
+      <input id="ief-input-${raverId}-${fieldKey}" class="ief-input" value="${escHtml(cur)}" placeholder="${escHtml(fieldKey)}" style="flex:1;min-width:0;">
       <button class="ief-btn ief-ok" onclick="commitInlineEdit('${raverId}','${fieldKey}')">✓</button>
-      <button class="ief-btn ief-cancel" onclick="cancelInlineEdit('${raverId}','${fieldKey}',\`${escaped}\`)">✕</button>`;
+      <button class="ief-btn ief-cancel" onclick="cancelInlineEdit('${raverId}','${fieldKey}')">✕</button>`;
     document.getElementById(`ief-input-${raverId}-${fieldKey}`)?.focus();
   }
 
-  function cancelInlineEdit(raverId, fieldKey, oldValue) {
+  function cancelInlineEdit(raverId, fieldKey) {
     const wrap = document.getElementById(`ief-wrap-${raverId}-${fieldKey}`);
     if (!wrap) return;
-    wrap.innerHTML = inlineEditDisplay(raverId, fieldKey, oldValue);
+    wrap.innerHTML = inlineEditDisplay(raverId, fieldKey, getRaver(raverId)?.[fieldKey] || '');
   }
 
   async function commitInlineEdit(raverId, fieldKey, isNickname) {
@@ -13170,7 +13256,7 @@ async function doProfilePasswordChange() {
   function inlineEditDisplay(raverId, fieldKey, value) {
     const display = value ? escHtml(value) : `<span style="color:var(--muted);font-size:0.8rem;">—</span>`;
     return `<span class="ief-value">${display}</span>
-      <button class="ief-btn ief-edit" onclick="startInlineEdit('${raverId}','${fieldKey}',\`${(value||'').replace(/`/g,'\\`')}\`)">✏️</button>`;
+      <button class="ief-btn ief-edit" onclick="startInlineEdit('${raverId}','${fieldKey}')">✏️</button>`;
   }
 
   function inlineEditNicknameDisplay(raverId, currentNickname) {
@@ -13178,25 +13264,27 @@ async function doProfilePasswordChange() {
     const display = val
       ? `<span class="ief-value nickname-value">${escHtml(val)}</span>`
       : `<span class="ief-add-nickname">+ Add nickname</span>`;
-    const pencil = val ? ` <button class="ief-btn ief-edit" onclick="startNicknameEdit('${raverId}','${val.replace(/'/g,"\\'")}')">✏️</button>` : '';
+    const pencil = val ? ` <button class="ief-btn ief-edit" onclick="startNicknameEdit('${raverId}')">✏️</button>` : '';
     return display + pencil;
   }
 
-  function startNicknameEdit(raverId, currentValue) {
+  // Nickname reads from nicknameCache for the same reason startInlineEdit reads
+  // from getRaver — the value never travels through the markup.
+  function startNicknameEdit(raverId) {
     const fieldKey = 'nickname';
     const wrap = document.getElementById(`ief-wrap-${raverId}-${fieldKey}`);
     if (!wrap) return;
-    const escaped = (currentValue || '').replace(/"/g, '&quot;');
+    const cur = nicknameCache[String(raverId)] || '';
     wrap.innerHTML = `
-      <input id="ief-input-${raverId}-${fieldKey}" class="ief-input" value="${escaped}" placeholder="Nickname…" maxlength="30" style="flex:1;min-width:0;">
+      <input id="ief-input-${raverId}-${fieldKey}" class="ief-input" value="${escHtml(cur)}" placeholder="Nickname…" maxlength="30" style="flex:1;min-width:0;">
       <button class="ief-btn ief-ok" onclick="commitInlineEdit('${raverId}','${fieldKey}',true)">✓</button>
-      <button class="ief-btn ief-cancel" onclick="cancelNicknameEdit('${raverId}','${escaped}')">✕</button>`;
+      <button class="ief-btn ief-cancel" onclick="cancelNicknameEdit('${raverId}')">✕</button>`;
     document.getElementById(`ief-input-${raverId}-${fieldKey}`)?.focus();
   }
 
-  function cancelNicknameEdit(raverId, oldValue) {
+  function cancelNicknameEdit(raverId) {
     const wrap = document.getElementById(`ief-wrap-${raverId}-nickname`);
-    if (wrap) wrap.innerHTML = inlineEditNicknameDisplay(raverId, oldValue);
+    if (wrap) wrap.innerHTML = inlineEditNicknameDisplay(raverId, nicknameCache[String(raverId)] || '');
   }
 
   async function saveFieldForRaver(raverId, fieldKey, value) {
@@ -13206,26 +13294,48 @@ async function doProfilePasswordChange() {
     const colMap = { name: 'name', base: 'base', instagram: 'instagram', radiate: 'radiate', phone: 'phone' };
     const col = colMap[fieldKey];
     if (!col) return;
+    const prev = r[fieldKey];
     r[fieldKey] = value;
-    showToast('✅ Saved');
     // Re-render the inline field display
     const wrap = document.getElementById(`ief-wrap-${raverId}-${fieldKey}`);
     if (wrap) wrap.innerHTML = inlineEditDisplay(raverId, fieldKey, value);
     renderSquad();
     if (currentUser) {
       const { error } = await sb.from('ravers').update({ [col]: value }).eq('id', String(raverId));
-      if (error) { console.error('saveFieldForRaver error', error); showToast('⚠️ Save failed'); }
+      // Roll the optimistic edit back on failure. Leaving it on screen meant the
+      // user saw "✅ Saved" then "⚠️ Save failed", with a value the DB rejected
+      // surviving until the next reload — and any later write building on it.
+      if (error) {
+        console.error('saveFieldForRaver error', error);
+        r[fieldKey] = prev;
+        const back = document.getElementById(`ief-wrap-${raverId}-${fieldKey}`);
+        if (back) back.innerHTML = inlineEditDisplay(raverId, fieldKey, prev);
+        renderSquad();
+        showToast('⚠️ Save failed — check your connection');
+        return;
+      }
     }
+    showToast('✅ Saved');
   }
 
-  function startPrivatePhoneEdit(raverId, currentValue) {
+  // Single source for the saved-number row — the value comes from
+  // privatePhoneCache, never from a handler argument. Used by the profile
+  // render and by both edit exits below.
+  function privatePhoneDisplay(raverId) {
+    const pv = privatePhoneCache[String(raverId)] || '';
+    const display = pv ? escHtml(pv) : `<span style="color:var(--muted);font-size:0.8rem;">—</span>`;
+    return `<span class="ief-value">${display}</span>
+      <button class="ief-btn ief-edit" onclick="startPrivatePhoneEdit('${raverId}')">✏️</button>`;
+  }
+
+  function startPrivatePhoneEdit(raverId) {
     const wrap = document.getElementById(`ief-wrap-${raverId}-private-phone`);
     if (!wrap) return;
-    const escaped = (currentValue || '').replace(/"/g, '&quot;');
+    const cur = privatePhoneCache[String(raverId)] || '';
     wrap.innerHTML = `
-      <input id="ief-input-${raverId}-private-phone" class="ief-input" value="${escaped}" placeholder="+44 7700…" style="flex:1;min-width:0;" type="tel">
+      <input id="ief-input-${raverId}-private-phone" class="ief-input" value="${escHtml(cur)}" placeholder="+44 7700…" style="flex:1;min-width:0;" type="tel">
       <button class="ief-btn ief-ok" onclick="commitPrivatePhoneEdit('${raverId}')">✓</button>
-      <button class="ief-btn ief-cancel" onclick="cancelPrivatePhoneEdit('${raverId}',\`${escaped}\`)">✕</button>`;
+      <button class="ief-btn ief-cancel" onclick="cancelPrivatePhoneEdit('${raverId}')">✕</button>`;
     document.getElementById(`ief-input-${raverId}-private-phone`)?.focus();
   }
 
@@ -13236,22 +13346,14 @@ async function doProfilePasswordChange() {
     await savePrivatePhone(raverId, value);
     // Refresh the display
     const wrap = document.getElementById(`ief-wrap-${raverId}-private-phone`);
-    if (wrap) {
-      const pv = value;
-      const escaped = pv.replace(/`/g,'\\`');
-      const display = pv || `<span style="color:var(--muted);font-size:0.8rem;">—</span>`;
-      wrap.innerHTML = `<span class="ief-value">${display}</span>
-        <button class="ief-btn ief-edit" onclick="startPrivatePhoneEdit('${raverId}',\`${escaped}\`)">✏️</button>`;
-    }
+    if (wrap) wrap.innerHTML = privatePhoneDisplay(raverId);
     showToast('✅ Saved');
   }
 
-  function cancelPrivatePhoneEdit(raverId, oldValue) {
+  function cancelPrivatePhoneEdit(raverId) {
     const wrap = document.getElementById(`ief-wrap-${raverId}-private-phone`);
     if (!wrap) return;
-    const display = oldValue || `<span style="color:var(--muted);font-size:0.8rem;">—</span>`;
-    wrap.innerHTML = `<span class="ief-value">${display}</span>
-      <button class="ief-btn ief-edit" onclick="startPrivatePhoneEdit('${raverId}',\`${oldValue}\`)">✏️</button>`;
+    wrap.innerHTML = privatePhoneDisplay(raverId);
   }
 
   function removeBeenTo(raverId, festId) {
@@ -13481,7 +13583,17 @@ async function doProfilePasswordChange() {
     removeOurPhoto(lightboxCtx.viewingRaverId, lightboxCtx.slot);
   }
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { closePhotoLightbox(); closeMapPinLightbox(); }
+    if (e.key !== 'Escape') return;
+    // Only claim the keypress when a lightbox is actually open, and mark it
+    // handled so the generic overlay handler doesn't then close whatever was
+    // sitting underneath. (See closeTopOverlayOnEscape.)
+    const photo = document.getElementById('photo-lightbox');
+    const pin   = document.getElementById('map-pin-lightbox');
+    const open  = (photo && photo.classList.contains('open')) || (pin && pin.classList.contains('open'));
+    if (!open) return;
+    closePhotoLightbox();
+    closeMapPinLightbox();
+    e.preventDefault();
   });
 
   // Map pin lightbox — shows the full festival map with the dropped pin
@@ -15464,7 +15576,7 @@ async function doProfilePasswordChange() {
   function missingGenreCardHTML(a) {
     const draft = modGenreDrafts[a.id] || [];
     const chips = draft.length
-      ? draft.map(g => `<span class="stats-pill cyan" style="cursor:pointer;" title="Remove" onclick="removeDraftGenre(${a.id},'${escHtml(g)}')">${escHtml(g)} ✕</span>`).join('')
+      ? draft.map((g, i) => `<span class="stats-pill cyan" style="cursor:pointer;" title="Remove" onclick="removeDraftGenre(${a.id},${i})">${escHtml(g)} ✕</span>`).join('')
       : `<span style="font-size:0.76rem;color:var(--muted);opacity:0.7;">No genres picked yet</span>`;
     return `
       <div class="event-item">
@@ -15521,10 +15633,13 @@ async function doProfilePasswordChange() {
     rerenderMissingGenresBody(artistId);
   }
 
-  function removeDraftGenre(artistId, genre) {
+  // Takes the chip's index, not its text — a community-submitted genre name
+  // interpolated into the onclick could break out of the JS string (escHtml
+  // escapes for HTML text, and the attribute is decoded before the JS parses).
+  function removeDraftGenre(artistId, index) {
     const list = modGenreDrafts[artistId];
-    if (!list) return;
-    modGenreDrafts[artistId] = list.filter(g => g !== genre);
+    if (!list || index < 0 || index >= list.length) return;
+    list.splice(index, 1);
     rerenderMissingGenresBody(artistId);
   }
 
@@ -15699,10 +15814,10 @@ async function doProfilePasswordChange() {
     const isOpen = modGuideOpenSections.has(s.id);
     return `
       <div class="tag-accordion mod-guide-acc${isOpen ? ' open' : ''}">
-        <div class="tag-acc-header" onclick="toggleModGuideSection('${s.id}')">
+        <button type="button" class="tag-acc-header" aria-expanded="${isOpen ? 'true' : 'false'}" onclick="toggleModGuideSection('${s.id}')">
           <span class="tag-acc-title">${s.icon} ${s.title}</span>
           <span class="tag-acc-chevron">▾</span>
-        </div>
+        </button>
         <div class="tag-acc-body"><div class="tag-acc-body-inner">${s.body}</div></div>
       </div>`;
   }
@@ -17264,7 +17379,7 @@ async function doProfilePasswordChange() {
           <div id="huddle-bubble-picker-${m.id}" class="huddle-reaction-picker hd-bubble-reaction-picker${isYou ? ' hd-bubble-reaction-picker-right' : ''}" style="display:none;">${addPickerBtns}</div>
         </div>
         <div class="kebab-wrap">
-          <button type="button" class="hd-act-btn" onclick="toggleKebabMenu('huddle-bubble-menu-${m.id}')" title="More">⋯</button>
+          <button type="button" class="hd-act-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="huddle-bubble-menu-${m.id}" onclick="toggleKebabMenu('huddle-bubble-menu-${m.id}')" title="More">⋯</button>
           <div id="huddle-bubble-menu-${m.id}" class="kebab-menu${isYou ? ' kebab-menu-right' : ''}" style="display:none;">${menuRows}</div>
         </div>
       </div>`;
@@ -18297,6 +18412,12 @@ async function doProfilePasswordChange() {
     const opening = el.style.display === 'none';
     document.querySelectorAll('.kebab-menu').forEach(m => { if (m !== el) m.style.display = 'none'; });
     el.style.display = opening ? '' : 'none';
+    // Re-sync every kebab trigger, not just this one — the loop above may have
+    // closed another menu whose button still claims to be expanded.
+    document.querySelectorAll('[aria-haspopup="menu"][aria-controls]').forEach(btn => {
+      const menu = document.getElementById(btn.getAttribute('aria-controls'));
+      if (menu) btn.setAttribute('aria-expanded', String(menu.style.display !== 'none'));
+    });
   }
 
   // ── Photo & voice note capture/upload ──
@@ -18482,8 +18603,8 @@ async function doProfilePasswordChange() {
 
   function teardownHuddleLive() {
     if (_huddleRecorder) cancelHuddleVoiceRecording();
-    if (_huddleChannel) { _huddleChannel.unsubscribe(); _huddleChannel = null; }
-    if (_huddlePresenceChannel) { _huddlePresenceChannel.untrack(); _huddlePresenceChannel.unsubscribe(); _huddlePresenceChannel = null; }
+    if (_huddleChannel) { sb.removeChannel(_huddleChannel); _huddleChannel = null; }
+    if (_huddlePresenceChannel) { _huddlePresenceChannel.untrack(); sb.removeChannel(_huddlePresenceChannel); _huddlePresenceChannel = null; }
     _huddlePresenceState = {};
     _huddleTypingUsers = {};
     _huddleTypingSentAt = 0;
@@ -21601,10 +21722,15 @@ async function doProfilePasswordChange() {
 
   async function loadVendorVillageData() {
     await Promise.all([dbLoadVendors(), dbLoadSavedVendors(), dbLoadMyVendorSpots(), dbLoadMyVendorBadges()]);
-    await dbLoadVendorReviews(vendors.map(v => v.id));
-    await dbLoadVendorFestivalTags(vendors.map(v => v.id));
-    await dbLoadVendorVibeTags(vendors.map(v => v.id));
-    await dbLoadVendorSpots(vendors.map(v => v.id));
+    // These four only need the vendor ids, not each other, so they go together
+    // rather than as four serial round trips — same reasoning as loadAllData().
+    const ids = vendors.map(v => v.id);
+    await Promise.all([
+      dbLoadVendorReviews(ids),
+      dbLoadVendorFestivalTags(ids),
+      dbLoadVendorVibeTags(ids),
+      dbLoadVendorSpots(ids),
+    ]);
     renderVendorVillagePanel();
   }
 
@@ -22176,7 +22302,7 @@ async function doProfilePasswordChange() {
         ].filter(Boolean).join('');
         const kebabHtml = kebabRows ? `
           <div class="kebab-wrap" style="align-self:center;">
-            <button type="button" class="kebab-btn" onclick="toggleKebabMenu('vv-detail-kebab-${escId}')" title="More">⋯</button>
+            <button type="button" class="kebab-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="vv-detail-kebab-${escId}" onclick="toggleKebabMenu('vv-detail-kebab-${escId}')" title="More">⋯</button>
             <div id="vv-detail-kebab-${escId}" class="kebab-menu kebab-menu-right" style="display:none;">${kebabRows}</div>
           </div>` : '';
         return `<div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;align-items:center;">
@@ -24132,7 +24258,7 @@ async function doProfilePasswordChange() {
         <input class="form-input" id="crew-edit-name-input" value="${crew.name.replace(/"/g,'&quot;')}" maxlength="40" placeholder="Crew name…">
       </div>
       <div class="form-group">
-        <label class="form-label">Crew Vibe <span style="font-weight:400;color:var(--muted);font-size:0.8rem;">optional</span></label>
+        <label class="form-label" for="crew-edit-desc-input">Crew Vibe <span style="font-weight:400;color:var(--muted);font-size:0.8rem;">optional</span></label>
         <textarea class="form-input" id="crew-edit-desc-input" rows="2" maxlength="120" style="resize:none;line-height:1.5;" placeholder="One line that says everything 🌀">${(crew.description || '').replace(/</g,'&lt;')}</textarea>
       </div>
       <div class="form-section-label">Look</div>
@@ -25044,7 +25170,7 @@ async function doProfilePasswordChange() {
             ${!r.isYou && currentUser ? `
               <div class="profile-nickname-row">
                 <span style="font-size:0.7rem;color:var(--muted);">🏷️</span>
-                <span id="ief-wrap-${r.id}-nickname" class="ief-wrap" onclick="if(!event.target.closest('button,input'))startNicknameEdit('${r.id}','${(nicknameCache[String(r.id)]||'').replace(/'/g,"\\'")}')" style="cursor:pointer;">
+                <span id="ief-wrap-${r.id}-nickname" class="ief-wrap" onclick="if(!event.target.closest('button,input'))startNicknameEdit('${r.id}')" style="cursor:pointer;">
                   ${inlineEditNicknameDisplay(r.id, nicknameCache[String(r.id)] || '')}
                 </span>
               </div>` : ''}
@@ -25220,13 +25346,7 @@ async function doProfilePasswordChange() {
                 : '');
           const myPhone = `<div class="contact-row">
               <div class="contact-your-label">Saved number (private)</div>
-              <div class="contact-their-phone"><span id="ief-wrap-${r.id}-private-phone" class="ief-wrap">${(() => {
-                const pv = privatePhoneCache[String(r.id)] || '';
-                const escaped = pv.replace(/`/g,'\\`');
-                const display = pv ? escHtml(pv) : `<span style="color:var(--muted);font-size:0.8rem;">—</span>`;
-                return `<span class="ief-value">${display}</span>
-                  <button class="ief-btn ief-edit" onclick="startPrivatePhoneEdit('${r.id}',\`${escaped}\`)">✏️</button>`;
-              })()}</span></div>
+              <div class="contact-their-phone"><span id="ief-wrap-${r.id}-private-phone" class="ief-wrap">${privatePhoneDisplay(r.id)}</span></div>
             </div>`;
           if (!theirInstagram && !theirRadiate && !theirPhone && !perms.isClaimed) return '';
           return `<div class="profile-section" style="${sg(1)}">
@@ -26619,10 +26739,10 @@ async function doProfilePasswordChange() {
         return `<span class="genre-preset${isPicked ? ' picked' : ''}${hiddenCls}" style="--chip-col:${p.color};" tabindex="0" role="button" aria-pressed="${isPicked ? 'true' : 'false'}" onclick="tagToggle('${kind}','${_tagEscAttr(p.id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tagToggle('${kind}','${_tagEscAttr(p.id)}');}">${labelHtml}</span>`;
       }).join('');
       return `<div class="tag-accordion${isOpen ? ' open' : ''}" data-cat="${c.id}">
-        <div class="tag-acc-header" onclick="toggleTagAccordionSection('${kind}','${c.id}')">
+        <button type="button" class="tag-acc-header" aria-expanded="${isOpen ? 'true' : 'false'}" onclick="toggleTagAccordionSection('${kind}','${c.id}')">
           <span class="tag-acc-title">${c.label}${selCount ? ` <span class="tag-acc-badge">${selCount}</span>` : ''}</span>
           <span class="tag-acc-chevron">▾</span>
-        </div>
+        </button>
         <div class="tag-acc-body"><div class="tag-acc-body-inner">${chips}</div></div>
       </div>`;
     }).join('');
@@ -27265,6 +27385,9 @@ async function doProfilePasswordChange() {
       items[_userLocIdx]?.dispatchEvent(new MouseEvent('mousedown'));
       return;
     } else if (e.key === 'Escape') {
+      // Consume it: the dropdown is open, so Escape dismisses that rather than
+      // the surrounding overlay (see closeTopOverlayOnEscape).
+      e.preventDefault();
       closeUserLocDropdown(); return;
     } else { return; }
     items.forEach((el, i) => el.classList.toggle('loc-active', i === _userLocIdx));
@@ -27737,6 +27860,7 @@ async function doProfilePasswordChange() {
       items[_locIdx]?.dispatchEvent(new MouseEvent('mousedown'));
       return;
     } else if (e.key === 'Escape') {
+      e.preventDefault();
       closeLoc(); return;
     } else { return; }
     items.forEach((el, i) => el.classList.toggle('loc-active', i === _locIdx));
@@ -27838,6 +27962,7 @@ async function doProfilePasswordChange() {
       items[_venueLocIdx]?.dispatchEvent(new MouseEvent('mousedown'));
       return;
     } else if (e.key === 'Escape') {
+      e.preventDefault();
       closeVenueLocDropdown(); return;
     } else { return; }
     items.forEach((el, i) => el.classList.toggle('loc-active', i === _venueLocIdx));
@@ -28107,7 +28232,7 @@ async function doProfilePasswordChange() {
     ].filter(Boolean).join('');
     const kebabHtml = kebabRows ? `
       <div class="kebab-wrap" style="align-self:center;">
-        <button type="button" class="kebab-btn" onclick="toggleKebabMenu('fe-kebab-menu')" title="More">⋯</button>
+        <button type="button" class="kebab-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="fe-kebab-menu" onclick="toggleKebabMenu('fe-kebab-menu')" title="More">⋯</button>
         <div id="fe-kebab-menu" class="kebab-menu" style="display:none;">${kebabRows}</div>
       </div>` : '';
     document.getElementById('rave-edit-modal').innerHTML = `
@@ -29388,6 +29513,93 @@ async function doProfilePasswordChange() {
     }, 2500);
   }
 
+  // ===== ESCAPE CLOSES THE TOP OVERLAY =====
+  // Every overlay already names its own close function in a backdrop handler —
+  // either `if(event.target===this)closeFoo()` or `closeFooOutside(event)`,
+  // which makes the same check internally. Dispatching a click on the overlay
+  // element itself satisfies both (el.click() sets event.target to el), so
+  // Escape re-runs that overlay's real teardown without an id-to-function map
+  // to keep in sync. Previously only the two lightboxes closed on Escape.
+  const OVERLAY_ROOT_SELECTOR = [
+    '-overlay', '-lightbox', '-sheet', '-backdrop', '-popup', '-screen',
+  ].map(suffix => `[id$="${suffix}"][onclick]`).join(',');
+  // "Open" has to be read off pointer-events, not display: .modal-overlay stays
+  // display:flex when closed and toggles opacity/pointer-events (see its rule),
+  // while the share overlays toggle display. Testing both covers each pattern.
+  function isOverlayOpen(el) {
+    const cs = getComputedStyle(el);
+    return cs.display !== 'none' && cs.visibility !== 'hidden' && cs.pointerEvents !== 'none';
+  }
+
+  function closeTopOverlayOnEscape() {
+    const open = [...document.querySelectorAll(OVERLAY_ROOT_SELECTOR)]
+      .filter(el => el.isConnected && isOverlayOpen(el));
+    if (!open.length) return false;
+    // Stacked overlays: highest z-index wins, ties go to the later one in DOM
+    // order (which is what paints on top).
+    const top = open.reduce((best, el) =>
+      (parseInt(getComputedStyle(el).zIndex, 10) || 0) >= (parseInt(getComputedStyle(best).zIndex, 10) || 0) ? el : best);
+    top.click();
+    return true;
+  }
+
+  document.addEventListener('keydown', (e) => {
+    // Field-level handlers run first and call preventDefault when they consume
+    // the key — the location autocompletes and the Huddle search/mention menus
+    // dismiss their own dropdown before Escape reaches the overlay. Anything
+    // they don't claim closes the overlay, including from inside a text field,
+    // which is what people expect Escape in a dialog to do.
+    if (e.key !== 'Escape' || e.defaultPrevented) return;
+    if (closeTopOverlayOnEscape()) e.preventDefault();
+  });
+
+  // ── Focus containment ─────────────────────────────────────────────────────
+  // Focus used to walk straight out of an open sheet and into the page behind
+  // it, which was still fully tabbable. Every overlay is a sibling of #main-app
+  // (the shell closes before the first overlay in the markup), so marking the
+  // shell inert while one is open takes the whole page underneath out of the
+  // tab order AND the accessibility tree — one attribute, and no need to touch
+  // the ~40 functions that open overlays.
+  const INERT_SHELL_IDS = ['main-app', 'auth-screen'];
+  let _lastShellFocus = null;
+
+  function inertShells() {
+    return INERT_SHELL_IDS.map(id => document.getElementById(id)).filter(Boolean);
+  }
+
+  // Tracked continuously so focus can go back where it was when the last
+  // overlay closes — by then the overlay has usually taken focus itself, so
+  // there is nothing left to read off activeElement.
+  document.addEventListener('focusin', (e) => {
+    if (inertShells().some(s => s.contains(e.target))) _lastShellFocus = e.target;
+  });
+
+  function syncOverlayInert() {
+    const shells = inertShells();
+    if (!shells.length) return;
+    const anyOpen = [...document.querySelectorAll(OVERLAY_ROOT_SELECTOR)].some(isOverlayOpen);
+    if (anyOpen === shells[0].inert) return;   // nothing changed
+
+    shells.forEach(el => { el.inert = anyOpen; });
+    if (!anyOpen && _lastShellFocus && _lastShellFocus.isConnected) {
+      // Without this, closing an overlay drops focus on <body> and a keyboard
+      // user restarts from the top of the page.
+      try { _lastShellFocus.focus({ preventScroll: true }); } catch (e) {}
+    }
+  }
+
+  // Overlays toggle either a class or an inline display depending on which
+  // pattern they follow (see isOverlayOpen), so watch both. Deliberately does
+  // not move focus into the overlay: most already focus their own field, and
+  // stealing that would pop or dismiss the mobile keyboard.
+  (function watchOverlaysForInert() {
+    const roots = document.querySelectorAll(OVERLAY_ROOT_SELECTOR);
+    if (!roots.length) return;
+    const obs = new MutationObserver(syncOverlayInert);
+    roots.forEach(el => obs.observe(el, { attributes: true, attributeFilter: ['class', 'style'] }));
+    syncOverlayInert();
+  })();
+
   // ===== COACHMARKS =====
   // Lightweight "first time you hit this feature" tips — distinct from the
   // signup-time onboarding wizard, the reopenable App Guide, and the
@@ -30018,6 +30230,49 @@ async function doProfilePasswordChange() {
     else if (entityType === 'crew') { switchTab('crews'); openDetail(entityId); }
   }
 
+  // ── Push notification deep links ──────────────────────────────────────────
+  // Beacon and mention pushes carry crewId / roomId / messageId (see the
+  // send-beacon-push and send-mention-push functions). Tapping one used to just
+  // focus whatever was already on screen, so the notification told you where to
+  // look and then didn't take you there. Two arrival paths: a cold start reads
+  // the ids off the URL, a running tab receives them by postMessage — focusing
+  // an open window doesn't navigate it.
+  let _pendingHuddleDeepLink = null;
+
+  function readHuddleDeepLinkFromUrl() {
+    const p = new URLSearchParams(location.search);
+    const crewId = p.get('crew');
+    if (!crewId) return null;
+    const link = { crewId, roomId: p.get('room'), messageId: p.get('msg') };
+    // Drop them from the address bar so a later reload doesn't reopen the room.
+    ['crew', 'room', 'msg'].forEach(k => p.delete(k));
+    const qs = p.toString();
+    history.replaceState(null, '', location.pathname + (qs ? `?${qs}` : '') + location.hash);
+    return link;
+  }
+
+  async function openHuddleDeepLink(link) {
+    if (!link || !link.crewId || !currentUser) return;
+    // Left the crew, or the room was deleted — leave them where they are rather
+    // than bouncing them into an error.
+    if (!getCrew(link.crewId)) return;
+    switchTab('crews');
+    await openDetail(link.crewId);
+    await openHuddle(link.crewId, link.roomId ? { roomId: link.roomId } : {});
+    if (!link.roomId || !link.messageId) return;
+    // The payload has no timestamp and switchHuddleRoomAtMessage pages around
+    // one, so fetch it. Landing on the room is already correct if this fails.
+    const { data } = await sb.from('huddle_messages')
+      .select('created_at').eq('id', link.messageId).is('deleted_at', null).maybeSingle();
+    if (data && data.created_at) {
+      await switchHuddleRoomAtMessage(link.roomId, link.messageId, data.created_at);
+    }
+  }
+
+  // Read once at startup, before anything else rewrites the URL. bootApp()
+  // consumes it after the crews are loaded — getCrew() is empty until then.
+  _pendingHuddleDeepLink = readHuddleDeepLinkFromUrl();
+
   // Quick-link from a drawer Huddle entry straight to that room. Every room
   // kind — main, custom, and per-rave — now lives behind the one Huddle
   // switcher, so this opens the chat directly on the target room rather than
@@ -30149,6 +30404,12 @@ async function doProfilePasswordChange() {
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(console.warn);
+
+    // Tapping a push when the app is already open: the worker focuses this
+    // window (which doesn't navigate) and sends the ids over instead.
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      if (e.data && e.data.type === 'rf-huddle-deeplink') openHuddleDeepLink(e.data);
+    });
 
     // ── Auto update detection ─────────────────────────────────────────
     // The entire app lives in app.html, which the service worker serves
@@ -31551,7 +31812,12 @@ async function doProfilePasswordChange() {
     const mapEl = document.getElementById('ravesradar-map');
     if (!mapEl) return;
 
+    // Started here so Leaflet downloads alongside the geocoding loop below,
+    // which is slow by design (Nominatim caps us at ~1 request/sec).
+    const leafletReady = loadLeaflet().catch(() => {});
+
     if (!upcoming.length) {
+      await leafletReady;
       renderRadarMapEmptyState(mapEl);
       return;
     }
@@ -31577,6 +31843,7 @@ async function doProfilePasswordChange() {
       if (coords) points.push({ fest: f, lat: coords.lat, lng: coords.lng, color: festColor(f) });
     }
 
+    await leafletReady;
     if (!document.getElementById('page-raves-radar').classList.contains('active')) return;
     if (!points.length || typeof L === 'undefined') {
       mapEl.innerHTML = `<div class="citymap-loading">Couldn't place any raves on the map right now — see the list above.</div>`;
@@ -32269,6 +32536,8 @@ async function doProfilePasswordChange() {
   }
 
   async function geocodeAndRenderCityMap(cityList) {
+    // As in renderRavesRadarMap: overlap the library fetch with the geocoding.
+    const leafletReady = loadLeaflet().catch(() => {});
     const cache = loadGeocodeCache();
     const points = [];
     for (const c of cityList) {
@@ -32284,6 +32553,7 @@ async function doProfilePasswordChange() {
       if (coords) points.push({ ...c, ...coords });
     }
 
+    await leafletReady;
     // Bail if the user navigated away while we were geocoding.
     if (!document.getElementById('page-cities-map').classList.contains('active')) return;
     const mapEl = document.getElementById('citymap');
@@ -32390,7 +32660,6 @@ async function doProfilePasswordChange() {
 </script>
 <script defer src="/_vercel/insights/script.js"></script>
 <script defer src="/_vercel/speed-insights/script.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
 <script>try { if (typeof maybeInitEruda === 'function') maybeInitEruda(); } catch (e) {}</script>
 </body>
 </html>
