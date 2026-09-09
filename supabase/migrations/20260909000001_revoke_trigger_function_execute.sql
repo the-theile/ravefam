@@ -13,9 +13,19 @@
 -- 20260811000001_revoke_anon_submit_micro_feedback.sql.
 --
 -- Written as a loop over pg_proc rather than 31 names so it stays correct as
--- triggers are added, and so re-running it is a no-op. Triggers themselves are
--- unaffected: the trigger machinery invokes these as the table owner and does
--- not consult EXECUTE grants on anon/authenticated.
+-- triggers are added, and so re-running it is a no-op.
+--
+-- PUBLIC is in the revoke list, and has to be: most of these carry EXECUTE via
+-- the default `=X/postgres` grant to PUBLIC rather than a direct grant, and
+-- anon/authenticated inherit it from there — revoking from those two roles
+-- alone leaves the function just as reachable. postgres and service_role hold
+-- their own explicit grants and keep working.
+--
+-- Triggers themselves are unaffected: EXECUTE is checked when the trigger is
+-- created, not each time it fires. The end state this produces is the ACL the
+-- award_*/enqueue_* trigger functions in this database already have
+-- ({postgres=X/postgres,service_role=X/postgres}), and those fire on every
+-- crew create and RSVP today.
 
 DO $$
 DECLARE
@@ -32,7 +42,7 @@ BEGIN
         OR has_function_privilege('authenticated', p.oid, 'EXECUTE')
       )
   LOOP
-    EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM anon, authenticated', fn.sig);
+    EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC, anon, authenticated', fn.sig);
   END LOOP;
 END
 $$;

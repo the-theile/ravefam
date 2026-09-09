@@ -50,3 +50,9 @@ ALTER FUNCTION public.user_is_crewmate_of_raver(p_raver_id uuid)
   SET search_path = pg_catalog, public;
 ALTER FUNCTION public.user_leads_crew_with_raver(p_raver_id uuid)
   SET search_path = pg_catalog, public;
+
+-- Not SECURITY DEFINER, so the escalation argument above doesn't apply — but it
+-- was the one remaining function_search_path_mutable finding, and pinning it
+-- takes that lint to zero.
+ALTER FUNCTION public.touch_venue_review_updated_at()
+  SET search_path = pg_catalog, public;
