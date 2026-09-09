@@ -33,6 +33,10 @@ function isJavaScript(attrs) {
 }
 // Attribute handlers are JS too: onclick="foo()" etc.
 const HANDLER_RE = /\bon[a-z]+="([^"]*)"/gi;
+// …and some handlers are data, not markup: notifActionButtons builds rows like
+// { label: '…', onclick: `notifBlockCrew('${id}')` } which are written into an
+// attribute later. Same thing as far as "does this function still exist" goes.
+const HANDLER_PROP_RE = /\bon[a-z]+\s*:\s*(`[^`]*`|'[^']*')/gi;
 
 // Globals the page gets from the CDN <script> tags in <head>, plus the ones
 // loaded on demand (see loadJsQR / loadLeaflet / maybeInitEruda in app.html).
@@ -98,24 +102,35 @@ const NOT_HANDLERS = new Set([
   'Set', 'Map', 'RegExp', 'Promise', 'Error',
 ]);
 
-/** Every function call made from an HTML event attribute, with its source line. */
+/**
+ * Every function call made from an HTML event attribute or an onclick: data
+ * property, with its source line.
+ *
+ * Single-quoted strings are blanked first, because
+ * onmouseover="this.style.transform='translateY(-2px)'" is not a call to
+ * translateY. Backtick templates are deliberately NOT blanked: most generated
+ * markup here reads onclick="${cond ? `joinCrew('${id}')` : …}", so the real
+ * handler call lives *inside* the template and blanking it hides exactly what
+ * this check is looking for.
+ */
 function collectHandlerCalls(html) {
   const calls = [];
-  let m;
-  HANDLER_RE.lastIndex = 0;
-  while ((m = HANDLER_RE.exec(html)) !== null) {
-    const line = html.slice(0, m.index).split('\n').length;
-    // Blank out string literals first — onmouseover="this.style.transform=
-    // 'translateY(-2px)'" is not a call to translateY.
-    const body = m[1]
+  const scan = (source, index) => {
+    const line = html.slice(0, index).split('\n').length;
+    const body = source
       .replace(/&quot;(?:\\.|[^\\])*?&quot;/g, "''")
-      .replace(/'(?:\\.|[^'\\])*'/g, "''")
-      .replace(/`(?:\\.|[^`\\])*`/g, '``');
+      .replace(/'(?:\\.|[^'\\])*'/g, "''");
     for (const call of body.matchAll(/(^|[^.\w$])([A-Za-z_$][\w$]*)\s*\(/g)) {
       const name = call[2];
-      if (!NOT_HANDLERS.has(name)) calls.push({ name, line, attr: m[0].slice(0, 60) });
+      if (!NOT_HANDLERS.has(name)) calls.push({ name, line });
     }
-  }
+  };
+
+  let m;
+  HANDLER_RE.lastIndex = 0;
+  while ((m = HANDLER_RE.exec(html)) !== null) scan(m[1], m.index);
+  HANDLER_PROP_RE.lastIndex = 0;
+  while ((m = HANDLER_PROP_RE.exec(html)) !== null) scan(m[1].slice(1, -1), m.index);
   return calls;
 }
 
