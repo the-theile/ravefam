@@ -9301,7 +9301,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.49.0';
+  const APP_VERSION = '1.49.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -30444,6 +30444,7 @@ async function doProfilePasswordChange() {
     if (entityType === 'rave') { switchTab('events'); openRaveEditor(entityId); }
     else if (entityType === 'crew') { switchTab('crews'); await openDetail(entityId); }
     else if (entityType === 'raver') { openProfile(entityId); }
+    else if (entityType === 'plur') { openPlurInfo(entityId); }
     else if (entityType === 'huddle') {
       // Reuses the push deep-link path so a mention lands on the exact message.
       await openHuddleDeepLink({ crewId: entityId, roomId: opts?.roomId || null, messageId: opts?.messageId || null });
@@ -30464,6 +30465,14 @@ async function doProfilePasswordChange() {
     // data.links but already store the entity name, so rebuild the same links.
     if ((n.type === 'festival_add' || n.type === 'festival_remove') && d.festival_id && d.festival_name) {
       return [{ t: d.festival_name, k: 'rave', id: d.festival_id }];
+    }
+    // Points always land on the earner's own raver (point_events RLS is
+    // own-row-only), so the target is resolved at render time rather than
+    // stored — which links the rows written before data.links existed too.
+    if (n.type === 'points_earned' && d.track && PLUR_TRACK_META[d.track]) {
+      const you = squad.find(r => r.isYou);
+      if (you) return [{ t: `${PLUR_TRACK_META[d.track].name} points`, k: 'plur', id: you.id }];
+      return [];
     }
     if ((n.type === 'crew_add' || n.type === 'crew_remove' || n.type === 'crew_leave_request') && d.crew_id && d.crew_name) {
       const out = [];
