@@ -9283,7 +9283,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.47.0';
+  const APP_VERSION = '1.48.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -29292,7 +29292,7 @@ async function doProfilePasswordChange() {
             .select('mention_push_opt_in').eq('user_id', currentUser.id).maybeSingle();
           mentionToggle.classList.toggle('on', !!prefs?.mention_push_opt_in);
         }
-      } catch (_) {}
+      } catch (e) { console.warn('push toggle state check failed', e); }
     }
   }
 
@@ -30860,12 +30860,17 @@ async function doProfilePasswordChange() {
     if (!response) { dismissMicroFeedback(); return; }
     const { milestone, question, crewId } = card.dataset;
     card.innerHTML = `<div class="micro-feedback-thanks">🙌 noted — thanks for the intel</div>`;
+    let failed = false;
     try {
-      await sb.rpc('submit_micro_feedback', {
+      const { error } = await sb.rpc('submit_micro_feedback', {
         p_milestone: milestone, p_question: question, p_response: response, p_crew_id: crewId || null
       });
-    } catch (e) {}
-    setTimeout(() => { card.classList.remove('show'); _microFeedbackShowing = false; }, 1800);
+      if (error) { failed = true; console.warn('micro feedback submit failed', error); }
+    } catch (e) { failed = true; console.warn('micro feedback submit failed', e); }
+    if (failed) {
+      card.innerHTML = `<div class="micro-feedback-thanks">⚠️ couldn't send that — try again later</div>`;
+    }
+    setTimeout(() => { card.classList.remove('show'); _microFeedbackShowing = false; }, failed ? 2600 : 1800);
   }
 
   function dismissMicroFeedback() {
@@ -30884,9 +30889,10 @@ async function doProfilePasswordChange() {
     if (_npsSlotChecked) return;  // already asked (or dismissed) this session
     _npsSlotChecked = true;
     try {
-      const { data: eligible } = await sb.rpc('nps_eligible');
+      const { data: eligible, error } = await sb.rpc('nps_eligible');
+      if (error) console.warn('nps_eligible check failed', error);
       if (eligible === true) renderNPSPromptCard();
-    } catch (e) {}
+    } catch (e) { console.warn('nps_eligible check failed', e); }
   }
 
   function renderNPSPromptCard() {
@@ -30921,8 +30927,15 @@ async function doProfilePasswordChange() {
     const score = _npsPendingScore;
     const slot = document.getElementById('nps-prompt-slot');
     if (slot) slot.innerHTML = `<div class="nps-prompt-card nps-prompt-thanks">🙏 Thanks for the feedback!</div>`;
-    try { await sb.rpc('submit_nps_response', { p_score: score, p_comment: comment || null }); } catch (e) {}
-    setTimeout(() => { if (slot) slot.innerHTML = ''; }, 2200);
+    let failed = false;
+    try {
+      const { error } = await sb.rpc('submit_nps_response', { p_score: score, p_comment: comment || null });
+      if (error) { failed = true; console.warn('NPS submit failed', error); }
+    } catch (e) { failed = true; console.warn('NPS submit failed', e); }
+    if (failed && slot) {
+      slot.innerHTML = `<div class="nps-prompt-card nps-prompt-thanks">⚠️ couldn't send that — try again later</div>`;
+    }
+    setTimeout(() => { if (slot) slot.innerHTML = ''; }, failed ? 3000 : 2200);
   }
 
   function dismissNPSPrompt() {
