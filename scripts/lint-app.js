@@ -38,6 +38,71 @@ const HANDLER_RE = /\bon[a-z]+="([^"]*)"/gi;
 // attribute later. Same thing as far as "does this function still exist" goes.
 const HANDLER_PROP_RE = /\bon[a-z]+\s*:\s*(`[^`]*`|'[^']*')/gi;
 
+// The escaping trap this codebase has fallen into three times. An HTML
+// attribute is HTML-decoded BEFORE its JavaScript is parsed, so escHtml's
+// &#39; is a plain quote again by the time the string is read — which closes
+// the JS string early and lets whatever follows run. escHtml is an HTML-TEXT
+// escaper; a JS string needs escJsAttr (or _tagEscAttr in the tag sheet).
+// Matches an interpolation that OPENS a single-quoted string inside a handler.
+const UNSAFE_ESCAPE_RE = /('\$\{\s*)(escHtml|escapeHtml)\s*\(/g;
+// Same position, but carrying a bare identifier. Whether that is safe depends
+// on what the identifier holds, which collectJsSafeNames works out below.
+const RAW_INTERP_RE = /'\$\{\s*(?!escJsAttr|_tagEscAttr|escHtml|escapeHtml)([A-Za-z_$][\w$.?[\]]*)\s*\}'/g;
+
+/**
+ * Locals assigned nothing but escJsAttr()/_tagEscAttr() calls. Several render
+ * paths hoist an escaped id into a variable and interpolate that, which is
+ * fine — but only if every assignment escapes. A name assigned escHtml()
+ * anywhere is NOT safe here, however id-like it looks: escHtml is the wrong
+ * escaper for a JS string, and hiding it behind a variable does not change that.
+ */
+function collectJsSafeNames(code) {
+  const assigned = new Map(); // name -> Set of escaper names ('' = none)
+  const RE = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)?\s*\(?/g;
+  let m;
+  while ((m = RE.exec(code))) {
+    const [, name, callee] = m;
+    if (!assigned.has(name)) assigned.set(name, new Set());
+    assigned.get(name).add(callee || '');
+  }
+  const safe = new Set();
+  for (const [name, callees] of assigned) {
+    if (callees.size && [...callees].every(c => c === 'escJsAttr' || c === '_tagEscAttr')) safe.add(name);
+  }
+  return safe;
+}
+
+/**
+ * Every interpolation inside an inline handler that lands in a JS string
+ * without a JS-string escaper. Reported with the handler text so the fix is
+ * obvious from the console line alone.
+ */
+function collectUnsafeInterpolations(html, jsSafeNames = new Set()) {
+  const out = [];
+  HANDLER_RE.lastIndex = 0;
+  let m;
+  while ((m = HANDLER_RE.exec(html))) {
+    const body = m[1];
+    const line = html.slice(0, m.index).split('\n').length;
+    for (const re of [UNSAFE_ESCAPE_RE, RAW_INTERP_RE]) {
+      re.lastIndex = 0;
+      let hit;
+      while ((hit = re.exec(body))) {
+        const wrong = re === UNSAFE_ESCAPE_RE;
+        if (!wrong && jsSafeNames.has(hit[1])) continue;
+        out.push({
+          line,
+          detail: wrong
+            ? `${hit[2]}() escapes for HTML text, not for a JS string`
+            : `\`${hit[1]}\` reaches a JS string with no escaping`,
+          snippet: body.slice(0, 90),
+        });
+      }
+    }
+  }
+  return out;
+}
+
 // Globals the page gets from the CDN <script> tags in <head>, plus the ones
 // loaded on demand (see loadJsQR / loadLeaflet / maybeInitEruda in app.html).
 // Callable browser globals that can legitimately appear in an attribute.
@@ -303,9 +368,18 @@ async function lintFile(file) {
     }
   }
 
-  const total = errors.length + deadHandlers;
+  // The other check ESLint can't do. Two live cross-user XSS holes in this file
+  // came from exactly this shape, so it is an error, not a warning.
+  let unsafeInterps = 0;
+  for (const { line, detail, snippet } of collectUnsafeInterpolations(scanHtml, collectJsSafeNames(code))) {
+    unsafeInterps++;
+    console.log(`${file}:${line}  error  ${detail} — use escJsAttr: ${snippet}  unsafe-handler-interpolation`);
+  }
+
+  const total = errors.length + deadHandlers + unsafeInterps;
   console.log(`\n${file}: ${total} error(s), ${warnings.length} warning(s)` +
-    (deadHandlers ? ` — ${deadHandlers} dead inline handler(s)` : ''));
+    (deadHandlers ? ` — ${deadHandlers} dead inline handler(s)` : '') +
+    (unsafeInterps ? ` — ${unsafeInterps} unsafely interpolated handler(s)` : ''));
   return total;
 }
 
