@@ -1379,6 +1379,19 @@
   /* Touch targets for interactive chips */
   .vibe-preset { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; }
   .genre-preset { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; }
+  /* Both are <button> so they take focus and fire on Enter/Space; the rules
+     above already set font, border, background and padding, so only the
+     browser's own button defaults need clearing. */
+  .vibe-preset, .genre-preset { margin: 0; text-align: center; -webkit-appearance: none; appearance: none; }
+  /* Same reason: these are controls, so they're <button> and need the browser's
+     own button defaults cleared. Each class already sets its own background,
+     border, padding and font. */
+  .poll-modal-type-card, .fest-quick-chip, .totem-icon-swatch, .crew-add-card,
+  .plur-ledger-toggle, .stats-pill {
+    font: inherit; color: inherit; margin: 0; text-align: inherit;
+    -webkit-appearance: none; appearance: none;
+  }
+  .poll-modal-type-card, .crew-add-card, .plur-ledger-toggle { width: 100%; display: block; }
   .fest-check { min-height: 44px; }
   @media (max-width: 480px) {
     .profile-hero.edit-mode { flex-direction: column; text-align: center; }
@@ -8172,10 +8185,10 @@
       </div>
       <div class="crew-grid" id="crew-grid">
         <!-- Crew cards rendered by JS -->
-        <div class="crew-add-card" onclick="openModal()">
+        <button type="button" class="crew-add-card" onclick="openModal()">
           <div class="add-icon">＋</div>
           <div class="add-label">Start Your Crew Free</div>
-        </div>
+        </button>
       </div>
     </div>
 
@@ -9247,7 +9260,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.43.0';
+  const APP_VERSION = '1.44.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -11544,7 +11557,7 @@ async function doProfilePasswordChange() {
     const unity   = totals.unity_points   || 0;
     const respect = totals.respect_points || 0;
     return `
-      <div class="plur-bar-section" onclick="openPlurInfo('${raverId}')">
+      <button type="button" class="plur-bar-section" onclick="openPlurInfo('${raverId}')" aria-label="What are PLUR points?">
         <span class="plur-bar-label">✨ PLUR</span>
         <span class="plur-bar-total">${total}</span>
         <div class="plur-bar-divider"></div>
@@ -11555,7 +11568,7 @@ async function doProfilePasswordChange() {
           <span class="plur-bar-emoji-item">🙏 ${respect}</span>
         </div>
         <span class="plur-bar-arrow">›</span>
-      </div>`;
+      </button>`;
   }
 
   const PLUR_TRACK_META = {
@@ -11604,20 +11617,20 @@ async function doProfilePasswordChange() {
     }).join('');
 
     const ledgerBlock = isOwn ? `
-      <div class="plur-ledger-toggle plur-milestones-link" onclick="openPlurMilestones('${raverId}')">
+      <button type="button" class="plur-ledger-toggle plur-milestones-link" onclick="openPlurMilestones('${raverId}')">
         <div>
           <div class="plur-ledger-toggle-text">🏅 See your milestones</div>
           <div class="plur-ledger-toggle-sub">Cosmetic tiers for each track</div>
         </div>
         <div>→</div>
-      </div>
-      <div class="plur-ledger-toggle" onclick="togglePlurLedger('${raverId}')">
+      </button>
+      <button type="button" class="plur-ledger-toggle" onclick="togglePlurLedger('${raverId}')">
         <div>
           <div class="plur-ledger-toggle-text">See your full activity log</div>
           <div class="plur-ledger-toggle-sub" id="plur-ledger-sub">Every point you've earned, in order</div>
         </div>
         <div>→</div>
-      </div>
+      </button>
       <div id="plur-ledger-list" class="plur-ledger-list" style="display:none;"></div>
     ` : '';
 
@@ -20529,27 +20542,27 @@ async function doProfilePasswordChange() {
       <div class="modal-title" style="margin-bottom:4px;">🗳️ Drop a Poll</div>
       <p style="font-size:0.8rem;color:var(--muted);margin-bottom:0;">What does the crew need to decide?</p>
       <div class="poll-modal-type-picker" id="poll-type-picker">
-        <div class="poll-modal-type-card" id="poll-type-choice" onclick="selectPollType('choice')">
+        <button type="button" class="poll-modal-type-card" id="poll-type-choice" onclick="selectPollType('choice')">
           <span class="poll-modal-type-icon">🗂️</span>
           <div class="poll-modal-type-text">
             <span class="poll-modal-type-name">Multiple Choice</span>
             <span class="poll-modal-type-desc">2–4 options, one tap to vote</span>
           </div>
-        </div>
-        <div class="poll-modal-type-card" id="poll-type-yes_no" onclick="selectPollType('yes_no')">
+        </button>
+        <button type="button" class="poll-modal-type-card" id="poll-type-yes_no" onclick="selectPollType('yes_no')">
           <span class="poll-modal-type-icon">✅</span>
           <div class="poll-modal-type-text">
             <span class="poll-modal-type-name">Yes / No + Vibe Check</span>
             <span class="poll-modal-type-desc">Quick answer with emoji energy</span>
           </div>
-        </div>
-        <div class="poll-modal-type-card" id="poll-type-rating" onclick="selectPollType('rating')">
+        </button>
+        <button type="button" class="poll-modal-type-card" id="poll-type-rating" onclick="selectPollType('rating')">
           <span class="poll-modal-type-icon">⭐</span>
           <div class="poll-modal-type-text">
             <span class="poll-modal-type-name">Rate This</span>
             <span class="poll-modal-type-desc">1–5 stars, no debate needed</span>
           </div>
-        </div>
+        </button>
       </div>
       <div id="poll-modal-step2" style="display:none">
         <div class="form-group" style="margin-bottom:8px;">
@@ -26086,7 +26099,7 @@ async function doProfilePasswordChange() {
       ? upcoming.map(f => {
           const isPicked = editingFestIds.has(f.id) || [...editingFestIds].some(id => String(id) === String(f.id));
           const when = `${f._d.getDate()} ${MON_SHORT[f._d.getMonth()]}`;
-          return `<span class="fest-quick-chip${isPicked ? ' picked' : ''}" data-fid="${f.id}" onclick="festToggleQuick('${f.id}',this)">${escHtml(f.name)}<span class="fest-quick-date">${when}</span></span>`;
+          return `<button type="button" class="fest-quick-chip${isPicked ? ' picked' : ''}" data-fid="${f.id}" aria-pressed="${isPicked ? 'true' : 'false'}" onclick="festToggleQuick('${f.id}',this)">${escHtml(f.name)}<span class="fest-quick-date">${when}</span></button>`;
         }).join('')
       : `<span class="fest-empty" style="font-size:0.78rem;">No upcoming raves in catalog yet</span>`;
 
@@ -26441,7 +26454,7 @@ async function doProfilePasswordChange() {
     const upHtml = upcoming.length
       ? upcoming.map(f => {
           const when = `${f._d.getDate()} ${MON_SHORT[f._d.getMonth()]}`;
-          return `<span class="fest-quick-chip" data-fid="${f.id}" onclick="ifpAdd('${raverId}','${f.id}')">${escHtml(f.name)}<span class="fest-quick-date">${when}</span></span>`;
+          return `<button type="button" class="fest-quick-chip" data-fid="${f.id}" onclick="ifpAdd('${raverId}','${f.id}')">${escHtml(f.name)}<span class="fest-quick-date">${when}</span></button>`;
         }).join('')
       : `<span class="fest-empty" style="font-size:0.78rem;">All upcoming raves already added</span>`;
 
@@ -26786,9 +26799,9 @@ async function doProfilePasswordChange() {
           const style = isPicked
             ? `border-color:${p.color};background:rgba(255,255,255,0.08);color:${p.color};box-shadow:0 0 14px -4px ${p.color};`
             : `color:${p.color};`;
-          return `<span class="vibe-preset${isPicked ? ' picked' : ''}${hiddenCls}" style="${style}" onclick="tagToggle('${kind}','${_tagEscAttr(p.id)}')"><span class="vt-icon">${p.icon}</span>${labelHtml}</span>`;
+          return `<button type="button" class="vibe-preset${isPicked ? ' picked' : ''}${hiddenCls}" style="${style}" aria-pressed="${isPicked ? 'true' : 'false'}" onclick="tagToggle('${kind}','${_tagEscAttr(p.id)}')"><span class="vt-icon">${p.icon}</span>${labelHtml}</button>`;
         }
-        return `<span class="genre-preset${isPicked ? ' picked' : ''}${hiddenCls}" style="--chip-col:${p.color};" tabindex="0" role="button" aria-pressed="${isPicked ? 'true' : 'false'}" onclick="tagToggle('${kind}','${_tagEscAttr(p.id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tagToggle('${kind}','${_tagEscAttr(p.id)}');}">${labelHtml}</span>`;
+        return `<button type="button" class="genre-preset${isPicked ? ' picked' : ''}${hiddenCls}" style="--chip-col:${p.color};" aria-pressed="${isPicked ? 'true' : 'false'}" onclick="tagToggle('${kind}','${_tagEscAttr(p.id)}')">${labelHtml}</button>`;
       }).join('');
       return `<div class="tag-accordion${isOpen ? ' open' : ''}" data-cat="${c.id}">
         <button type="button" class="tag-acc-header" aria-expanded="${isOpen ? 'true' : 'false'}" onclick="toggleTagAccordionSection('${kind}','${c.id}')">
@@ -29020,8 +29033,8 @@ async function doProfilePasswordChange() {
     const accordion = VIBE_CATEGORIES.map(c => {
       const chips = VIBE_PRESETS.filter(p => p.cat === c.id).map(p => {
         const has = already.has(p.id);
-        return `<span class="vibe-preset${has ? ' picked' : ''}" style="color:${p.color};${has ? 'opacity:.4;pointer-events:none;' : ''}"
-                  onclick="${has ? '' : `submitSuggestedVibeTag('${p.id}')`}"><span class="vt-icon">${p.icon}</span>${escHtml(p.label)}</span>`;
+        return `<button type="button" class="vibe-preset${has ? ' picked' : ''}" style="color:${p.color};${has ? 'opacity:.4;' : ''}"
+                  ${has ? 'disabled aria-label="Already suggested"' : `onclick="submitSuggestedVibeTag('${p.id}')"`}><span class="vt-icon">${p.icon}</span>${escHtml(p.label)}</button>`;
       }).join('');
       return `<div class="tag-acc-title" style="margin-top:10px;">${c.label}</div><div class="tag-acc-body-inner">${chips}</div>`;
     }).join('');
@@ -31017,7 +31030,7 @@ async function doProfilePasswordChange() {
             <div class="stats-personality-sub">${escHtml(personality.sub || '')}</div>
           </div>
         </div>
-        ${genres.length ? `<div style="margin-top:12px;margin-bottom:3px;font-size:0.67rem;color:var(--muted);font-family:'Outfit',sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Genres</div><div>${genres.map(g => `<span class="stats-pill" style="cursor:pointer;" onclick="openArtistsSeenPage('${g.replace(/'/g, "\\'")}')" title="See artists you've seen live in ${escHtml(g)}">${escHtml(g)}</span>`).join('')}</div>` : ''}
+        ${genres.length ? `<div style="margin-top:12px;margin-bottom:3px;font-size:0.67rem;color:var(--muted);font-family:'Outfit',sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Genres</div><div>${genres.map(g => `<button type="button" class="stats-pill" style="cursor:pointer;" onclick="openArtistsSeenPage('${escJsAttr(g)}')" title="See artists you've seen live in ${escHtml(g)}">${escHtml(g)}</button>`).join('')}</div>` : ''}
         ${topTags.length ? `<div style="margin-top:9px;margin-bottom:3px;font-size:0.67rem;color:var(--muted);font-family:'Outfit',sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Your Vibes</div><div>${topTags.map(t => { const p = getPreset(t); return `<span class="stats-pill cyan">${escHtml(p ? `${p.icon} ${p.label}` : t)}</span>`; }).join('')}</div>` : ''}
         ${topEmoji ? `<div style="margin-top:9px;margin-bottom:4px;font-size:0.67rem;color:var(--muted);font-family:'Outfit',sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Signature Emoji</div><span style="font-size:1.9rem;">${topEmoji}</span>` : ''}
       </div>`;
@@ -32327,7 +32340,7 @@ async function doProfilePasswordChange() {
       <div class="stats-section-card">
         <div class="stats-section-title">🧬 Genre Breakdown</div>
         ${statsChartOrFallback('artists-genre-chart', statBarRows(genreRows.map(([g, c]) => ({ label: g, count: c })), genreRows[0][1]), Math.max(140, genreRows.length * 34))}
-        <div style="margin-top:10px;">${genreRows.map(([g, c]) => `<span class="stats-pill cyan${g === filter ? ' active' : ''}" style="cursor:pointer;" onclick="openArtistsSeenPage('${g.replace(/'/g, "\\'")}')" title="Filter to ${escHtml(g)} artists">${escHtml(g)} · ${c}</span>`).join('')}</div>
+        <div style="margin-top:10px;">${genreRows.map(([g, c]) => `<button type="button" class="stats-pill cyan${g === filter ? ' active' : ''}" style="cursor:pointer;" onclick="openArtistsSeenPage('${escJsAttr(g)}')" title="Filter to ${escHtml(g)} artists">${escHtml(g)} · ${c}</button>`).join('')}</div>
       </div>` : ''}
       <div class="stats-section-card">
         <div class="stats-section-title">🎧 Full List</div>
