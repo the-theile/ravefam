@@ -2738,6 +2738,10 @@
   }
   .color-swatch:hover { transform: scale(1.15); }
   .color-swatch.selected { border-color: #fff; transform: scale(1.15); }
+  /* Swatches are <button> so they take focus and fire on Enter/Space;
+     these resets keep them rendering exactly as the <div>s they replaced. */
+  .color-swatch { padding: 0; margin: 0; font: inherit; -webkit-appearance: none; appearance: none; }
+  .color-swatch[disabled] { pointer-events: none; opacity: 0.6; }
 
   .modal-actions { display: flex; gap: 10px; margin-top: 24px; }
   .modal-actions .btn { flex: 1; padding: 12px; font-size: 0.85rem; }
@@ -4893,7 +4897,9 @@
     border: 1px solid rgba(191,0,255,0.35); color: #d67fff;
     font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.72rem;
   }
-  .vibe-chip-remove { cursor: pointer; font-size: 0.8rem; opacity: 0.7; transition: opacity 0.15s; }
+  .vibe-chip-remove { cursor: pointer; font-size: 0.8rem; opacity: 0.7; transition: opacity 0.15s;
+    background: none; border: 0; padding: 0; margin: 0; font-family: inherit; color: inherit;
+    line-height: inherit; -webkit-appearance: none; appearance: none; }
   .vibe-chip-remove:hover { opacity: 1; }
 
   .member-vibes { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; margin-top: 8px; }
@@ -8334,18 +8340,18 @@
     <div class="form-group">
       <label class="form-label">Crew Color</label>
       <div class="color-swatches">
-        <div class="color-swatch selected" style="background:#FF2D78" onclick="selectSwatch(this)"></div>
-        <div class="color-swatch" style="background:#FF0099" onclick="selectSwatch(this)"></div>
-        <div class="color-swatch" style="background:#FF4040" onclick="selectSwatch(this)"></div>
-        <div class="color-swatch" style="background:#FF6B35" onclick="selectSwatch(this)"></div>
-        <div class="color-swatch" style="background:#FFCC00" onclick="selectSwatch(this)"></div>
-        <div class="color-swatch" style="background:#FFE600" onclick="selectSwatch(this)"></div>
-        <div class="color-swatch" style="background:#39FF14" onclick="selectSwatch(this)"></div>
-        <div class="color-swatch" style="background:#00FFCC" onclick="selectSwatch(this)"></div>
-        <div class="color-swatch" style="background:#00F5FF" onclick="selectSwatch(this)"></div>
-        <div class="color-swatch" style="background:#0066FF" onclick="selectSwatch(this)"></div>
-        <div class="color-swatch" style="background:#BF00FF" onclick="selectSwatch(this)"></div>
-        <div class="color-swatch" style="background:#FF00CC" onclick="selectSwatch(this)"></div>
+        <button type="button" class="color-swatch selected" style="background:#FF2D78" aria-label="Neon pink" aria-pressed="true" onclick="selectSwatch(this)"></button>
+        <button type="button" class="color-swatch" style="background:#FF0099" aria-label="Magenta" aria-pressed="false" onclick="selectSwatch(this)"></button>
+        <button type="button" class="color-swatch" style="background:#FF4040" aria-label="Red" aria-pressed="false" onclick="selectSwatch(this)"></button>
+        <button type="button" class="color-swatch" style="background:#FF6B35" aria-label="Orange" aria-pressed="false" onclick="selectSwatch(this)"></button>
+        <button type="button" class="color-swatch" style="background:#FFCC00" aria-label="Amber" aria-pressed="false" onclick="selectSwatch(this)"></button>
+        <button type="button" class="color-swatch" style="background:#FFE600" aria-label="Neon yellow" aria-pressed="false" onclick="selectSwatch(this)"></button>
+        <button type="button" class="color-swatch" style="background:#39FF14" aria-label="Neon green" aria-pressed="false" onclick="selectSwatch(this)"></button>
+        <button type="button" class="color-swatch" style="background:#00FFCC" aria-label="Turquoise" aria-pressed="false" onclick="selectSwatch(this)"></button>
+        <button type="button" class="color-swatch" style="background:#00F5FF" aria-label="Neon cyan" aria-pressed="false" onclick="selectSwatch(this)"></button>
+        <button type="button" class="color-swatch" style="background:#0066FF" aria-label="Blue" aria-pressed="false" onclick="selectSwatch(this)"></button>
+        <button type="button" class="color-swatch" style="background:#BF00FF" aria-label="Neon purple" aria-pressed="false" onclick="selectSwatch(this)"></button>
+        <button type="button" class="color-swatch" style="background:#FF00CC" aria-label="Hot pink" aria-pressed="false" onclick="selectSwatch(this)"></button>
       </div>
     </div>
     <div class="form-group">
@@ -9241,7 +9247,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.42.0';
+  const APP_VERSION = '1.43.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -12761,7 +12767,7 @@ async function doProfilePasswordChange() {
     _colorPickerRaverId = raverId;
     const currentHex = extractFirstColor(r.gradient);
     document.getElementById('raver-color-swatches').innerHTML = EDIT_SWATCH_COLORS.map(c =>
-      `<div class="color-swatch raver-color-swatch${c.toLowerCase() === (currentHex||'').toLowerCase() ? ' selected' : ''}" style="background:${c}" onclick="selectRaverColorSwatch(this)"></div>`
+      `<button type="button" class="color-swatch raver-color-swatch${c.toLowerCase() === (currentHex||'').toLowerCase() ? ' selected' : ''}" style="background:${c}" aria-label="${escHtml(colourName(c))}" aria-pressed="${c.toLowerCase() === (currentHex||'').toLowerCase()}" onclick="selectRaverColorSwatch(this)"></button>`
     ).join('');
     document.getElementById('raver-color-overlay').classList.add('open');
   }
@@ -12774,6 +12780,7 @@ async function doProfilePasswordChange() {
   function selectRaverColorSwatch(el) {
     document.querySelectorAll('#raver-color-swatches .raver-color-swatch').forEach(s => s.classList.remove('selected'));
     el.classList.add('selected');
+    syncSwatchPressed(document.getElementById('raver-color-swatches'));
   }
 
   async function saveRaverColor() {
@@ -13970,9 +13977,18 @@ async function doProfilePasswordChange() {
     if (e.target === document.getElementById('modal-overlay')) closeModal();
   }
 
+  // Keeps aria-pressed in step with .selected — a control that looks chosen but
+  // reports unpressed is worse than no state at all.
+  function syncSwatchPressed(root) {
+    (root || document).querySelectorAll('.color-swatch').forEach(s => {
+      if (s.hasAttribute('aria-pressed')) s.setAttribute('aria-pressed', String(s.classList.contains('selected')));
+    });
+  }
+
   function selectSwatch(el) {
     document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
     el.classList.add('selected');
+    syncSwatchPressed();
   }
 
   // ===== Crew data model =====
@@ -15616,7 +15632,7 @@ async function doProfilePasswordChange() {
     ).join('');
     const exactMatch = lower && (already.has(lower) || allGenres.includes(lower));
     const addNewHtml = query && !exactMatch
-      ? `<div class="fest-search-item" onmousedown="modGenrePick(${artistId},'${query.replace(/'/g,"\\'")}')">
+      ? `<div class="fest-search-item" onmousedown="modGenrePick(${artistId},'${escJsAttr(query)}')">
           <span class="fest-search-name">+ Add "${escHtml(query)}" as new genre</span>
         </div>`
       : '';
@@ -17292,11 +17308,11 @@ async function doProfilePasswordChange() {
           const pinAvatarUrl = senderRaver?.avatarUrl || null;
           const pinGradient = senderRaver?.gradient || 'linear-gradient(135deg,#FF2D78,#00F5FF)';
           const openArgs = [
-            `'${pinFestival.mapUrl.replace(/'/g,"\\'")}'`,
+            `'${escJsAttr(pinFestival.mapUrl)}'`,
             m.pin_x, m.pin_y,
-            pinAvatarUrl ? `'${pinAvatarUrl.replace(/'/g,"\\'")}'` : 'null',
-            `'${pinGradient.replace(/'/g,"\\'")}'`,
-            `'${senderName.replace(/'/g,"\\'")}'`,
+            pinAvatarUrl ? `'${escJsAttr(pinAvatarUrl)}'` : 'null',
+            `'${escJsAttr(pinGradient)}'`,
+            `'${escJsAttr(senderName)}'`,
             `'${m.id}'`,
             m.sender_id ? `'${m.sender_id}'` : 'null',
             m.meetup_status ? `'${m.meetup_status}'` : 'null'
@@ -24074,7 +24090,7 @@ async function doProfilePasswordChange() {
         ? `<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><polyline points="1.5,6.5 4.5,9.5 10.5,2.5" stroke="#000" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
         : '';
       return `
-        <div class="crew-pick-item${sel ? ' selected' : ''}" onclick="toggleCrewPick('${String(c.id).replace(/'/g,"\\'")}')">
+        <div class="crew-pick-item${sel ? ' selected' : ''}" onclick="toggleCrewPick('${escJsAttr(c.id)}')">
           <div class="crew-pick-dot" style="background:${safeColor(c.color)}"></div>
           <div class="crew-pick-info">
             <div class="crew-pick-name">${escHtml(c.name)}</div>
@@ -24243,12 +24259,26 @@ async function doProfilePasswordChange() {
   let _editingCrewId = null;
   const EDIT_SWATCH_COLORS = ['#FF2D78','#FF0099','#FF4040','#FF6B35','#FFCC00','#FFE600','#39FF14','#00FFCC','#00F5FF','#0066FF','#BF00FF','#FF00CC'];
 
+  // A hex is not an accessible name. Five of these already have names in the
+  // app's own CSS variables (--neon-pink, --neon-cyan, …); the rest follow the
+  // same vocabulary. colourName() falls back to the hex for anything unlisted.
+  const COLOR_NAMES = {
+    '#ff2d78': 'Neon pink', '#ff0099': 'Magenta',    '#ff4040': 'Red',
+    '#ff6b35': 'Orange',    '#ffcc00': 'Amber',      '#ffe600': 'Neon yellow',
+    '#39ff14': 'Neon green','#00ffcc': 'Turquoise',  '#00f5ff': 'Neon cyan',
+    '#0066ff': 'Blue',      '#bf00ff': 'Neon purple','#ff00cc': 'Hot pink',
+    '#5b6eff': 'Indigo',    '#ff8a3d': 'Tangerine',
+  };
+  function colourName(hex) {
+    return COLOR_NAMES[String(hex || '').toLowerCase()] || String(hex || '');
+  }
+
   function showCrewEditModal(id) {
     const crew = getCrew(id);
     if (!crew || !crew.isLead) return;
     _editingCrewId = id;
     const swatches = EDIT_SWATCH_COLORS.map(c =>
-      `<div class="crew-edit-swatch color-swatch${c.toLowerCase() === (crew.color||'').toLowerCase() ? ' selected' : ''}" style="background:${c}" onclick="selectCrewEditSwatch(this)"></div>`
+      `<button type="button" class="crew-edit-swatch color-swatch${c.toLowerCase() === (crew.color||'').toLowerCase() ? ' selected' : ''}" style="background:${c}" aria-label="${escHtml(colourName(c))}" aria-pressed="${c.toLowerCase() === (crew.color||'').toLowerCase()}" onclick="selectCrewEditSwatch(this)"></button>`
     ).join('');
     document.getElementById('crew-edit-modal-content').innerHTML = `
       <div class="modal-title">Edit Crew</div>
@@ -24285,6 +24315,7 @@ async function doProfilePasswordChange() {
   function selectCrewEditSwatch(el) {
     document.querySelectorAll('#crew-edit-modal-content .crew-edit-swatch').forEach(s => s.classList.remove('selected'));
     el.classList.add('selected');
+    syncSwatchPressed(document.getElementById('crew-edit-modal-content'));
   }
 
   function saveCrewEdit() {
@@ -24619,11 +24650,20 @@ async function doProfilePasswordChange() {
   function vibeTagHTML(vtId, isCustom, mini, removableRaverId, ownerRaverId) {
     const cls = `vibe-display-tag ${isCustom ? 'is-custom' : 'is-preset'}${mini ? ' vibe-mini' : ''}`;
     const field = isCustom ? 'customVibeTags' : 'vibeTags';
+    // For a custom tag, vtId IS the user's own text — and crewmates can tag each
+    // other — so it used to reach a crewmate's browser inside a JS string in an
+    // onclick, escaped for apostrophes only. A quote broke out of the attribute.
+    // The id travels as a data attribute now (escHtml is correct there) and a
+    // delegated handler reads it back; nothing is generated as code.
+    const label = isCustom ? vtId : (getPreset(vtId)?.label || vtId);
+    const dataFor = (raverId) =>
+      `data-raver="${escHtml(String(raverId))}" data-field="${escHtml(field)}" ` +
+      `data-tag="${escHtml(vtId)}" data-custom="${!!isCustom}"`;
     const removeBtn = removableRaverId
-      ? ` <span class="vibe-chip-remove" onclick="removeTag('${removableRaverId}','${field}','${vtId.replace(/'/g,"\\'")}')">✕</span>`
+      ? ` <button type="button" class="vibe-chip-remove" data-act="vibe-remove" ${dataFor(removableRaverId)} aria-label="Remove tag ${escHtml(label)}">✕</button>`
       : '';
     const reportBtn = (!removeBtn && ownerRaverId)
-      ? ` <span class="vibe-chip-remove" title="Report this tag" onclick="showReportModal('vibe_tag','${ownerRaverId}',{metadata:{tag:'${vtId.replace(/'/g,"\\'")}', is_custom:${!!isCustom}}})">🚩</span>`
+      ? ` <button type="button" class="vibe-chip-remove" data-act="vibe-report" ${dataFor(ownerRaverId)} title="Report this tag" aria-label="Report tag ${escHtml(label)}">🚩</button>`
       : '';
     if (isCustom) return `<span class="${cls}">${escHtml(vtId)}${removeBtn}${reportBtn}</span>`;
     const p = getPreset(vtId);
@@ -24748,6 +24788,19 @@ async function doProfilePasswordChange() {
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
       .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   }
+  // Escaping a value that lands inside a JS string inside an HTML attribute —
+  // onclick="fn('HERE')" — which escHtml does NOT do: an attribute is
+  // HTML-decoded before its JS is parsed, so escHtml's &#39; becomes a quote
+  // again and closes the string. Backslash first, then the quote that delimits
+  // the JS string, then the quote that delimits the attribute.
+  //
+  // Values that can be passed as data attributes should be; this is for the
+  // inline handlers that haven't been converted yet.
+  function escJsAttr(s) {
+    return String(s == null ? '' : s)
+      .replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+  }
+
   function safeColor(v, fallback = '#FF2D78') {
     return /^#[0-9A-Fa-f]{3,6}$/.test(v) ? v : fallback;
   }
@@ -24970,7 +25023,7 @@ async function doProfilePasswordChange() {
         if (!artist) return '';
         const canEdit = editMode && (r.isYou || perms.editArtists);
         const onRemove = canEdit
-          ? `showConfirm('Remove tag?','Remove \'${artist.name.replace(/'/g,"\\'")}\'?','Remove',()=>removeTag('${r.id}','favArtists','${artist.id}'))`
+          ? `showConfirm('Remove tag?','Remove \u201C${escJsAttr(artist.name)}\u201D?','Remove',()=>removeTag('${r.id}','favArtists','${artist.id}'))`
           : null;
         return favArtistChipHTML(artist, canEdit ? { onRemove } : null);
       }
@@ -24980,7 +25033,7 @@ async function doProfilePasswordChange() {
         const canEdit = r.isYou || perms.editGenres;
         if (canEdit) {
           return `<span class="fav-chip tag-removable" style="${cs}">${escHtml(val)}<button class="tag-remove-btn" title="Remove ${escHtml(val)}" aria-label="Remove ${escHtml(val)}"
-            onclick="showConfirm('Remove tag?','Remove \'${val.replace(/'/g,"\\'")}\'?','Remove',()=>removeTag('${r.id}','${field}','${val.replace(/'/g,"\\'")}'))">&nbsp;✕</button></span>`;
+            onclick="showConfirm('Remove tag?','Remove \u201C${escJsAttr(val)}\u201D?','Remove',()=>removeTag('${r.id}','${field}','${escJsAttr(val)}'))">&nbsp;✕</button></span>`;
         }
       }
       return `<span class="fav-chip" style="${cs}">${escHtml(val)}</span>`;
@@ -25694,7 +25747,7 @@ async function doProfilePasswordChange() {
     ).join('');
     const exactMatch = query && artists.some(a => a.name.toLowerCase() === query.toLowerCase());
     const addNewHtml = query && !exactMatch
-      ? `<div class="fest-search-item" onmousedown="lineupAddNewArtistFromSearch('${festId}','${query.replace(/'/g,"\\'")}')">
+      ? `<div class="fest-search-item" onmousedown="lineupAddNewArtistFromSearch('${festId}','${escJsAttr(query)}')">
           <span class="fest-search-name">+ Add "${escHtml(query)}" as new artist</span>
         </div>`
       : '';
@@ -25758,7 +25811,7 @@ async function doProfilePasswordChange() {
     ).join('');
     const exactMatch = query && venues.some(v => v.name.toLowerCase() === lower);
     const addNewHtml = query && !exactMatch
-      ? `<div class="fest-search-item" onmousedown="addNewVenueFromSearch('${query.replace(/'/g,"\\'")}')">
+      ? `<div class="fest-search-item" onmousedown="addNewVenueFromSearch('${escJsAttr(query)}')">
           <span class="fest-search-name">+ Add "${escHtml(query)}" as new venue</span>
         </div>`
       : '';
@@ -26100,7 +26153,7 @@ async function doProfilePasswordChange() {
     ).join('');
     const exactMatch = query && artists.some(a => a.name.toLowerCase() === query.toLowerCase());
     const addNewHtml = query && !exactMatch
-      ? `<div class="fest-search-item" onmousedown="addNewArtistFromSearch('${query.replace(/'/g,"\\'")}')">
+      ? `<div class="fest-search-item" onmousedown="addNewArtistFromSearch('${escJsAttr(query)}')">
           <span class="fest-search-name">+ Add "${escHtml(query)}" as new artist</span>
         </div>`
       : '';
@@ -26593,9 +26646,8 @@ async function doProfilePasswordChange() {
     return _tagOpenState[kind];
   }
 
-  function _tagEscAttr(s) {
-    return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-  }
+  // Kept as the tag sheet's local name for escJsAttr (defined next to escHtml).
+  const _tagEscAttr = escJsAttr;
 
   function _tagHighlight(label, term) {
     if (!term) return escHtml(label);
@@ -26821,7 +26873,7 @@ async function doProfilePasswordChange() {
     const box = document.getElementById('tag-sheet-custom-chips');
     if (!box) return;
     box.innerHTML = cfg.editingCustom().map((t, i) =>
-      `<span class="vibe-custom-chip">${escHtml(t)} <span class="vibe-chip-remove" onclick="tagRemoveCustom('${kind}', ${i})">✕</span></span>`
+      `<span class="vibe-custom-chip">${escHtml(t)} <button type="button" class="vibe-chip-remove" onclick="tagRemoveCustom('${kind}', ${i})" aria-label="Remove ${escHtml(t)}">✕</button></span>`
     ).join('');
     const capEl = document.getElementById('tag-sheet-cap-note');
     if (capEl) capEl.textContent = Number.isFinite(cfg.maxCustom)
@@ -27649,7 +27701,7 @@ async function doProfilePasswordChange() {
       if (dateBit) metaBits.push(`<span>${escHtml(dateBit)}</span>`);
       const venueLine = venue ? `<div class="marquee-meta marquee-venue-line">🏛️ ${escHtml(venue.name)}</div>` : '';
       const weatherChip = weatherChipHTML(f, weatherCache);
-      const mapUrlJs = String(f.mapUrl || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      const mapUrlJs = escJsAttr(f.mapUrl || '');
       const mapBtn = f.mapUrl
         ? `<button class="map-pill" onclick="event.stopPropagation(); openMapPinLightbox('${mapUrlJs}', null, null, null, null, null, null, null, null)">🗺️ View Map</button>`
         : '';
@@ -27993,6 +28045,7 @@ async function doProfilePasswordChange() {
     document.querySelectorAll('#fe-color-grid .color-swatch').forEach(s =>
       s.classList.toggle('selected', s.dataset.color === color)
     );
+    syncSwatchPressed(document.getElementById('fe-color-grid'));
   }
 
   // Moderator-only: uploads a static map image for a festival so crew can
@@ -28115,7 +28168,7 @@ async function doProfilePasswordChange() {
     const lineupBtn = lineupUrl
       ? `<a class="lineup-explorer-btn" href="${lineupUrl}" target="_blank" rel="noopener">🔭 Lineup Explorer</a>`
       : '';
-    const mapUrlJs = String(f.mapUrl || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const mapUrlJs = escJsAttr(f.mapUrl || '');
     const mapBtn = f.mapUrl
       ? `<button class="map-pill" onclick="openMapPinLightbox('${mapUrlJs}', null, null, null, null, null, null, null, null)">🗺️ View Map</button>`
       : '';
@@ -28219,7 +28272,7 @@ async function doProfilePasswordChange() {
     editRaveLastLocation = { location: f?.location || '', lat: f?.lat ?? null, lng: f?.lng ?? null };
     editRaveColor = f?.color || festColor(f || { id: 'new' });
     const swatchHtml = CARD_PALETTE.map(c =>
-      `<div class="color-swatch${c === editRaveColor ? ' selected' : ''}" data-color="${c}" style="background:${c};" ${canEditFest ? `onclick="pickRaveColor('${c}')"` : 'style="pointer-events:none;opacity:0.6;"'}></div>`
+      `<button type="button" class="color-swatch${c === editRaveColor ? ' selected' : ''}" data-color="${c}" style="background:${c};" aria-label="${escHtml(colourName(c))}" aria-pressed="${c === editRaveColor}" ${canEditFest ? `onclick="pickRaveColor('${c}')"` : 'disabled'}></button>`
     ).join('');
     // Footer: primary row (Cancel + Save) stays visible; less-common actions
     // (History, Unarchive, Delete, Report) tuck behind a kebab menu so the
@@ -29599,6 +29652,36 @@ async function doProfilePasswordChange() {
     roots.forEach(el => obs.observe(el, { attributes: true, attributeFilter: ['class', 'style'] }));
     syncOverlayInert();
   })();
+
+  // Vibe-tag chip actions, read back from data attributes rather than generated
+  // as code in an onclick — see vibeTagHTML.
+  document.addEventListener('click', (e) => {
+    const btn = e.target && e.target.closest && e.target.closest('[data-act="vibe-remove"],[data-act="vibe-report"]');
+    if (!btn) return;
+    const { act, raver, field, tag, custom } = btn.dataset;
+    if (act === 'vibe-remove') removeTag(raver, field, tag);
+    else showReportModal('vibe_tag', raver, { metadata: { tag, is_custom: custom === 'true' } });
+  });
+
+  // ===== KEYBOARD ACTIVATION FOR role="button" =====
+  // An element with role="button" is announced as a button, so a keyboard or
+  // screen-reader user expects Enter and Space to work — but on a div they do
+  // nothing unless something wires them. Seven of these carry their own
+  // onkeydown; the rest were focusable, announced, and inert, which is worse
+  // than an unlabelled div because the user is told it should work.
+  //
+  // Elements that handle their own keys are skipped rather than double-fired,
+  // and native controls are left alone — they already do this themselves.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const el = e.target;
+    if (!el || typeof el.getAttribute !== 'function') return;
+    if (el.getAttribute('role') !== 'button') return;
+    if (el.hasAttribute('onkeydown') || el.hasAttribute('disabled')) return;
+    if (el.tagName === 'BUTTON' || el.tagName === 'A' || el.tagName === 'INPUT') return;
+    e.preventDefault();
+    el.click();
+  });
 
   // ===== COACHMARKS =====
   // Lightweight "first time you hit this feature" tips — distinct from the
