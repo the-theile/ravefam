@@ -9283,7 +9283,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.48.0';
+  const APP_VERSION = '1.48.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -9477,6 +9477,18 @@
     return uid ? squad.find(r => r.claimedBy === uid) : null;
   }
 
+  // A raver counts as claimed only when it carries the auth uid we can actually
+  // notify — status='claimed' on its own can lie (a row whose claimed_by got
+  // cleared without its status following, see the raver_claim_state trigger in
+  // 20260910000000_raver_claim_state_integrity.sql). Mentions have always been
+  // strict about this (huddleMentionCandidates), so a half-claimed row rendered
+  // as a linked member everywhere while being untaggable and unnotifiable.
+  // isYou stays in the test for the local/optimistic profile that exists before
+  // its insert resolves.
+  function raverIsClaimed(r) {
+    return !!(r && (r.claimedBy || r.isYou));
+  }
+
   // ===== PERMISSION HELPERS =====
 
   // Permission flags for the current viewer on a given raver object.
@@ -9497,7 +9509,7 @@
     };
     if (!currentUser) return none();
     const mod = isModerator();
-    const isClaimed  = !!(r.claimedBy || r.status === 'claimed');
+    const isClaimed  = raverIsClaimed(r);
     // Creator of an unclaimed raver gets full leader-level permissions (matches DB RLS)
     const isCreator  = !isClaimed && !!(r.createdBy && String(r.createdBy) === String(currentUser.id));
     const shared = crews.filter(c => (c.squadIds||[]).some(id => String(id) === String(r.id)));
@@ -9560,7 +9572,7 @@
     const me = squad.find(r => r.isYou);
     const isClaimedMember = !isLead && !!me
       && (crew.squadIds||[]).some(id => String(id) === String(me.id))
-      && !!(me.claimedBy || me.isYou || me.status === 'claimed');
+      && raverIsClaimed(me);
     return {
       isLead,
       canEdit:         isLead || mod,
@@ -12659,7 +12671,7 @@ async function doProfilePasswordChange() {
     const people = crewSquad(crew);
     // In Secret mode this intentionally notifies no one except the leader (who is handled separately).
     // Claimed members only exist once the crew is Recruiting or Locked In.
-    const claimed = people.filter(p => (p.claimedBy || p.status === 'claimed') && p.claimedBy !== uid);
+    const claimed = people.filter(p => p.claimedBy && p.claimedBy !== uid);
     await Promise.all(claimed.map(p => dbAddNotification(p.claimedBy, crew.id, message)));
     // Add to local feed for the acting user (leader sees their own actions)
     addNotification(message);
@@ -16429,7 +16441,7 @@ async function doProfilePasswordChange() {
           return 0;
         }).map(p => {
           const isLeader = p.id === crew.leader_id;
-          const isClaimed = isLeader || p.claimedBy || p.isYou || p.status === 'claimed';
+          const isClaimed = isLeader || raverIsClaimed(p);
           const statusDot = isLeader ? '' : isClaimed
             ? `<span class="verified-badge" title="Claimed">✓</span>`
             : `<span class="claim-badge claim-badge-unclaimed" title="Placeholder until they scan their QR and claim it — open their profile to grab it and share">◌ Unclaimed</span>`;
@@ -23315,7 +23327,7 @@ async function doProfilePasswordChange() {
 
       if (badgeId === 'poll_master') {
         const crewPeople = crewSquad(crew);
-        const claimedCount = Math.max(1, crewPeople.filter(p => p.isYou || p.status === 'claimed' || p.claimedBy || p.claimed_by).length);
+        const claimedCount = Math.max(1, crewPeople.filter(p => raverIsClaimed(p) || p.claimed_by).length);
         const voteThreshold = Math.ceil(claimedCount * 0.8);
         current = crewPolls.filter(poll => {
           if (poll.created_by !== raverAuthId) return false;
@@ -23577,7 +23589,7 @@ async function doProfilePasswordChange() {
     } else if (newStatus === 'locked-in') {
       icon = '🔒';
       title = `Lock ${escHtml(crew.name)} In? 🔒`;
-      const unclaimedCount = crewSquad(crew).filter(p => !(p.claimedBy || p.isYou || p.status === 'claimed')).length;
+      const unclaimedCount = crewSquad(crew).filter(p => !raverIsClaimed(p)).length;
       const unclaimedWarn = unclaimedCount > 0
         ? `<div style="margin-top:10px;padding:10px 12px;background:rgba(255,230,0,0.08);border:1px solid rgba(255,230,0,0.25);border-radius:10px;color:var(--neon-yellow);font-size:0.8rem;line-height:1.5;">⚠️ <strong>${unclaimedCount} unclaimed profile${unclaimedCount > 1 ? 's' : ''}</strong> won't be able to join without an invite — but their QR codes stay active so they can still claim a spot later.</div>`
         : '';
@@ -28795,7 +28807,7 @@ async function doProfilePasswordChange() {
         const _members = new Set();
         _ledCrews.forEach(c => {
           crewSquad(c).forEach(p => {
-            if ((p.claimedBy || p.status === 'claimed') && p.claimedBy && p.claimedBy !== currentUser?.id) {
+            if (p.claimedBy && p.claimedBy !== currentUser?.id) {
               _members.add(p.claimedBy);
             }
           });
