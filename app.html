@@ -3411,6 +3411,24 @@
     color: var(--text);
   }
   .notif-item.unread .notif-text { font-weight: 500; }
+  /* Inline entity links inside a notification message — the crew/rave/person
+     the notification is actually about. Underlined rather than button-shaped
+     so the sentence still reads as a sentence. */
+  .notif-link {
+    color: var(--neon-cyan);
+    font-weight: 700;
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: rgba(0,240,255,0.4);
+    text-underline-offset: 2px;
+    border-radius: 3px;
+    transition: color 0.15s, text-decoration-color 0.15s;
+  }
+  .notif-link:hover, .notif-link:focus-visible {
+    color: var(--neon-pink);
+    text-decoration-color: var(--neon-pink);
+    outline: none;
+  }
   .notif-time {
     font-size: 0.7rem;
     color: var(--muted);
@@ -9283,7 +9301,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.48.1';
+  const APP_VERSION = '1.49.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -10746,13 +10764,15 @@ async function doProfilePasswordChange() {
     renderSquad(); renderCrews(); renderEvents();
     // Notify the new member (local feed)
     const _claimCrewName = previewSnap?.crew?.name || 'the crew';
-    addNotification(`🎉 You just claimed your spot in ${_claimCrewName}! Welcome to the tribe — the bassline drops harder with you here.`);
+    const _claimCrewId   = previewSnap?.crew?.id;
+    const _claimCrewLink = nlCrew({ id: _claimCrewId, name: _claimCrewName });
+    addNotification(`🎉 You just claimed your spot in ${_claimCrewName}! Welcome to the tribe — the bassline drops harder with you here.`, [_claimCrewLink]);
     // Notify the crew leader (DB)
     const _claimLeaderId = previewSnap?.crew?.leader_id;
-    const _claimCrewId   = previewSnap?.crew?.id;
     const _claimRaverName = previewSnap?.raver?.name || 'Someone';
     if (_claimLeaderId && _claimLeaderId !== currentUser?.id) {
-      dbAddNotification(_claimLeaderId, _claimCrewId, `📡 ${_claimRaverName} just scanned in and claimed their spot in ${_claimCrewName}! The squad is growing!`);
+      dbAddNotification(_claimLeaderId, _claimCrewId, `📡 ${_claimRaverName} just scanned in and claimed their spot in ${_claimCrewName}! The squad is growing!`,
+        null, nlData([nlRaver({ id: previewSnap?.raver?.id }, _claimRaverName), _claimCrewLink]));
     }
     showClaimSuccess(previewSnap);
     maybeAskMicroFeedback('claim_made', _pendingPostClaimCrewId);
@@ -12618,6 +12638,27 @@ async function doProfilePasswordChange() {
 
   // ===== NOTIFICATION DB HELPERS =====
 
+  // Shorthand builders for the inline link targets a notification carries in
+  // data.links — see linkifyNotifMessage for how they're rendered. `t` must be
+  // the exact substring of the message to linkify, so these read the same name
+  // that the message was built from. Null when the entity can't be linked; the
+  // notification helpers drop those.
+  function nlRave(f) { return (f && f.id && f.name) ? { t: f.name, k: 'rave', id: f.id } : null; }
+  function nlCrew(c) { return (c && c.id && c.name) ? { t: c.name, k: 'crew', id: c.id } : null; }
+  function nlRaver(r, label) {
+    const t = label || (r && r.name);
+    return (r && r.id && t) ? { t, k: 'raver', id: r.id } : null;
+  }
+  function nlHuddle(c, roomId, messageId) {
+    if (!c || !c.id || !c.name) return null;
+    return { t: c.name, k: 'huddle', id: c.id, room: roomId || null, msg: messageId || null };
+  }
+  // data payload for a notification whose only extra is its links.
+  function nlData(links) {
+    const clean = (links || []).filter(Boolean);
+    return clean.length ? { links: clean } : null;
+  }
+
   async function dbAddNotification(userId, crewId, message, type = null, data = null) {
     if (!userId) return;
     const { error } = await sb.from('notifications').insert({
@@ -12666,15 +12707,16 @@ async function doProfilePasswordChange() {
   }
 
   // Notify all currently claimed members of a crew (excluding the acting user)
-  async function notifyCrewMembers(crew, message) {
+  async function notifyCrewMembers(crew, message, links) {
     const uid = currentUser?.id;
     const people = crewSquad(crew);
+    const data = nlData(links);
     // In Secret mode this intentionally notifies no one except the leader (who is handled separately).
     // Claimed members only exist once the crew is Recruiting or Locked In.
     const claimed = people.filter(p => p.claimedBy && p.claimedBy !== uid);
-    await Promise.all(claimed.map(p => dbAddNotification(p.claimedBy, crew.id, message)));
+    await Promise.all(claimed.map(p => dbAddNotification(p.claimedBy, crew.id, message, null, data)));
     // Add to local feed for the acting user (leader sees their own actions)
-    addNotification(message);
+    addNotification(message, links);
   }
 
   // ===== PHOTO HELPERS =====
@@ -17989,7 +18031,8 @@ async function doProfilePasswordChange() {
     const snippet = huddleMessageSnippetText(message);
     await Promise.all(uids
       .filter(uid => uid !== currentUser.id)
-      .map(uid => dbAddNotification(uid, crew.id, `💬 ${who} mentioned you in ${crew.name}: "${snippet}"`)));
+      .map(uid => dbAddNotification(uid, crew.id, `💬 ${who} mentioned you in ${crew.name}: "${snippet}"`,
+        null, nlData([nlHuddle(crew, message.room_id, message.id)]))));
   }
 
   async function retryHuddleMessage(tempId) {
@@ -18226,7 +18269,7 @@ async function doProfilePasswordChange() {
     if (!huddleMessages.some(m => m.id === data.id)) huddleMessages.push(data);
     _huddleActiveBeacon = data;
     const crew = getCrew(_huddleActiveCrewId);
-    if (crew) notifyCrewMembers(crew, `📣 Beacon in ${crew.name}: "${text}"`);
+    if (crew) notifyCrewMembers(crew, `📣 Beacon in ${crew.name}: "${text}"`, [nlHuddle(crew, data.room_id, data.id)]);
     renderHuddleUI();
   }
 
@@ -20559,7 +20602,7 @@ async function doProfilePasswordChange() {
     const willPin = !isCurrentlyPinned;
     await dbTogglePinPoll(pollId, willPin);
     if (willPin && crew) {
-      notifyCrewMembers(crew, `📌 ${crew.name}: a poll result has been pinned — check the FAM Poll!`);
+      notifyCrewMembers(crew, `📌 ${crew.name}: a poll result has been pinned — check the FAM Poll!`, [nlCrew(crew)]);
     }
     rerenderPolls(crewId);
   }
@@ -23385,7 +23428,10 @@ async function doProfilePasswordChange() {
 
     const who = def.type === 'crew' ? 'The whole crew' : earnerName;
     const notifMsg = `${def.emoji} ${who} just unlocked "${def.name}" in ${crew.name}! 🥹`;
-    await notifyCrewMembers(crew, notifMsg);
+    await notifyCrewMembers(crew, notifMsg, [
+      def.type === 'crew' ? null : nlRaver(earnerRaver, who),
+      nlCrew(crew)
+    ]);
     postCrewActivity(crewId, `${def.emoji} ${who} just unlocked "${def.name}"!`);
 
     rerenderFamPins(crewId);
@@ -23636,17 +23682,17 @@ async function doProfilePasswordChange() {
         ? `🎉 ${crew.name} is now Recruiting! Share the QR codes and invite your family.`
         : `🌟 ${crew.name} is back in Recruiting mode! More ravers might be joining the squad — keep an eye out!`;
       showToast(msg);
-      notifyCrewMembers(crew, msg);
+      notifyCrewMembers(crew, msg, [nlCrew(crew)]);
       if (wasSecret) {
-        addNotification(`🟢 ${crew.name} just went public! QR codes are hot, invite links are live — it's time to rally the tribe!`);
+        addNotification(`🟢 ${crew.name} just went public! QR codes are hot, invite links are live — it's time to rally the tribe!`, [nlCrew(crew)]);
       } else {
-        addNotification(`🌟 ${crew.name} is back in Recruiting mode! The gates are open again — keep an eye on who slides through the portal.`);
+        addNotification(`🌟 ${crew.name} is back in Recruiting mode! The gates are open again — keep an eye on who slides through the portal.`, [nlCrew(crew)]);
       }
     } else {
       const msg = `🔒 ${crew.name} is now Locked In! No new ravers are joining the squad — this crew is official!`;
       showToast(msg);
-      notifyCrewMembers(crew, msg);
-      addNotification(`🔒 ${crew.name} is Locked In! The roster is sealed and the vibe is set — this crew is official, no new heads allowed.`);
+      notifyCrewMembers(crew, msg, [nlCrew(crew)]);
+      addNotification(`🔒 ${crew.name} is Locked In! The roster is sealed and the vibe is set — this crew is official, no new heads allowed.`, [nlCrew(crew)]);
     }
     // Persist to DB
     if (currentUser) dbSaveCrew({ name: crew.name, color: crew.color, gradient: crew.gradient, status }, crew.id);
@@ -23725,7 +23771,7 @@ async function doProfilePasswordChange() {
     } else {
       const addMsg = `🎉 ${raver.name.split(' ')[0]} has been added to ${crew.name}! Share their QR code or invite link so they can claim their spot.`;
       showToast(`✅ ${raver.name.split(' ')[0]} added to ${crew.name}`);
-      addNotification(addMsg);
+      addNotification(addMsg, [nlRaver(raver, raver.name.split(' ')[0]), nlCrew(crew)]);
       if (currentUser) postCrewActivity(crew.id, `👋 ${raver.name.split(' ')[0]} joined the crew`);
     }
     if (currentUser) dbAddCrewMember(crew.id, raver.id);
@@ -23780,7 +23826,7 @@ async function doProfilePasswordChange() {
     const removedName = raver ? raver.name.split(' ')[0] : 'Member';
     const removeMsg = `${removedName} was removed from the crew by the leader. The squad just got a little tighter! 🔒`;
     showToast(removeMsg);
-    notifyCrewMembers(crew, removeMsg);
+    notifyCrewMembers(crew, removeMsg, [nlRaver(raver, removedName)]);
     if (currentUser) dbRemoveCrewMember(crew.id, raverId);
   }
 
@@ -24056,6 +24102,8 @@ async function doProfilePasswordChange() {
     const descEl = document.getElementById('crew-desc-input');
     if (descEl) descEl.value = '';
     showToast(`🔥 ${name} created — you're the Crew Lead 👑`);
+    // No inline crew link here: newCrew.id is still a temp_ id until dbSaveCrew
+    // resolves below, and openDetail() already lands the leader on this crew.
     addNotification(`🔥 You sparked a new crew — ${name} is live in Secret mode. Time to build your lineup before the drop!`);
 
     // Always open the crew detail so the leader can immediately add members
@@ -24513,8 +24561,10 @@ async function doProfilePasswordChange() {
     const crewName = data.crew_name || 'the crew';
     closeCrewJoinModal();
     showToast(`🎉 You're in ${crewName}! Welcome to the tribe.`);
-    addNotification(`🎉 You joined ${crewName}! Welcome to the tribe — the bassline drops harder with you here.`);
-    if (data.leader_id) dbAddNotification(data.leader_id, data.crew_id, `🔗 Someone just joined ${crewName} via your invite link! The tribe is growing.`);
+    const _joinCrewLink = nlCrew({ id: data.crew_id, name: crewName });
+    addNotification(`🎉 You joined ${crewName}! Welcome to the tribe — the bassline drops harder with you here.`, [_joinCrewLink]);
+    if (data.leader_id) dbAddNotification(data.leader_id, data.crew_id, `🔗 Someone just joined ${crewName} via your invite link! The tribe is growing.`,
+      null, nlData([_joinCrewLink]));
     await loadAllData();
     renderSquad(); renderCrews(); renderEvents();
     if (data.crew_id) {
@@ -28442,7 +28492,7 @@ async function doProfilePasswordChange() {
       you.interestedFestIds = (you.interestedFestIds || []).filter(fid => String(fid) !== String(festId));
       you.festIds.push(fest ? fest.id : festId);
       showToast(isPast ? `🎟️ Sent it at ${fest?.name || 'that rave'}!` : `✅ You're going to ${fest?.name || 'that rave'}!`);
-      addNotification(isPast ? `🎟️ Logged! You sent it at ${fest?.name || 'that rave'}.` : `🎪 You're locked in for ${fest?.name || 'that rave'}! Pack your kit, charge the glowsticks, and get ready for the frequencies.`);
+      addNotification(isPast ? `🎟️ Logged! You sent it at ${fest?.name || 'that rave'}.` : `🎪 You're locked in for ${fest?.name || 'that rave'}! Pack your kit, charge the glowsticks, and get ready for the frequencies.`, [nlRave(fest)]);
       // Let each of your crews know — skip Secret crews, same posture as notifyCrewMembers.
       if (currentUser && fest) {
         const who = displayName(you).split(' ')[0];
@@ -28791,11 +28841,9 @@ async function doProfilePasswordChange() {
       festivals.push(newFest);
       showToast(`🎉 Added ${name}`);
       const _isPastRave = date && new Date(date + 'T23:59:59') < new Date();
-      if (_isPastRave) {
-        addNotification(`🗓️ ${name} logged! The rave has been added to the archives — track who was there.`);
-      } else {
-        addNotification(`🗓️ ${name} is on the radar! The rave is in the calendar — now get the crew onboard.`);
-      }
+      const _raveOwnMsg = _isPastRave
+        ? `🗓️ ${name} logged! The rave has been added to the archives — track who was there.`
+        : `🗓️ ${name} is on the radar! The rave is in the calendar — now get the crew onboard.`;
       // Notify all claimed crew members about the new rave
       const _raveMsg = _isPastRave
         ? `🗓️ ${name}${date ? ' on ' + date : ''} has been added to the archives. Check it out in the Events tab — was the crew there?`
@@ -28803,22 +28851,31 @@ async function doProfilePasswordChange() {
       // Notify each claimed crew member once (de-duped across all crews the user leads),
       // and show the broadcast in the leader's own feed a single time.
       const _ledCrews = crews.filter(c => c.isLead);
-      if (_ledCrews.length) {
-        const _members = new Set();
-        _ledCrews.forEach(c => {
-          crewSquad(c).forEach(p => {
-            if (p.claimedBy && p.claimedBy !== currentUser?.id) {
-              _members.add(p.claimedBy);
-            }
-          });
+      const _raveMembers = new Set();
+      _ledCrews.forEach(c => {
+        crewSquad(c).forEach(p => {
+          if (p.claimedBy && p.claimedBy !== currentUser?.id) {
+            _raveMembers.add(p.claimedBy);
+          }
         });
-        _members.forEach(memberId => dbAddNotification(memberId, null, _raveMsg));
-        addNotification(_raveMsg);
-      }
+      });
+      // Deferred until the save below hands back the real festival id, so the
+      // rave name in the message can link to it — newFest.id is still a temp_
+      // id at this point and would resolve to nothing on tap. Called with null
+      // when there's no id to link to, which just sends the plain message.
+      const _sendNewRaveNotifs = (festId) => {
+        const _raveLinks = [nlRave({ id: festId, name })];
+        addNotification(_raveOwnMsg, _raveLinks);
+        if (!_ledCrews.length) return;
+        const _raveData = nlData(_raveLinks);
+        _raveMembers.forEach(memberId => dbAddNotification(memberId, null, _raveMsg, null, _raveData));
+        addNotification(_raveMsg, _raveLinks);
+      };
       if (currentUser) {
         dbSaveFestival({ name, date, location, color, days, lat, lng, venueId }, null).then(dbId => {
-          if (!dbId) return;
+          if (!dbId) { _sendNewRaveNotifs(null); return; }
           newFest.id = dbId;
+          _sendNewRaveNotifs(dbId);
           // If a racing loadAllData() cleared the array before the save returned,
           // re-add the festival so it's not silently lost.
           if (!festivals.some(f => String(f.id) === String(dbId))) {
@@ -28828,6 +28885,8 @@ async function doProfilePasswordChange() {
           maybeAskMicroFeedback('event_added', _ledCrews[0]?.id);
           renderEvents();
         });
+      } else {
+        _sendNewRaveNotifs(null);
       }
       closeRaveEditor();
       renderEvents(); renderCrews();
@@ -30304,8 +30363,9 @@ async function doProfilePasswordChange() {
   function loadNotifs() { return _notifications; }
   function saveNotifs() {} // intentional no-op — kept so no stray call breaks
 
-  function addNotification(message) {
-    const n = { id: Date.now() + '_' + Math.random(), message, timestamp: Date.now(), read: false };
+  function addNotification(message, links) {
+    const data = nlData(links);
+    const n = { id: Date.now() + '_' + Math.random(), message, timestamp: Date.now(), read: false, type: null, data };
     _notifications.unshift(n);
     if (_notifications.length > 100) _notifications.splice(100);
     updateNotifBadge();
@@ -30315,7 +30375,7 @@ async function doProfilePasswordChange() {
       renderNotifList();
     }
     if (currentUser) {
-      sb.from('notifications').insert({ user_id: currentUser.id, crew_id: null, message })
+      sb.from('notifications').insert({ user_id: currentUser.id, crew_id: null, message, data })
         .select('id').single()
         .then(({ data: ins }) => { if (ins?.id) n.id = ins.id; })
         .catch(() => {});
@@ -30377,11 +30437,98 @@ async function doProfilePasswordChange() {
   }
 
   // Tap the message itself to jump to the rave/crew it's about. Only wired
-  // up when the notification actually carries a navigable entity.
-  function notifNavigate(entityType, entityId) {
+  // up when the notification actually carries a navigable entity — kept as the
+  // fallback for rows with no inline links (see linkifyNotifMessage).
+  async function notifNavigate(entityType, entityId, opts) {
     closeNotifDrawer();
     if (entityType === 'rave') { switchTab('events'); openRaveEditor(entityId); }
-    else if (entityType === 'crew') { switchTab('crews'); openDetail(entityId); }
+    else if (entityType === 'crew') { switchTab('crews'); await openDetail(entityId); }
+    else if (entityType === 'raver') { openProfile(entityId); }
+    else if (entityType === 'plur') { openPlurInfo(entityId); }
+    else if (entityType === 'huddle') {
+      // Reuses the push deep-link path so a mention lands on the exact message.
+      await openHuddleDeepLink({ crewId: entityId, roomId: opts?.roomId || null, messageId: opts?.messageId || null });
+    }
+  }
+
+  // ── Inline notification links ─────────────────────────────────────────────
+  // A notification carries its link targets in data.links as
+  // [{ t: 'MorFlow', k: 'rave', id: '<uuid>' }] — t is the exact substring of
+  // the message to turn into a link, k the entity kind notifNavigate handles.
+  // Huddle links add room/msg so a mention opens on the message itself. The
+  // message stays plain readable text in the DB (push/email reuse it), so the
+  // linking is purely a render-time concern.
+  function notifLinkTargets(n) {
+    const d = n.data || {};
+    if (Array.isArray(d.links) && d.links.length) return d.links;
+    // Trigger-generated rows (rsvp_crew_action_notifications migration) predate
+    // data.links but already store the entity name, so rebuild the same links.
+    if ((n.type === 'festival_add' || n.type === 'festival_remove') && d.festival_id && d.festival_name) {
+      return [{ t: d.festival_name, k: 'rave', id: d.festival_id }];
+    }
+    // Points always land on the earner's own raver (point_events RLS is
+    // own-row-only), so the target is resolved at render time rather than
+    // stored — which links the rows written before data.links existed too.
+    if (n.type === 'points_earned' && d.track && PLUR_TRACK_META[d.track]) {
+      const you = squad.find(r => r.isYou);
+      if (you) return [{ t: `${PLUR_TRACK_META[d.track].name} points`, k: 'plur', id: you.id }];
+      return [];
+    }
+    if ((n.type === 'crew_add' || n.type === 'crew_remove' || n.type === 'crew_leave_request') && d.crew_id && d.crew_name) {
+      const out = [];
+      if (d.raver_id && d.raver_name) out.push({ t: d.raver_name, k: 'raver', id: d.raver_id });
+      out.push({ t: d.crew_name, k: 'crew', id: d.crew_id });
+      return out;
+    }
+    return [];
+  }
+
+  function notifLinkHTML(l, innerHtml) {
+    const attrs = [
+      `data-nl-kind="${escHtml(String(l.k))}"`,
+      `data-nl-id="${escHtml(String(l.id))}"`,
+      l.room ? `data-nl-room="${escHtml(String(l.room))}"` : '',
+      l.msg ? `data-nl-msg="${escHtml(String(l.msg))}"` : ''
+    ].filter(Boolean).join(' ');
+    return `<span class="notif-link" role="link" tabindex="0" ${attrs} onclick="notifOpenLink(this)" onkeydown="notifLinkKey(event, this)">${innerHtml}</span>`;
+  }
+
+  function notifOpenLink(el) {
+    const d = el.dataset;
+    notifNavigate(d.nlKind, d.nlId, { roomId: d.nlRoom || null, messageId: d.nlMsg || null });
+  }
+
+  function notifLinkKey(ev, el) {
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    ev.preventDefault();
+    notifOpenLink(el);
+  }
+
+  // Splices link spans into the escaped message. Works on a segment list so an
+  // already-linked span is never re-scanned — otherwise a second link whose
+  // name appears inside the first link's markup would nest tags. A target whose
+  // text is no longer in the message (entity renamed since) is skipped and that
+  // notification simply stays static.
+  function linkifyNotifMessage(message, links) {
+    let parts = [{ html: escHtml(message), done: false }];
+    let linked = 0;
+    (links || []).forEach(l => {
+      if (!l || !l.t || !l.k || !l.id) return;
+      const needle = escHtml(l.t);
+      if (!needle) return;
+      for (let i = 0; i < parts.length; i++) {
+        if (parts[i].done) continue;
+        const at = parts[i].html.indexOf(needle);
+        if (at < 0) continue;
+        parts.splice(i, 1,
+          { html: parts[i].html.slice(0, at), done: false },
+          { html: notifLinkHTML(l, needle), done: true },
+          { html: parts[i].html.slice(at + needle.length), done: false });
+        linked++;
+        break;
+      }
+    });
+    return { html: parts.map(p => p.html).join(''), linked };
   }
 
   // ── Push notification deep links ──────────────────────────────────────────
@@ -30471,14 +30618,17 @@ async function doProfilePasswordChange() {
       const actionsHtml = buttons.length
         ? `<div class="notif-actions-row">${buttons.map(b => `<button class="notif-action-btn${b.ghost ? ' notif-ghost-btn' : ''}" onclick="${b.onclick}">${b.label}</button>`).join('')}</div>`
         : '';
-      const navigable = n.entityType && n.entityId;
+      const { html: messageHtml, linked } = linkifyNotifMessage(n.message, notifLinkTargets(n));
+      // Whole-row tap is the fallback only when nothing linked inline, so the
+      // two handlers never fight over the same click.
+      const navigable = !linked && n.entityType && n.entityId;
       const textAttrs = navigable
         ? ` style="cursor:pointer;" onclick="notifNavigate('${escJsAttr(String(n.entityType))}','${escJsAttr(String(n.entityId))}')"`
         : '';
       return `
       <div class="notif-item ${n.read ? 'notif-read' : 'unread'}">
         <span class="notif-dot"></span>
-        <span class="notif-text"${textAttrs}>${escHtml(n.message)}</span>
+        <span class="notif-text"${textAttrs}>${messageHtml}</span>
         <span class="notif-time">${relativeTime(n.timestamp)}</span>
         ${actionsHtml}
       </div>`;
