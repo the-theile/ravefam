@@ -6893,6 +6893,12 @@
     display: flex; align-items: center; justify-content: center; height: 100%;
     color: var(--muted); font-size: 0.78rem; font-family: 'Outfit', sans-serif; text-align: center; padding: 0 24px;
   }
+  /* OSM tiles ship light, so invert + hue-rotate them back into a dark basemap
+     that fits the neon theme. Scoped to the tile pane only — markers, popups
+     and the attribution bar sit in other panes and stay untouched. */
+  .citymap .leaflet-tile-pane {
+    filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9) saturate(0.55);
+  }
   .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #14141f; color: var(--text); }
   .leaflet-popup-content { font-family: 'Outfit', sans-serif; font-size: 0.78rem; }
 
@@ -9301,7 +9307,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.49.1';
+  const APP_VERSION = '1.49.2';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -9899,6 +9905,19 @@ async function doProfilePasswordChange() {
   function loadLeaflet() {
     if (window.L) return Promise.resolve();
     return Promise.all([loadStylesheetOnce(LEAFLET_CSS), loadScriptOnce(LEAFLET_JS)]);
+  }
+
+  // Basemap tiles for every Leaflet map (radar map, city map). CARTO's dark
+  // basemap now stamps "API KEY REQUIRED" across unauthenticated tiles, so we
+  // use OSM's keyless tiles and darken them in CSS instead — see the
+  // `.citymap .leaflet-tile-pane` filter, which only touches the tile pane so
+  // markers, popups and attribution keep their real colors.
+  const BASEMAP_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+  function addBasemapTiles(map) {
+    return L.tileLayer(BASEMAP_TILES, {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 19
+    }).addTo(map);
   }
 
   // ===== APP SHOW / HIDE =====
@@ -32192,10 +32211,7 @@ async function doProfilePasswordChange() {
     }
     // Florida Gulf Coast / Tampa Bay — a friendly default center while nothing's on the radar.
     const map = L.map(mapEl, { scrollWheelZoom: false, zoomControl: true }).setView([27.9506, -82.4572], 9);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      maxZoom: 19
-    }).addTo(map);
+    addBasemapTiles(map);
     radarMapInstance = map;
 
     const me = squad.find(r => r.isYou);
@@ -32248,10 +32264,7 @@ async function doProfilePasswordChange() {
   function buildRadarMap(mapEl, rawPoints) {
     mapEl.innerHTML = '';
     const map = L.map(mapEl, { scrollWheelZoom: false, zoomControl: true }).setView([rawPoints[0].lat, rawPoints[0].lng], 4);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      maxZoom: 19
-    }).addTo(map);
+    addBasemapTiles(map);
     radarMapInstance = map;
 
     function settle() {
@@ -32883,10 +32896,7 @@ async function doProfilePasswordChange() {
 
     mapEl.innerHTML = '';
     const map = L.map(mapEl, { scrollWheelZoom: false }).setView([points[0].lat, points[0].lng], 3);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      maxZoom: 19
-    }).addTo(map);
+    addBasemapTiles(map);
 
     const bounds = [];
     points.forEach(p => {
