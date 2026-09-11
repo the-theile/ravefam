@@ -3749,6 +3749,19 @@
     font-family: var(--hd-mono); font-size: 0.58rem; color: var(--muted);
     text-transform: uppercase; letter-spacing: 0.6px; padding: 6px 8px 2px;
   }
+  .huddle-room-group { display: flex; flex-direction: column; gap: 4px; }
+  .huddle-room-group-toggle {
+    display: flex; align-items: center; gap: 7px; width: 100%;
+    background: none; border: 0; cursor: pointer; text-align: left;
+    font-family: var(--hd-mono); font-size: 0.58rem; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.6px; padding: 8px 8px 2px;
+    transition: color 0.15s;
+  }
+  .huddle-room-group-toggle:hover { color: var(--neon-cyan); }
+  .huddle-room-group-caret { display: inline-block; transition: transform 0.15s; }
+  .huddle-room-group.open .huddle-room-group-caret { transform: rotate(90deg); }
+  .huddle-room-group-count { margin-left: auto; opacity: 0.8; }
+  .huddle-room-group .huddle-cta-count { margin-left: 0; }
   .huddle-room-pill {
     flex-shrink: 0;
     background: rgba(255,255,255,0.05);
@@ -9301,7 +9314,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.49.1';
+  const APP_VERSION = '1.50.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -15484,6 +15497,9 @@ async function doProfilePasswordChange() {
   let _gamePlanActiveCrewId = null;
   let _gamePlanActiveFestivalId = null;
   let _gamePlanActiveSection = 'checklist';
+  // Past raves nest behind one pill in the Rave Plan picker; collapsed on
+  // every open, same as the Huddle switcher.
+  let _gamePlanPastRavesOpen = false;
   let _archiveFilters = { festivalId: null };
   // Vendor Village — lazy-loaded the first time the Village nav tab is
   // tapped (see renderVendorVillage()), so sessions that never open it pay
@@ -16574,7 +16590,9 @@ async function doProfilePasswordChange() {
     // shared huddle room (deriveCrewFestivalRooms — you + ≥1 other crew
     // member both RSVP'd/upcoming). Same gate the per-rave huddle room
     // already used before Rave Plan absorbed it.
-    const hasGamePlan = deriveCrewFestivalRooms(crew).length > 0;
+    // .live carries the same grace window the Rave Plan tab uses, so the tile
+    // doesn't vanish the morning after a rave while its plan is still open.
+    const hasGamePlan = deriveCrewFestivalPlans(crew).live.length > 0;
 
     // Everything except the roster + Huddle — the Overview tab.
     const overviewPanelHTML = `
@@ -16785,6 +16803,9 @@ async function doProfilePasswordChange() {
   const HUDDLE_SENDER_COLORS = ['#00F5FF','#BF00FF','#39FF14','#5B6EFF','#FFE600','#FF8A3D'];
 
   let huddleRooms = [];
+  // Past raves nest under a collapsed group in the switcher. The menu always
+  // opens short, so this resets to false every time the menu is opened.
+  let _huddlePastRoomsOpen = false;
   let huddleMessages = [];
   let _huddleActiveCrewId = null;
   let _huddleActiveRoomId = null;
@@ -16839,6 +16860,28 @@ async function doProfilePasswordChange() {
       .sort((a, b) => a.festival._d - b.festival._d);
   }
 
+  // deriveCrewFestivalRooms is deliberately upcoming-only — it drives room
+  // materialization, and we don't want a room upserted for every rave the
+  // crew ever shared. Rave Plan wants the whole history though: a plan for a
+  // rave you already did is a record worth keeping reachable, so this splits
+  // every shared rave into the live ones and the archived ones.
+  function deriveCrewFestivalPlans(crew) {
+    const people = crewSquad(crew);
+    const byFest = {};
+    people.forEach(p => {
+      raverFestivals(p).forEach(f => {
+        if (!byFest[f.id]) byFest[f.id] = { festival: f, who: [] };
+        byFest[f.id].who.push(p);
+      });
+    });
+    const shared = Object.values(byFest)
+      .filter(entry => entry.who.some(p => p.isYou) && entry.who.some(p => !p.isYou));
+    return {
+      live: shared.filter(e => !festivalIsArchived(e.festival)).sort((a, b) => a.festival._d - b.festival._d),
+      past: shared.filter(e => festivalIsArchived(e.festival)).sort((a, b) => b.festival._d - a.festival._d)
+    };
+  }
+
   function huddleSenderName(uid) {
     if (currentUser && uid === currentUser.id) return 'You';
     const r = raverByAuthUid(uid);
@@ -16855,9 +16898,35 @@ async function doProfilePasswordChange() {
   function huddleRoomLabel(room) {
     if (room.kind === 'festival' && room.festival_id) {
       const fest = festivals.find(f => String(f.id) === String(room.festival_id));
-      if (fest) return `${escHtml(fest.name)} · ⏳ ${countdownLabel(festDate(fest))}`;
+      if (fest) {
+        const d = festDate(fest);
+        const n = daysUntil(d);
+        // Inside the grace window "past" undersells a room that's still the
+        // busiest one you have — the recap chat is happening right now.
+        const tag = (n !== null && n < 0 && !festivalIsArchived(fest)) ? 'just wrapped' : countdownLabel(d);
+        return `${escHtml(fest.name)} · ⏳ ${tag}`;
+      }
     }
     return escHtml(room.name);
+  }
+
+  // A rave's room and Rave Plan stay in the live list for a few days after the
+  // rave itself — that's when the photos, the recaps and the "who has my
+  // hoodie" chat happen. Past the grace window they nest under a collapsed
+  // group instead of pushing every upcoming rave below the fold.
+  const RAVE_ARCHIVE_GRACE_DAYS = 3;
+
+  function festivalIsArchived(fest) {
+    const n = daysUntil(festDate(fest));
+    return n !== null && n < -RAVE_ARCHIVE_GRACE_DAYS;
+  }
+
+  // A room whose festival isn't loaded stays in the live list — better a
+  // stale room in view than one silently nested where nobody looks.
+  function huddleRoomIsPast(room) {
+    if (!room || room.kind !== 'festival' || !room.festival_id) return false;
+    const fest = festivals.find(f => String(f.id) === String(room.festival_id));
+    return fest ? festivalIsArchived(fest) : false;
   }
 
   // ── Time formatting ──
@@ -16985,14 +17054,15 @@ async function doProfilePasswordChange() {
     const { data: rooms, error } = await sb.from('huddle_rooms')
       .select('*').eq('crew_id', crewId).order('created_at', { ascending: true });
     if (error || !rooms) return [];
-    // Main first, then raves by soonest, then custom rooms.
-    const rank = r => (r.kind === 'main' ? 0 : r.kind === 'festival' ? 1 : 2);
+    // Main first, then raves by soonest, then custom rooms, then past raves
+    // (most recent first) — which is the order the switcher nests them in.
+    const rank = r => (r.kind === 'main' ? 0 : huddleRoomIsPast(r) ? 3 : r.kind === 'festival' ? 1 : 2);
     huddleRooms = rooms.slice().sort((a, b) => {
       if (rank(a) !== rank(b)) return rank(a) - rank(b);
       if (a.kind === 'festival' && b.kind === 'festival') {
         const fa = festivals.find(f => String(f.id) === String(a.festival_id));
         const fb = festivals.find(f => String(f.id) === String(b.festival_id));
-        if (fa && fb) return festDate(fa) - festDate(fb);
+        if (fa && fb) return rank(a) === 3 ? festDate(fb) - festDate(fa) : festDate(fa) - festDate(fb);
       }
       return new Date(a.created_at) - new Date(b.created_at);
     });
@@ -17228,11 +17298,34 @@ async function doProfilePasswordChange() {
     if (!head || !crew) return;
     const currentRoom = huddleRooms.find(r => r.id === _huddleActiveRoomId);
     const online = huddleOnlineCount();
-    const roomsHTML = huddleRooms.map(r => {
-      const unread = (_huddleRoomUnreadCache && _huddleRoomUnreadCache[r.id]) || 0;
-      const badge = (unread && r.id !== _huddleActiveRoomId) ? `<span class="huddle-cta-count">${unread > 99 ? '99+' : unread}</span>` : '';
-      return `<button type="button" class="huddle-room-pill${r.id === _huddleActiveRoomId ? ' active' : ''}" data-room-id="${r.id}" onclick="switchHuddleRoom(this.dataset.roomId)">${huddleRoomLabel(r)}${badge}</button>`;
-    }).join('');
+    const roomUnread = r => (r.id === _huddleActiveRoomId ? 0 : (_huddleRoomUnreadCache && _huddleRoomUnreadCache[r.id]) || 0);
+    const unreadBadge = n => (n ? `<span class="huddle-cta-count">${n > 99 ? '99+' : n}</span>` : '');
+    const roomPillHTML = r =>
+      `<button type="button" class="huddle-room-pill${r.id === _huddleActiveRoomId ? ' active' : ''}" data-room-id="${r.id}" onclick="switchHuddleRoom(this.dataset.roomId)">${huddleRoomLabel(r)}${unreadBadge(roomUnread(r))}</button>`;
+
+    // A crew that rages every weekend accumulates rooms fast, and the dead
+    // ones used to sit above the live ones. Past raves fold into one row that
+    // carries their combined unread count, so nothing gets lost behind it.
+    // The room you're actually in is never nested away.
+    const pastRooms = huddleRooms.filter(r => huddleRoomIsPast(r) && r.id !== _huddleActiveRoomId);
+    const liveRooms = huddleRooms.filter(r => !pastRooms.includes(r));
+    const pastUnread = pastRooms.reduce((n, r) => n + roomUnread(r), 0);
+    const roomsHTML = liveRooms.map(roomPillHTML).join('') + (pastRooms.length ? `
+            <div class="huddle-room-group${_huddlePastRoomsOpen ? ' open' : ''}">
+              <button type="button" class="huddle-room-group-toggle" onclick="toggleHuddlePastRooms()"
+                aria-expanded="${_huddlePastRoomsOpen ? 'true' : 'false'}">
+                <span class="huddle-room-group-caret">▸</span>
+                <span>⏳ Past raves</span>
+                <span class="huddle-room-group-count">${pastRooms.length}</span>
+                ${_huddlePastRoomsOpen ? '' : unreadBadge(pastUnread)}
+              </button>
+              ${_huddlePastRoomsOpen ? pastRooms.map(roomPillHTML).join('') : ''}
+            </div>` : '');
+
+    // Presence and typing re-render this chrome constantly; an open switcher
+    // must survive that, or the menu slams shut while you're reading it.
+    const openMenu = document.getElementById('huddle-room-menu');
+    const menuWasOpen = !!openMenu && openMenu.style.display !== 'none';
 
     head.innerHTML = `
       <button type="button" class="hd-back" onclick="closeHuddleScreen()" aria-label="Back">‹</button>
@@ -17253,6 +17346,10 @@ async function doProfilePasswordChange() {
       <button type="button" class="hd-search-btn" title="Search the Huddle" aria-label="Search messages" onclick="openHuddleSearch()">🔍</button>
       <button type="button" class="huddle-beacon-fab-inline" title="Send an urgent Beacon to your crew" onclick="toggleHuddleBeaconForm()">📡</button>`;
     _rebindCoachmarkTarget('.huddle-beacon-fab-inline');
+    if (menuWasOpen) {
+      const menu = document.getElementById('huddle-room-menu');
+      if (menu) menu.style.display = '';
+    }
 
     const pinnedSlot = document.getElementById('hd-pinned-slot');
     if (pinnedSlot) {
@@ -18332,7 +18429,16 @@ async function doProfilePasswordChange() {
 
   function toggleHuddleRoomMenu() {
     const el = document.getElementById('huddle-room-menu'); if (!el) return;
-    el.style.display = el.style.display === 'none' ? '' : 'none';
+    const opening = el.style.display === 'none';
+    // The switcher always opens short: past raves re-collapse on every open,
+    // so the list you get is the same length every time.
+    if (opening && _huddlePastRoomsOpen) { _huddlePastRoomsOpen = false; renderHuddleChrome(); }
+    const menu = document.getElementById('huddle-room-menu');
+    if (menu) menu.style.display = opening ? '' : 'none';
+  }
+  function toggleHuddlePastRooms() {
+    _huddlePastRoomsOpen = !_huddlePastRoomsOpen;
+    renderHuddleChrome();
   }
   function hideHuddleRoomMenu() {
     const el = document.getElementById('huddle-room-menu'); if (el) el.style.display = 'none';
@@ -19012,13 +19118,17 @@ async function doProfilePasswordChange() {
       panel.innerHTML = `<div class="es-block"><div class="es-icon">🔒</div><div class="es-headline">Sign in for the Rave Plan</div><div class="es-sub">You'll need an account to plan a rave with your crew.</div></div>`;
       return;
     }
-    const rooms = deriveCrewFestivalRooms(crew);
-    if (!rooms.length) {
+    const plans = deriveCrewFestivalPlans(crew);
+    const ordered = plans.live.concat(plans.past);
+    if (!ordered.length) {
       panel.innerHTML = `<div class="es-block"><div class="es-icon">🗺️</div><div class="es-headline">No Rave Plan yet</div><div class="es-sub">Once you and a crewmate are both going to the same rave, its Rave Plan appears here.</div></div>`;
       return;
     }
-    const targetFestId = (_gamePlanActiveFestivalId && rooms.some(r => String(r.festival.id) === String(_gamePlanActiveFestivalId)))
-      ? _gamePlanActiveFestivalId : rooms[0].festival.id;
+    // Live raves come first, so the tab opens on the next one up rather than
+    // on whatever the crew did last summer.
+    _gamePlanPastRavesOpen = false;
+    const targetFestId = (_gamePlanActiveFestivalId && ordered.some(r => String(r.festival.id) === String(_gamePlanActiveFestivalId)))
+      ? _gamePlanActiveFestivalId : ordered[0].festival.id;
     panel.innerHTML = `<div class="es-block"><div class="es-icon">🗺️</div><div class="es-headline">Loading Rave Plan…</div></div>`;
     await loadGamePlanForFestival(crewId, targetFestId);
     panel.innerHTML = buildGamePlanTabHTML(crew);
@@ -19040,6 +19150,14 @@ async function doProfilePasswordChange() {
     const crew = getCrew(crewId);
     panel.innerHTML = buildGamePlanTabHTML(crew);
     await ensureHuddleRoomForFestival(crewId, festivalId);
+  }
+
+  function toggleGamePlanPastRaves() {
+    const panel = document.getElementById('crew-feature-panel-raveplan');
+    const crew = getCrew(_gamePlanActiveCrewId);
+    if (!panel || !crew) return;
+    _gamePlanPastRavesOpen = !_gamePlanPastRavesOpen;
+    panel.innerHTML = buildGamePlanTabHTML(crew);
   }
 
   function switchGamePlanSection(section, btnEl) {
@@ -19074,19 +19192,30 @@ async function doProfilePasswordChange() {
   }
 
   function buildGamePlanTabHTML(crew) {
-    const rooms = deriveCrewFestivalRooms(crew);
-    if (!rooms.length) {
+    const plans = deriveCrewFestivalPlans(crew);
+    const ordered = plans.live.concat(plans.past);
+    if (!ordered.length) {
       return `<div class="es-block"><div class="es-icon">🗺️</div><div class="es-headline">No Rave Plan yet</div><div class="es-sub">Once you and a crewmate are both going to the same rave, its Rave Plan appears here.</div></div>`;
     }
     const activeFestId = String(_gamePlanActiveFestivalId);
     const escCrewId = escJsAttr(String(crew.id));
 
-    const picker = rooms.map(r => {
+    const pickerPill = r => {
       const fid = String(r.festival.id);
       return `<button type="button" class="huddle-room-pill${fid === activeFestId ? ' active' : ''}"
         data-fest-id="${escHtml(fid)}"
         onclick="switchGamePlanFestival('${escCrewId}', this.dataset.festId)">${escHtml(r.festival.name)}</button>`;
-    }).join('');
+    };
+    // Same nesting as the Huddle switcher: raves past their grace window fold
+    // behind one pill so the row stays scannable. The plan you're looking at
+    // always stays on the row, even once it ages out.
+    const pastPlans = plans.past.filter(r => String(r.festival.id) !== activeFestId);
+    const livePlans = ordered.filter(r => !pastPlans.includes(r));
+    const picker = livePlans.map(pickerPill).join('')
+      + (pastPlans.length ? `<button type="button" class="huddle-room-pill${_gamePlanPastRavesOpen ? ' active' : ''}"
+        onclick="toggleGamePlanPastRaves()" aria-expanded="${_gamePlanPastRavesOpen ? 'true' : 'false'}"
+        >⏳ Past · ${pastPlans.length}</button>` : '')
+      + (_gamePlanPastRavesOpen ? pastPlans.map(pickerPill).join('') : '');
 
     // Chat is deliberately not a section here anymore — it lives in the one
     // unified Huddle, reachable from the shortcut row below.
@@ -19105,7 +19234,7 @@ async function doProfilePasswordChange() {
     ).join('');
 
     return `
-      ${rooms.length > 1 ? `<div style="font-size:0.72rem;color:var(--muted);margin-bottom:8px;">Tap between raves you and your crew are both going to</div>` : ''}
+      ${ordered.length > 1 ? `<div style="font-size:0.72rem;color:var(--muted);margin-bottom:8px;">Tap between raves you and your crew are both going to</div>` : ''}
       <div class="game-plan-rave-picker">${picker}</div>
       <div class="game-plan-shortcuts">
         <button class="btn btn-ghost" onclick="openHuddleForFestival('${escCrewId}','${escJsAttr(activeFestId)}')">🕊️ Huddle</button>

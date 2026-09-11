@@ -138,6 +138,35 @@ test.describe('crew detail · game plan', () => {
     await expect(page.locator('.crew-feature-tile[data-feature="raveplan"]')).toHaveCount(0);
   });
 
+  // Rave Plan used to drop a rave the morning after it happened, taking its
+  // tasks/rides/roles record with it. Past raves now nest behind one pill.
+  test('past raves nest behind one pill in the rave picker', async ({ page }) => {
+    const data = seedData();
+    const ymd = (d) => new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
+    data.festivals = data.festivals.concat([
+      { id: 'f-old', name: 'Old Fest', date: ymd(30), location: 'Miami, FL', color: '#B14BFF', days: null, deleted_at: null },
+      { id: 'f-ancient', name: 'Ancient Fest', date: ymd(400), location: 'Orlando, FL', color: '#FFD93D', days: null, deleted_at: null },
+    ]);
+    ['f-old', 'f-ancient'].forEach(fid => {
+      data.raver_festivals = data.raver_festivals.concat([
+        { raver_id: 'r-you', festival_id: fid },
+        { raver_id: 'r-sam', festival_id: fid },
+      ]);
+    });
+    await bootAuthedApp(page, { data });
+    await openGamePlan(page);
+
+    const pills = page.locator('.game-plan-rave-picker .huddle-room-pill');
+    await expect(pills).toHaveCount(2);           // Tomorrowland + the "Past · 2" pill
+    await expect(pills.nth(0)).toContainText('Tomorrowland');
+    await expect(pills.nth(1)).toContainText('Past · 2');
+
+    await pills.nth(1).click();
+    await expect(page.locator('.game-plan-rave-picker .huddle-room-pill')).toHaveCount(4);
+    await expect(page.locator('.game-plan-rave-picker .huddle-room-pill').nth(2)).toContainText('Old Fest');
+    await expect(page.locator('.game-plan-rave-picker .huddle-room-pill').nth(3)).toContainText('Ancient Fest');
+  });
+
   test('adding a checklist task shows it, persists, and can be toggled done', async ({ page }) => {
     await bootAuthedApp(page);
     await openGamePlan(page);

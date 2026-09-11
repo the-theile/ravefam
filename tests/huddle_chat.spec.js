@@ -26,6 +26,36 @@ function seedWithChat(over = {}) {
   return Object.assign(data, over);
 }
 
+// A crew with a rave history: one upcoming, one that happened last night
+// (inside the 3-day grace window) and two well past it.
+function seedWithRaveHistory() {
+  const data = seedWithChat();
+  const ymd = (d) => new Date(now - d * 86400000).toISOString().slice(0, 10);
+  data.festivals = data.festivals.concat([
+    { id: 'f-last', name: 'Last Night Fest', date: ymd(1), location: 'Tampa, FL', color: '#00F5FF', days: null, deleted_at: null },
+    { id: 'f-old', name: 'Old Fest', date: ymd(30), location: 'Miami, FL', color: '#B14BFF', days: null, deleted_at: null },
+    { id: 'f-ancient', name: 'Ancient Fest', date: ymd(400), location: 'Orlando, FL', color: '#FFD93D', days: null, deleted_at: null },
+  ]);
+  // Shared attendance is what earns a rave its room: you plus a crewmate.
+  ['f-last', 'f-old', 'f-ancient'].forEach(fid => {
+    data.raver_festivals = data.raver_festivals.concat([
+      { raver_id: 'r-you', festival_id: fid },
+      { raver_id: 'r-sam', festival_id: fid },
+    ]);
+  });
+  // Past rooms are never re-materialized by ensureHuddleRooms — they simply
+  // persist from when the rave was still upcoming, which is what this seeds.
+  data.huddle_rooms = data.huddle_rooms.concat([
+    { id: 'room-last', crew_id: 'c1', room_key: 'festival:f-last', kind: 'festival', name: 'Last Night Fest Huddle', festival_id: 'f-last', created_by: TEST_UID, created_at: '2024-01-02T00:00:00Z' },
+    { id: 'room-old', crew_id: 'c1', room_key: 'festival:f-old', kind: 'festival', name: 'Old Fest Huddle', festival_id: 'f-old', created_by: TEST_UID, created_at: '2024-01-03T00:00:00Z' },
+    { id: 'room-ancient', crew_id: 'c1', room_key: 'festival:f-ancient', kind: 'festival', name: 'Ancient Fest Huddle', festival_id: 'f-ancient', created_by: TEST_UID, created_at: '2024-01-04T00:00:00Z' },
+  ]);
+  data.huddle_messages = data.huddle_messages.concat([
+    { id: 'm-old-1', room_id: 'room-old', crew_id: 'c1', sender_id: 'kai-uid', kind: 'text', body: 'found your fanny pack', reactions: {}, created_at: minsAgo(10), deleted_at: null, mentions: [] },
+  ]);
+  return data;
+}
+
 async function openChat(page, data) {
   await bootAuthedApp(page, { data, sessionOver: { user_metadata: { guidance_dismissed: true, seen_tips: { beacon: true } } } });
   await page.evaluate(async () => { await openHuddle('c1'); });
@@ -86,6 +116,61 @@ test.describe('huddle chat · stream rendering', () => {
     await expect(pills).toHaveCount(2);
     await expect(pills.nth(0)).toContainText('Main Huddle');
     await expect(pills.nth(1)).toContainText('Tomorrowland');
+  });
+
+  // A crew that rages every weekend piles up rave rooms, and the dead ones
+  // used to sort above the live ones — five "past" rooms before "tomorrow".
+  // Raves older than the grace window now nest behind one collapsed row.
+  test('raves past the grace window nest under a collapsed group, live rooms stay up top', async ({ page }) => {
+    await openChat(page, seedWithRaveHistory());
+    await page.evaluate(() => toggleHuddleRoomMenu());
+
+    // Main, the rave that only just happened, then the upcoming one. The
+    // afterglow room stays in the live list through its grace window — and
+    // leads it, because that's where the recap chat is actually happening.
+    const pills = page.locator('#huddle-room-menu .huddle-room-pill');
+    await expect(pills).toHaveCount(3);
+    await expect(pills.nth(0)).toContainText('Main Huddle');
+    await expect(pills.nth(1)).toContainText('Last Night Fest · ⏳ just wrapped');
+    await expect(pills.nth(2)).toContainText('Tomorrowland');
+
+    // The two archived raves fold into one row that carries their combined
+    // unread count, so nothing is lost behind the fold.
+    const toggle = page.locator('.huddle-room-group-toggle');
+    await expect(toggle).toContainText('Past raves');
+    await expect(toggle.locator('.huddle-room-group-count')).toHaveText('2');
+    await expect(toggle.locator('.huddle-cta-count')).toHaveText('1');
+
+    await toggle.click();
+    await expect(pills).toHaveCount(5);
+    // Most recent archived rave first.
+    await expect(pills.nth(3)).toContainText('Old Fest');
+    await expect(pills.nth(4)).toContainText('Ancient Fest');
+    await expect(page.locator('#huddle-room-menu')).toBeVisible();
+  });
+
+  test('the switcher re-collapses past raves every time it is opened', async ({ page }) => {
+    await openChat(page, seedWithRaveHistory());
+    await page.evaluate(() => toggleHuddleRoomMenu());
+    await page.locator('.huddle-room-group-toggle').click();
+    await expect(page.locator('#huddle-room-menu .huddle-room-pill')).toHaveCount(5);
+
+    await page.evaluate(() => toggleHuddleRoomMenu());  // close
+    await page.evaluate(() => toggleHuddleRoomMenu());  // reopen
+    await expect(page.locator('#huddle-room-menu .huddle-room-pill')).toHaveCount(3);
+  });
+
+  test('the room you are in is never nested away', async ({ page }) => {
+    await openChat(page, seedWithRaveHistory());
+    await page.evaluate(async () => { await switchHuddleRoom('room-old'); });
+    await page.waitForTimeout(200);
+    await page.evaluate(() => toggleHuddleRoomMenu());
+
+    const pills = page.locator('#huddle-room-menu .huddle-room-pill');
+    await expect(pills).toHaveCount(4);
+    await expect(pills.nth(3)).toContainText('Old Fest');
+    await expect(pills.nth(3)).toHaveClass(/active/);
+    await expect(page.locator('.huddle-room-group-count')).toHaveText('1');
   });
 });
 
