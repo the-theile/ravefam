@@ -1,13 +1,13 @@
-# RaveFAM beta QA — 2026-09-15 — APP_VERSION 1.51.0
+# RaveFAM beta QA — 2026-09-15 — APP_VERSION 1.52.0
 
 ## Environment
 
 | | |
 |---|---|
-| Local app | `app.html` @ `claude/ravefam-beta-qa-3knvbj` (baseline 1.50.0 → shipped 1.51.0) |
+| Local app | `app.html` @ `claude/ravefam-beta-qa-3knvbj` (baseline 1.50.0 → shipped 1.52.0) |
 | Playwright | `@playwright/test` 1.56.0, Chromium 1194, `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers` |
-| Viewport | Desktop Chrome (Playwright default). **Mobile 390×844 not exercised** — see caveat below |
-| Production DB | Supabase project `RaveFam` (`tvpgopciioqbqmjjjigh`), **read-only schema inspection only** |
+| Viewport | Desktop Chrome **and iPhone 13 (390×844, DPR 3, touch)** via the new `mobile-chromium` project. Real WebKit is configured but unavailable here — see "Mobile & iOS coverage" |
+| Production DB | Supabase project `RaveFam` (`tvpgopciioqbqmjjjigh`). Read-only inspection, **plus the hardening migration applied on request** (see Fixes shipped) |
 | Live site | **Unreachable — see "Blocked on live"** |
 | Accounts used | **None.** No credentials were supplied and no accounts were created |
 
@@ -39,10 +39,13 @@ aggregates quoted are counts.
 ## Suite baseline
 
 ```
-npm test  →  329 passed / 0 failed  (4.8m)   [before any change]
-npm test  →  338 passed / 0 failed          [after fixes: 329 + 9 new]
+npm test  →  329 passed / 0 failed  (4.8m)   [baseline, before any change]
+npm test  →  399 passed / 0 failed  (5.9m)   [final: 352 desktop + 47 mobile]
 npm run lint → app.html 0 errors, 82 warnings (all pre-existing no-unused-vars)
 ```
+
+23 specs added across 6 new files. The mobile project re-runs 9 layout/touch-sensitive
+specs at iPhone 13 metrics rather than the whole suite — see "Mobile & iOS coverage".
 
 No pre-existing failures. The suite does not weaken any assertion in this change.
 
@@ -87,15 +90,19 @@ The merge branch never reads `auth.uid()` at all, so **an unauthenticated caller
 
 **Suspected cause:** `claim_and_merge_raver`, merge branch (`if p_existing_raver_id is not null and p_existing_raver_id <> v_stub.id then …`). The repo's copy is `supabase/migrations/20260711000000_support_declined_items_on_direct_claim.sql`; production matches it.
 
-**Fix shipped this session?** **Migration written, NOT applied** —
+**Fix shipped this session?** **Yes — applied to production 2026-09-15.**
 `supabase/migrations/20260915000000_harden_claim_flow.sql`. Adds an `auth.uid() is null`
 guard and an ownership check (`exists (select 1 from ravers where id = p_existing_raver_id
 and claimed_by = v_uid)`), and revokes `EXECUTE … from anon`.
 
-**Residual risk:** the migration is unapplied, so **production is still exposed**. Applying
-it is the single highest-priority action out of this pass. `revoke … from anon` is safe:
-`commitClaim()` already returns early without `currentUser` (`app.html:10736`), so no
-client path loses function.
+Verified live after applying:
+- `exec_grants` on `claim_and_merge_raver` is now `{authenticated, postgres, service_role}` — **`anon` is gone**.
+- Calling it with no JWT returns `{"error":"not_authenticated"}` (guard fires before the row lock, zero writes).
+- Calling it with a JWT and a bogus token returns `{"error":"invalid_or_used_token"}` — the normal path is intact.
+
+**Residual risk:** low. `revoke … from anon` is safe because `commitClaim()` already returned
+early without `currentUser`. An authenticated attacker can no longer target another raver's
+row, but can still burn an invite they legitimately hold — that is inherent to invite links.
 
 ---
 
@@ -159,15 +166,14 @@ so a `?claim=` link or 6-char code still converts a member into a locked-in crew
 **Actual (before fix):** the claim went through. Worse, the preview *displayed* the crew
 as claimable while labelling it "🔒 Locked In".
 
-**Fix shipped this session?** **Partially.**
-- Client: `showClaimPreview` now replaces the claim CTA with an explanation for a locked-in
-  crew, and `showScannerError` gained a `locked` view. Locked by
-  `tests/claim_preview_status.spec.js`.
-- Server: the authoritative gate is in the **unapplied** migration
-  (`return jsonb_build_object('error','crew_locked_in')`), wired to the new client error view.
+**Fix shipped this session?** **Yes, both layers.**
+- Client: `showClaimPreview` replaces the claim CTA with an explanation for a locked-in crew,
+  and `showScannerError` gained a `locked` view. Locked by `tests/claim_preview_status.spec.js`.
+- Server: **applied to production** — `claim_and_merge_raver` returns
+  `{"error":"crew_locked_in"}`, wired to the client error view.
 
-**Residual risk:** until the migration is applied the client gate is cosmetic — a stale tab
-or a direct RPC call still claims into a locked crew.
+**Residual risk:** none for Locked In. **Secret** is deliberately still claimable — see open
+question 2.
 
 ---
 
@@ -202,9 +208,13 @@ tokens. This is a latent correctness bug that arrives with growth.
 
 **Expected:** only live invites resolve; an ambiguous code fails closed.
 
-**Fix shipped this session?** **Migration written, NOT applied** — restricts to
+**Fix shipped this session?** **Yes — applied to production 2026-09-15.** Restricts to
 `claimed_by is null and status = 'unclaimed'` and returns zero rows when the prefix matches
 more than one stub.
+
+Verified live after applying: a claimed raver's 6-char code now returns **0 rows** (was 1),
+a real unclaimed stub's code still returns **1** (invites keep working), and a garbage code
+returns 0. 17 of the 41 tokens in production are no longer resolvable by code at all.
 
 **Residual risk:** even after the fix, 24 unclaimed stubs in a 16.7M space is ~700k
 unthrottled guesses to hit one — minutes of scripted traffic. **Rate limiting is not
@@ -241,12 +251,13 @@ Realistic triggers:
 **Actual:** hard failure, useless message, stub stays `unclaimed` forever. No data loss —
 the transaction rolls back — but the person is stuck and the roster keeps a ghost row.
 
-**Fix shipped this session?** **Migration written, NOT applied** — deletes the stub's
+**Fix shipped this session?** **Yes — applied to production 2026-09-15.** Deletes the stub's
 membership of any crew the claimer already belongs to before repointing the rest.
 
-**Residual risk:** unapplied. Note the deleted row's `added_at` / `added_by` are dropped in
-favour of the claimer's existing membership; that is the correct precedence but does lose
-the stub's original `added_at`.
+**Residual risk:** the deleted row's `added_at` / `added_by` are dropped in favour of the
+claimer's existing membership. That is the correct precedence, but it does lose the stub's
+original `added_at` — a crew's "member since" for that person becomes the earlier of the two,
+not the stub's date.
 
 ---
 
@@ -265,9 +276,22 @@ In practice gradients are written from preset maps (`CREW_GRADIENTS`), so this n
 crafted direct API write to `ravers.gradient` by someone whose RLS lets them update that row
 (a stub's creator can). Reachable, but not through the UI.
 
-**Fix shipped this session?** **No** — deliberately. This is an app-wide render pattern, and
-fixing it properly means adding `safeGradient()` and threading it through every call site.
-That is the drive-by refactor the brief rules out. Recommended as its own scoped change.
+**Fix shipped this session?** **Yes.** My first read called this an app-wide refactor; that
+was an overestimate — it is ~20 sinks, and chasing sinks was the wrong shape anyway.
+
+`safeGradient(v, fallback)` now sits beside `safeColor()` and accepts only
+`linear-/radial-gradient(...)` over a character class that cannot close an attribute. It is
+applied **at the data boundary** in `loadAllData()` (both raver load paths and the crew path),
+so every downstream sink is safe by construction — including the ones that reach it through
+intermediate variables (`m.c`, `avatarBg`, `dividerBg`), which a sink-by-sink pass missed and
+the test caught. The ~20 direct interpolations are wrapped too, as belt-and-braces.
+
+The default is a string literal, not a module `const`: `safeGradient()` is called from
+`loadAllData()`, and a `const` declared later in the file would be in its temporal dead zone
+there and throw, breaking the entire data load.
+
+Covered by `tests/gradient_injection.spec.js` (5 specs: accepts every real gradient shape,
+rejects attribute-breaking input, and a hostile crew/raver/stub gradient renders inert).
 
 ---
 
@@ -317,8 +341,12 @@ Two nuances that shape the fix:
 The `index.html` FAQ copy is duplicated into `schema.org` `FAQPage` markup, so it can surface
 in Google results — worth correcting alongside.
 
-**Fix shipped this session?** **No** — proposed only. Exact replacement wording is in the
-hand-off; the two accurate surfaces are explicitly out of scope and should not be touched.
+**Fix shipped this session?** **Yes — all six strings, approved wording.** The Lineup Explorer
+and "adding crewmates" claims were left untouched, as they are accurate. The two claimer-facing
+strings now branch on `currentUser` in `switchScannerTab()`, so a signed-in scanner still reads
+"you're added to the crew instantly" (true for them) and only a signed-out one is told about the
+signup step. Verified afterwards that no "no account needed first" / "join … instantly" string
+survives in `app.html` or `index.html`, and that all three accurate claims still do.
 
 ---
 
@@ -340,10 +368,13 @@ someone else, or simply decides not to join, gets the claim preview shoved in fr
 
 **Expected:** a way to say "not now" / "not me" that sticks.
 
-**Fix shipped this session?** **No** — the current behaviour is an intentional trade-off and
-the fix is a product decision. Suggested: treat a ✕ **from the preview view specifically** as a
-deliberate decline (clear both keys) while keeping the token for closes from the scan view; or
-keep a dismiss counter and stop re-prompting after 2.
+**Fix shipped this session?** **Yes.** `closeScanner()` now distinguishes *which view* it is
+closing from. Closing the **preview** is a decision — the user has seen whose spot it is and
+chose not to take it — so both storage keys are cleared and a toast acknowledges it. Closing
+from the **scan** view, or from an **error** view, is just backing out and keeps the token, so
+a network blip never burns someone's invite.
+
+Covered by `tests/claim_dismissal.spec.js` (4 specs, including both keep-the-token cases).
 
 ---
 
@@ -365,9 +396,17 @@ spends a whole signup to deliver a rejection. For the `?claim=` path this is an 
 choice (`app.html:10039-10043`, "signup is open to everyone now"); for `?join=` the rejection
 is knowable before signup.
 
-**Fix shipped this session?** **No.** Suggested: on `not_recruiting`, replace the intercept
-body with the crew name and "this crew isn't taking new members right now" before the signup
-form is offered.
+**Fix shipped this session?** **Yes.** `showJoinNotRecruiting()` repoints the intercept at
+"*Bass Syndicate* isn't recruiting right now 🤫" (or "This invite link has expired" for an
+unknown token) and clears the pending token, since there is no join to complete after signup.
+Signup stays reachable underneath — a closed link is no reason to bar the door.
+
+This is safe to do for `?join=` precisely because the rejection is knowable pre-auth:
+`get_crew_by_invite_token` is `anon`-callable and returns `not_recruiting` with the crew name.
+The `?claim=` path deliberately keeps its optimistic intercept.
+
+Required a harness addition: `get_crew_by_invite_token` is now stubbed in `tests/helpers.js`,
+mirroring the production function. Covered by `tests/join_link_preauth.spec.js` (5 specs).
 
 ---
 
@@ -406,10 +445,37 @@ leader who wants to pre-share can; the change is that the app no longer *pushes*
 **Residual risk:** none for the prompt. The underlying claim link still works in Secret — see
 open question 2.
 
+---
+
+### BUG-11 — **P2** — The mobile bottom nav ignores the iOS home-indicator safe area
+
+**Journey / surface:** 7 (client quality bar), iOS · `nav` and `main` under `@media (max-width: 640px)`, `app.html:262`
+
+**Status:** CONFIRMED (found by the new mobile pass; fixed + regression-tested)
+
+On phones the tab bar is `position: fixed; bottom: 0` with `padding: 0` and **no
+`env(safe-area-inset-bottom)`**. On any iPhone with a home indicator the tab row renders
+inside the ~34px strip iOS reserves for the swipe bar, so the bottom of every tap target is
+fouled and the nav reads as sitting under the system UI. `main`'s `padding-bottom: 90px`
+had the same problem — it stops clearing the nav once the nav grows by the inset.
+
+This is a gap rather than an oversight in principle: the huddle composer (`app.html:4115`)
+and the notification drawer footer (`app.html:3293`) both already handle the inset. The
+primary nav — the one control on every single screen — was the one that didn't.
+
+**Fix shipped this session?** **Yes.** `padding: 0 0 env(safe-area-inset-bottom, 0px)` on the
+nav, and `calc(90px + env(safe-area-inset-bottom, 0px))` on `main`.
+
+**Note on the test:** `env(safe-area-inset-*)` resolves to `0` in a headless browser with no
+notch, so a computed-style assertion cannot tell "handled" from "forgotten". The spec asserts
+against the CSSOM rule text instead. I verified it genuinely fails by reverting the fix and
+re-running — it does.
+
 ## Fixes shipped
 
-**APP_VERSION 1.50.0 → 1.50.1** (PATCH — bug fixes) → **1.51.0** (MINOR — the Secret
-invite-prompt change is a deliberate behaviour change, not a fix). `package.json` in sync.
+**APP_VERSION 1.50.0 → 1.52.0**, `package.json` in sync. 1.50.1 (PATCH, claim-screen
+fixes) → 1.51.0 (MINOR, Secret invite-prompt behaviour change) → 1.52.0 (MINOR, approved copy
+changes, three P2 fixes, and the iOS safe-area fix).
 
 | Change | File | Bug |
 |---|---|---|
@@ -420,16 +486,72 @@ invite-prompt change is a deliberate behaviour change, not a fix). `package.json
 | 4 new specs covering Secret / Recruiting / Locked-In / missing-crew previews | `tests/claim_preview_status.spec.js` | BUG-3 |
 | `raverInviteIsLive()` gates the invite prompt to Recruiting crews; Secret/Locked In get an explanatory toast | `app.html:24459-24484`, `24448` | BUG-10 |
 | 5 new specs covering the invite prompt across Secret / Recruiting / Locked In / crewless / multi-crew | `tests/invite_prompt_crew_status.spec.js` | BUG-10 |
+| All six overstated "no account / instantly" strings rewritten; the two claimer-facing ones now branch on `currentUser` | `app.html:8110,9075,9102,10176`, `switchScannerTab()`; `index.html:46,731` | BUG-7 |
+| `safeGradient()` added beside `safeColor()`, applied at the `loadAllData()` boundary + ~20 sinks | `app.html:25135`, `11324`, `11384`, `11428` | BUG-6 |
+| Closing the claim **preview** now clears the pending token (scan/error closes keep it) | `closeScanner()`, `app.html:10247` | BUG-8 |
+| `showJoinNotRecruiting()` — a `?join=` link to a Secret/Locked In/unknown crew says so before signup | `app.html:10047-10082` | BUG-9 |
+| Mobile bottom nav + `main` reserve `env(safe-area-inset-bottom)` | `app.html:262`, `310` | BUG-11 |
+| `mobile-chromium` project (iPhone 13 metrics) + auto-detected `mobile-safari` (real WebKit) | `playwright.config.js` | iOS coverage |
+| 7 phone-width layout specs: no h-scroll, safe areas, nav pinning, tap targets, signed-out screens | `tests/mobile_layout.spec.js` | BUG-11 |
+| 5 gradient-injection specs | `tests/gradient_injection.spec.js` | BUG-6 |
+| 4 claim-dismissal specs | `tests/claim_dismissal.spec.js` | BUG-8 |
+| 5 pre-auth `?join=` specs + `get_crew_by_invite_token` added to the stub | `tests/join_link_preauth.spec.js`, `tests/helpers.js` | BUG-9 |
+| **Migration APPLIED to production** (was written-not-applied) | `supabase/migrations/20260915000000_harden_claim_flow.sql` | BUG-1, 3, 4, 5 |
 
-**Migration written but deliberately NOT applied** —
-`supabase/migrations/20260915000000_harden_claim_flow.sql` (BUG-1, BUG-3 server gate,
-BUG-4, BUG-5). Per the brief, migrations are not applied to production without
-confirmation. **This needs an explicit decision — BUG-1 is a live P0.**
+**The hardening migration was applied to production on request**, after capturing the prior
+definitions for rollback (`scratchpad/ROLLBACK_NOTES.md`; the `claim_and_merge_raver` pre-state
+is byte-identical to `20260711000000_support_declined_items_on_direct_claim.sql`). Post-apply
+verification is recorded under BUG-1 and BUG-4. The smoke checks used bogus tokens and returned
+before any write statement, so no production rows were touched.
 
 Verification: `npm test` → 333 passed / 0 failed. `npm run lint` → `app.html` 0 errors
 (82 pre-existing warnings, unchanged).
 
-## Proposed copy changes — BUG-7 (awaiting approval, not shipped)
+## Mobile & iOS coverage
+
+**Correction to an earlier claim in this report:** I previously wrote that
+`ios_input_zoom.spec.js` "never actually runs at phone width." That was wrong. It sets its own
+iPhone 13 viewport via `test.use({ viewport, isMobile, hasTouch })` and always has — its header
+comment explains the deliberate choice to borrow the iPhone viewport but *not* its
+`defaultBrowserType`, because the CSS floor it guards keys off `(hover: none) and
+(pointer: coarse)`, which `isMobile`/`hasTouch` drive on Chromium. The real gap was that
+**every other spec ran at 1280px only**, so nothing watched phone-width layout.
+
+`playwright.config.js` now defines three projects:
+
+| Project | Engine | Scope |
+|---|---|---|
+| `chromium` | Desktop Chrome | everything except `mobile_layout.spec.js` |
+| `mobile-chromium` | Chromium at iPhone 13 metrics (390×844, DPR 3, touch, mobile UA) | 9 layout/touch-sensitive specs |
+| `mobile-safari` | **real WebKit**, iPhone 13 | same 9 specs — **added only when the WebKit binary is present** |
+
+Re-running all ~350 specs at phone width would double the suite for little signal, so the
+mobile projects run a curated list (`MOBILE_SPECS`): the phone-only layout spec, the iOS zoom
+spec, boot/auth/onboarding, both claim-flow specs, and the two overlay-behaviour specs — the
+screens a new user actually meets on a phone, which is how most people arrive.
+
+### The WebKit caveat — this is the honest limit
+
+**Real Mobile Safari was not exercised.** WebKit is not installed in this sandbox and
+`npx playwright install webkit` fails (`Download failure` — the same egress policy that blocks
+the live site). `mobile-chromium` gives iPhone *metrics* on Chromium: it catches layout,
+viewport, touch-media-query and tap-target regressions, but **not** WebKit rendering
+differences, real iOS Safari input-zoom behaviour, `-webkit-` prefix gaps, or the camera/QR
+permission path.
+
+The `mobile-safari` project is written and will activate itself the moment the binary exists —
+`webkitAvailable()` probes `PLAYWRIGHT_BROWSERS_PATH` (or `~/.cache/ms-playwright`) and adds the
+project only if a `webkit*` directory is there. So on your Mac, or in CI with network access:
+
+```bash
+npx playwright install webkit
+npm test          # now runs chromium + mobile-chromium + mobile-safari
+```
+
+No config change needed. On a machine without it the suite still runs and simply skips the
+WebKit pass rather than failing to start.
+
+## Copy changes — BUG-7 (approved and shipped in 1.52.0)
 
 **Out of scope — do not touch.** These are accurate and stay exactly as written:
 `lineup-explorer/index.html:50,304,1058`, `lineup-explorer/og-image-source.html:144`,
@@ -499,39 +621,73 @@ Where a new crew would stall, against `ANALYTICS.md`'s
   rather than to the crew's next rave, which is one more tap than needed before the
   `first_rsvp_updated` event can fire.
 
+## How to actually get a live pass
+
+Journeys 1-5 against `myravefam.com` are still the big hole. Two things are missing and they
+are independent — fixing one without the other does not unblock it.
+
+**Blocker A — network.** This sandbox's egress policy denies `CONNECT` to everything outside a
+small allowlist (npm, PyPI, the Anthropic API). `myravefam.com`, `cdn.jsdelivr.net` and the
+Playwright browser CDN are all refused with `403 connect_rejected`. Notably the **Supabase MCP
+connector is not affected** — it is how the production findings in this report were confirmed
+and how the migration was applied. So "no network" is really "no *HTTP* egress"; the database
+is reachable.
+
+**Blocker B — credentials.** The test-account block in the brief is still empty.
+
+### Options, roughly best to worst
+
+| Option | What it unblocks | Effort | Catch |
+|---|---|---|---|
+| **1. Run the suite against live from your own machine** | Everything. Full journeys 1-5 in a real browser on a real network. | **S** | Needs the test accounts created and the env block filled in. This is the one I'd pick. |
+| **2. GitHub Actions workflow with repo secrets** | Journeys 1-5 on every push, plus WebKit (runners can install it). | **M** | Secrets for the beta accounts; a live-hitting job should be manual-dispatch or nightly, never on every PR. |
+| **3. Allowlist `myravefam.com` on this environment** | Live HTTP from sessions like this one. | **S** (for whoever owns the policy) | Still needs credentials. Check whether the environment's network policy is configurable — see the Claude Code on the web docs on network policies. |
+| **4. Point the existing offline suite at a Supabase branch** | Real RPCs, real RLS, real claim/merge — no stubs — without touching production data. | **M** | Supabase branching is available on this project. Catches everything the stub can't model (RLS, triggers, the claim RPC's real behaviour). Does **not** cover the live CDN, service worker, or PWA install. |
+| **5. Me driving live through a browser-automation MCP** | Journeys 1-5 from here. | **M** | Only if such a connector is attached *and* it is not behind the same egress policy. It is not attached today. |
+
+### What I'd actually do
+
+**Option 1 for the immediate gap, option 4 as the durable fix.** Option 1 answers "does the
+real thing work" once. Option 4 is what stops this class of bug recurring: every P0 in this
+report lived in a Postgres function that the offline stub re-implements *by hand* in
+`tests/helpers.js`. A hand-written stub can never catch a bug in the thing it is imitating —
+`claim_and_merge_raver` had no authorization check for months and no test could have found it,
+because the stub's version was a different piece of code with different logic.
+
+Running the same specs against a real Supabase branch closes that gap permanently.
+
+### Fastest concrete path
+
+1. Create three throwaway accounts on live (leader + two joiners), fill in the brief's env block.
+2. `npx playwright install webkit` on your machine — that alone activates the `mobile-safari`
+   project and gives you real iOS Safari coverage on the next `npm test`.
+3. Walk journeys 2 and 4 by hand once, on an actual phone. Record the claim code, `?claim=` URL
+   and `?join=` URL. Those two journeys are where every P0 and P1 in this report lived.
+4. If you want it repeatable, wire option 2 or 4.
+
 ## Open questions for the founder
 
-1. **Apply `20260915000000_harden_claim_flow.sql`?** BUG-1 is a live P0 and the migration is
-   the fix. It also changes two error paths (`not_your_profile`, `crew_locked_in`) and revokes
-   `anon` EXECUTE on `claim_and_merge_raver`. I have not applied it.
-2. **Should a `?claim=` link still *work* while the crew is Secret?** ✅ *Partly resolved:*
-   you confirmed a Secret crew should not **prompt** to invite, and that is now shipped
-   (BUG-10). The open half is narrower: a claim link **already handed out** still resolves and
-   claims into a Secret crew, because neither `showQRModal` nor `claim_and_merge_raver` checks
-   status. I left that working on purpose — blocking it would kill links a leader deliberately
-   pre-shared. Confirm that's the intent, or say the word and the server-side gate goes in
-   beside the Locked In one.
-
-3. **BUG-7 copy — approve the proposed wording?** ✅ *Scope resolved:* you confirmed the
-   "no account" promise is correct for the **Lineup Explorer** (verified: zero auth code) and
-   for **adding crewmates** (`app.html:8716`, already precisely worded). Those two stay
-   untouched. Only the six scan/claim strings overstate it. Proposed replacements are in the
-   hand-off — they make the claimer-facing strings branch on `currentUser` (so the signed-in
-   case keeps saying "instantly", because it's true) and re-point the leader-facing one at what
-   the leader actually did. Not shipped pending your read on the wording.
-
-4. **`get_claim_preview` returns `notes` to `anon`.** The claim preview shows it as "Your leader
-   added these details for you", but the profile UI describes a raver's own notes as *"a secret
-   only you can read"* (`app.html:25675`), and the test harness masks `notes` to self-or-unclaimed
-   with no moderator bypass. Exposure is **bounded to unclaimed stubs** — `get_claim_preview`
-   returns only `{error, raver_name, claimer_name}` once a raver is claimed — so this is a
-   narrower leak than it first looks, and it matches product intent for the real invitee. It is
-   only wrong for someone who *brute-forced* a stub token (BUG-4). Leave as-is, or drop `notes`
-   from the anon payload?
-5. **Do you want a live pass at all?** It needs both the test-account block filled in **and** an
-   environment with egress to `myravefam.com`. This sandbox has neither. Journeys 1–5 remain
-   genuinely untested — in particular the two the brief ranks highest, live registration and live
-   claim.
-6. **Mobile was not exercised.** `playwright.config.js` defines a single Desktop Chrome project.
-   Worth adding a 390×844 project so `ios_input_zoom.spec.js` and the bottom-nav/home-indicator
-   checks actually run at phone width?
+1. ~~Apply the hardening migration?~~ ✅ **Done** — applied to production 2026-09-15 and
+   verified live (see BUG-1 / BUG-4). Rollback notes captured.
+2. **Should a `?claim=` link still *work* while the crew is Secret?** ✅ *Confirmed as-is.*
+   You said that's fine. A claim link already handed out still resolves into a Secret crew;
+   only **Locked In** is gated. Recorded so the next person doesn't "fix" it.
+3. ~~BUG-7 copy?~~ ✅ **Done** — approved wording shipped for all six strings; the Lineup
+   Explorer and "adding crewmates" claims left untouched.
+4. **`get_claim_preview` still returns `notes` to `anon`.** The only open item I'd still like a
+   ruling on. Exposure is now much narrower than it first looked: the payload is only built for
+   **unclaimed stubs** (a claimed raver returns just `{error, raver_name, claimer_name}`), and
+   with BUG-4 fixed a stranger can no longer turn a guessed code into a claimed account's token.
+   So `notes` reaches only someone holding an actual live invite link — which matches the intent
+   of showing "your leader added these details for you." But the profile UI calls a raver's own
+   notes *"a secret only you can read."* Leave as-is, or drop `notes` from the anon payload?
+5. **Rate limiting on `find_raver_by_invite_code`.** Still unthrottled. 24 live stubs in a 16^6
+   space is ~700k unthrottled guesses to hit one — minutes of scripted traffic. Worth doing
+   before the crew count grows. Cheapest real fix is a longer invite code (Enhancement E6);
+   a per-IP throttle via `current_setting('request.headers')` is the other option.
+6. **Real Mobile Safari is still unexercised** — WebKit can't be installed here. The project is
+   configured and self-activating; `npx playwright install webkit` on any machine with network
+   turns it on. See "Mobile & iOS coverage".
+7. **Live journeys 1-5 remain untested.** See "How to actually get a live pass" — my
+   recommendation is a manual pass from your machine now, and Supabase-branch testing as the
+   durable fix, since every P0 here lived in a Postgres function the offline stub only imitates.
