@@ -9320,7 +9320,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.50.1';
+  const APP_VERSION = '1.51.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -24440,7 +24440,7 @@ async function doProfilePasswordChange() {
       switchTab('members');
     }
     renderSquad();
-    if (currentUser) openInvitePrompt(raver.id);
+    if (currentUser && raverInviteIsLive(raver.id)) openInvitePrompt(raver.id);
   }
 
   function closeCrewPick() {
@@ -24454,12 +24454,35 @@ async function doProfilePasswordChange() {
 
   let _invitePromptRaverId = null;
 
+  // Inviting is a Recruiting-stage action. A Secret crew is a private
+  // workspace — "nothing is sent or notified while you're Secret" (see the
+  // onboarding copy) — and a Locked In crew has closed its roster, so pushing
+  // an invite in either state contradicts the status the leader chose. Mirrors
+  // the canInvite check that already gates the crew-wide ?join= link.
+  // A raver in no crew at all keeps the old behaviour: there's no crew status
+  // to respect, and they're still a blackbook contact worth inviting.
+  function raverInviteIsLive(raverId) {
+    const inCrews = crews.filter(c => (c.squadIds || []).some(id => String(id) === String(raverId)));
+    if (!inCrews.length) return true;
+    return inCrews.some(c => c.status === 'recruiting');
+  }
+
+  // Why the invite prompt is being withheld, phrased for the leader.
+  function inviteHeldBackReason(raverId, firstName) {
+    const inCrews = crews.filter(c => (c.squadIds || []).some(id => String(id) === String(raverId)));
+    return inCrews.some(c => c.status === 'secret')
+      ? `🤫 ${firstName} is on the roster. Invites go live when you open the crew to Recruiting.`
+      : `🔒 ${firstName} is on the roster. That crew's locked in, so invites are closed.`;
+  }
+
   // Opens the raver profile underneath, then layers the invite prompt on top
   // (only when signed in — guests have no qr_token / backend to invite with).
   function maybeOfferInvite(raverId) {
     const r = getRaver(raverId);
     if (r) openProfile(r.id, false, 'members');
-    if (currentUser && r) openInvitePrompt(r.id);
+    if (!currentUser || !r) return;
+    if (raverInviteIsLive(raverId)) openInvitePrompt(r.id);
+    else showToast(inviteHeldBackReason(raverId, r.name.split(' ')[0]));
   }
 
   function openInvitePrompt(raverId) {

@@ -1,10 +1,10 @@
-# RaveFAM beta QA — 2026-09-15 — APP_VERSION 1.50.1
+# RaveFAM beta QA — 2026-09-15 — APP_VERSION 1.51.0
 
 ## Environment
 
 | | |
 |---|---|
-| Local app | `app.html` @ `claude/ravefam-beta-qa-3knvbj` (baseline 1.50.0 → shipped 1.50.1) |
+| Local app | `app.html` @ `claude/ravefam-beta-qa-3knvbj` (baseline 1.50.0 → shipped 1.51.0) |
 | Playwright | `@playwright/test` 1.56.0, Chromium 1194, `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers` |
 | Viewport | Desktop Chrome (Playwright default). **Mobile 390×844 not exercised** — see caveat below |
 | Production DB | Supabase project `RaveFam` (`tvpgopciioqbqmjjjigh`), **read-only schema inspection only** |
@@ -40,7 +40,7 @@ aggregates quoted are counts.
 
 ```
 npm test  →  329 passed / 0 failed  (4.8m)   [before any change]
-npm test  →  333 passed / 0 failed          [after fixes: 329 + 4 new]
+npm test  →  338 passed / 0 failed          [after fixes: 329 + 9 new]
 npm run lint → app.html 0 errors, 82 warnings (all pre-existing no-unused-vars)
 ```
 
@@ -52,7 +52,7 @@ No pre-existing failures. The suite does not weaken any assertion in this change
 |---|---|---|---|
 | 1 | Marketing → app handoff | **Blocked (live)** | Static: all 8 landing CTAs point at `app.html?tab=login\|signup`; `?tab=` **is** correctly consumed at `app.html:9314` into `window._pendingAuthTab`. Landing QR path stashes `pendingClaimToken` + `openCodeEntry` (`index.html:848,939,943`) and the app consumes both (`app.html:10095,10026`). No defect found statically. |
 | 2 | New user registration | **Blocked (live)** | Static review of `doSignup` / `showAuthTab` / onboarding v2 found no P0/P1. Handle rules enforced identically in both entry points (`validateHandleFormat`, `app.html:30124`); live availability-check-as-you-type already exists in **both** the handle picker and onboarding step 2 — the brief's "handle availability check" enhancement is already shipped. |
-| 3 | Leader: Secret → people → event → invite | **Blocked (live)** / partial local | Invite generation covered by `tests/invites.spec.js` (QR code derivation, share sheet, crew `?join=` token persistence) — all pass. **Found BUG-3** (Locked In does not lock the roster). |
+| 3 | Leader: Secret → people → event → invite | **Blocked (live)** / partial local | Invite generation covered by `tests/invites.spec.js` (QR code derivation, share sheet, crew `?join=` token persistence) — all pass. **Found BUG-3** (Locked In does not lock the roster) and **BUG-10** (a Secret crew prompts to invite). |
 | 4 | Invite acceptance | **Blocked (live)** / partial local | The high-value area. **Found BUG-1, BUG-2, BUG-3, BUG-4, BUG-5, BUG-6.** Paths 1–14 could not be walked end-to-end; findings come from reading the client flow plus the live RPC definitions. |
 | 5 | Post-join first session | **Blocked (live)** | Post-claim landing (`showClaimSuccess` → "View My Crews") and `runFirstTimeSetup` read as sensible. Not exercised. |
 | 6 | Core loops | **Pass (local only)** | Raves/Ravers/Stats/Notifications/Huddle/Archive/Vendor/Venue/moderation/soft-delete all covered by existing specs, all green. |
@@ -271,29 +271,54 @@ That is the drive-by refactor the brief rules out. Recommended as its own scoped
 
 ---
 
-### BUG-7 — **P2** — "No account needed first" is not true
+### BUG-7 — **P2** — "No account needed" is true in two places and false in a third
 
-**Journey / surface:** 3 & 4 · `app.html:10176`, `9075`, `9102`
+**Journey / surface:** 3 & 4 · see the table below
 
-**Status:** CONFIRMED (source; the code path is explicit)
+**Status:** CONFIRMED (source; auth-free surfaces verified by absence of any auth code)
 
-Three strings promise an account-free claim:
+RaveFAM makes the "no account" promise on **three different surfaces**. Two are accurate and
+should be left exactly as they are. Only the scan/claim surface overstates it.
 
-- `app.html:10176` — "they're added to your crew instantly. **No account needed first.**"
-- `app.html:9075` — "you're added to the crew **instantly**"
-- `app.html:9102` — "enter it below to **join instantly**"
+| Surface | Claim | Verdict |
+|---|---|---|
+| **Lineup Explorer** — `lineup-explorer/index.html:50,304,1058`, `og-image-source.html:144` | "free, with no account or login required" | ✅ **True.** The directory and all 34 festival pages contain zero Supabase and zero auth code — the only matches for `supabase\|auth\|login` in the whole directory are the two copy strings themselves. |
+| **Landing page, Lineup Explorer section** — `index.html:653` | "Free for the fam · no account" | ✅ **True.** Scoped inside the `<!-- LINEUP EXPLORER -->` section, next to "no login, no wall." |
+| **Adding crewmates (leader-facing)** — `app.html:8716` | "Add ravers you already know as unclaimed profiles… **no account needed for them yet** — to track your whole fam before anyone's even signed up" | ✅ **True, and precisely worded.** "for them" and "yet" both do real work. This is the product thesis and it holds. |
+| **Scan / claim flow** — 6 strings, below | "no account needed first" / "added to the crew **instantly**" | ❌ **Overstated.** |
 
-But `handleClaimToken` (`app.html:10484`) branches on `if (!currentUser)` straight into
-`showPreAuthIntercept`, whose copy reads *"Create an account or log in to claim it."*
-An account is required first, always.
+The six strings that overstate it:
 
-The brief calls this out by name ("'No account needed first' is either true or the UI stops
-claiming it") and grades it P2 ("Copy lies").
+| Line | Audience | Current text |
+|---|---|---|
+| `app.html:8110` | claimer (signed-out splash) | "Got a crew invite? Scan the QR code — **no account needed first**" |
+| `app.html:10176` | **leader** (`showQRModal` hint) | "they're added to your crew instantly. **No account needed first.**" |
+| `app.html:9075` | claimer (scanner subtitle, static) | "you're added to the crew **instantly**" |
+| `app.html:10273` | claimer (same subtitle, set by `switchScannerTab`) | same |
+| `app.html:9102` | claimer (code-entry hint, static) | "enter it below to **join instantly**" |
+| `app.html:10278` | claimer (same hint, set by `switchScannerTab`) | "Type it in — you're added to the crew instantly" |
+| `index.html:46`, `:731` | claimer (FAQ **and** schema.org FAQPage) | "Scan a QR code or enter a 6-digit claim code to join an existing crew **instantly**" |
 
-**Fix shipped this session?** **No** — this is a founder's call between two valid fixes, and
-the copy carries product voice I shouldn't unilaterally rewrite:
-- **Cheap:** change the three strings (e.g. "→ they claim their spot in seconds").
-- **Right:** build claim-first onboarding (Enhancement E1) and make the promise true.
+`handleClaimToken` (`app.html:10484`) branches on `if (!currentUser)` straight into
+`showPreAuthIntercept`, whose own copy reads *"Create an account or log in to claim it."*
+So for a signed-out scanner an account is required first, always.
+
+Two nuances that shape the fix:
+
+1. **`app.html:10176` is leader-facing, not claimer-facing.** It sits inside the QR modal the
+   *leader* is holding up. The true statement there is the one at `app.html:8716` — the leader
+   didn't need the invitee to have an account in order to build the roster. As written it reads
+   as a promise about the scanner instead.
+2. **The claimer-facing strings are conditionally true.** If the scanner is already signed in
+   (the scanner is reachable from inside the app), the claim really is instant. Only the
+   signed-out case is wrong — and `switchScannerTab` already sets both strings dynamically, so
+   they can simply branch on `currentUser`.
+
+The `index.html` FAQ copy is duplicated into `schema.org` `FAQPage` markup, so it can surface
+in Google results — worth correcting alongside.
+
+**Fix shipped this session?** **No** — proposed only. Exact replacement wording is in the
+hand-off; the two accurate surfaces are explicitly out of scope and should not be touched.
 
 ---
 
@@ -346,9 +371,45 @@ form is offered.
 
 ---
 
+---
+
+### BUG-10 — **P1** — A Secret crew prompts the leader to invite, breaking the Secret promise
+
+**Journey / surface:** 3 (leader path) · `maybeOfferInvite` / `closeCrewPickAndProfile`, `app.html:24459`
+
+**Status:** CONFIRMED (fixed + covered by new specs)
+
+Crews are created **Secret**, and the onboarding copy promises *"Nothing is sent or notified
+while you're Secret"* (`app.html:8716`). But adding a person to a Secret crew fired the invite
+prompt — *"Invite Sam now? · Show QR & code · Send a link"* — immediately, pushing the leader
+toward an action the Secret stage is supposed to defer.
+
+`saveCrewPick()` already respects Secret for the activity feed
+(`if (crew.status !== 'secret') postCrewActivity(...)`), so the crew-status check existed one
+line away and simply wasn't applied to the invite prompt.
+
+**Expected:** building a Secret roster stays silent. Invites become a thing when the leader
+opens the crew to Recruiting.
+
+**Actual (before fix):** the prompt fired on every add, in every crew status.
+
+**Fix shipped this session?** **Yes.** New `raverInviteIsLive(raverId)` gates both entry
+points: the prompt appears only when the raver is in at least one `recruiting` crew. Secret
+and Locked In instead show a toast that names the reason and points at the next step
+("Invites go live when you open the crew to Recruiting"). A raver in **no** crew keeps the old
+behaviour — there is no crew status to respect, and they're still a blackbook contact worth
+inviting.
+
+Deliberately **not** gated: the 📲 button on a raver's profile still opens the QR in Secret. A
+leader who wants to pre-share can; the change is that the app no longer *pushes* it.
+
+**Residual risk:** none for the prompt. The underlying claim link still works in Secret — see
+open question 2.
+
 ## Fixes shipped
 
-**APP_VERSION 1.50.0 → 1.50.1** (PATCH — bug fixes). `package.json` bumped in sync.
+**APP_VERSION 1.50.0 → 1.50.1** (PATCH — bug fixes) → **1.51.0** (MINOR — the Secret
+invite-prompt change is a deliberate behaviour change, not a fix). `package.json` in sync.
 
 | Change | File | Bug |
 |---|---|---|
@@ -357,6 +418,8 @@ form is offered.
 | Locked-in crew: claim CTA replaced with an explanation instead of a button the server would reject | `app.html:10643-10648` | BUG-3 |
 | New `locked` error view + `crew_locked_in` error mapping in `commitClaim` | `app.html:10696-10703`, `10789` | BUG-3 |
 | 4 new specs covering Secret / Recruiting / Locked-In / missing-crew previews | `tests/claim_preview_status.spec.js` | BUG-3 |
+| `raverInviteIsLive()` gates the invite prompt to Recruiting crews; Secret/Locked In get an explanatory toast | `app.html:24459-24484`, `24448` | BUG-10 |
+| 5 new specs covering the invite prompt across Secret / Recruiting / Locked In / crewless / multi-crew | `tests/invite_prompt_crew_status.spec.js` | BUG-10 |
 
 **Migration written but deliberately NOT applied** —
 `supabase/migrations/20260915000000_harden_claim_flow.sql` (BUG-1, BUG-3 server gate,
@@ -365,6 +428,36 @@ confirmation. **This needs an explicit decision — BUG-1 is a live P0.**
 
 Verification: `npm test` → 333 passed / 0 failed. `npm run lint` → `app.html` 0 errors
 (82 pre-existing warnings, unchanged).
+
+## Proposed copy changes — BUG-7 (awaiting approval, not shipped)
+
+**Out of scope — do not touch.** These are accurate and stay exactly as written:
+`lineup-explorer/index.html:50,304,1058`, `lineup-explorer/og-image-source.html:144`,
+`index.html:653`, `app.html:8716`.
+
+**In scope.** Two principles: (a) the claimer-facing strings branch on `currentUser`, because
+"instantly" is genuinely true for a signed-in scanner and only wrong when signed out;
+(b) the one leader-facing string stops describing the scanner's experience and describes what
+the leader actually did.
+
+| # | Line | Current | Proposed |
+|---|---|---|---|
+| C1 | `app.html:8110` (signed-out splash) | "Got a crew invite? Scan the QR code — no account needed first" | "Got a crew invite? Scan the QR code — see your crew before you sign up" |
+| C2 | `app.html:10176` (**leader**, QR modal hint) | "Show this QR or share the code — they're added to your crew instantly. No account needed first." | "Show this QR or share the code — their spot's already built, they just claim it. You never needed their account to get this far." |
+| C3 | `app.html:9075` + `10273` (scanner subtitle) | "…— you're added to the crew instantly." | *signed in:* unchanged — "…— you're added to the crew instantly."<br>*signed out:* "…— see who you're joining, then finish signing up to claim your spot." |
+| C4 | `app.html:9102` + `10278` (code-entry hint) | "enter it below to join instantly" / "Type it in — you're added to the crew instantly" | *signed in:* unchanged.<br>*signed out:* "Type it in — see the crew, then finish signing up to claim your spot." |
+| C5 | `index.html:46` + `:731` (FAQ **and** schema.org `FAQPage`) | "…enter a 6-digit claim code to join an existing crew instantly." | "…enter a 6-digit claim code to see the crew straight away, then create your free account to claim your spot." |
+
+C3/C4 need a small change in `switchScannerTab` (`app.html:10270-10280`), which already sets
+both strings dynamically — so this is a `currentUser ? … : …` on two existing assignments,
+plus updating the two static defaults in the markup to the signed-out variant.
+
+C1's "see your crew before you sign up" is accurate: `showPreAuthIntercept` renders the crew
+name, colour and the raver's avatar before any auth, powered by `get_claim_preview`'s `anon`
+grant (which the hardening migration deliberately preserves).
+
+**If Enhancement E1 (claim-first onboarding) ships instead, C1–C5 become unnecessary** — the
+original copy would simply become true. These changes are the cheap path, not the good one.
 
 ## Enhancements (prioritized)
 
@@ -411,13 +504,22 @@ Where a new crew would stall, against `ANALYTICS.md`'s
 1. **Apply `20260915000000_harden_claim_flow.sql`?** BUG-1 is a live P0 and the migration is
    the fix. It also changes two error paths (`not_your_profile`, `crew_locked_in`) and revokes
    `anon` EXECUTE on `claim_and_merge_raver`. I have not applied it.
-2. **Should a `?claim=` link work while the crew is still Secret?** Today it does. The brief's
-   lifecycle says invites go live at Recruiting; `app.html:14126-14129` says "QR codes live" at
-   recruiting. But the invite prompt fires *immediately* after adding a person — which happens in
-   Secret, since crews are created Secret. So the code and the UX disagree. I fixed **Locked In**
-   (unambiguous: "roster closed") and deliberately left **Secret** alone. Which is intended?
-3. **BUG-7: change the copy, or build claim-first onboarding (E1)?** I did not touch the copy —
-   it carries product voice and the answer depends on whether E1 is on the roadmap.
+2. **Should a `?claim=` link still *work* while the crew is Secret?** ✅ *Partly resolved:*
+   you confirmed a Secret crew should not **prompt** to invite, and that is now shipped
+   (BUG-10). The open half is narrower: a claim link **already handed out** still resolves and
+   claims into a Secret crew, because neither `showQRModal` nor `claim_and_merge_raver` checks
+   status. I left that working on purpose — blocking it would kill links a leader deliberately
+   pre-shared. Confirm that's the intent, or say the word and the server-side gate goes in
+   beside the Locked In one.
+
+3. **BUG-7 copy — approve the proposed wording?** ✅ *Scope resolved:* you confirmed the
+   "no account" promise is correct for the **Lineup Explorer** (verified: zero auth code) and
+   for **adding crewmates** (`app.html:8716`, already precisely worded). Those two stay
+   untouched. Only the six scan/claim strings overstate it. Proposed replacements are in the
+   hand-off — they make the claimer-facing strings branch on `currentUser` (so the signed-in
+   case keeps saying "instantly", because it's true) and re-point the leader-facing one at what
+   the leader actually did. Not shipped pending your read on the wording.
+
 4. **`get_claim_preview` returns `notes` to `anon`.** The claim preview shows it as "Your leader
    added these details for you", but the profile UI describes a raver's own notes as *"a secret
    only you can read"* (`app.html:25675`), and the test harness masks `notes` to self-or-unclaimed
