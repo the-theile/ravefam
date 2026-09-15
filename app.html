@@ -9320,7 +9320,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.50.0';
+  const APP_VERSION = '1.50.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -10545,7 +10545,11 @@ async function doProfilePasswordChange() {
     const crewColor   = safeColor(crew?.color, '#FF2D78');
     const crewName    = crew?.name  || 'a crew';
     const memberCount = crew?.member_count ?? 0;
-    const statusLabel = crew?.status === 'locked-in' ? '🔒 Locked In' : '🌐 Recruiting';
+    // Report the crew's real status. The old mapping collapsed everything that
+    // wasn't 'locked-in' into "Recruiting", so a Secret crew's claim link told
+    // the scanner it was Recruiting — see STATUS for the canonical labels.
+    const isLockedIn  = crew?.status === 'locked-in';
+    const statusLabel = STATUS[crew?.status]?.label || '🌐 Recruiting';
     const memberText  = memberCount > 0
       ? `${memberCount} raver${memberCount !== 1 ? 's' : ''} already in`
       : 'Be the first to claim';
@@ -10635,6 +10639,13 @@ async function doProfilePasswordChange() {
         : `<div class="claim-spot-label">This profile was saved for you by your crew leader.</div>`;
     }
 
+    // A locked-in crew has closed its roster (see STATUS), so there's no spot
+    // left to claim — say so instead of offering a button that fails server-side.
+    if (isLockedIn) bottomSection = '';
+    const claimCta = isLockedIn
+      ? `<div class="claim-spot-label">🔒 ${escHtml(crewName)} is locked in — the roster's closed, so this invite can't be claimed right now. Ask your crew leader to reopen recruiting.</div>`
+      : `<button class="btn-claim" id="confirm-claim-btn" onclick="commitClaim()">🎉 Claim My Spot in ${escHtml(crewName)}</button>`;
+
     const slotGradient = raver.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)';
     const primaryColor = slotGradient.match(/#[0-9A-Fa-f]{6}/)?.[0] || crewColor;
     document.getElementById('preview-body').innerHTML = `
@@ -10655,7 +10666,7 @@ async function doProfilePasswordChange() {
         </div>
       </div>
       ${bottomSection}
-      <button class="btn-claim" id="confirm-claim-btn" onclick="commitClaim()">🎉 Claim My Spot in ${escHtml(crewName)}</button>
+      ${claimCta}
       <span class="claim-back-link" role="button" tabindex="0" onclick="backToScan()" onkeydown="if(event.key==='Enter')backToScan()">Not you? Scan a different code</span>
     `;
     showScannerView('preview');
@@ -10667,7 +10678,11 @@ async function doProfilePasswordChange() {
     if (type === 'claimed') {
       icon    = '🔒';
       title   = "This spot's taken";
-      desc    = `<strong>${data?.raver_name || 'This profile'}</strong> has already been claimed${data?.claimer_name ? ' by ' + data.claimer_name : ''}.<br><br>Ask your crew leader to create a new invite for you.`;
+      // Both names are free text a user controls (a stub's name is typed by the
+      // leader, claimer_name is the claimer's own display name) and this lands
+      // in innerHTML — escape, or a hostile name runs as markup for whoever
+      // scans that code next.
+      desc    = `<strong>${escHtml(data?.raver_name || 'This profile')}</strong> has already been claimed${data?.claimer_name ? ' by ' + escHtml(data.claimer_name) : ''}.<br><br>Ask your crew leader to create a new invite for you.`;
       actions = `
         <button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="backToScan()">📷 Scan a Different Code</button>
         <button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="closeScanner()">Close</button>`;
@@ -10677,6 +10692,13 @@ async function doProfilePasswordChange() {
       desc    = "This QR code or invite link is no longer valid. It may have already been used or your crew leader generated a new one.";
       actions = `
         <button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="backToScan()">📷 Try Again</button>
+        <button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="closeScanner()">Close</button>`;
+    } else if (type === 'locked') {
+      icon    = '🔒';
+      title   = 'This crew is locked in';
+      desc    = `${data?.crew?.name ? '<strong>' + escHtml(data.crew.name) + '</strong>' : 'This crew'} has closed its roster, so invites can't be claimed right now.<br><br>Ask your crew leader to reopen recruiting.`;
+      actions = `
+        <button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="backToScan()">📷 Scan a Different Code</button>
         <button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="closeScanner()">Close</button>`;
     } else if (type === 'network') {
       icon    = '⚠️';
@@ -10763,6 +10785,8 @@ async function doProfilePasswordChange() {
       let errType;
       if (result?.error === 'invalid_or_used_token' || result?.error === 'already_claimed') {
         errType = 'claimed';
+      } else if (result?.error === 'crew_locked_in') {
+        errType = 'locked';
       } else if (error && (!error.status || error.status === 0)) {
         errType = 'network';
       } else {
