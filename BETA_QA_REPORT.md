@@ -1,5 +1,9 @@
 # RaveFAM beta QA — 2026-09-15 — APP_VERSION 1.52.0
 
+> A formatted, filterable version of this report is published as a private artifact:
+> https://claude.ai/artifact/7sJGRvwM8o3g3ETZ5tPgyK
+> This file stays the source of truth; the page mirrors it.
+
 ## Environment
 
 | | |
@@ -50,8 +54,9 @@ npm test  →  399 passed / 0 failed  (5.9m)   [final: 352 desktop + 47 mobile]
 npm run lint → app.html 0 errors, 82 warnings (all pre-existing no-unused-vars)
 ```
 
-23 specs added across 6 new files. The mobile project re-runs 9 layout/touch-sensitive
-specs at iPhone 13 metrics rather than the whole suite — see "Mobile & iOS coverage".
+32 specs added across 6 new files — 23 visible to the desktop project (329 + 23 = 352) and
+9 phone-only. The mobile project re-runs 9 layout/touch-sensitive spec files at iPhone 13
+metrics rather than the whole suite — see "Mobile & iOS coverage".
 
 No pre-existing failures. The suite does not weaken any assertion in this change.
 
@@ -65,7 +70,7 @@ No pre-existing failures. The suite does not weaken any assertion in this change
 | 4 | Invite acceptance | **Blocked (live)** / partial local | The high-value area. **Found BUG-1, BUG-2, BUG-3, BUG-4, BUG-5, BUG-6, BUG-8, BUG-9.** Paths 1–14 could not be walked end-to-end; findings come from reading the client flow plus the live RPC definitions. |
 | 5 | Post-join first session | **Blocked (live)** | Post-claim landing (`showClaimSuccess` → "View My Crews") and `runFirstTimeSetup` read as sensible. Not exercised. |
 | 6 | Core loops | **Pass (local only)** | Raves/Ravers/Stats/Notifications/Huddle/Archive/Vendor/Venue/moderation/soft-delete all covered by existing specs, all green. |
-| 7 | Client quality bar | **Partial pass** | Zero uncaught exceptions on boot signed-out and signed-in (CONFIRMED, `smoke`/`authed` specs). Escape-closes-overlays, focus containment, input labelling, colour-swatch a11y, keyboard reachability, iOS input zoom, XSS injection specs — all green. **Mobile 390×844 is now exercised** by the `mobile-chromium` project (7 new layout specs; found BUG-11). Still not exercised: **real Mobile Safari / WebKit** (binary unavailable here), Android Chrome, desktop Safari, and the camera QR path. |
+| 7 | Client quality bar | **Partial pass** | Zero uncaught exceptions on boot signed-out and signed-in (CONFIRMED, `smoke`/`authed` specs). Escape-closes-overlays, focus containment, input labelling, colour-swatch a11y, keyboard reachability, iOS input zoom, XSS injection specs — all green. **Mobile 390×844 is now exercised** by the `mobile-chromium` project (9 new layout specs; found BUG-11). Still not exercised: **real Mobile Safari / WebKit** (binary unavailable here), Android Chrome, desktop Safari, and the camera QR path. |
 
 ## Bugs (prioritized)
 
@@ -498,7 +503,7 @@ changes, three P2 fixes, and the iOS safe-area fix).
 | `showJoinNotRecruiting()` — a `?join=` link to a Secret/Locked In/unknown crew says so before signup | `app.html:10047-10082` | BUG-9 |
 | Mobile bottom nav + `main` reserve `env(safe-area-inset-bottom)` | `app.html:262`, `310` | BUG-11 |
 | `mobile-chromium` project (iPhone 13 metrics) + auto-detected `mobile-safari` (real WebKit) | `playwright.config.js` | iOS coverage |
-| 7 phone-width layout specs: no h-scroll, safe areas, nav pinning, tap targets, signed-out screens | `tests/mobile_layout.spec.js` | BUG-11 |
+| 9 phone-width layout specs: no h-scroll, safe areas, nav pinning, tap targets, signed-out screens | `tests/mobile_layout.spec.js` | BUG-11 |
 | 5 gradient-injection specs | `tests/gradient_injection.spec.js` | BUG-6 |
 | 4 claim-dismissal specs | `tests/claim_dismissal.spec.js` | BUG-8 |
 | 5 pre-auth `?join=` specs + `get_crew_by_invite_token` added to the stub | `tests/join_link_preauth.spec.js`, `tests/helpers.js` | BUG-9 |
