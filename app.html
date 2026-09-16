@@ -264,7 +264,11 @@
       position: fixed;
       bottom: 0; left: 0; right: 0;
       z-index: 100;
-      padding: 0;
+      /* Clear the iOS home indicator. Without this the tab row renders inside
+         the strip iOS reserves for the swipe bar, so the bottom of every tap
+         target is fouled. The huddle composer and the notification drawer
+         footer already do this; the primary nav was the one that didn't. */
+      padding: 0 0 env(safe-area-inset-bottom, 0px);
       gap: 0;
       border-bottom: none;
       border-top: 1px solid rgba(255,255,255,0.08);
@@ -307,7 +311,9 @@
     .tab-label-full { display: none; }
     .tab-label-short { display: inline; }
     /* Extra bottom padding so content clears the nav bar */
-    main { padding: 20px 16px 90px; }
+    /* 90px clears the fixed nav; the inset keeps that true once the nav grows
+       by the home-indicator strip above. */
+    main { padding: 20px 16px calc(90px + env(safe-area-inset-bottom, 0px)); }
   }
 
   /* Pages */
@@ -8107,7 +8113,7 @@
       margin-bottom:4px;
     ">📷 Scan Crew Invite QR</button>
     <p style="text-align:center;font-size:0.74rem;color:var(--muted);margin-top:6px;font-family:'Outfit',sans-serif;">
-      Got a crew invite? Scan the QR code — no account needed first
+      Got a crew invite? Scan the QR code — see your crew before you sign up
     </p>
     <p style="text-align:center;margin-top:8px;font-size:0.78rem;color:var(--muted);font-family:'Outfit',sans-serif;">
       Have a text invite code? <a href="#" onclick="openScanner();switchScannerTab('code');return false;" style="color:var(--neon-cyan);text-decoration:none;font-weight:600;">Enter it here →</a>
@@ -9072,7 +9078,7 @@
       <button class="scanner-tab active" id="stab-camera" onclick="switchScannerTab('camera')">📷 Scan QR</button>
       <button class="scanner-tab"        id="stab-code"   onclick="switchScannerTab('code')">🔢 Enter Code</button>
     </div>
-    <div class="scanner-subtitle" id="scanner-subtitle">Point your camera at the QR your crew leader is showing you — you're added to the crew instantly.</div>
+    <div class="scanner-subtitle" id="scanner-subtitle">Point your camera at the QR your crew leader is showing you — see who you're joining, then finish signing up to claim your spot.</div>
 
     <!-- Camera pane -->
     <div id="scanner-pane-camera" style="width:100%;display:flex;flex-direction:column;align-items:center;">
@@ -9099,7 +9105,7 @@
     <!-- Code entry pane -->
     <div id="scanner-pane-code" class="code-input-wrap" style="display:none;">
       <div class="code-input-label">Enter your invite code</div>
-      <div class="code-input-hint">Ask your crew leader for the 6-character code — enter it below to join instantly</div>
+      <div class="code-input-hint">Ask your crew leader for the 6-character code — enter it below to see the crew and claim your spot</div>
       <div class="otp-boxes" id="otp-boxes">
         <input class="otp-box" aria-label="Claim code digit 1 of 6" maxlength="1" data-idx="0" oninput="otpInput(this)" onkeydown="otpKeydown(event,this)" autocomplete="off" inputmode="text" spellcheck="false">
         <input class="otp-box" aria-label="Claim code digit 2 of 6" maxlength="1" data-idx="1" oninput="otpInput(this)" onkeydown="otpKeydown(event,this)" autocomplete="off" inputmode="text" spellcheck="false">
@@ -9320,7 +9326,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.50.0';
+  const APP_VERSION = '1.52.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -10041,9 +10047,38 @@ async function doProfilePasswordChange() {
     } else if (pendingJoin) {
       document.getElementById('claim-intercept').classList.add('open');
       sb.rpc('get_crew_by_invite_token', { p_token: pendingJoin }).then(({ data }) => {
-        if (data && !data.error) showPreAuthIntercept({ crew: data, raver: null }, pendingJoin);
+        if (data && !data.error) { showPreAuthIntercept({ crew: data, raver: null }, pendingJoin); return; }
+        // Unlike a claim token, a crew link's rejection is knowable before
+        // signup — get_crew_by_invite_token tells us the crew isn't recruiting
+        // right now. Saying so here beats letting someone create an account
+        // and only then toasting "isn't currently recruiting" from bootApp().
+        if (data?.error === 'not_recruiting') {
+          sessionStorage.removeItem('pendingCrewJoin');
+          showJoinNotRecruiting(data.crew_name);
+        } else if (data?.error === 'invalid_token') {
+          sessionStorage.removeItem('pendingCrewJoin');
+          showJoinNotRecruiting(null, true);
+        }
       }).catch(() => {});
     }
+  }
+
+  // Repoints the pre-auth intercept at "this link isn't live" instead of the
+  // generic "You've been invited!" copy. Signup stays available underneath —
+  // the link being closed is no reason to bar the door.
+  function showJoinNotRecruiting(crewName, invalid = false) {
+    const titleEl = document.getElementById('intercept-title');
+    const subEl   = document.getElementById('intercept-sub');
+    const pillEl  = document.getElementById('intercept-crew-pill');
+    const avatarEl = document.getElementById('intercept-avatar');
+    if (titleEl) titleEl.textContent = invalid
+      ? 'This invite link has expired 🎟️'
+      : `${crewName || 'That crew'} isn't recruiting right now 🤫`;
+    if (subEl) subEl.textContent = invalid
+      ? 'Ask your crew leader to send you a fresh one. You can still create an account and look around.'
+      : "Their roster is closed for now — ask your crew leader to open it back up. You can still create an account and look around.";
+    if (pillEl) pillEl.style.visibility = 'hidden';
+    if (avatarEl) { avatarEl.textContent = '🎪'; }
   }
 
   // ===== AUTH STATE LISTENER =====
@@ -10171,9 +10206,9 @@ async function doProfilePasswordChange() {
       : '';
 
     document.getElementById('qr-modal').innerHTML = `
-      <div class="qr-color-bar" style="background:${gradient}"></div>
+      <div class="qr-color-bar" style="background:${safeGradient(gradient)}"></div>
       <div class="modal-title" style="margin-bottom:4px;">Invite ${escHtml(r.name.split(' ')[0])}</div>
-      <div class="qr-hint">Show this QR or share the code — they're added to your crew instantly. No account needed first.</div>
+      <div class="qr-hint">Show this QR or share the code — their spot's already built, they just claim it. You never needed their account to get this far.</div>
       <div class="qr-canvas-wrap" id="qr-canvas-wrap" style="min-width:200px;min-height:200px;display:flex;align-items:center;justify-content:center;">
         <div style="color:var(--muted);font-size:0.78rem;">Generating…</div>
       </div>
@@ -10239,6 +10274,18 @@ async function doProfilePasswordChange() {
   }
 
   function closeScanner() {
+    // Closing from the PREVIEW view is a decision: the user has seen whose
+    // spot this is and chose not to take it. Without this, the token stays in
+    // localStorage (it deliberately survives the email round trip) and
+    // processPendingClaim() re-opens this overlay on every single app launch,
+    // forever, with no way to decline short of logging out. Closing from the
+    // scan view is just backing out of the scanner, so the token is kept.
+    const fromPreview = document.getElementById('sv-preview')?.classList.contains('active');
+    if (fromPreview && _pendingClaimToken) {
+      sessionStorage.removeItem('pendingClaim');
+      localStorage.removeItem('pendingClaimToken');
+      showToast('👍 No worries — ask your crew leader for a fresh invite whenever you want in.');
+    }
     stopCamera();
     document.getElementById('scanner-overlay').classList.remove('open');
     _pendingClaimToken = null;
@@ -10266,16 +10313,24 @@ async function doProfilePasswordChange() {
     const codePane   = document.getElementById('scanner-pane-code');
     if (!cameraPane || !codePane) return;
 
+    // "Instantly" is true for a signed-in scanner and false for a signed-out
+    // one — handleClaimToken() sends them to the pre-auth intercept first. The
+    // scanner is reachable from both, so say what actually happens either way
+    // rather than promising the shorter path to everyone.
     const subtitleEl = document.getElementById('scanner-subtitle');
     if (tab === 'camera') {
       cameraPane.style.display = 'flex';
       codePane.style.display   = 'none';
-      if (subtitleEl) subtitleEl.textContent = 'Point your camera at the QR your crew leader is showing you — you\'re added to the crew instantly.';
+      if (subtitleEl) subtitleEl.textContent = currentUser
+        ? 'Point your camera at the QR your crew leader is showing you — you\'re added to the crew instantly.'
+        : 'Point your camera at the QR your crew leader is showing you — see who you\'re joining, then finish signing up to claim your spot.';
       startCamera();
     } else {
       cameraPane.style.display = 'none';
       codePane.style.display   = 'flex';
-      if (subtitleEl) subtitleEl.textContent = 'Got a code from your crew leader? Type it in — you\'re added to the crew instantly.';
+      if (subtitleEl) subtitleEl.textContent = currentUser
+        ? 'Got a code from your crew leader? Type it in — you\'re added to the crew instantly.'
+        : 'Got a code from your crew leader? Type it in — see the crew, then finish signing up to claim your spot.';
       stopCamera();
       setTimeout(() => {
         const first = document.querySelector('.otp-box[data-idx="0"]');
@@ -10545,7 +10600,11 @@ async function doProfilePasswordChange() {
     const crewColor   = safeColor(crew?.color, '#FF2D78');
     const crewName    = crew?.name  || 'a crew';
     const memberCount = crew?.member_count ?? 0;
-    const statusLabel = crew?.status === 'locked-in' ? '🔒 Locked In' : '🌐 Recruiting';
+    // Report the crew's real status. The old mapping collapsed everything that
+    // wasn't 'locked-in' into "Recruiting", so a Secret crew's claim link told
+    // the scanner it was Recruiting — see STATUS for the canonical labels.
+    const isLockedIn  = crew?.status === 'locked-in';
+    const statusLabel = STATUS[crew?.status]?.label || '🌐 Recruiting';
     const memberText  = memberCount > 0
       ? `${memberCount} raver${memberCount !== 1 ? 's' : ''} already in`
       : 'Be the first to claim';
@@ -10635,6 +10694,13 @@ async function doProfilePasswordChange() {
         : `<div class="claim-spot-label">This profile was saved for you by your crew leader.</div>`;
     }
 
+    // A locked-in crew has closed its roster (see STATUS), so there's no spot
+    // left to claim — say so instead of offering a button that fails server-side.
+    if (isLockedIn) bottomSection = '';
+    const claimCta = isLockedIn
+      ? `<div class="claim-spot-label">🔒 ${escHtml(crewName)} is locked in — the roster's closed, so this invite can't be claimed right now. Ask your crew leader to reopen recruiting.</div>`
+      : `<button class="btn-claim" id="confirm-claim-btn" onclick="commitClaim()">🎉 Claim My Spot in ${escHtml(crewName)}</button>`;
+
     const slotGradient = raver.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)';
     const primaryColor = slotGradient.match(/#[0-9A-Fa-f]{6}/)?.[0] || crewColor;
     document.getElementById('preview-body').innerHTML = `
@@ -10646,8 +10712,8 @@ async function doProfilePasswordChange() {
         </div>
       </div>
       <div class="claim-divider" style="color:${crewColor};"><span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:${crewColor};box-shadow:0 0 8px ${crewColor};"></span>your profile slot<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:${crewColor};box-shadow:0 0 8px ${crewColor};"></span></div>
-      <div class="claim-slot-card" style="--slot-grad:${slotGradient};border-color:${primaryColor}44;box-shadow:0 0 24px ${primaryColor}20;">
-        <div class="claim-slot-avatar" style="background:${slotGradient};box-shadow:0 0 22px ${primaryColor}55;">${avatarContent}</div>
+      <div class="claim-slot-card" style="--slot-grad:${safeGradient(slotGradient)};border-color:${primaryColor}44;box-shadow:0 0 24px ${primaryColor}20;">
+        <div class="claim-slot-avatar" style="background:${safeGradient(slotGradient)};box-shadow:0 0 22px ${primaryColor}55;">${avatarContent}</div>
         <div class="claim-slot-info">
           <div class="claim-slot-name">${escHtml(raver.name) || 'Your Spot'}</div>
           ${raver.handle ? `<div class="claim-slot-handle">${escHtml(raver.handle)}</div>` : ''}
@@ -10655,7 +10721,7 @@ async function doProfilePasswordChange() {
         </div>
       </div>
       ${bottomSection}
-      <button class="btn-claim" id="confirm-claim-btn" onclick="commitClaim()">🎉 Claim My Spot in ${escHtml(crewName)}</button>
+      ${claimCta}
       <span class="claim-back-link" role="button" tabindex="0" onclick="backToScan()" onkeydown="if(event.key==='Enter')backToScan()">Not you? Scan a different code</span>
     `;
     showScannerView('preview');
@@ -10667,7 +10733,11 @@ async function doProfilePasswordChange() {
     if (type === 'claimed') {
       icon    = '🔒';
       title   = "This spot's taken";
-      desc    = `<strong>${data?.raver_name || 'This profile'}</strong> has already been claimed${data?.claimer_name ? ' by ' + data.claimer_name : ''}.<br><br>Ask your crew leader to create a new invite for you.`;
+      // Both names are free text a user controls (a stub's name is typed by the
+      // leader, claimer_name is the claimer's own display name) and this lands
+      // in innerHTML — escape, or a hostile name runs as markup for whoever
+      // scans that code next.
+      desc    = `<strong>${escHtml(data?.raver_name || 'This profile')}</strong> has already been claimed${data?.claimer_name ? ' by ' + escHtml(data.claimer_name) : ''}.<br><br>Ask your crew leader to create a new invite for you.`;
       actions = `
         <button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="backToScan()">📷 Scan a Different Code</button>
         <button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="closeScanner()">Close</button>`;
@@ -10677,6 +10747,13 @@ async function doProfilePasswordChange() {
       desc    = "This QR code or invite link is no longer valid. It may have already been used or your crew leader generated a new one.";
       actions = `
         <button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="backToScan()">📷 Try Again</button>
+        <button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="closeScanner()">Close</button>`;
+    } else if (type === 'locked') {
+      icon    = '🔒';
+      title   = 'This crew is locked in';
+      desc    = `${data?.crew?.name ? '<strong>' + escHtml(data.crew.name) + '</strong>' : 'This crew'} has closed its roster, so invites can't be claimed right now.<br><br>Ask your crew leader to reopen recruiting.`;
+      actions = `
+        <button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="backToScan()">📷 Scan a Different Code</button>
         <button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="closeScanner()">Close</button>`;
     } else if (type === 'network') {
       icon    = '⚠️';
@@ -10763,6 +10840,8 @@ async function doProfilePasswordChange() {
       let errType;
       if (result?.error === 'invalid_or_used_token' || result?.error === 'already_claimed') {
         errType = 'claimed';
+      } else if (result?.error === 'crew_locked_in') {
+        errType = 'locked';
       } else if (error && (!error.status || error.status === 0)) {
         errType = 'network';
       } else {
@@ -10825,12 +10904,12 @@ async function doProfilePasswordChange() {
 
     document.getElementById('success-content').innerHTML = `
       <div class="success-bg-radial" style="background:radial-gradient(ellipse 320px 280px at 50% 30%,${primaryColor}35 0%,${crewColor}18 45%,transparent 72%);"></div>
-      <div class="success-check" style="background:${gradient};box-shadow:0 0 55px ${primaryColor}60,0 0 110px ${primaryColor}28;">${avatarContent}</div>
+      <div class="success-check" style="background:${safeGradient(gradient)};box-shadow:0 0 55px ${primaryColor}60,0 0 110px ${primaryColor}28;">${avatarContent}</div>
       <div class="success-badge" style="color:${crewColor};border-color:${crewColor}55;box-shadow:0 0 14px ${crewColor}28;">IN THE FAM 🎉</div>
       <div class="success-crew-name" style="text-shadow:0 0 50px ${crewColor}55;">${escHtml(crewName)}</div>
       <div class="success-tagline">The bassline just got louder.</div>
       <div class="success-raver-pill" style="border-color:${primaryColor}30;">
-        <div class="success-raver-avatar" style="background:${gradient};">${avatarContent}</div>
+        <div class="success-raver-avatar" style="background:${safeGradient(gradient)};">${avatarContent}</div>
         <span class="success-raver-name">${escHtml(raverName)}</span>
       </div>
       <div class="success-cta">
@@ -11283,7 +11362,7 @@ async function doProfilePasswordChange() {
           isYou: r.claimed_by === uid && (r.is_you || r.status === 'claimed'),
           createdBy: r.created_by || null,
           base: r.base || '',
-          gradient: r.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)',
+          gradient: safeGradient(r.gradient),
           avatarUrl: r.avatar_url || null,
           blockedTags: r.blocked_tags || [],
           genres: r.genres || [],
@@ -11341,7 +11420,9 @@ async function doProfilePasswordChange() {
           id: c.id,
           name: c.name,
           color: c.color || '#FF2D78',
-          gradient: c.gradient || `linear-gradient(90deg,${c.color},${c.color})`,
+          // Sanitised at the boundary: gradient is a free text column and it flows
+          // into style="" attributes in ~20 places downstream.
+          gradient: safeGradient(c.gradient, `linear-gradient(90deg,${safeColor(c.color)},${safeColor(c.color)})`),
           status: c.status || 'secret',
           isLead: c.leader_id === uid,
           leader_id: leaderRaver?.id ?? null,
@@ -11385,7 +11466,7 @@ async function doProfilePasswordChange() {
             createdBy: r.created_by || null,
             readOnly: true,
             base: r.base || '',
-            gradient: r.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)',
+            gradient: safeGradient(r.gradient),
             avatarUrl: r.avatar_url || null,
             blockedTags: r.blocked_tags || [],
             genres: r.genres || [],
@@ -12123,7 +12204,7 @@ async function doProfilePasswordChange() {
       : '';
 
     return `
-      <div class="raves-together-hero" style="background:${r.gradient}">
+      <div class="raves-together-hero" style="background:${safeGradient(r.gradient)}">
         <div class="raves-together-hero-number">${count}</div>
         <div class="raves-together-hero-label">${vibe.emoji} ${vibe.label}</div>
       </div>
@@ -13179,13 +13260,13 @@ async function doProfilePasswordChange() {
         const glyph = TOTEM_ICON_MAP[crew.totemIcon] || '✦';
         totemBody = `
           <div class="totem-icon-current" data-crew-id="${crew.id}" role="button" tabindex="0" aria-label="Change the crew totem icon" onclick="revealTotemIconGrid(this.dataset.crewId)">
-            <div class="crew-totem-icon-mark totem-mark-lg" style="background:${crew.gradient}">${glyph}</div>
+            <div class="crew-totem-icon-mark totem-mark-lg" style="background:${safeGradient(crew.gradient)}">${glyph}</div>
             <div class="totem-icon-current-hint">Tap to change icon</div>
           </div>`;
       } else {
         const iconGrid = TOTEM_ICONS.map(({key, glyph, label}) => `
           <button type="button" class="totem-icon-swatch${crew.totemIcon===key?' selected':''}"
-               style="background:${crew.gradient}" title="${label}" aria-label="${label}"
+               style="background:${safeGradient(crew.gradient)}" title="${label}" aria-label="${label}"
                aria-pressed="${crew.totemIcon===key}"
                onclick="setCrewTotemIcon('${escJsAttr(crew.id)}','${escJsAttr(key)}')">${glyph}</button>
         `).join('');
@@ -15285,7 +15366,7 @@ async function doProfilePasswordChange() {
       }
 
       card.innerHTML = `
-        <div class="crew-color-bar" style="background:${crew.gradient}"></div>
+        <div class="crew-color-bar" style="background:${safeGradient(crew.gradient)}"></div>
         ${crew.status === 'secret'
           ? `<div class="secret-eye-badge eye-secret" title="Secret — only you can see this crew"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg></div>`
           : `<div class="secret-eye-badge eye-open" title="Crew is visible to members"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>`}
@@ -16670,7 +16751,7 @@ async function doProfilePasswordChange() {
     document.getElementById('page-crew-detail').innerHTML = `
       <button class="profile-back" onclick="closeDetail()">← My Crews</button>
       <div class="crew-detail-page-wrap">
-      <div class="detail-bar" style="background:${crew.gradient}"></div>
+      <div class="detail-bar" style="background:${safeGradient(crew.gradient)}"></div>
       <div class="crew-pass-punch"></div>
       <div class="crew-pass-tagrow">
         ${totemMark}
@@ -24173,7 +24254,7 @@ async function doProfilePasswordChange() {
     document.getElementById('page-crew-detail').innerHTML = `
       <button class="profile-back" onclick="renderDetail(activeDetailId)">← Back</button>
       <div class="crew-detail-page-wrap">
-      <div class="detail-bar" style="background:${crew.gradient}"></div>
+      <div class="detail-bar" style="background:${safeGradient(crew.gradient)}"></div>
       <div style="text-align:center;padding:8px 0 24px;">
         <div style="font-size:2.8rem;margin-bottom:14px;">🗑️</div>
         <div class="modal-title" style="margin-bottom:12px;">Delete "${escHtml(crew.name)}"?</div>
@@ -24416,7 +24497,7 @@ async function doProfilePasswordChange() {
       switchTab('members');
     }
     renderSquad();
-    if (currentUser) openInvitePrompt(raver.id);
+    if (currentUser && raverInviteIsLive(raver.id)) openInvitePrompt(raver.id);
   }
 
   function closeCrewPick() {
@@ -24430,12 +24511,35 @@ async function doProfilePasswordChange() {
 
   let _invitePromptRaverId = null;
 
+  // Inviting is a Recruiting-stage action. A Secret crew is a private
+  // workspace — "nothing is sent or notified while you're Secret" (see the
+  // onboarding copy) — and a Locked In crew has closed its roster, so pushing
+  // an invite in either state contradicts the status the leader chose. Mirrors
+  // the canInvite check that already gates the crew-wide ?join= link.
+  // A raver in no crew at all keeps the old behaviour: there's no crew status
+  // to respect, and they're still a blackbook contact worth inviting.
+  function raverInviteIsLive(raverId) {
+    const inCrews = crews.filter(c => (c.squadIds || []).some(id => String(id) === String(raverId)));
+    if (!inCrews.length) return true;
+    return inCrews.some(c => c.status === 'recruiting');
+  }
+
+  // Why the invite prompt is being withheld, phrased for the leader.
+  function inviteHeldBackReason(raverId, firstName) {
+    const inCrews = crews.filter(c => (c.squadIds || []).some(id => String(id) === String(raverId)));
+    return inCrews.some(c => c.status === 'secret')
+      ? `🤫 ${firstName} is on the roster. Invites go live when you open the crew to Recruiting.`
+      : `🔒 ${firstName} is on the roster. That crew's locked in, so invites are closed.`;
+  }
+
   // Opens the raver profile underneath, then layers the invite prompt on top
   // (only when signed in — guests have no qr_token / backend to invite with).
   function maybeOfferInvite(raverId) {
     const r = getRaver(raverId);
     if (r) openProfile(r.id, false, 'members');
-    if (currentUser && r) openInvitePrompt(r.id);
+    if (!currentUser || !r) return;
+    if (raverInviteIsLive(raverId)) openInvitePrompt(r.id);
+    else showToast(inviteHeldBackReason(raverId, r.name.split(' ')[0]));
   }
 
   function openInvitePrompt(raverId) {
@@ -24662,7 +24766,7 @@ async function doProfilePasswordChange() {
            <input class="form-input" id="crew-join-handle" aria-label="Your tag" placeholder="@yourhandle" maxlength="30">
          </div>`;
     document.getElementById('crew-join-modal-content').innerHTML = `
-      <div style="height:6px;background:${gradient};border-radius:6px 6px 0 0;margin:-32px -32px 20px;"></div>
+      <div style="height:6px;background:${safeGradient(gradient)};border-radius:6px 6px 0 0;margin:-32px -32px 20px;"></div>
       <div class="modal-title" style="margin-bottom:4px;">You're invited! 🎪</div>
       <p style="font-size:0.85rem;color:var(--muted);margin-bottom:18px;">
         <strong style="color:var(--text);">${escHtml(name)}</strong> &nbsp;·&nbsp; ${count} member${count !== 1 ? 's' : ''}
@@ -24764,7 +24868,7 @@ async function doProfilePasswordChange() {
     if (crew.totemPhotoUrl) return `<img class="crew-totem-thumb ${extraClass}" src="${escHtml(crew.totemPhotoUrl)}" alt="Crew totem" style="cursor:zoom-in;" role="button" tabindex="0" onclick="event.stopPropagation(); openPhotoLightbox('${escJsAttr(crew.totemPhotoUrl)}', null, null, '✦ crew totem ✦')">`;
     if (crew.totemIcon) {
       const glyph = TOTEM_ICON_MAP[crew.totemIcon] || '✦';
-      return `<div class="crew-totem-thumb crew-totem-icon-mark ${extraClass}" style="background:${crew.gradient}">${glyph}</div>`;
+      return `<div class="crew-totem-thumb crew-totem-icon-mark ${extraClass}" style="background:${safeGradient(crew.gradient)}">${glyph}</div>`;
     }
     return '';
   }
@@ -25059,6 +25163,20 @@ async function doProfilePasswordChange() {
   function safeColor(v, fallback = '#FF2D78') {
     return /^#[0-9A-Fa-f]{3,6}$/.test(v) ? v : fallback;
   }
+  // safeColor's counterpart for gradients. Values come from preset maps
+  // (CREW_GRADIENTS, the raver default) but live in plain text columns, so a
+  // direct API write — which a stub's creator has RLS to make — could put a
+  // quote in one and break out of the style="" attribute it gets interpolated
+  // into. The character class admits every shape the app generates
+  // (linear/radial, deg, hex, rgba, percentages) and nothing that can close an
+  // attribute or start a new one.
+  // Literal default, not a module const: safeGradient() is called from
+  // loadAllData(), which can run before a `const` later in the file has
+  // initialised, and a TDZ ReferenceError there would break the whole load.
+  function safeGradient(v, fallback = 'linear-gradient(135deg,#FF2D78,#BF00FF)') {
+    return /^(linear|radial)-gradient\([#0-9A-Za-z%,.\s()-]*\)$/.test(String(v ?? ''))
+      ? v : fallback;
+  }
   function extractFirstColor(gradient) {
     return /#[0-9A-Fa-f]{6}/.exec(gradient)?.[0] || '#ffffff';
   }
@@ -25067,7 +25185,7 @@ async function doProfilePasswordChange() {
     if (photoUrl) {
       return `<div class="${divClass}" style="${divStyle}background:transparent;overflow:hidden;padding:0;flex-shrink:0;"><img src="${escHtml(photoUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" alt="${escHtml(name)}"></div>`;
     }
-    return `<div class="${divClass}" style="${divStyle}background:${gradient}">${initials(name).toUpperCase()}</div>`;
+    return `<div class="${divClass}" style="${divStyle}background:${safeGradient(gradient)}">${initials(name).toUpperCase()}</div>`;
   }
   function initials(name) {
     const parts = name.trim().split(/\s+/);
@@ -25264,7 +25382,7 @@ async function doProfilePasswordChange() {
       const f = upcomingFests[0];
       const n = daysUntil(f._d);
       nextBanner = `
-        <div class="countdown-banner" style="background:${r.gradient}">
+        <div class="countdown-banner" style="background:${safeGradient(r.gradient)}">
           <div class="cd-label">⏳ Next rave</div>
           <div class="cd-fest">${escHtml(f.name)}</div>
           <div class="cd-days">${n === 0 ? "It's TODAY! 🔥" : n === 1 ? '1 day to go' : n + ' days to go'}</div>
@@ -25396,7 +25514,7 @@ async function doProfilePasswordChange() {
       profilePage.innerHTML = `
         <button class="profile-back" data-raver-id="${r.id}" onclick="cancelProfileEdit(this.dataset.raverId)">← Cancel</button>
         <div class="profile-hero edit-mode">
-          <div class="profile-hero-bar" style="background:${r.gradient}"></div>
+          <div class="profile-hero-bar" style="background:${safeGradient(r.gradient)}"></div>
           ${avatarEl}
           <div class="profile-id">
             <input class="profile-edit-hero-input" id="pf-name" aria-label="Name" value="${(r.name||'').replace(/"/g,'&quot;')}" placeholder="Name" maxlength="80">
@@ -25469,7 +25587,7 @@ async function doProfilePasswordChange() {
       const sg = (i) => `--section-glow:${_STAGE_PAL[i % _STAGE_PAL.length]};`;
       profilePage.innerHTML = `
         <button class="profile-back" onclick="backFromProfile()">← Back to ${profileOrigin === 'crews' ? 'My Crews' : 'Squad'}</button>
-        <div class="profile-hero-banner" style="background:${r.gradient}"></div>
+        <div class="profile-hero-banner" style="background:${safeGradient(r.gradient)}"></div>
         <div class="profile-hero-body">
           <div class="profile-avatar-ring" role="button" tabindex="0" aria-label="Pause or resume the spinning avatar ring" onclick="this.classList.toggle('paused')">
             ${avatarEl}
@@ -25579,7 +25697,7 @@ async function doProfilePasswordChange() {
               const memberCount = (c.squadIds || []).length;
               return `
                 <div class="profile-crew-card" role="button" tabindex="0" aria-label="Open ${escHtml(c.name)}" onclick="openDetail('${escJsAttr(c.id)}')" style="--crew-col:${safeColor(c.color)};">
-                  <div class="profile-crew-bar" style="background:${c.gradient};"></div>
+                  <div class="profile-crew-bar" style="background:${safeGradient(c.gradient)};"></div>
                   <div class="profile-crew-body">
                     <div class="profile-crew-name">${escHtml(c.name)}</div>
                     <div class="profile-crew-meta">

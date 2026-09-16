@@ -368,6 +368,30 @@ async function installSupabaseStub(page, opts = {}) {
             if (fn === 'get_festival_history') return { data: historyRows('festival', args.p_festival_id, args.p_limit), error: null };
             if (fn === 'get_crew_history') return { data: historyRows('crew', args.p_crew_id, args.p_limit), error: null };
             if (fn === 'get_raver_history') return { data: historyRows('raver', args.p_raver_id, args.p_limit), error: null };
+            // Mirrors the production function: invalid token -> invalid_token,
+            // any non-recruiting status -> not_recruiting (with the crew name so
+            // the UI can say which crew), otherwise the crew plus a count of
+            // members who actually have accounts.
+            if (fn === 'get_crew_by_invite_token') {
+              const crew = (store.crews || []).find(c => c.invite_token === args.p_token && !c.deleted_at);
+              if (!crew) return { data: { error: 'invalid_token' }, error: null };
+              if (crew.status !== 'recruiting') {
+                return { data: { error: 'not_recruiting', crew_name: crew.name, status: crew.status }, error: null };
+              }
+              const count = (store.crew_members || [])
+                .filter(m => String(m.crew_id) === String(crew.id) && !m.deleted_at)
+                .filter(m => {
+                  const r = (store.ravers || []).find(x => String(x.id) === String(m.raver_id));
+                  return r && (r.claimed_by != null || r.status === 'claimed');
+                }).length;
+              return {
+                data: {
+                  id: crew.id, name: crew.name, color: crew.color || '#FF2D78',
+                  gradient: crew.gradient, status: crew.status,
+                  totem_photo_url: crew.totem_photo_url ?? null, member_count: count,
+                }, error: null,
+              };
+            }
             if (fn === 'get_crewmate_ravers') {
               const ids = (args.p_ids || []).map(String);
               const rows = (store.ravers || []).filter(r => ids.includes(String(r.id)) && r.status !== 'merged' && !r.deleted_at);
