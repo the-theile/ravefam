@@ -24,17 +24,23 @@
    unblocked it — `cdn.jsdelivr.net` and every other non-allowlisted host are denied too.
 
 So this pass is: **full offline Playwright suite + close static review of the claim /
-join / signup / onboarding code paths + read-only inspection of the production
-function definitions, grants and triggers** (via the Supabase MCP connector, which is
-not affected by the HTTP egress policy).
+join / signup / onboarding code paths + inspection of the production function definitions,
+grants and triggers** (via the Supabase MCP connector, which is not affected by the HTTP
+egress policy).
+
+That inspection started read-only. Later in the session, **on explicit request, the hardening
+migration was applied to production** — see "Fixes shipped". That is the only write this
+session made to production, and it changed function definitions and one grant, not data.
 
 Everything below labelled **CONFIRMED** was verified by executing code (Playwright) or by
 reading the live function/trigger definition out of the production database. Everything
 labelled **STATIC** is read from source and is *not* live-verified. Nothing here is
 reported as live-tested.
 
-No production rows were modified. No user data is reproduced in this report — the only
-aggregates quoted are counts.
+**No production rows were read out or modified.** The applied migration is DDL only. The
+post-apply smoke checks used deliberately bogus tokens and returned before any write
+statement. No user data is reproduced in this report — the only production figures quoted are
+aggregate counts (41 tokens, 24 unclaimed stubs, 0 colliding prefixes).
 
 ## Suite baseline
 
@@ -56,10 +62,10 @@ No pre-existing failures. The suite does not weaken any assertion in this change
 | 1 | Marketing → app handoff | **Blocked (live)** | Static: all 8 landing CTAs point at `app.html?tab=login\|signup`; `?tab=` **is** correctly consumed at `app.html:9314` into `window._pendingAuthTab`. Landing QR path stashes `pendingClaimToken` + `openCodeEntry` (`index.html:848,939,943`) and the app consumes both (`app.html:10095,10026`). No defect found statically. |
 | 2 | New user registration | **Blocked (live)** | Static review of `doSignup` / `showAuthTab` / onboarding v2 found no P0/P1. Handle rules enforced identically in both entry points (`validateHandleFormat`, `app.html:30124`); live availability-check-as-you-type already exists in **both** the handle picker and onboarding step 2 — the brief's "handle availability check" enhancement is already shipped. |
 | 3 | Leader: Secret → people → event → invite | **Blocked (live)** / partial local | Invite generation covered by `tests/invites.spec.js` (QR code derivation, share sheet, crew `?join=` token persistence) — all pass. **Found BUG-3** (Locked In does not lock the roster) and **BUG-10** (a Secret crew prompts to invite). |
-| 4 | Invite acceptance | **Blocked (live)** / partial local | The high-value area. **Found BUG-1, BUG-2, BUG-3, BUG-4, BUG-5, BUG-6.** Paths 1–14 could not be walked end-to-end; findings come from reading the client flow plus the live RPC definitions. |
+| 4 | Invite acceptance | **Blocked (live)** / partial local | The high-value area. **Found BUG-1, BUG-2, BUG-3, BUG-4, BUG-5, BUG-6, BUG-8, BUG-9.** Paths 1–14 could not be walked end-to-end; findings come from reading the client flow plus the live RPC definitions. |
 | 5 | Post-join first session | **Blocked (live)** | Post-claim landing (`showClaimSuccess` → "View My Crews") and `runFirstTimeSetup` read as sensible. Not exercised. |
 | 6 | Core loops | **Pass (local only)** | Raves/Ravers/Stats/Notifications/Huddle/Archive/Vendor/Venue/moderation/soft-delete all covered by existing specs, all green. |
-| 7 | Client quality bar | **Partial pass** | Zero uncaught exceptions on boot signed-out and signed-in (CONFIRMED, `smoke`/`authed` specs). Escape-closes-overlays, focus containment, input labelling, colour-swatch a11y, keyboard reachability, iOS input zoom, XSS injection specs — all green. **Mobile 390×844, Android Chrome, desktop Safari and the camera QR path were not exercised** (Playwright config runs Desktop Chrome only). |
+| 7 | Client quality bar | **Partial pass** | Zero uncaught exceptions on boot signed-out and signed-in (CONFIRMED, `smoke`/`authed` specs). Escape-closes-overlays, focus containment, input labelling, colour-swatch a11y, keyboard reachability, iOS input zoom, XSS injection specs — all green. **Mobile 390×844 is now exercised** by the `mobile-chromium` project (7 new layout specs; found BUG-11). Still not exercised: **real Mobile Safari / WebKit** (binary unavailable here), Android Chrome, desktop Safari, and the camera QR path. |
 
 ## Bugs (prioritized)
 
