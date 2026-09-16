@@ -652,9 +652,34 @@ is reachable.
 |---|---|---|---|
 | **1. Run the suite against live from your own machine** | Everything. Full journeys 1-5 in a real browser on a real network. | **S** | Needs the test accounts created and the env block filled in. This is the one I'd pick. |
 | **2. GitHub Actions workflow with repo secrets** | Journeys 1-5 on every push, plus WebKit (runners can install it). | **M** | Secrets for the beta accounts; a live-hitting job should be manual-dispatch or nightly, never on every PR. |
-| **3. Allowlist `myravefam.com` on this environment** | Live HTTP from sessions like this one. | **S** (for whoever owns the policy) | Still needs credentials. Check whether the environment's network policy is configurable — see the Claude Code on the web docs on network policies. |
+| **3. Allowlist the hosts on this environment** | Live HTTP from sessions like this one. | **S** (for whoever owns the policy) | **Not changeable from inside a session** — it's the environment's network policy, set where the environment is configured, and a session only picks it up on a fresh start. Still needs credentials. See the host list below. |
 | **4. Point the existing offline suite at a Supabase branch** | Real RPCs, real RLS, real claim/merge — no stubs — without touching production data. | **M** | Supabase branching is available on this project. Catches everything the stub can't model (RLS, triggers, the claim RPC's real behaviour). Does **not** cover the live CDN, service worker, or PWA install. |
 | **5. Me driving live through a browser-automation MCP** | Journeys 1-5 from here. | **M** | Only if such a connector is attached *and* it is not behind the same egress policy. It is not attached today. |
+
+### If you allowlist, allowlist these
+
+The egress policy is enforced at the gateway, upstream of the session's local proxy — a session
+cannot widen it, and the proxy's own README says to report a 403 rather than route around it
+(`/root/.ccr/README.md`, "403 / 407 from the proxy"). It is set on the **environment**, and a
+running session does not pick up a change: start a new session after editing it. Configuration
+and the available policies are documented at
+<https://code.claude.com/docs/en/claude-code-on-the-web>.
+
+`myravefam.com` alone would load the page but leave it broken — the app pulls from several
+hosts. Worth adding together:
+
+| Host | Why |
+|---|---|
+| `myravefam.com` | The live site itself |
+| `tvpgopciioqbqmjjjigh.supabase.co` | The backend — without it the app boots to a dead shell |
+| `cdn.jsdelivr.net` | Chart.js, html2canvas, eruda |
+| `fonts.googleapis.com`, `fonts.gstatic.com` | Webfonts; absence changes layout metrics |
+| `tile.openstreetmap.org`, `nominatim.openstreetmap.org` | Radar map tiles and location autocomplete |
+| `api.open-meteo.com`, `geocoding-api.open-meteo.com` | Rave weather |
+| Playwright's browser CDN | Only if you want **WebKit** installed here rather than on your own machine |
+
+The first two are the minimum for any live journey. The rest decide whether you are testing the
+real app or a degraded one — and a degraded one will generate false findings.
 
 ### What I'd actually do
 
@@ -685,13 +710,15 @@ Running the same specs against a real Supabase branch closes that gap permanentl
    only **Locked In** is gated. Recorded so the next person doesn't "fix" it.
 3. ~~BUG-7 copy?~~ ✅ **Done** — approved wording shipped for all six strings; the Lineup
    Explorer and "adding crewmates" claims left untouched.
-4. **`get_claim_preview` still returns `notes` to `anon`.** The only open item I'd still like a
-   ruling on. Exposure is now much narrower than it first looked: the payload is only built for
-   **unclaimed stubs** (a claimed raver returns just `{error, raver_name, claimer_name}`), and
-   with BUG-4 fixed a stranger can no longer turn a guessed code into a claimed account's token.
-   So `notes` reaches only someone holding an actual live invite link — which matches the intent
-   of showing "your leader added these details for you." But the profile UI calls a raver's own
-   notes *"a secret only you can read."* Leave as-is, or drop `notes` from the anon payload?
+4. ~~Should `get_claim_preview` keep returning `notes` to `anon`?~~ ✅ **Resolved — leave as
+   is.** Recorded so it isn't re-litigated: the payload is only built for **unclaimed stubs**
+   (a claimed raver returns just `{error, raver_name, claimer_name}`), and since BUG-4 was fixed
+   a stranger can no longer turn a guessed code into a claimed account's token. So `notes`
+   reaches only someone holding a real invite link — which is exactly who the claim preview's
+   "your leader added these details for you" line is written for. The residual tension is
+   cosmetic: the profile UI describes a raver's *own* notes as "a secret only you can read",
+   which reads oddly next to a leader-written note on a stub. No code change.
+
 5. **Rate limiting on `find_raver_by_invite_code`.** Still unthrottled. 24 live stubs in a 16^6
    space is ~700k unthrottled guesses to hit one — minutes of scripted traffic. Worth doing
    before the crew count grows. Cheapest real fix is a longer invite code (Enhancement E6);
