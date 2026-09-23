@@ -105,7 +105,7 @@ async function installSupabaseStub(page, opts = {}) {
   const session = opts.session ?? null;
   const data = opts.data ?? {};
 
-  // Session produced by signInWithPassword / signUp (defaults to the initial
+  // Session produced by verifyOtp / signInWithPassword / signUp (defaults to the initial
   // session). Pass loginSession explicitly to test the login transition from a
   // signed-out start.
   const loginSession = opts.loginSession !== undefined ? opts.loginSession : session;
@@ -466,6 +466,7 @@ async function installSupabaseStub(page, opts = {}) {
             getSession() { return Promise.resolve({ data: { session: SESSION }, error: null }); },
             signInWithPassword() { if (authCb) setTimeout(() => authCb('SIGNED_IN', LOGIN), 0); return Promise.resolve({ data: { session: LOGIN }, error: null }); },
             signInWithOtp() { return Promise.resolve({ data: {}, error: null }); },
+            verifyOtp() { if (authCb) setTimeout(() => authCb('SIGNED_IN', LOGIN), 0); return Promise.resolve({ data: { session: LOGIN }, error: null }); },
             signUp() { if (LOGIN && authCb) setTimeout(() => authCb('SIGNED_IN', LOGIN), 0); return Promise.resolve({ data: { session: LOGIN }, error: null }); },
             signOut() { if (authCb) setTimeout(() => authCb('SIGNED_OUT', null), 0); return Promise.resolve({ error: null }); },
             updateUser() { return Promise.resolve({ data: { user: SESSION?.user ?? null }, error: null }); },
