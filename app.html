@@ -8678,6 +8678,15 @@
         <button type="button" class="btn btn-ghost" id="reset-tips-btn" style="padding:6px 14px;font-size:0.72rem;" onclick="resetTips()">Reset</button>
       </div>
     </div>
+    <div class="poll-modal-settings" style="margin-top:12px;">
+      <div class="poll-setting-row">
+        <div>
+          <div class="poll-setting-label">Delete my account</div>
+          <div class="poll-setting-hint">Permanently erase your profile, photos and account</div>
+        </div>
+        <button type="button" class="btn btn-ghost btn-danger" id="delete-account-btn" style="padding:6px 14px;font-size:0.72rem;" onclick="openDeleteAccountModal()">Delete</button>
+      </div>
+    </div>
     <div id="eruda-toggle-row" style="display:none;border-top:1px solid var(--border);padding-top:14px;margin-top:12px;">
       <div style="display:flex;align-items:center;justify-content:space-between;">
         <span style="font-size:0.82rem;color:var(--muted);">🛠️ Dev console</span>
@@ -8687,6 +8696,25 @@
     <div id="app-version-label" style="text-align:center;font-size:0.7rem;color:var(--muted);opacity:0.6;margin-top:16px;"></div>
     <div class="modal-actions">
       <button class="btn btn-primary" style="flex:1;" onclick="closePrivacySettingsModal()">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Account Modal -->
+<div class="modal-overlay" id="delete-account-overlay" onclick="if(event.target===this)closeDeleteAccountModal()">
+  <div class="modal" style="max-width:380px;text-align:left;">
+    <div class="modal-title">💔 Delete Account</div>
+    <p style="font-size:0.82rem;color:var(--muted);margin-bottom:10px;line-height:1.5;">This can't be undone. Right away we'll:</p>
+    <ul style="font-size:0.8rem;color:var(--muted);margin:0 0 14px 18px;line-height:1.6;">
+      <li>Erase your profile, RSVPs, photos and account</li>
+      <li>Hand any crew you lead to its longest-standing member</li>
+      <li>Keep your Huddle messages and posts for your crew, shown as “Deleted raver”</li>
+    </ul>
+    <label for="delete-account-confirm" class="form-label">Type <strong style="color:var(--neon-pink);">DELETE</strong> to confirm</label>
+    <input class="form-input" id="delete-account-confirm" type="text" autocomplete="off" autocapitalize="characters" placeholder="DELETE" oninput="document.getElementById('delete-account-go').disabled = this.value.trim().toUpperCase() !== 'DELETE'" style="margin-bottom:16px;">
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeDeleteAccountModal()">Cancel</button>
+      <button class="btn btn-ghost btn-danger" id="delete-account-go" disabled onclick="doDeleteAccount()">Delete Forever</button>
     </div>
   </div>
 </div>
@@ -9292,7 +9320,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.53.0';
+  const APP_VERSION = '1.54.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -16960,6 +16988,7 @@
   }
 
   function huddleSenderName(uid) {
+    if (!uid) return 'Deleted raver'; // sender deleted their account
     if (currentUser && uid === currentUser.id) return 'You';
     const r = raverByAuthUid(uid);
     return r ? displayName(r).split(' ')[0] : 'A crew member';
@@ -29628,6 +29657,45 @@
     document.getElementById('privacy-settings-overlay').classList.remove('open');
   }
 
+  // ===== DELETE ACCOUNT =====
+  // Self-serve erasure (App Store guideline 5.1.1(v)). delete_my_account() does
+  // the DB side in one transaction — hands off crews and friend profiles,
+  // deletes the user's own profile and auth user, anonymises shared crew
+  // content — and returns the photos-bucket paths for us to remove here.
+  function openDeleteAccountModal() {
+    closePrivacySettingsModal();
+    const input = document.getElementById('delete-account-confirm');
+    input.value = '';
+    document.getElementById('delete-account-go').disabled = true;
+    document.getElementById('delete-account-overlay').classList.add('open');
+    setTimeout(() => input.focus(), 50);
+  }
+
+  function closeDeleteAccountModal() {
+    document.getElementById('delete-account-overlay').classList.remove('open');
+  }
+
+  async function doDeleteAccount() {
+    if (document.getElementById('delete-account-confirm').value.trim().toUpperCase() !== 'DELETE') return;
+    const btn = document.getElementById('delete-account-go');
+    btn.disabled = true; btn.textContent = 'Deleting…';
+    const { data, error } = await sb.rpc('delete_my_account');
+    if (error) {
+      btn.disabled = false; btn.textContent = 'Delete Forever';
+      showToast('⚠️ Could not delete your account — ' + error.message);
+      return;
+    }
+    const paths = (data && data.storage_paths) || [];
+    if (paths.length) {
+      try { await sb.storage.from('photos').remove(paths); } catch (e) { console.warn('photo cleanup failed', e); }
+    }
+    closeDeleteAccountModal();
+    btn.textContent = 'Delete Forever';
+    try { localStorage.removeItem('rf_vid'); } catch (_) {}
+    await doLogout();
+    showToast('💔 Your account has been deleted. PLUR, always.');
+  }
+
   async function toggleBeaconPush(btn) {
     const enabling = !btn.classList.contains('on');
     btn.disabled = true;
@@ -29811,9 +29879,11 @@
     { id: 'vendor-village-intro', category: 'vendor-village', q: 'What is Vendor Village?',
       a: 'A crew-sourced directory of local vendors — browse what other ravers recommend, save your favorites, and add your own with reviews and badges to help everyone find the good stuff.' },
     { id: 'delete-account', category: 'account', q: 'How do I delete my account?',
-      a: 'Email <a href="mailto:bump@myravefam.com" style="color:var(--neon-cyan);">bump@myravefam.com</a> with subject "Delete my account" — we\'ll process it within 30 days, including all associated data.' },
-    { id: 'forgot-password', category: 'account', q: 'I forgot my password — what do I do?',
-      a: 'On the login screen tap Forgot password and enter your email. Check spam if the reset link doesn\'t show up in a few minutes.' },
+      a: 'Open ⚙️ Settings and tap Delete under "Delete my account". It\'s immediate and permanent: your profile, RSVPs, photos and account are erased. Crews you lead pass to their longest-standing member, and your Huddle messages stay for the crew as "Deleted raver".',
+      keywords: ['erase', 'remove', 'close account', 'gdpr'] },
+    { id: 'login-code', category: 'account', q: "How do I log in? There's no password.",
+      a: 'Enter your email and we\'ll send a 6-digit code and a magic link — type the code or tap the link. Codes expire after a while, so if one doesn\'t work tap Resend code. Check spam if the email doesn\'t show up in a few minutes.',
+      keywords: ['password', 'forgot password', 'magic link', 'code', 'otp', 'sign in'] },
     { id: 'remove-unclaimed-profile', category: 'account', q: 'A crew leader added me before I signed up — how do I get removed?',
       a: 'Email <a href="mailto:bump@myravefam.com" style="color:var(--neon-cyan);">bump@myravefam.com</a> with subject "Remove my profile" and we\'ll delete it within 30 days, no questions asked.' },
     { id: 'is-free', category: 'account', q: 'Is RaveFAM free to use?',

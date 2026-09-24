@@ -392,6 +392,10 @@ async function installSupabaseStub(page, opts = {}) {
                 }, error: null,
               };
             }
+            if (fn === 'delete_my_account') {
+              window.__deleteAccountCalls = (window.__deleteAccountCalls || 0) + 1;
+              return { data: { storage_paths: ['profiles/me.jpg'], crews_transferred: 0, crews_deleted: 0 }, error: null };
+            }
             if (fn === 'get_crewmate_ravers') {
               const ids = (args.p_ids || []).map(String);
               const rows = (store.ravers || []).filter(r => ids.includes(String(r.id)) && r.status !== 'merged' && !r.deleted_at);
