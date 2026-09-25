@@ -4,7 +4,7 @@
 // ravers — waits until onboarding finishes. The share card's QR and share
 // text point at the same public link.
 const { test, expect } = require('@playwright/test');
-const { installSupabaseStub, makeSession, seedData, collectPageErrors } = require('./helpers');
+const { installSupabaseStub, makeSession, seedData, collectPageErrors, bootAuthedApp } = require('./helpers');
 
 const SESSION_OVER = { user_metadata: { guidance_dismissed: true, onboarded: true } };
 const AUTH_KEY = 'sb-tvpgopciioqbqmjjjigh-auth-token';
@@ -123,8 +123,23 @@ test.describe('rave share links — in the app', () => {
       fallback: raveShareUrl({ name: 'No slug yet' }),
     }));
     expect(out.url).toBe('https://myravefam.com/rave/tomorrowland-2099');
-    expect(out.text).toBe('Tomorrowland\nhttps://myravefam.com/rave/tomorrowland-2099');
+    expect(out.text).toBe('Tomorrowland 🎟️\nSat Jul 18 · Boom, BE\n2 going — come rave with us!\nhttps://myravefam.com/rave/tomorrowland-2099');
     expect(out.fallback).toBe('https://myravefam.com');
+  });
+
+  test('share popup: caption leads the share text, and "Share link instead" shares text only', async ({ page }) => {
+    await bootAuthedApp(page, { sessionOver: SESSION_OVER, data: seedWithSlugs() });
+    await page.evaluate(() => {
+      window.__shared = null;
+      navigator.share = async (payload) => { window.__shared = payload; };
+    });
+    await page.evaluate(() => openRaveShareCard('f1'));
+    await page.locator('.rave-share-caption-input').fill('Who is in??');
+    await page.locator('.rave-share-link-btn').click();
+    const shared = await page.evaluate(() => window.__shared);
+    expect(shared.files).toBeUndefined();
+    expect(shared.text.split('\n')[0]).toBe('Who is in??');
+    expect(shared.text).toContain('https://myravefam.com/rave/tomorrowland-2099');
   });
 });
 
