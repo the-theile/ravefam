@@ -31,6 +31,7 @@ function isHTMLRequest(req) {
 
 const PASSTHROUGH_HOSTS = [
   'supabase.co',
+  'challenges.cloudflare.com', // Turnstile — Cloudflare forbids caching api.js
   'nominatim.openstreetmap.org',
   'open-meteo.com',
 ];

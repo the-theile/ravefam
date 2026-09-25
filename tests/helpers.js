@@ -497,6 +497,13 @@ async function installSupabaseStub(page, opts = {}) {
   await page.route('**/html2canvas*', r => r.fulfill({ contentType: 'text/javascript', body: 'window.html2canvas=function(){return Promise.resolve(document.createElement("canvas"));};' }));
   await page.route('**/fonts.googleapis.com/**', r => r.fulfill({ contentType: 'text/css', body: '' }));
   await page.route('**/fonts.gstatic.com/**', r => r.abort());
+  // Cloudflare Turnstile (auth CAPTCHA): a stand-in that issues a token at once,
+  // so code sends never wait on — or reach — the real challenge.
+  await page.route('**/challenges.cloudflare.com/**', r => r.fulfill({
+    contentType: 'text/javascript',
+    body: 'window.turnstile={render:function(el,o){this._o=o;setTimeout(function(){o.callback("test-captcha-token");},0);return "w";},' +
+          'reset:function(){var o=this._o;if(o)setTimeout(function(){o.callback("test-captcha-token");},0);}};',
+  }));
 }
 
 /**
