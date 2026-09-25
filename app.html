@@ -5384,14 +5384,9 @@
   .auth-phone-input { font-size: 16px; }
   .auth-phone-error { color: var(--neon-pink); font-size: 0.78rem; margin-top: 6px; min-height: 0; display: none; }
   .auth-phone-error.show { display: block; }
-  .auth-alt-btn {
-    display: block; width: 100%; margin-top: 14px; padding: 11px;
-    background: transparent; cursor: pointer;
-    border: 1px solid rgba(0,245,255,0.35); border-radius: 12px;
-    color: var(--neon-cyan); font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.85rem;
-    transition: box-shadow 0.2s, border-color 0.2s;
-  }
-  .auth-alt-btn:hover, .auth-alt-btn:focus-visible { border-color: var(--neon-cyan); box-shadow: 0 0 14px rgba(0,245,255,0.3); }
+  .auth-flow-note { text-align: center; margin-top: 12px; font-size: 0.75rem; color: var(--muted); line-height: 1.45; }
+  .auth-terms { text-align: center; margin-top: 14px; font-size: 0.72rem; color: var(--muted); line-height: 1.45; }
+  .auth-terms a { color: var(--muted); text-decoration: underline; }
   .auth-btn {
     width: 100%; padding: 14px;
     background: linear-gradient(135deg, var(--neon-pink), var(--neon-purple));
@@ -8203,9 +8198,10 @@
   </div>
 
   <div class="auth-card">
-    <div class="auth-tabs" id="auth-tabs">
-      <button class="auth-tab active" id="tab-login" onclick="showAuthTab('login')">Log In</button>
-      <button class="auth-tab" id="tab-signup" onclick="showAuthTab('signup')">Sign Up</button>
+    <!-- One flow for new and returning users: pick how to get a code -->
+    <div class="auth-tabs" id="auth-tabs" role="tablist" aria-label="Get your code by">
+      <button class="auth-tab active" id="tab-email" role="tab" aria-selected="true" onclick="showAuthTab('email', true)">✉️ Email</button>
+      <button class="auth-tab" id="tab-phone" role="tab" aria-selected="false" onclick="showAuthTab('phone', true)">📱 Phone</button>
     </div>
 
     <div class="auth-error" id="auth-error" role="alert"></div>
@@ -8217,37 +8213,26 @@
         <label for="login-email" class="form-label">Email</label>
         <input class="form-input" id="login-email" type="email" enterkeyhint="send" placeholder="you@example.com" autocomplete="email">
       </div>
-      <button class="auth-btn" id="login-btn" onclick="doLogin()">Send My Login Code 🔥</button>
-      <p style="text-align:center;margin-top:12px;font-size:0.75rem;color:var(--muted);">No passwords here — we'll email you a 6-digit code and a magic link.</p>
-      <button type="button" class="auth-alt-btn" onclick="showPhoneForm()">📱 Text me a code instead</button>
-      <p style="text-align:center;margin-top:16px;font-size:0.82rem;color:var(--muted);">
-        Don't have an account? <a href="#" onclick="showAuthTab('signup');return false;" style="color:var(--neon-pink);text-decoration:none;font-weight:600;">Sign up free →</a>
-      </p>
+      <button class="auth-btn" id="login-btn" onclick="doLogin()">Send My Code 🔥</button>
+      <p class="auth-flow-note">New here or coming back — same button. We'll email you a 6-digit code.</p>
     </div>
 
-    <div id="auth-signup-form" style="display:none;">
+    <div id="auth-phone-form" style="display:none;">
       <div class="form-group">
-        <label for="signup-name" class="form-label">Your Name</label>
-        <input class="form-input" id="signup-name" type="text" enterkeyhint="next" placeholder="e.g. Jamie D." autocomplete="name">
+        <label for="login-phone" class="form-label">Phone Number</label>
+        <input class="form-input auth-phone-input" id="login-phone" type="tel" enterkeyhint="send" inputmode="tel" placeholder="(555) 123-4567" autocomplete="tel" oninput="clearPhoneError()" aria-describedby="login-phone-hint login-phone-error">
+        <div class="auth-field-hint" id="login-phone-hint">US numbers can skip the +1. Outside the US, start with your country code.</div>
+        <div class="auth-phone-error" id="login-phone-error"></div>
       </div>
-      <div class="form-group">
-        <label class="form-label" for="signup-phone">Phone Number <span style="color:var(--muted);font-weight:400;">— so your crew can reach you</span></label>
-        <input class="form-input" id="signup-phone" type="tel" enterkeyhint="next" placeholder="+1 (555) 000-0000" autocomplete="tel">
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="signup-email">Email <span style="color:var(--muted);font-weight:400;">— your login code goes here</span></label>
-        <input class="form-input" id="signup-email" type="email" enterkeyhint="send" placeholder="you@example.com" autocomplete="email">
-      </div>
-      <button class="auth-btn" id="signup-btn" onclick="doSignup()">Create Account 🎉</button>
-      <p style="text-align:center;margin-top:16px;font-size:0.82rem;color:var(--muted);">
-        Already have an account? <a href="#" onclick="showAuthTab('login');return false;" style="color:var(--neon-pink);text-decoration:none;font-weight:600;">Log in →</a>
-      </p>
-      <p style="text-align:center;margin-top:10px;font-size:0.75rem;color:var(--muted);">
-        By signing up you agree to our <a href="/terms.html" style="color:var(--muted);text-decoration:underline;">Terms</a> and <a href="/privacy.html" style="color:var(--muted);text-decoration:underline;">Privacy Policy</a>. You must be 18+ to use RaveFAM.
-      </p>
+      <button class="auth-btn" id="phone-send-btn" onclick="doSendSmsCode()">Text Me a Code 📱</button>
+      <p class="auth-flow-note">New here or coming back — same button. Msg &amp; data rates may apply.</p>
     </div>
 
-    <!-- ── Enter the emailed 6-digit code (after Log In / Sign Up) ── -->
+    <p class="auth-terms" id="auth-terms">
+      By continuing you agree to our <a href="/terms.html">Terms</a> and <a href="/privacy.html">Privacy Policy</a>. You must be 18+ to use RaveFAM.
+    </p>
+
+    <!-- ── Enter the emailed 6-digit code ── -->
     <div id="auth-code-form" style="display:none;">
       <p style="text-align:center;margin:0 0 20px;font-size:0.9rem;color:var(--muted);line-height:1.5;">We sent a 6-digit code to<br><strong id="auth-code-email" style="color:var(--text);"></strong><br>Enter it below, or just tap the magic link in the email.</p>
       <div class="form-group">
@@ -8258,7 +8243,7 @@
       <p style="text-align:center;margin-top:16px;font-size:0.82rem;color:var(--muted);">
         <a href="#" id="resend-code-btn" onclick="doResendCode();return false;" style="color:var(--neon-pink);text-decoration:none;font-weight:600;">Resend code</a>
         &nbsp;·&nbsp;
-        <a href="#" onclick="showAuthTab(_otpMode);return false;" style="color:var(--muted);text-decoration:underline;">Use a different email</a>
+        <a href="#" onclick="showAuthTab('email', true);return false;" style="color:var(--muted);text-decoration:underline;">Use a different email</a>
       </p>
     </div>
 
@@ -8288,7 +8273,7 @@
       <p style="text-align:center;margin-top:16px;font-size:0.82rem;color:var(--muted);">
         <a href="#" id="sms-resend-btn" onclick="doResendSmsCode();return false;" style="color:var(--neon-pink);text-decoration:none;font-weight:600;">Resend code</a>
         &nbsp;·&nbsp;
-        <a href="#" onclick="showPhoneForm();return false;" style="color:var(--muted);text-decoration:underline;">Use a different number</a>
+        <a href="#" onclick="showAuthTab('phone', true);return false;" style="color:var(--muted);text-decoration:underline;">Use a different number</a>
       </p>
     </div>
 
@@ -9536,7 +9521,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.61.2';
+  const APP_VERSION = '1.62.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -9929,18 +9914,37 @@
   let _bootedUserId = null; // guard: prevents bootApp() running more than once per session
 
   // ===== AUTH UI helpers =====
-  function showAuthTab(tab) {
-    document.getElementById('auth-login-form').style.display  = tab === 'login'  ? 'block' : 'none';
-    document.getElementById('auth-signup-form').style.display = tab === 'signup' ? 'block' : 'none';
-    document.getElementById('auth-code-form').style.display   = 'none';
-    document.getElementById('auth-phone-form').style.display    = 'none';
+  // Email | Phone picker — one flow for new and returning users. Legacy
+  // 'login'/'signup' values (landing-page ?tab=, claim intercept, QR arrivals)
+  // predate the single flow and land on email. focus=true only from a tap, so
+  // the keyboard opens on iOS without popping up on page load.
+  function showAuthTab(tab, focus) {
+    if (tab !== 'phone') tab = 'email';
+    document.getElementById('auth-login-form').style.display    = tab === 'email' ? 'block' : 'none';
+    document.getElementById('auth-phone-form').style.display    = tab === 'phone' ? 'block' : 'none';
+    document.getElementById('auth-code-form').style.display     = 'none';
     document.getElementById('auth-sms-code-form').style.display = 'none';
     clearInterval(_otpResendTimer);
     clearInterval(_smsResendTimer);
     setAuthFocusMode(false);
-    document.getElementById('tab-login').classList.toggle('active',  tab === 'login');
-    document.getElementById('tab-signup').classList.toggle('active', tab === 'signup');
-    clearAuthMessages();
+    ['email', 'phone'].forEach(t => {
+      const b = document.getElementById('tab-' + t);
+      b.classList.toggle('active', t === tab);
+      b.setAttribute('aria-selected', t === tab);
+    });
+    clearAuthMessages(); clearPhoneError();
+    const input = document.getElementById(tab === 'phone' ? 'login-phone' : 'login-email');
+    if (tab === 'phone' && _smsPhone && !input.value) input.value = formatPhoneDisplay(_smsPhone);
+    if (focus) input.focus();
+  }
+
+  // Last method + address used on this device, so "coming back" is one tap.
+  // Per-device convenience only — never read for anything but prefill.
+  function saveLastLogin(method, value) {
+    try { localStorage.setItem('rf_last_login', JSON.stringify({ method, value })); } catch (e) {}
+  }
+  function readLastLogin() {
+    try { return JSON.parse(localStorage.getItem('rf_last_login') || 'null'); } catch (e) { return null; }
   }
   function authError(msg) {
     const el = document.getElementById('auth-error');
@@ -9961,9 +9965,10 @@
   function setAuthFocusMode(on) {
     document.getElementById('auth-tabs').style.display         = on ? 'none' : '';
     document.getElementById('auth-invite-block').style.display = on ? 'none' : '';
+    document.getElementById('auth-terms').style.display        = on ? 'none' : '';
   }
   const AUTH_BUSY_LABELS = {
-    'login-btn': 'Sending…', 'signup-btn': 'Sending…', 'phone-send-btn': 'Sending…',
+    'login-btn': 'Sending…', 'phone-send-btn': 'Sending…',
     'verify-btn': 'Checking…', 'sms-verify-btn': 'Checking…'
   };
   function setAuthBusy(busy) {
@@ -9983,8 +9988,6 @@
   // primary path: it keeps the user in this tab, so an installed PWA / iOS app
   // stays put and any pending claim / crew-join in sessionStorage survives.
   let _otpEmail = '';
-  let _otpMode = 'login';        // which tab to return to from the code screen
-  let _otpSignupData = null;     // { full_name, phone } — resent with the code
   let _otpResendTimer = null;
   const OTP_RESEND_COOLDOWN = 60;
 
@@ -10055,24 +10058,23 @@
   }
   const CAPTCHA_ERROR_MSG = "We couldn't confirm you're human — give it a few seconds and try again.";
 
-  async function sendLoginCode(email, mode, data) {
+  async function sendLoginCode(email) {
     const captchaToken = await getCaptchaToken();
     return sb.auth.signInWithOtp({
       email,
       options: {
-        // Log In never creates accounts, so a typo'd email doesn't spawn a ghost user.
-        shouldCreateUser: mode === 'signup',
-        ...(data ? { data } : {}),
+        // One flow: an unknown email gets an account, which stays unconfirmed
+        // until the code is verified. Name etc. are collected in onboarding.
+        shouldCreateUser: true,
         ...(captchaToken ? { captchaToken } : {}),
         emailRedirectTo: authRedirectUrl()
       }
     });
   }
 
-  function showCodeScreen(email, mode, data) {
-    _otpEmail = email; _otpMode = mode; _otpSignupData = data;
+  function showCodeScreen(email) {
+    _otpEmail = email;
     document.getElementById('auth-login-form').style.display  = 'none';
-    document.getElementById('auth-signup-form').style.display = 'none';
     document.getElementById('auth-code-form').style.display   = 'block';
     // Hide tabs so the user can't navigate away mid-verify ("Use a different email" goes back)
     setAuthFocusMode(true);
@@ -10104,9 +10106,9 @@
 
   function otpErrorMessage(error) {
     if (isCaptchaError(error)) return CAPTCHA_ERROR_MSG;
-    // Log In with an unknown email — Supabase refuses because shouldCreateUser is false.
+    // New sign-ups switched off in the Supabase dashboard.
     if (error.code === 'otp_disabled' || /signups not allowed/i.test(error.message)) {
-      return "No account found for that email — tap Sign Up to create one.";
+      return "New sign-ups are paused right now — if you already have an account, double-check your email.";
     }
     if (error.status === 429 || /rate limit|security purposes/i.test(error.message)) {
       return 'Too many codes requested — give it a minute and try again.';
@@ -10118,30 +10120,16 @@
     const email = document.getElementById('login-email').value.trim();
     if (!email) { authError('Please enter your email.'); return; }
     setAuthBusy(true); clearAuthMessages();
-    const { error } = await sendLoginCode(email, 'login', null);
+    const { error } = await sendLoginCode(email);
     setAuthBusy(false);
     if (error) { authError(otpErrorMessage(error)); return; }
-    showCodeScreen(email, 'login', null);
-  }
-
-  async function doSignup() {
-    const name  = document.getElementById('signup-name').value.trim();
-    const email = document.getElementById('signup-email').value.trim();
-    if (!name)  { authError('Please enter your name.'); return; }
-    if (!email) { authError('Please enter your email.'); return; }
-    const phone = document.getElementById('signup-phone').value.trim();
-    const data = { full_name: name, phone };
-    setAuthBusy(true); clearAuthMessages();
-    const { error } = await sendLoginCode(email, 'signup', data);
-    setAuthBusy(false);
-    if (error) { authError(otpErrorMessage(error)); return; }
-    showCodeScreen(email, 'signup', data);
+    showCodeScreen(email);
   }
 
   async function doResendCode() {
     if (!_otpEmail) return;
     clearAuthMessages();
-    const { error } = await sendLoginCode(_otpEmail, _otpMode, _otpSignupData);
+    const { error } = await sendLoginCode(_otpEmail);
     if (error) { authError(otpErrorMessage(error)); return; }
     authSuccess('New code sent! Check your inbox (and spam, just in case).');
     startResendCooldown();
@@ -10168,13 +10156,14 @@
       return;
     }
     clearInterval(_otpResendTimer);
+    saveLastLogin('email', _otpEmail);
     // onAuthStateChange will fire SIGNED_IN and handle the rest
   }
 
   // ===== SMS AUTH (phone code via Supabase + Twilio Verify) =====
-  // Log-in only: shouldCreateUser is false, so a number that isn't on an
-  // account yet (e.g. only saved in signup metadata) can't spawn a duplicate
-  // user. Every send costs money, so all requests go through _smsInFlight.
+  // Same one flow as email: an unknown number gets a new account. Existing
+  // email users are offered phone linking after login so they don't end up
+  // with two accounts. Every send costs money, so requests go through _smsInFlight.
   let _smsPhone = '';
   let _smsSentAt = 0;
   let _smsInFlight = false;
@@ -10211,23 +10200,10 @@
     document.getElementById('login-phone-error').classList.remove('show');
   }
 
-  function showPhoneForm() {
-    document.getElementById('auth-login-form').style.display    = 'none';
-    document.getElementById('auth-signup-form').style.display   = 'none';
-    document.getElementById('auth-code-form').style.display     = 'none';
-    document.getElementById('auth-sms-code-form').style.display = 'none';
-    document.getElementById('auth-phone-form').style.display    = 'block';
-    setAuthFocusMode(true);
-    clearInterval(_smsResendTimer);
-    clearAuthMessages(); clearPhoneError();
-    const input = document.getElementById('login-phone');
-    if (_smsPhone && !input.value) input.value = formatPhoneDisplay(_smsPhone);
-    setTimeout(() => input.focus(), 50);
-  }
-
   function showSmsCodeScreen(phone) {
     document.getElementById('auth-phone-form').style.display    = 'none';
     document.getElementById('auth-sms-code-form').style.display = 'block';
+    setAuthFocusMode(true); // "Use a different number" brings the picker back
     document.getElementById('auth-sms-phone').textContent = formatPhoneDisplay(phone);
     const input = document.getElementById('sms-code');
     input.value = '';
@@ -10263,7 +10239,7 @@
     const code = error.code || '';
     if (isCaptchaError(error)) return CAPTCHA_ERROR_MSG;
     if (code === 'otp_disabled' || /signups not allowed/i.test(msg)) {
-      return 'No RaveFAM account uses that number yet — log in with email for now.';
+      return "New sign-ups by text are paused right now — try email instead.";
     }
     if (error.status === 429 || /rate.?limit|security purposes|too many|max check attempts/i.test(code + ' ' + msg)) {
       return 'Too many tries — texting is capped at 5 attempts per 10 minutes. Take a breather and try again soon.';
@@ -10288,7 +10264,7 @@
     const captchaToken = await getCaptchaToken();
     const { error } = await sb.auth.signInWithOtp({
       phone,
-      options: { shouldCreateUser: false, channel: 'sms', ...(captchaToken ? { captchaToken } : {}) }
+      options: { shouldCreateUser: true, channel: 'sms', ...(captchaToken ? { captchaToken } : {}) }
     });
     _smsInFlight = false; setAuthBusy(false);
     if (!error) _smsSentAt = Date.now();
@@ -10329,6 +10305,7 @@
     _smsInFlight = false; setAuthBusy(false);
     if (error) { authError(smsErrorMessage(error, 'verify')); return; }
     clearInterval(_smsResendTimer);
+    saveLastLogin('phone', _smsPhone);
     // onAuthStateChange will fire SIGNED_IN and handle the rest
   }
 
@@ -10482,9 +10459,15 @@
     // most scanners are new — everyone else still lands on Log In.
     const pendingToken = sessionStorage.getItem('pendingClaim');
     const pendingJoin  = sessionStorage.getItem('pendingCrewJoin');
-    const tab = window._pendingAuthTab || ((pendingToken || pendingJoin) ? 'signup' : 'login');
+    // Coming back on this device: reopen the method they last used, prefilled.
+    const last = readLastLogin();
+    const tab = last?.method || window._pendingAuthTab || ((pendingToken || pendingJoin) ? 'signup' : 'login');
     window._pendingAuthTab = null;
     showAuthTab(tab);
+    if (last?.value) {
+      const input = document.getElementById(last.method === 'phone' ? 'login-phone' : 'login-email');
+      if (!input.value) input.value = last.method === 'phone' ? formatPhoneDisplay(last.value) : last.value;
+    }
 
     // If the user came from the landing page via "Enter code manually", open the
     // scanner overlay on the code entry tab automatically.
@@ -10570,12 +10553,10 @@
   document.addEventListener('keydown', e => {
     if (e.key !== 'Enter') return;
     const loginVisible  = document.getElementById('auth-login-form').style.display  !== 'none';
-    const signupVisible = document.getElementById('auth-signup-form').style.display !== 'none';
     const authOpen = !document.getElementById('auth-screen').classList.contains('hidden');
     if (!authOpen) return;
     const codeVisible   = document.getElementById('auth-code-form').style.display   !== 'none';
     if (loginVisible)  doLogin();
-    if (signupVisible) doSignup();
     if (codeVisible)   doVerifyCode();
     if (document.getElementById('auth-phone-form').style.display    !== 'none') doSendSmsCode();
     if (document.getElementById('auth-sms-code-form').style.display !== 'none') doVerifySmsCode();
