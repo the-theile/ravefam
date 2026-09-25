@@ -856,6 +856,163 @@
   .ticket-type-list-badge.yellow { color: var(--neon-yellow); background: rgba(255,230,0,0.1);   border-color: rgba(255,230,0,0.32); }
   .ticket-type-list-badge.purple { color: var(--neon-purple); background: rgba(191,0,255,0.08);  border-color: rgba(191,0,255,0.3); }
   .ticket-type-list-badge.cyan   { color: var(--neon-cyan);   background: rgba(0,245,255,0.08);  border-color: rgba(0,245,255,0.25); }
+
+  /* ── Rave Focus popup (tabbed view): accent bar + chips header, Vibe/Going
+     segmented control, Plan · Crew · Lineup · Info tabs, sticky action bar.
+     Scoped to #rave-focus-modal — padding moves inside so the accent bar and
+     sticky bar can sit flush with the modal edges. Also shared by the edit
+     wizard (.rw-*) below. */
+  #rave-focus-modal, #rave-edit-overlay { --rf-panel: #0a0a10; --rf-card: #101018; --rf-border: #242432; --rf-amber: #FFB020; }
+  #rave-focus-modal { padding: 0; background: var(--rf-panel); border-color: var(--rf-border); border-radius: 20px; }
+  .rf-ico { flex-shrink: 0; display: block; }
+  .rf-accent { height: 4px; }
+  .rf-body { padding: 18px 20px 8px; }
+  .rf-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .rf-title { font-family: 'Urbanist', sans-serif; font-weight: 900; font-size: 1.75rem; line-height: 1.1; letter-spacing: -0.01em; overflow-wrap: anywhere; padding-top: 4px; }
+  .rf-close, .rw-close { width: 44px; height: 44px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+    border-radius: 12px; border: 1px solid var(--rf-border); background: var(--rf-card); color: var(--text); }
+  .rf-close:hover, .rw-close:hover { border-color: #3a3a4c; }
+  .rf-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 16px; }
+  .rf-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-height: 32px; font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.8rem;
+    padding: 5px 12px; border-radius: 100px; background: transparent; border: 1px solid var(--rf-border); color: var(--text); }
+  .rf-chip .rf-ico { color: var(--muted); }
+  .rf-chip .marquee-weather { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; }
+  .rf-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; background: var(--rf-card); border: 1px solid var(--rf-border); border-radius: 14px; }
+  .rf-seg-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.92rem;
+    min-height: 48px; padding: 8px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--muted); cursor: pointer; transition: background 0.2s, color 0.2s, border-color 0.2s; }
+  .rf-seg-btn:hover, .rf-seg-btn.set { color: var(--text); }
+  .rf-seg-btn.going.active { background: rgba(57,255,20,0.07); border-color: var(--neon-green); color: var(--neon-green); }
+  .rf-seg-btn.going.interested { background: rgba(0,245,255,0.07); border-color: var(--neon-cyan); color: var(--neon-cyan); }
+  .rf-tabs { display: flex; margin: 18px -20px 16px; padding: 0 20px; border-bottom: 1px solid var(--rf-border); overflow-x: auto; scrollbar-width: none; }
+  .rf-tabs::-webkit-scrollbar { display: none; }
+  .rf-tab { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.88rem;
+    min-height: 46px; padding: 8px 6px; background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; color: var(--muted); cursor: pointer; }
+  .rf-tab.active { color: var(--text); border-bottom-color: var(--neon-pink); }
+  .rf-tab-count { font-size: 0.68rem; font-weight: 700; line-height: 1; padding: 3px 7px; border-radius: 100px; background: var(--rf-border); color: var(--text); }
+  .rf-card { position: relative; background: var(--rf-card); border: 1px solid var(--rf-border); border-radius: 18px; padding: 16px; margin-bottom: 12px; }
+  .rf-list { padding: 2px 16px; }
+  .rf-empty { font-size: 0.82rem; color: var(--muted); text-align: center; }
+  .rf-muted { color: var(--muted); }
+  .rf-section-label { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin: 18px 0 8px; }
+  .rf-panel > .rf-section-label:first-child { margin-top: 0; }
+  .rf-vibe-row { padding: 0 0 4px; }
+  .rf-crew-summary { cursor: pointer; }
+  .rf-crew-summary:hover { border-color: #3a3a4c; }
+  .rf-crew-summary-row { display: flex; align-items: center; gap: 14px; }
+  .rf-crew-summary-main { flex: 1; min-width: 0; }
+  .rf-card-chev { color: var(--muted); flex-shrink: 0; }
+  .rf-av-stack { display: flex; flex-shrink: 0; }
+  .rf-av-stack .rf-av + .rf-av { margin-left: -9px; }
+  .rf-av { width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; overflow: hidden;
+    font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.72rem; color: #0a0a10; border: 2px solid var(--rf-card); }
+  .rf-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .rf-av.rf-ring-going { box-shadow: 0 0 0 1.5px var(--neon-green); }
+  .rf-av.rf-ring-interested { box-shadow: 0 0 0 1.5px var(--neon-cyan); }
+  .rf-av-more { background: var(--rf-border); color: var(--text); }
+  .rf-crew-summary-text { font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.9rem; line-height: 1.3; }
+  .rf-progress { height: 6px; border-radius: 6px; background: var(--rf-border); overflow: hidden; margin-top: 10px; }
+  .rf-progress > span { display: block; height: 100%; background: var(--neon-green); border-radius: 6px; transition: width 0.3s; }
+  .rf-progress-amber > span { background: var(--rf-amber); }
+  .rf-crew-row { display: flex; align-items: center; gap: 12px; min-height: 54px; padding: 8px 0; cursor: pointer; }
+  .rf-crew-row + .rf-crew-row, .rf-info-row + .rf-info-row { border-top: 1px solid var(--rf-border); }
+  .rf-crew-name { flex: 1; min-width: 0; font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rf-you { font-size: 0.74rem; font-weight: 500; color: var(--muted); }
+  .rf-badge-muted { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.66rem; padding: 2px 8px; border-radius: 100px; white-space: nowrap;
+    color: var(--muted); border: 1px dashed #3a3a4c; }
+  .rf-info-row { display: flex; gap: 12px; padding: 12px 0; }
+  .rf-info-icon { width: 22px; display: flex; justify-content: center; padding-top: 2px; flex-shrink: 0; color: var(--muted); }
+  .rf-info-label { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.66rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+  .rf-info-value { font-size: 0.9rem; margin-top: 2px; overflow-wrap: anywhere; }
+  .rf-link { background: none; border: 0; padding: 0; color: var(--neon-cyan); font: inherit; cursor: pointer; text-align: left; }
+  .rf-map { display: block; width: 100%; max-height: 240px; object-fit: cover; border-radius: 18px; border: 1px solid var(--rf-border); cursor: zoom-in; }
+  .rf-recap-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 0.9rem; padding: 4px 0; }
+  .rf-mini-btn { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.8rem; min-height: 36px; padding: 6px 14px; border-radius: 10px; cursor: pointer;
+    background: transparent; color: var(--text); border: 1px solid #3a3a4c; }
+  .rf-sticky { position: sticky; bottom: 0; z-index: 2; display: flex; gap: 12px; padding: 14px 20px; background: var(--rf-panel); border-top: 1px solid var(--rf-border); }
+  .rf-share-btn, .rf-edit-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 50px; border-radius: 14px; cursor: pointer;
+    font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.95rem; }
+  .rf-share-btn { flex: 1; background: var(--rf-card); color: var(--text); border: 1px solid var(--rf-border); }
+  .rf-share-btn:hover { border-color: #3a3a4c; }
+  .rf-edit-btn { flex: 1.5; background: var(--neon-pink); color: #0a0a10; border: 0; box-shadow: 0 0 18px rgba(255,45,120,0.3); }
+  .rf-edit-btn:hover { box-shadow: 0 0 26px rgba(255,45,120,0.5); }
+  /* Get rave-ready checklist */
+  .rf-ready-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .rf-ready-title { font-family: 'Urbanist', sans-serif; font-weight: 900; font-size: 1.3rem; }
+  .rf-ready-count { display: inline-flex; align-items: center; gap: 2px; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.8rem; color: var(--neon-green); white-space: nowrap; }
+  .rf-ready-hint { display: flex; align-items: center; gap: 6px; font-size: 0.76rem; color: var(--muted); margin: 10px 0 4px; }
+  .rf-ready-item { display: flex; align-items: center; gap: 14px; min-height: 64px; padding: 10px 0; }
+  .rf-ready-item + .rf-ready-item { border-top: 1px solid var(--rf-border); }
+  .rf-ready-check { width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+    border: 2px dashed var(--neon-pink); color: #0a0a10; }
+  .rf-ready-item.done .rf-ready-check, .rf-ready-slim .rf-ready-check { border: 0; background: var(--neon-green); }
+  .rf-ready-text { flex: 1; min-width: 0; }
+  .rf-ready-label { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.98rem; }
+  .rf-ready-value { font-size: 0.82rem; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rf-star { color: var(--neon-yellow); margin-right: 4px; }
+  .rf-ready-btn { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.84rem; min-height: 40px; padding: 6px 14px; border-radius: 10px; cursor: pointer; flex-shrink: 0;
+    background: transparent; color: var(--text); border: 1px solid #3a3a4c; }
+  .rf-ready-btn:hover { border-color: #55556a; }
+  .rf-ready-btn.add { min-height: 44px; padding: 8px 20px; border-radius: 100px; background: var(--neon-pink); color: #0a0a10; border-color: var(--neon-pink); font-weight: 800; }
+  .rf-ready-hide { display: block; margin: 8px auto 0; font-size: 0.8rem; color: var(--muted); }
+  .rf-ready-slim { display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.95rem;
+    padding: 14px 16px; border-color: rgba(57,255,20,0.35); background: linear-gradient(90deg, rgba(57,255,20,0.08), var(--rf-card)); }
+  .rf-ready-slim-label { display: inline-flex; align-items: center; gap: 10px; }
+  .rf-ready-slim .rf-ready-check { width: 22px; height: 22px; }
+  .rf-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* ── Edit rave wizard (Basics · Place · Look · Tools) — same tokens as the
+     popup above; Tools is the moderator-only amber step. */
+  #rave-edit-overlay { background: var(--rf-panel); }
+  #rave-edit-overlay .rw-header { justify-content: space-between; gap: 10px; padding: 14px 20px 8px; border-bottom: 0; }
+  #rave-edit-overlay .rw-head-title { flex: 1; text-align: center; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.05rem; }
+  #rave-edit-overlay .rw-header .kebab-btn { width: 44px; height: 44px; border-radius: 12px; }
+  #rave-edit-overlay .rw-header .kebab-menu { top: calc(100% + 6px); bottom: auto; }
+  #rave-edit-overlay .rw-save { min-height: 44px; padding: 0 18px; flex-shrink: 0; border-radius: 12px; cursor: pointer; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.92rem;
+    border: 1.5px solid var(--neon-green); background: transparent; color: var(--neon-green); }
+  #rave-edit-overlay .rw-save:hover { background: rgba(57,255,20,0.08); }
+  #rave-edit-overlay .rw-steps { flex-shrink: 0; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 10px; max-width: 640px; width: 100%; margin: 0 auto; padding: 6px 20px 4px; box-sizing: border-box; }
+  #rave-edit-overlay .rw-step { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-height: 44px; padding: 6px 0; background: none; border: 0; cursor: pointer; text-align: left;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+  #rave-edit-overlay .rw-step-bar { display: block; width: 100%; height: 4px; border-radius: 4px; background: var(--rf-border); transition: background 0.2s; }
+  #rave-edit-overlay .rw-step.active { color: var(--text); }
+  #rave-edit-overlay .rw-step.active .rw-step-bar { background: var(--neon-pink); }
+  #rave-edit-overlay .rw-step.done .rw-step-bar { background: rgba(255,45,120,0.45); }
+  #rave-edit-overlay .rw-step.tools { color: var(--rf-amber); }
+  #rave-edit-overlay .rw-step.tools .rw-step-bar { background: rgba(255,176,32,0.3); }
+  #rave-edit-overlay .rw-step.tools.active .rw-step-bar { background: var(--rf-amber); }
+  #rave-edit-overlay .rw-body { padding: 18px 20px 28px; }
+  #rave-edit-overlay .rw-title { font-family: 'Urbanist', sans-serif; font-weight: 900; font-size: 1.9rem; line-height: 1.1; margin: 0 0 8px; }
+  #rave-edit-overlay .rw-panel[data-rw-panel="tools"] .rw-title { color: var(--rf-amber); }
+  #rave-edit-overlay .rw-sub { font-size: 0.88rem; color: var(--muted); line-height: 1.45; margin: 0 0 22px; }
+  #rave-edit-overlay .rw-body .form-group { margin-bottom: 20px; }
+  #rave-edit-overlay .rw-body .form-label { font-size: 0.86rem; font-weight: 700; text-transform: none; letter-spacing: 0; color: var(--text); margin-bottom: 8px; }
+  #rave-edit-overlay .rw-body .form-input { min-height: 52px; background: var(--rf-card); border-color: var(--rf-border); border-radius: 12px; padding: 12px 16px; }
+  #rave-edit-overlay .rw-body .form-input:focus { border-color: var(--neon-pink); box-shadow: 0 0 0 3px rgba(255,45,120,0.15); }
+  #rave-edit-overlay .rw-days { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  #rave-edit-overlay .rw-day-btn { min-height: 52px; border-radius: 12px; border: 1px solid var(--rf-border); background: var(--rf-card); color: var(--text); cursor: pointer;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.98rem; transition: border-color 0.15s, background 0.15s; }
+  #rave-edit-overlay .rw-day-btn:hover { border-color: #3a3a4c; }
+  #rave-edit-overlay .rw-day-btn.selected { border-color: var(--neon-pink); background: rgba(255,45,120,0.1); box-shadow: 0 0 14px rgba(255,45,120,0.2); }
+  #rave-edit-overlay .rw-day-btn[disabled] { opacity: 0.6; cursor: default; }
+  #rave-edit-overlay .rw-note { display: flex; align-items: center; gap: 8px; font-size: 0.84rem; color: var(--muted); }
+  #rave-edit-overlay .rw-note .rf-ico { color: var(--rf-amber); }
+  #rave-edit-overlay .rw-or { display: flex; align-items: center; gap: 12px; margin: -4px 0 16px; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.68rem;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  #rave-edit-overlay .rw-or::before, #rave-edit-overlay .rw-or::after { content: ''; flex: 1; height: 1px; background: var(--rf-border); }
+  #rave-edit-overlay .rw-swatches { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 4px; }
+  #rave-edit-overlay .rw-swatches .color-swatch { width: 40px; height: 40px; aspect-ratio: auto; border: 0; transform: none; }
+  #rave-edit-overlay .rw-swatches .color-swatch:hover { transform: scale(1.08); }
+  #rave-edit-overlay .rw-swatches .color-swatch.selected { transform: none; box-shadow: 0 0 0 3px var(--rf-panel), 0 0 0 5px #fff; }
+  #rave-edit-overlay .rw-footer { flex-wrap: nowrap; gap: 12px; padding: 14px 20px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--rf-border); }
+  #rave-edit-overlay .rw-back, #rave-edit-overlay .rw-next { min-height: 52px; border-radius: 14px; cursor: pointer; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.95rem; }
+  #rave-edit-overlay .rw-back { flex: 0 0 38%; background: var(--rf-card); color: var(--text); border: 1px solid var(--rf-border); }
+  #rave-edit-overlay .rw-back:hover { border-color: #3a3a4c; }
+  #rave-edit-overlay .rw-next { flex: 1; background: var(--neon-pink); color: #0a0a10; border: 0; box-shadow: 0 0 18px rgba(255,45,120,0.3); }
+  #rave-edit-overlay .rw-next:hover { box-shadow: 0 0 26px rgba(255,45,120,0.5); }
+  #rave-edit-overlay .rw-upload { position: relative; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; border-radius: 12px; cursor: pointer;
+    border: 1px dashed rgba(255,176,32,0.5); background: rgba(255,176,32,0.06); color: var(--rf-amber); font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.9rem; }
+  #rave-edit-overlay .rw-upload:hover { background: rgba(255,176,32,0.1); }
+  #rave-edit-overlay .rw-map-preview { width: 100%; max-height: 220px; object-fit: cover; border-radius: 12px; border: 1px solid var(--rf-border); margin-bottom: 10px; display: block; }
   /* Summary "N GA · N VIP …" chip row next to the Ticket Types section label */
   .ticket-mix-row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 
@@ -9328,7 +9485,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.54.1';
+  const APP_VERSION = '1.57.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -12065,6 +12222,14 @@
     }
   }
 
+  // The Raves list behind the Rave Focus popup renders the same
+  // vibe-picker-<id> slot, so prefer the popup's copy while it's open.
+  function vibePickerSlot(festId) {
+    const id = `vibe-picker-${String(festId)}`;
+    const focusOpen = document.getElementById('rave-focus-overlay')?.classList.contains('open');
+    return (focusOpen && document.querySelector(`#rave-focus-modal #${CSS.escape(id)}`)) || document.getElementById(id);
+  }
+
   function openVibePicker(festId) {
     if (_vibePickerFestId && _vibePickerFestId !== String(festId)) closeVibePicker(_vibePickerFestId);
     _vibePickerFestId = String(festId);
@@ -12075,7 +12240,7 @@
     const emojiGrid = VIBE_EMOJIS.map(e =>
       `<button type="button" class="fest-vibe-picker-emoji${e === _vibePickerEmoji ? ' selected' : ''}" aria-pressed="${e === _vibePickerEmoji}" aria-label="Vibe ${e}" onclick="event.stopPropagation(); selectVibeEmoji('${escJsAttr(e)}')">${e}</button>`
     ).join('');
-    let pickerEl = document.getElementById(`vibe-picker-${festId}`);
+    let pickerEl = vibePickerSlot(festId);
     if (!pickerEl) {
       const card = document.querySelector(`[data-fest-id="${festId}"]`);
       if (!card) return;
@@ -12097,7 +12262,7 @@
   }
 
   function closeVibePicker(festId) {
-    const el = document.getElementById(`vibe-picker-${String(festId)}`);
+    const el = vibePickerSlot(festId);
     if (el) { el.innerHTML = ''; el.style.display = 'none'; }
     if (_vibePickerFestId === String(festId)) { _vibePickerFestId = null; _vibePickerEmoji = null; }
   }
@@ -26122,6 +26287,9 @@
         : (!canEdit && rows.length === 0 ? `<div class="fest-empty" style="font-size:0.72rem;margin-top:6px;">RSVP to this rave to tag its lineup</div>` : ''));
 
     box.innerHTML = `<div class="fav-chip-row" id="lineup-chip-wrap">${chipsOrEmpty}</div>${addHtml}${sightingHint}`;
+    const countEl = document.getElementById('rf-lineup-count');
+    if (countEl) countEl.textContent = rows.length;
+    refreshRaveReadyChecklist(festId);
   }
 
   function lineupArtistSearchInput(festId, q) {
@@ -28494,9 +28662,16 @@
   // ===== Rave Focus popup — RSVPs + lineup for an existing rave. Tapping a
   // rave card opens this instead of the full editor; its own "Edit" button
   // is the only way into openRaveEditor() from here. =====
+  // Which tab the popup is showing. Kept across in-place re-renders (RSVP,
+  // vibe, tribe add) so they don't bounce you back to Plan; reset whenever
+  // a different rave is opened.
+  let _raveFocusTab = 'plan';
+  let _raveFocusTabFestId = null;
+
   function openRaveFocus(festId) {
     const f = getFestival(festId);
     if (!f) return;
+    if (String(_raveFocusTabFestId) !== String(festId)) { _raveFocusTab = 'plan'; _raveFocusTabFestId = festId; }
     activeFestId = festId;
     editingFestivalId = festId;
     document.getElementById('rave-focus-modal').innerHTML = raveFocusModalHTML(f);
@@ -28509,15 +28684,21 @@
     editingFestivalId = null;
   }
 
-  // Re-render in place after a self RSVP toggle so the popup reflects the
-  // change immediately (toggleGoingToFest/toggleInterestedInFest already
-  // re-render the Raves tab itself, but not this popup).
-  function raveFocusToggleGoing(festId) { toggleGoingToFest(festId); openRaveFocus(festId); }
-  function raveFocusToggleInterested(festId) { toggleInterestedInFest(festId); openRaveFocus(festId); }
+  // Tabs toggle in place (no re-render) so an open vibe picker or a
+  // half-typed search in another tab survives the switch.
+  function raveFocusSwitchTab(tab) {
+    _raveFocusTab = tab;
+    document.querySelectorAll('#rave-focus-modal .rf-tab').forEach(el => {
+      const on = el.dataset.rfTab === tab;
+      el.classList.toggle('active', on);
+      el.setAttribute('aria-selected', String(on));
+    });
+    document.querySelectorAll('#rave-focus-modal .rf-panel').forEach(el => { el.hidden = el.dataset.rfPanel !== tab; });
+  }
 
   // Sets/clears your own ticket type for a rave you're already Going to.
-  // Only reachable once youGoing is true (see raveFocusModalHTML), so the
-  // raver_festivals row this updates is guaranteed to already exist.
+  // Only reachable once youGoing is true (the Going Options sheet marks you
+  // going first), so the raver_festivals row this updates already exists.
   function saveMyTicketType(festId, type, other) {
     const you = squad.find(r => r.isYou);
     if (!you) return;
@@ -28527,153 +28708,319 @@
     if (currentUser) dbSetRaverFestivalTicketType(you.id, festId, type || null, other || null);
   }
 
-  function onTicketTypeSelectChange(festId, value) {
-    const otherInput = document.getElementById(`ticket-type-other-${festId}`);
-    if (otherInput) otherInput.style.display = value === 'other' ? '' : 'none';
-    saveMyTicketType(festId, value || null, value === 'other' ? (otherInput?.value || '') : null);
-    if (value !== 'other') openRaveFocus(festId);
+  // Line icons for the rave popup + edit wizard (Lucide-style 24px strokes,
+  // inherit currentColor) — sharper than emoji at chip/button sizes.
+  const RF_ICONS = {
+    calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+    clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+    pin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+    sparkle: '<path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2Z"/>',
+    ticket: '<path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2M13 17v2M13 11v2"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    eye: '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+    share: '<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M16 6l-4-4-4 4M12 2v13"/>',
+    pencil: '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
+    lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    x: '<path d="M18 6 6 18M6 6l12 12"/>',
+    chevronRight: '<path d="m9 18 6-6-6-6"/>',
+    info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
+    venue: '<path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h1M14 9h1M9 13h1M14 13h1M9 17h1M14 17h1"/>',
+    upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5M12 3v12"/>',
+  };
+  function rfIcon(name, size = 16) {
+    return `<svg class="rf-ico" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${RF_ICONS[name] || ''}</svg>`;
   }
 
-  function saveTicketTypeOther(festId, value) {
-    saveMyTicketType(festId, 'other', value.trim());
-    openRaveFocus(festId);
-  }
-
+  // Header (accent bar + chips) → Vibe/Going control → Plan|Recap · Crew ·
+  // Lineup · Info tabs → sticky Share / Edit bar. Admin-ish actions (adding
+  // tribe, tagging artists) live inside their tabs, not the main view.
   function raveFocusModalHTML(f) {
     const you = squad.find(r => r.isYou);
     const youGoing = you && (you.festIds || []).some(fid => String(fid) === String(f.id));
     const youInterested = you && (you.interestedFestIds || []).some(fid => String(fid) === String(f.id));
     const d = festDate(f);
     const isUpcoming = d && d >= TODAY;
-    const dateBit = d ? `${d.getDate()} ${MON_SHORT[d.getMonth()]}${!isUpcoming ? ' ' + d.getFullYear() : ''}` : '';
     const venue = findVenueById(f.venueId);
     const goers = festivalGoers(f.id);
     const interestedPeople = festivalInterestedGoers(f.id);
+    const crewPeople = [...goers, ...interestedPeople];
+    const lineupCount = lineupArtistsFor(f.id).length;
+    const days = Number(f.days) || 0;
+    const tab = _raveFocusTab;
 
-    // Same info the marquee card shows (duration/location/distance/date,
-    // venue line, Lineup Explorer / map / weather pills) — the popup is the
-    // new primary "view this rave" surface, so it carries that over rather
-    // than dropping it.
-    const durLabel = raveDurationLabel(f);
+    // Header chips — date, length, location, weather (cached reading only;
+    // the Raves tab's own fetch is what fills the cache).
+    const dateBit = d ? `${DOW_SHORT[d.getDay()]} ${d.getDate()} ${MON_SHORT[d.getMonth()]}${!isUpcoming ? ' ' + d.getFullYear() : ''}` : '';
+    const locationText = festivalLocationSource(f).location || 'Location TBD';
     const distMi = _raveFilters.distance != null ? festivalDistance(f, loadUserGeo()) : null;
-    const metaBits = [];
-    if (durLabel) metaBits.push(`<span class="marquee-duration-badge">${escHtml(durLabel)}</span>`);
-    metaBits.push(`<span>📍 ${escHtml(festivalLocationSource(f).location || 'Location TBD')}${distMi != null ? ` · ${Math.round(distMi)} mi away` : ''}</span>`);
-    if (dateBit) metaBits.push(`<span>${escHtml(dateBit)}</span>`);
-    const venueLine = venue ? `<div class="marquee-meta marquee-venue-line">🏛️ ${escHtml(venue.name)}</div>` : '';
-    const lineupUrl = getLineupExplorerUrl(f);
-    const lineupBtn = lineupUrl
-      ? `<a class="lineup-explorer-btn" href="${lineupUrl}" target="_blank" rel="noopener">🔭 Lineup Explorer</a>`
-      : '';
-    const mapUrlJs = escJsAttr(f.mapUrl || '');
-    const mapBtn = f.mapUrl
-      ? `<button class="map-pill" onclick="openMapPinLightbox('${mapUrlJs}', null, null, null, null, null, null, null, null)">🗺️ View Map</button>`
-      : '';
+    const distBit = distMi != null ? ` · ${Math.round(distMi)} mi away` : '';
     const weatherChip = weatherChipHTML({ ...f, _d: d }, loadWeatherCache());
-    const pillRow = (lineupBtn || mapBtn || weatherChip) ? `<div class="pill-row">${lineupBtn}${mapBtn}${weatherChip}</div>` : '';
+    const chips = [];
+    if (dateBit) chips.push(`<span class="rf-chip">${rfIcon('calendar', 14)}${escHtml(dateBit)}</span>`);
+    if (days) chips.push(`<span class="rf-chip">${rfIcon('clock', 14)}${days} day${days !== 1 ? 's' : ''}</span>`);
+    chips.push(`<span class="rf-chip">${rfIcon('pin', 14)}${escHtml(locationText)}</span>`);
+    if (weatherChip && !weatherChip.includes('marquee-weather-slot')) chips.push(`<span class="rf-chip">${weatherChip}</span>`);
 
+    // Vibe / Going segmented control. Going always goes through the Going
+    // Options sheet — ticket type, Interested and Not going all live there.
+    const myVibe = you && (festVibesCache[String(f.id)] || []).find(v => String(v.raverId) === String(you.id));
     const goingLabel = isUpcoming ? 'Going' : 'Sent It';
-    const vibeBtn = `<button class="event-action-btn vibe-action" onclick="openVibePicker('${escJsAttr(f.id)}')">✦ Vibe</button>`;
-    const goingBtn = `<button class="event-action-btn going-action${youGoing ? ' active' : ''}" onclick="raveFocusToggleGoing('${escJsAttr(f.id)}')">${youGoing ? '🎟️ ' : '＋ '}${goingLabel}</button>`;
-    const interestedBtn = `<button class="event-action-btn interested-action${youInterested ? ' active' : ''}" onclick="raveFocusToggleInterested('${escJsAttr(f.id)}')">👀 Interested</button>`;
-    const rsvpButtonsHtml = youGoing ? [vibeBtn, goingBtn].join('') : youInterested ? [vibeBtn, interestedBtn].join('') : [vibeBtn, goingBtn, interestedBtn].join('');
+    const goingSeg = youGoing ? `${rfIcon('ticket')}${goingLabel}` : youInterested ? `${rfIcon('eye')}Interested` : `${rfIcon('plus')}${goingLabel}`;
+    const segHtml = `
+      <div class="rf-seg" role="group" aria-label="Your RSVP">
+        <button type="button" class="rf-seg-btn${myVibe ? ' set' : ''}" onclick="raveFocusSwitchTab('plan'); openVibePicker('${escJsAttr(f.id)}')">${myVibe ? `${myVibe.emoji} Vibe` : `${rfIcon('sparkle')}Vibe`}</button>
+        <button type="button" class="rf-seg-btn going${youGoing ? ' active' : youInterested ? ' interested' : ''}" onclick="openGoingOptionsSheet('${escJsAttr(f.id)}')">${goingSeg}</button>
+      </div>`;
 
-    const yourTicket = youGoing ? (you.ticketTypes || {})[f.id] : null;
-    const ticketPickerHtml = youGoing ? `
-      <div class="form-group ticket-type-picker" style="margin-top:10px;margin-bottom:0;">
-        <label class="form-label" style="font-size:0.72rem;">🎫 Your ticket</label>
-        <select class="archive-fest-select" aria-label="Ticket type" onchange="onTicketTypeSelectChange('${escJsAttr(f.id)}', this.value)">
-          <option value="">Ticket type (optional)</option>
-          ${TICKET_TYPES.map(t => `<option value="${t.key}" ${yourTicket?.type === t.key ? 'selected' : ''}>${escHtml(t.label)}</option>`).join('')}
-        </select>
-        <input class="form-input" id="ticket-type-other-${f.id}" aria-label="Ticket type" style="margin-top:6px;${yourTicket?.type === 'other' ? '' : 'display:none;'}"
-          placeholder="e.g. Weekend Camping Pass" maxlength="40" value="${escHtml(yourTicket?.type === 'other' ? (yourTicket.other || '') : '')}"
-          onblur="saveTicketTypeOther('${escJsAttr(f.id)}', this.value)">
-      </div>` : '';
+    const ticketOf = r => ticketTypeInfo((r.ticketTypes || {})[f.id]);
+    const withTicket = goers.filter(ticketOf).length;
+    const miniAvatar = (r, ring) => {
+      const dn = displayName(r);
+      const bg = r.avatarUrl ? 'transparent' : extractFirstColor(r.gradient);
+      const inner = r.avatarUrl ? `<img src="${escHtml(r.avatarUrl)}" alt="">` : initials(dn).toUpperCase();
+      return `<span class="rf-av${ring ? ' ' + ring : ''}" style="background:${bg};" aria-hidden="true">${inner}</span>`;
+    };
 
-    const goersWithTickets = goers
-      .map(g => ({ g, info: ticketTypeInfo((g.ticketTypes || {})[f.id]) }))
-      .filter(({ info }) => info);
-    // Grouped counts for the mix chip — "Other" custom labels all fold into
-    // one Other count here rather than each getting their own chip.
-    const ticketMixCounts = {};
-    goersWithTickets.forEach(({ g }) => {
-      const type = (g.ticketTypes[f.id] || {}).type;
-      if (type) ticketMixCounts[type] = (ticketMixCounts[type] || 0) + 1;
-    });
-    const ticketMixChipsHtml = TICKET_TYPES.map(t => ticketMixCounts[t.key]
-      ? `<span class="ticket-type-list-badge ${t.color}">${ticketMixCounts[t.key]} ${escHtml(t.abbr)}</span>` : '').join('');
-    const ticketListHtml = goersWithTickets.length ? `
-      <div class="ticket-type-list">
-        <div class="form-section-label ticket-mix-row" style="margin-top:10px;justify-content:space-between;">
-          <span>🎟️ Ticket Types</span>
-          <span class="ticket-mix-row">${ticketMixChipsHtml}</span>
+    // Crew summary card (Plan/Recap tab) — opens the Crew tab.
+    const summaryBits = [`${goers.length} ${isUpcoming ? 'going' : 'sent it'}`];
+    if (goers.length) summaryBits.push(`${withTicket} ${withTicket === 1 ? 'has a ticket' : 'have tickets'}`);
+    if (interestedPeople.length) summaryBits.push(`${interestedPeople.length} interested`);
+    const ticketPct = goers.length ? Math.round(withTicket / goers.length * 100) : 0;
+    const crewSummaryHtml = crewPeople.length ? `
+      <div class="rf-card rf-crew-summary" role="button" tabindex="0" aria-label="See crew" onclick="raveFocusSwitchTab('crew')">
+        <div class="rf-crew-summary-row">
+        <div class="rf-av-stack">${[
+          ...goers.map(g => miniAvatar(g, 'rf-ring-going')),
+          ...interestedPeople.map(p => miniAvatar(p, 'rf-ring-interested')),
+        ].slice(0, 5).join('')}${crewPeople.length > 5 ? `<span class="rf-av rf-av-more">+${crewPeople.length - 5}</span>` : ''}</div>
+        <div class="rf-crew-summary-main">
+          <div class="rf-crew-summary-text">${summaryBits.join(' · ')}</div>
+          ${goers.length ? `<div class="rf-progress rf-progress-amber" role="progressbar" aria-label="Crew with tickets" aria-valuemin="0" aria-valuemax="${goers.length}" aria-valuenow="${withTicket}"><span style="width:${ticketPct}%;"></span></div>` : ''}
         </div>
-        ${goersWithTickets.map(({ g, info }) => `
-          <div class="ticket-type-list-row">
-            <span class="ticket-type-list-name">${escHtml(displayName(g).split(' ')[0])}</span>
-            <span class="ticket-type-list-badge ${info.color}">${escHtml(info.label)}</span>
-          </div>`).join('')}
-      </div>` : '';
+        <span class="rf-card-chev">${rfIcon('chevronRight', 18)}</span>
+        </div>
+      </div>` : `
+      <div class="rf-card rf-empty">Nobody from the tribe yet · <button type="button" class="rf-link" onclick="raveFocusSwitchTab('crew')">Add crew</button></div>`;
 
     const vibeRowContent = buildVibeRowHTML(f.id);
     const vibeSection = vibeRowContent
-      ? `<div class="fest-vibe-row" style="padding:8px 0 0;">${vibeRowContent}</div>`
-      : `<div id="vibe-picker-${f.id}" style="display:none;padding:8px 0 0;"></div>`;
+      ? `<div class="fest-vibe-row rf-vibe-row">${vibeRowContent}</div>`
+      : `<div id="vibe-picker-${f.id}" style="display:none;"></div>`;
 
-    return `
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:4px;">
-        <div>
-          <div class="modal-title" style="margin-bottom:2px;">${escHtml(f.name)}</div>
-          <div class="marquee-meta" style="font-size:0.78rem;color:var(--muted);">${metaBits.join('<span class="marquee-dot">·</span>')}</div>
-          ${venueLine}
-          ${pillRow}
-        </div>
-        <button type="button" class="page-panel-back" style="flex-shrink:0;" onclick="closeRaveFocus()">✕</button>
-      </div>
-      <div class="event-action-bar" style="margin:10px 0 0;">${rsvpButtonsHtml}</div>
-      ${ticketPickerHtml}
+    // Recap (past raves) — what you personally logged, in place of Plan.
+    const yourTicket = youGoing ? ticketOf(you) : null;
+    const seenCount = youGoing ? myLineupSightingIds(f.id).size : 0;
+    const recapRows = [];
+    if (youGoing) recapRows.push(`<div class="rf-recap-row"><span>🎟️ You sent it</span>${yourTicket ? `<span class="ticket-type-list-badge ${yourTicket.color}">${escHtml(yourTicket.label)}</span>` : ''}</div>`);
+    if (youGoing && lineupCount) recapRows.push(`<div class="rf-recap-row"><span>🎧 Caught ${seenCount} of ${lineupCount} set${lineupCount !== 1 ? 's' : ''}</span><button type="button" class="rf-mini-btn" onclick="raveFocusSwitchTab('lineup')">Mark sets</button></div>`);
+    const recapCard = recapRows.length
+      ? `<div class="rf-card">${recapRows.join('')}</div>`
+      : `<div class="rf-card rf-empty">Were you there? Tap <b>＋ Sent It</b> to log it.</div>`;
+
+    const planPanel = `
+      ${isUpcoming ? raveReadyChecklistHTML(f, you) : recapCard}
       ${vibeSection}
-      <div style="margin-top:14px;">${raveCrewSectionHTML(f, goers, interestedPeople)}</div>
-      ${ticketListHtml}
-      <button class="btn btn-ghost" style="width:100%;padding:10px;font-size:0.85rem;margin-top:10px;" onclick="openRaveShareCard('${escJsAttr(f.id)}')">📲 Share Rave Card</button>
-      <div class="form-section-label">Tribe</div>
-      <div class="fest-goers-note" id="re-goers-note">${goers.length ? goers.length + ' tribe member' + (goers.length!==1?'s':'') + ' linked: ' + goers.map(g=>escHtml(g.name.split(' ')[0])).join(', ') : 'No tribe members linked yet'}</div>
-      <div class="fest-search-wrap" style="margin-top:8px;margin-bottom:4px;">
+      <div class="rf-section-label">Crew</div>
+      ${crewSummaryHtml}`;
+
+    // Crew tab — one row per person; going first (with ticket badge), then interested.
+    const crewRow = (r, badge, ring) => `
+      <div class="rf-crew-row" role="button" tabindex="0" data-raver-id="${r.id}" aria-label="View ${escHtml(displayName(r))}'s profile" onclick="openProfile(this.dataset.raverId, false, 'members')">
+        ${miniAvatar(r, ring)}
+        <span class="rf-crew-name">${escHtml(displayName(r))}${r.isYou ? ' <span class="rf-you">(you)</span>' : ''}</span>
+        ${badge}
+      </div>`;
+    const goerRows = goers.map(g => {
+      const info = ticketOf(g);
+      const badge = info
+        ? `<span class="ticket-type-list-badge ${info.color}">${escHtml(info.key === 'other' ? info.label : info.abbr)}</span>`
+        : `<span class="rf-badge-muted">No ticket</span>`;
+      return crewRow(g, badge, 'rf-ring-going');
+    }).join('');
+    const interestedRows = interestedPeople.map(p => crewRow(p, `<span class="ticket-type-list-badge cyan">Interested</span>`, 'rf-ring-interested')).join('');
+    const crewPanel = `
+      ${goers.length ? `<div class="rf-section-label">${isUpcoming ? 'Going' : 'Sent it'} · ${goers.length}</div><div class="rf-card rf-list">${goerRows}</div>` : ''}
+      ${interestedPeople.length ? `<div class="rf-section-label">Interested · ${interestedPeople.length}</div><div class="rf-card rf-list">${interestedRows}</div>` : ''}
+      ${!crewPeople.length ? `<div class="rf-card rf-empty">Nobody from the tribe yet</div>` : ''}
+      <div class="rf-section-label">Add crew</div>
+      <div class="fest-search-wrap" style="margin-bottom:4px;">
         <input class="form-input" id="re-raver-search" aria-label="Search ravers to add" placeholder="🔍 Search tribe to add…" autocomplete="off"
           oninput="reSearch(this.value)"
           onblur="setTimeout(()=>{const d=document.getElementById('re-raver-results');if(d)d.style.display='none';},200)">
         <div id="re-raver-results" class="fest-search-dropdown" style="display:none;"></div>
       </div>
-      <div class="field-help" style="margin:-2px 0 4px;">Add crew members who are also going.</div>
-      <div class="form-group">
-        <label class="form-label">🎧 Lineup</label>
-        <div id="lineup-section"></div>
+      <div class="field-help">Add crew members who are also going.</div>`;
+
+    // Lineup tab — renderFestivalLineupSection() fills #lineup-section.
+    const lineupUrl = getLineupExplorerUrl(f);
+    const lineupPanel = `
+      <div id="lineup-section"></div>
+      ${lineupUrl ? `<a class="lineup-explorer-btn" style="margin-top:14px;" href="${lineupUrl}" target="_blank" rel="noopener">🔭 Lineup Explorer</a>` : ''}`;
+
+    // Info tab — venue, location, dates, festival map.
+    const fmtFull = x => `${DOW_SHORT[x.getDay()]} ${x.getDate()} ${MON_SHORT[x.getMonth()]} ${x.getFullYear()}`;
+    const endD = d && days > 1 ? new Date(d.getFullYear(), d.getMonth(), d.getDate() + days - 1) : null;
+    const infoRow = (icon, label, valueHtml) => `
+      <div class="rf-info-row">
+        <span class="rf-info-icon" aria-hidden="true">${icon}</span>
+        <div><div class="rf-info-label">${label}</div><div class="rf-info-value">${valueHtml}</div></div>
+      </div>`;
+    const infoPanel = `
+      <div class="rf-card rf-list">
+        ${infoRow(rfIcon('venue'), 'Venue', venue ? `<button type="button" class="rf-link" onclick="openVenueDetail('${escJsAttr(venue.id)}')">${escHtml(venue.name)}</button>` : '<span class="rf-muted">No venue linked</span>')}
+        ${infoRow(rfIcon('pin'), 'Location', escHtml(locationText + distBit))}
+        ${infoRow(rfIcon('calendar'), 'Dates', d ? escHtml(fmtFull(d) + (endD ? ' – ' + fmtFull(endD) : '')) + (days ? ` <span class="rf-muted">· ${escHtml(raveDurationLabel({ days }))}</span>` : '') : '<span class="rf-muted">Date TBD</span>')}
       </div>
-      <div style="display:flex;gap:10px;margin-top:18px;">
-        <button class="btn btn-ghost" style="flex:1;" onclick="closeRaveFocus()">Close</button>
-        <button class="btn btn-primary" style="flex:1;" onclick="closeRaveFocus(); openRaveEditor('${escJsAttr(f.id)}')">✏️ Edit Rave</button>
+      <div class="rf-section-label">Festival map</div>
+      ${f.mapUrl
+        ? `<img class="rf-map" src="${escHtml(f.mapUrl)}" alt="Festival map for ${escHtml(f.name)}" role="button" tabindex="0" onclick="openMapPinLightbox('${escJsAttr(f.mapUrl)}', null, null, null, null, null, null, null, null)">`
+        : `<div class="rf-card rf-empty">No festival map yet</div>`}`;
+
+    const tabs = [
+      ['plan', isUpcoming ? 'Plan' : 'Recap'],
+      ['crew', `Crew <span class="rf-tab-count">${crewPeople.length}</span>`],
+      ['lineup', `Lineup <span class="rf-tab-count" id="rf-lineup-count">${lineupCount}</span>`],
+      ['info', 'Info'],
+    ];
+    const tabsHtml = tabs.map(([key, label]) =>
+      `<button type="button" role="tab" class="rf-tab${key === tab ? ' active' : ''}" data-rf-tab="${key}" aria-selected="${key === tab}" onclick="raveFocusSwitchTab('${escJsAttr(key)}')">${label}</button>`
+    ).join('');
+    const panel = (key, html) => `<div class="rf-panel" role="tabpanel" data-rf-panel="${key}"${key === tab ? '' : ' hidden'}>${html}</div>`;
+
+    return `
+      <div class="rf-accent" style="background:${escHtml(festColor(f))};"></div>
+      <div class="rf-body">
+        <div class="rf-head">
+          <div class="rf-title">${escHtml(f.name)}</div>
+          <button type="button" class="rf-close" aria-label="Close" onclick="closeRaveFocus()">${rfIcon('x', 18)}</button>
+        </div>
+        <div class="rf-chips">${chips.join('')}</div>
+        ${segHtml}
+        <div class="rf-tabs" role="tablist">${tabsHtml}</div>
+        ${panel('plan', planPanel)}
+        ${panel('crew', crewPanel)}
+        ${panel('lineup', lineupPanel)}
+        ${panel('info', infoPanel)}
+      </div>
+      <div class="rf-sticky">
+        <button type="button" class="rf-share-btn" onclick="openRaveShareCard('${escJsAttr(f.id)}')">${rfIcon('share')}Share</button>
+        <button type="button" class="rf-edit-btn" onclick="closeRaveFocus(); openRaveEditor('${escJsAttr(f.id)}')">${rfIcon('pencil')}Edit rave</button>
       </div>
     `;
   }
 
+  // "Get rave-ready" checklist — Plan tab, upcoming raves only, and only
+  // ever shows your own state. Unfinished items sort to the top; once all
+  // four are done it collapses to a slim bar you can reopen.
+  function raveReadyOpenIds() {
+    try { return JSON.parse(localStorage.getItem('rf_ready_open') || '[]'); } catch (e) { return []; }
+  }
+  function raveReadyToggle(festId) {
+    const ids = raveReadyOpenIds().map(String);
+    const next = ids.includes(String(festId)) ? ids.filter(id => id !== String(festId)) : [...ids, String(festId)];
+    try { localStorage.setItem('rf_ready_open', JSON.stringify(next)); } catch (e) { /* per-device nicety only */ }
+    refreshRaveReadyChecklist(festId);
+  }
+
+  function raveReadyChecklistHTML(f, you) {
+    if (!f || !you) return '';
+    const youGoing = (you.festIds || []).some(fid => String(fid) === String(f.id));
+    const ticket = youGoing ? ticketTypeInfo((you.ticketTypes || {})[f.id]) : null;
+    const lineupIds = new Set(lineupArtistsFor(f.id).map(a => String(a.artist_id)));
+    const starred = [...myLineupPlanIds(f.id)].filter(id => lineupIds.has(id)).map(id => findArtistById(id)).filter(Boolean);
+    const myVibe = (festVibesCache[String(f.id)] || []).find(v => String(v.raverId) === String(you.id));
+    const fid = escJsAttr(f.id);
+    const starredValue = starred.slice(0, 2).map(a => a.name).join(', ') + (starred.length > 2 ? ` +${starred.length - 2}` : '');
+
+    // todo = label while unfinished, label = once done; doneBtn overrides "Change".
+    const items = [
+      { todo: 'Mark yourself going', label: "You're going", done: youGoing, value: youGoing ? "You're in" : 'Lock in your RSVP',
+        action: `openGoingOptionsSheet('${fid}')` },
+      { todo: 'Add your ticket', label: 'Your ticket', done: !!ticket, value: ticket ? ticket.label : 'GA, VIP, backstage…',
+        action: `openGoingOptionsSheet('${fid}')` },
+      { todo: "Star who you're seeing", label: "Who you're seeing", done: starred.length > 0, value: starred.length ? starredValue : 'Pick the sets you want to catch',
+        star: starred.length > 0, doneBtn: 'Lineup', action: `raveFocusSwitchTab('lineup')` },
+      { todo: 'Add your vibe', label: 'Your vibe', done: !!myVibe, value: myVibe ? `${myVibe.emoji}${myVibe.caption ? ' ' + myVibe.caption : ''}` : 'Let the crew know your energy',
+        action: `openVibePicker('${fid}')` },
+    ];
+    const doneCount = items.filter(i => i.done).length;
+    const allDone = doneCount === items.length;
+
+    if (allDone && !raveReadyOpenIds().map(String).includes(String(f.id))) {
+      return `
+        <div class="rf-card rf-ready rf-ready-slim" id="rf-ready" role="button" tabindex="0" aria-label="You're rave-ready — show checklist" onclick="raveReadyToggle('${escJsAttr(f.id)}')">
+          <span class="rf-ready-slim-label"><span class="rf-ready-check">${rfIcon('check', 13)}</span>You're rave-ready</span>
+          <span class="rf-ready-count">${doneCount} of ${items.length}${rfIcon('chevronRight', 16)}</span>
+        </div>`;
+    }
+
+    const sorted = [...items.filter(i => !i.done), ...items.filter(i => i.done)];
+    const rows = sorted.map(i => `
+      <div class="rf-ready-item${i.done ? ' done' : ''}">
+        <span class="rf-ready-check" aria-hidden="true">${i.done ? rfIcon('check', 15) : ''}</span>
+        <div class="rf-ready-text">
+          <div class="rf-ready-label">${escHtml(i.done ? i.label : i.todo)}<span class="rf-sr">${i.done ? ' — done' : ' — to do'}</span></div>
+          <div class="rf-ready-value">${i.star ? '<span class="rf-star" aria-hidden="true">★</span>' : ''}${escHtml(i.value)}</div>
+        </div>
+        <button type="button" class="rf-ready-btn${i.done ? '' : ' add'}" onclick="${i.action}">${i.done ? (i.doneBtn || 'Change') : 'Add'}</button>
+      </div>`).join('');
+    return `
+      <div class="rf-card rf-ready" id="rf-ready">
+        <div class="rf-ready-head">
+          <span class="rf-ready-title">Get rave-ready</span>
+          <span class="rf-ready-count">${doneCount} of ${items.length}</span>
+        </div>
+        <div class="rf-progress" role="progressbar" aria-label="Rave-ready progress" aria-valuemin="0" aria-valuemax="${items.length}" aria-valuenow="${doneCount}"><span style="width:${Math.round(doneCount / items.length * 100)}%;"></span></div>
+        <div class="rf-ready-hint">${rfIcon('lock', 12)}Only you see your checklist</div>
+        ${rows}
+        ${allDone ? `<button type="button" class="rf-link rf-ready-hide" onclick="raveReadyToggle('${escJsAttr(f.id)}')">Hide checklist</button>` : ''}
+      </div>`;
+  }
+
+  // Swap just the checklist in place (e.g. after starring an artist in the
+  // Lineup tab) without re-rendering the whole popup.
+  function refreshRaveReadyChecklist(festId) {
+    const el = document.getElementById('rf-ready');
+    if (!el || String(editingFestivalId) !== String(festId)) return;
+    el.outerHTML = raveReadyChecklistHTML(getFestival(festId), squad.find(r => r.isYou));
+  }
+
+  // Edit Rave is a step wizard (Basics · Place · Look · Tools). Every step's
+  // fields stay in the DOM and only the inactive steps are hidden, so
+  // saveRave(), the venue picker and the location field keep reading the
+  // same #fe-* ids no matter which step is showing. The step survives the
+  // History view round-trip and resets on close.
+  let _raveEditStep = 'basics';
+  let _raveEditStepFestId = null;
+  const RAVE_EDIT_STEPS = [
+    { key: 'basics', label: 'Basics', title: 'The basics', sub: 'Tap any step up top to jump straight there. Save works from every step.' },
+    { key: 'place', label: 'Place', title: 'Where is it?', sub: 'Link a venue to keep the location in sync, or just type a place.' },
+    { key: 'look', label: 'Look', title: 'The look', sub: 'Pick the card colour your crew sees on the Raves tab.' },
+    { key: 'tools', label: 'Tools', title: 'Moderator tools', sub: 'Festival map — lets crew tap a spot on meetup pins.' },
+  ];
+
   function openRaveEditor(id) {
     const f = id ? getFestival(id) : null;
-    // Editing details (name/date/location/etc.) is gated to the creator or a moderator,
-    // but the modal still opens for everyone — adding tribe members' RSVPs below is a
-    // separate permission and shouldn't be blocked by festivalPerms().canEdit.
+    // Editing details (name/date/location/etc.) is gated to the creator or a moderator;
+    // everyone else gets the same wizard read-only (fields disabled, no Save).
     const canEditFest = !f || festivalPerms(f).canEdit;
+    const stepKey = String(id || 'new');
+    if (_raveEditStepFestId !== stepKey) { _raveEditStep = 'basics'; _raveEditStepFestId = stepKey; }
     editingFestivalId = id || null;
     activeFestId = id || null;
     editingVenueId = f?.venueId || null;
     editRaveLastLocation = { location: f?.location || '', lat: f?.lat ?? null, lng: f?.lng ?? null };
     editRaveColor = f?.color || festColor(f || { id: 'new' });
+    const steps = RAVE_EDIT_STEPS.filter(s => s.key !== 'tools' || (f && isModerator()));
+    if (!steps.some(s => s.key === _raveEditStep)) _raveEditStep = 'basics';
+    const dis = canEditFest ? '' : 'disabled';
+
     const swatchHtml = CARD_PALETTE.map(c =>
       `<button type="button" class="color-swatch${c === editRaveColor ? ' selected' : ''}" data-color="${c}" style="background:${c};" aria-label="${escHtml(colourName(c))}" aria-pressed="${c === editRaveColor}" ${canEditFest ? `onclick="pickRaveColor('${escJsAttr(c)}')"` : 'disabled'}></button>`
     ).join('');
-    // Footer: primary row (Cancel + Save) stays visible; less-common actions
-    // (History, Unarchive, Delete, Report) tuck behind a kebab menu so the
-    // footer doesn't show up to 5 same-weight buttons at once.
+    // Less-common actions (History, Unarchive, Report, Delete) tuck behind a
+    // kebab next to Save so the wizard chrome stays two buttons wide.
     const kebabRows = [
       f && currentUser ? `<button type="button" class="kebab-menu-row" onclick="toggleKebabMenu('fe-kebab-menu'); showFestivalHistoryInModal('${escJsAttr(f.id)}')">📜 History</button>` : '',
       f && f.archived && festivalPerms(f).canArchive ? `<button type="button" class="kebab-menu-row" onclick="toggleKebabMenu('fe-kebab-menu'); unarchiveFestival('${escJsAttr(f.id)}')">🗄️ Unarchive</button>` : '',
@@ -28681,59 +29028,141 @@
       f && festivalPerms(f).canEdit ? `<button type="button" class="kebab-menu-row danger" onclick="toggleKebabMenu('fe-kebab-menu'); showDeleteRaveConfirm()">🗑️ Delete</button>` : '',
     ].filter(Boolean).join('');
     const kebabHtml = kebabRows ? `
-      <div class="kebab-wrap" style="align-self:center;">
+      <div class="kebab-wrap">
         <button type="button" class="kebab-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="fe-kebab-menu" onclick="toggleKebabMenu('fe-kebab-menu')" title="More">⋯</button>
-        <div id="fe-kebab-menu" class="kebab-menu" style="display:none;">${kebabRows}</div>
+        <div id="fe-kebab-menu" class="kebab-menu kebab-menu-right" style="display:none;">${kebabRows}</div>
       </div>` : '';
-    document.getElementById('rave-edit-modal').innerHTML = `
-      <div class="page-panel-header">
-        <button type="button" class="page-panel-back" onclick="closeRaveEditor()">← Back</button>
-        <div>
-          <div class="modal-title" style="margin-bottom:0;">${f ? '✏️ Edit Rave' : '🎉 Add Rave'}</div>
-          ${f ? `<div style="font-size:0.76rem;color:var(--muted);">${escHtml(f.name)}</div>` : ''}
-        </div>
-      </div>
-      <div class="page-panel-body">
-        ${!canEditFest ? `<p style="font-size:0.78rem;color:var(--muted);margin:-4px 0 12px;">🔒 Only the creator or a moderator can edit these details.</p>` : ''}
-        <div class="form-section-label">Details</div>
-        ${fieldRow('Rave Name','fe-name', f?.name, 'e.g. Awakenings or Basement at Fabric this Friday', false, 100)}
+
+    const dateVal = (() => { if (!f) return ''; if (f.date) return f.date; const d = festDate(f); if (!d || isNaN(d)) return ''; return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
+    const daysVal = Number(f?.days) || 0;
+    const dayBtns = [1, 2, 3, 4].map(n => {
+      const on = n === 4 ? daysVal >= 4 : daysVal === n;
+      return `<button type="button" class="rw-day-btn${on ? ' selected' : ''}" data-days="${n}" aria-pressed="${on}" ${canEditFest ? `onclick="raveEditPickDays(${n})"` : 'disabled'}>${n === 4 ? '4+' : n}</button>`;
+    }).join('');
+
+    const stepBody = {
+      basics: `
+        ${fieldRow('Rave name','fe-name', f?.name, 'e.g. Awakenings or Basement at Fabric this Friday', false, 100)}
         <div class="form-group">
-          <label for="fe-date" class="form-label">Date</label>
-          <input class="form-input" id="fe-date" type="date" value="${(() => { if (!f) return ''; if (f.date) return f.date; const d = festDate(f); if (!d || isNaN(d)) return ''; return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })()}" style="color-scheme:dark;" ${canEditFest ? '' : 'disabled'}>
+          <label for="fe-date" class="form-label">Start date</label>
+          <input class="form-input" id="fe-date" type="date" value="${dateVal}" style="color-scheme:dark;" ${dis}>
         </div>
+        <div class="form-group">
+          <label class="form-label" id="fe-days-label">How many days? <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
+          <div class="rw-days" role="group" aria-labelledby="fe-days-label">${dayBtns}</div>
+          <input class="form-input" id="fe-days" aria-label="How many days" type="number" min="1" max="14" value="${daysVal || ''}" placeholder="e.g. 5"
+            style="max-width:120px;margin-top:8px;${daysVal >= 4 ? '' : 'display:none;'}" ${dis}>
+        </div>
+        ${steps.some(s => s.key === 'tools') ? `<div class="rw-note">${rfIcon('info')}Step 4 (festival map) only shows for moderators.</div>` : ''}`,
+      place: `
         ${canEditFest ? `<div class="form-group">
-          <label class="form-label">🏛️ Venue <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
+          <label class="form-label">Venue <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
           <div id="fe-venue-picker"></div>
           <div class="field-help">Links this rave to a venue page and keeps its location in sync automatically.</div>
-        </div>` : ''}
-        <div class="form-group" id="fe-loc-group"></div>
-        <div class="form-group">
-          <label class="form-label">How Many Days? <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
-          <input class="form-input" id="fe-days" aria-label="How many days" type="number" min="1" max="14" value="${f?.days || ''}" placeholder="e.g. 3" style="max-width:120px;" ${canEditFest ? '' : 'disabled'}>
         </div>
-        <div class="form-section-label">Appearance</div>
+        <div class="rw-or"><span>or</span></div>` : ''}
+        <div class="form-group" id="fe-loc-group"></div>`,
+      look: `
         <div class="form-group">
-          <label class="form-label">Card Colour</label>
-          <div class="color-picker-grid" id="fe-color-grid">${swatchHtml}</div>
-        </div>
-        ${f && isModerator() ? `
-        <div class="form-section-label">Moderator Tools</div>
+          <label class="form-label">Card colour</label>
+          <div class="color-picker-grid rw-swatches" id="fe-color-grid">${swatchHtml}</div>
+        </div>`,
+      tools: f && isModerator() ? `
         <div class="form-group">
-          <label class="form-label">🗺️ Festival Map <span style="color:var(--muted);font-weight:400;">(lets crew tap a spot on meetup pins)</span></label>
-          ${f.mapUrl ? `<img src="${escHtml(f.mapUrl)}" alt="Festival map" style="width:100%;border-radius:10px;margin-bottom:8px;max-height:220px;object-fit:cover;">` : ''}
-          <input type="file" accept="image/*" onchange="handleFestivalMapUpload(event, '${escJsAttr(f.id)}')">
-          ${f.mapUrl ? `<button class="btn btn-ghost" style="margin-top:8px;" onclick="removeFestivalMap('${escJsAttr(f.id)}')">Remove map</button>` : ''}
-        </div>` : ''}
-      </div>
-      <div class="page-panel-footer">
+          <label class="form-label">Festival map</label>
+          ${f.mapUrl ? `<img class="rw-map-preview" src="${escHtml(f.mapUrl)}" alt="Festival map">` : ''}
+          <label class="rw-upload">${rfIcon('upload')}${f.mapUrl ? 'Replace map image' : 'Upload map image'}
+            <input type="file" class="rf-sr" accept="image/*" aria-label="Upload festival map" onchange="handleFestivalMapUpload(event, '${escJsAttr(f.id)}')">
+          </label>
+          ${f.mapUrl ? `<button type="button" class="rw-back" style="width:100%;margin-top:10px;" onclick="removeFestivalMap('${escJsAttr(f.id)}')">Remove map</button>` : ''}
+        </div>` : '',
+    };
+
+    const pillsHtml = steps.map((s, i) =>
+      `<button type="button" class="rw-step${s.key === 'tools' ? ' tools' : ''}${s.key === _raveEditStep ? ' active' : ''}" data-rw-step="${s.key}" aria-current="${s.key === _raveEditStep ? 'step' : 'false'}" onclick="raveEditGoStep('${escJsAttr(s.key)}')"><span class="rw-step-bar"></span>${i + 1} ${s.label}</button>`
+    ).join('');
+    const panelsHtml = steps.map(s => `
+      <section class="rw-panel" data-rw-panel="${s.key}"${s.key === _raveEditStep ? '' : ' hidden'}>
+        <h2 class="rw-title">${s.title}</h2>
+        <p class="rw-sub">${s.sub}</p>
+        ${!canEditFest ? `<p class="rw-sub">🔒 Only the creator or a moderator can edit these details.</p>` : ''}
+        ${stepBody[s.key]}
+      </section>`).join('');
+
+    document.getElementById('rave-edit-modal').innerHTML = `
+      <div class="page-panel-header rw-header">
+        <button type="button" class="rw-close" aria-label="Close" onclick="closeRaveEditor()">${rfIcon('x', 18)}</button>
+        <div class="rw-head-title">${f ? 'Edit rave' : 'Add rave'}</div>
         ${kebabHtml}
-        <button class="btn btn-ghost" onclick="closeRaveEditor()">Cancel</button>
-        ${canEditFest ? `<button class="btn btn-primary" onclick="saveRave()">${f ? 'Save' : 'Add 🔥'}</button>` : ''}
+        ${canEditFest ? `<button type="button" class="rw-save" onclick="raveEditSave()">${f ? 'Save' : 'Add 🔥'}</button>` : ''}
+      </div>
+      <div class="rw-steps" role="group" aria-label="Edit steps">${pillsHtml}</div>
+      <div class="page-panel-body rw-body">${panelsHtml}</div>
+      <div class="page-panel-footer rw-footer">
+        <button type="button" class="rw-back" id="rw-back-btn"></button>
+        <button type="button" class="rw-next" id="rw-next-btn"></button>
       </div>
     `;
     document.getElementById('rave-edit-overlay').classList.add('open');
     if (canEditFest) renderFestVenuePicker();
     renderFestLocationField();
+    raveEditGoStep(_raveEditStep);
+  }
+
+  // Shows one step and rewires the footer: Cancel/Back on the left, "Next:
+  // <step>" on the right — or Save/Add on the last step.
+  function raveEditGoStep(key) {
+    const panels = [...document.querySelectorAll('#rave-edit-modal .rw-panel')];
+    const keys = panels.map(p => p.dataset.rwPanel);
+    if (!keys.includes(key)) return;
+    _raveEditStep = key;
+    const idx = keys.indexOf(key);
+    panels.forEach(p => { p.hidden = p.dataset.rwPanel !== key; });
+    document.querySelectorAll('#rave-edit-modal .rw-step').forEach(el => {
+      const i = keys.indexOf(el.dataset.rwStep);
+      el.classList.toggle('active', i === idx);
+      el.classList.toggle('done', i < idx);
+      el.setAttribute('aria-current', i === idx ? 'step' : 'false');
+    });
+    const back = document.getElementById('rw-back-btn');
+    const next = document.getElementById('rw-next-btn');
+    const saveBtn = document.querySelector('#rave-edit-modal .rw-save');
+    if (back) {
+      back.textContent = idx === 0 ? 'Cancel' : '‹ Back';
+      back.onclick = idx === 0 ? closeRaveEditor : () => raveEditGoStep(keys[idx - 1]);
+    }
+    if (next) {
+      const nextStep = RAVE_EDIT_STEPS.find(s => s.key === keys[idx + 1]);
+      next.hidden = !nextStep && !saveBtn;
+      next.textContent = nextStep ? `Next: ${nextStep.label} ›` : (saveBtn ? saveBtn.textContent : '');
+      next.onclick = nextStep ? () => raveEditGoStep(nextStep.key) : raveEditSave;
+    }
+    const body = document.querySelector('#rave-edit-modal .rw-body');
+    if (body) body.scrollTop = 0;
+  }
+
+  // 1 / 2 / 3 write straight into #fe-days; 4+ reveals it for a bigger
+  // number. Tapping the selected button again clears it (days is optional).
+  function raveEditPickDays(n) {
+    const input = document.getElementById('fe-days');
+    if (!input) return;
+    const current = parseInt(input.value || '', 10) || 0;
+    const wasOn = n === 4 ? current >= 4 : current === n;
+    input.value = wasOn ? '' : (n === 4 ? Math.max(current, 4) : n);
+    input.style.display = !wasOn && n === 4 ? '' : 'none';
+    document.querySelectorAll('#rave-edit-modal .rw-day-btn').forEach(b => {
+      const on = !wasOn && Number(b.dataset.days) === n;
+      b.classList.toggle('selected', on);
+      b.setAttribute('aria-pressed', String(on));
+    });
+    if (!wasOn && n === 4) input.focus();
+  }
+
+  // Save from any step. saveRave() only toasts on a missing name/date, so
+  // hop back to Basics first so the empty field is actually on screen.
+  function raveEditSave() {
+    if (!val('fe-name') || !document.getElementById('fe-date')?.value) raveEditGoStep('basics');
+    saveRave();
   }
 
   // Swaps the existing rave-edit modal body to a read-only History view for
@@ -28899,8 +29328,8 @@
   // Replaces a bare toggle on the Rave card / list row: tapping Going always
   // opens this sheet — to set a ticket type up front (before you're even
   // marked going), change it later, or step back to Interested/Not Going.
-  // The Rave Focus popup's own Going button is intentionally left alone —
-  // it already has its own inline ticket-type picker once you're going.
+  // The Rave Focus popup's Going segment opens it too, and it re-renders
+  // that popup on close.
   let _goingOptionsFestId = null;
 
   function openGoingOptionsSheet(festId) {
@@ -28910,6 +29339,7 @@
     if (!f || !you) return;
     _goingOptionsFestId = festId;
     const youGoing = (you.festIds || []).some(fid => String(fid) === String(festId));
+    const youInterested = (you.interestedFestIds || []).some(fid => String(fid) === String(festId));
     const d = festDate(f);
     const isUpcoming = d && d >= TODAY;
     const currentTicket = (you.ticketTypes || {})[festId];
@@ -28929,7 +29359,7 @@
       ? `<button class="btn btn-ghost" style="flex:1;" onclick="goingOptionsInterested('${escJsAttr(festId)}')">👀 Interested instead</button>
          <button class="btn btn-ghost" style="flex:1;color:var(--neon-pink);" onclick="goingOptionsNotGoing('${escJsAttr(festId)}')">🙅 Not going</button>`
       : `<button class="btn btn-primary" style="flex:1;" onclick="goingOptionsJustGoing('${escJsAttr(festId)}')">🎟️ I'm going</button>
-         <button class="btn btn-ghost" style="flex:1;" onclick="goingOptionsInterested('${escJsAttr(festId)}')">👀 Interested</button>`;
+         <button class="btn btn-ghost" style="flex:1;" onclick="goingOptionsInterested('${escJsAttr(festId)}')">${youInterested ? '👀 Not interested' : '👀 Interested'}</button>`;
     document.getElementById('going-options-sheet-content').innerHTML = `
       <div style="display:flex;justify-content:flex-end;margin:-8px -8px 0;">
         <button type="button" class="page-panel-back" onclick="closeGoingOptionsSheet()">✕</button>
@@ -28955,6 +29385,7 @@
     // if a ticket type changed while either was the visible page.
     if (document.getElementById('page-ticket-mix')?.classList.contains('active')) renderTicketMixPage();
     if (document.getElementById('page-stats')?.classList.contains('active')) loadStatsPage();
+    if (document.getElementById('rave-focus-overlay')?.classList.contains('open') && editingFestivalId) openRaveFocus(editingFestivalId);
   }
 
   function goingOptionsShowOtherInput(festId) {
@@ -28999,6 +29430,7 @@
   function closeRaveEditor() {
     document.getElementById('rave-edit-overlay').classList.remove('open');
     editingFestivalId = null;
+    _raveEditStepFestId = null;
   }
 
   let _reSearchQuery = '';
@@ -29051,17 +29483,8 @@
     // here — that way every add path notifies the recipient, not just this one.
     if (currentUser) dbAddRaverFestival(raverId, editingFestivalId);
     renderSquad(); renderEvents(); renderCrews();
-    const goers = festivalGoers(editingFestivalId);
-    const note = document.getElementById('re-goers-note');
-    if (note) {
-      note.textContent = goers.length
-        ? `${goers.length} tribe member${goers.length !== 1 ? 's' : ''} linked: ${goers.map(g => g.name.split(' ')[0]).join(', ')}`
-        : 'No tribe members linked yet';
-    }
-    const inp = document.getElementById('re-raver-search');
-    if (inp) inp.value = '';
-    const res = document.getElementById('re-raver-results');
-    if (res) res.style.display = 'none';
+    // Re-render the popup in place (stays on the Crew tab) so the new row shows.
+    if (document.getElementById('rave-focus-overlay')?.classList.contains('open')) openRaveFocus(editingFestivalId);
     showToast(`✅ ${r.name.split(' ')[0]} linked`);
   }
 
