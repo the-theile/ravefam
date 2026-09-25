@@ -92,6 +92,32 @@ begin
   end loop;
 end $$;
 
+-- ---- 1b. Let the FK's SET NULL through the festival-map guard ---------------
+-- festivals_enforce_map_moderator_only blocks any non-moderator change to
+-- map_uploaded_by, including the SET NULL above when an uploader's account is
+-- deleted. Allow exactly that: the uploader is gone and nothing else about the
+-- map changes. (Security definer + postgres owner, so auth.users is readable.)
+create or replace function public.enforce_festival_map_moderator_only()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if NEW.map_url is not distinct from OLD.map_url
+     and NEW.map_uploaded_by is null and OLD.map_uploaded_by is not null
+     and not exists (select 1 from auth.users where id = OLD.map_uploaded_by) then
+    return NEW;
+  end if;
+  if (NEW.map_url is distinct from OLD.map_url
+      or NEW.map_uploaded_by is distinct from OLD.map_uploaded_by)
+     and not public.is_moderator(auth.uid()) then
+    raise exception 'Only moderators can update the festival map';
+  end if;
+  return NEW;
+end;
+$$;
+
 -- ---- 2. delete_my_account() --------------------------------------------------
 create or replace function public.delete_my_account()
 returns jsonb
