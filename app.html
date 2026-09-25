@@ -5363,6 +5363,18 @@
     text-align: center; line-height: 1.5;
   }
   .auth-success.show { display: block; }
+  /* SMS login — 16px inputs stop iOS Safari zooming the card on focus */
+  .auth-phone-input { font-size: 16px; }
+  .auth-phone-error { color: var(--neon-pink); font-size: 0.78rem; margin-top: 6px; min-height: 0; display: none; }
+  .auth-phone-error.show { display: block; }
+  .auth-alt-btn {
+    display: block; width: 100%; margin-top: 14px; padding: 11px;
+    background: transparent; cursor: pointer;
+    border: 1px solid rgba(0,245,255,0.35); border-radius: 12px;
+    color: var(--neon-cyan); font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.85rem;
+    transition: box-shadow 0.2s, border-color 0.2s;
+  }
+  .auth-alt-btn:hover, .auth-alt-btn:focus-visible { border-color: var(--neon-cyan); box-shadow: 0 0 14px rgba(0,245,255,0.3); }
   .auth-btn {
     width: 100%; padding: 14px;
     background: linear-gradient(135deg, var(--neon-pink), var(--neon-purple));
@@ -8204,6 +8216,7 @@
       </div>
       <button class="auth-btn" id="login-btn" onclick="doLogin()">Send My Login Code 🔥</button>
       <p style="text-align:center;margin-top:12px;font-size:0.75rem;color:var(--muted);">No passwords here — we'll email you a 6-digit code and a magic link.</p>
+      <button type="button" class="auth-alt-btn" onclick="showPhoneForm()">📱 Text me a code instead</button>
       <p style="text-align:center;margin-top:16px;font-size:0.82rem;color:var(--muted);">
         Don't have an account? <a href="#" onclick="showAuthTab('signup');return false;" style="color:var(--neon-pink);text-decoration:none;font-weight:600;">Sign up free →</a>
       </p>
@@ -8243,6 +8256,35 @@
         <a href="#" id="resend-code-btn" onclick="doResendCode();return false;" style="color:var(--neon-pink);text-decoration:none;font-weight:600;">Resend code</a>
         &nbsp;·&nbsp;
         <a href="#" onclick="showAuthTab(_otpMode);return false;" style="color:var(--muted);text-decoration:underline;">Use a different email</a>
+      </p>
+    </div>
+
+    <!-- ── SMS login: enter phone number ── -->
+    <div id="auth-phone-form" style="display:none;">
+      <div class="form-group">
+        <label for="login-phone" class="form-label">Phone Number <span style="color:var(--muted);font-weight:400;">— US numbers can skip the +1</span></label>
+        <input class="form-input auth-phone-input" id="login-phone" type="tel" inputmode="tel" placeholder="(555) 123-4567" autocomplete="tel" oninput="clearPhoneError()">
+        <div class="auth-phone-error" id="login-phone-error"></div>
+      </div>
+      <button class="auth-btn" id="phone-send-btn" onclick="doSendSmsCode()">Text Me a Code 📱</button>
+      <p style="text-align:center;margin-top:12px;font-size:0.75rem;color:var(--muted);">Works for accounts with a verified phone. Msg &amp; data rates may apply.</p>
+      <p style="text-align:center;margin-top:16px;font-size:0.82rem;color:var(--muted);">
+        <a href="#" onclick="showAuthTab('login');return false;" style="color:var(--neon-pink);text-decoration:none;font-weight:600;">← Use email instead</a>
+      </p>
+    </div>
+
+    <!-- ── SMS login: enter the texted 6-digit code ── -->
+    <div id="auth-sms-code-form" style="display:none;">
+      <p style="text-align:center;margin:0 0 20px;font-size:0.9rem;color:var(--muted);line-height:1.5;">We texted a 6-digit code to<br><strong id="auth-sms-phone" style="color:var(--text);"></strong></p>
+      <div class="form-group">
+        <label for="sms-code" class="form-label">Text Code</label>
+        <input class="form-input auth-phone-input" id="sms-code" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="123456" autocomplete="one-time-code" oninput="onSmsCodeInput(this)" style="text-align:center;letter-spacing:0.5em;font-size:1.3rem;font-weight:700;">
+      </div>
+      <button class="auth-btn" id="sms-verify-btn" onclick="doVerifySmsCode()">Let Me In 🔓</button>
+      <p style="text-align:center;margin-top:16px;font-size:0.82rem;color:var(--muted);">
+        <a href="#" id="sms-resend-btn" onclick="doResendSmsCode();return false;" style="color:var(--neon-pink);text-decoration:none;font-weight:600;">Resend code</a>
+        &nbsp;·&nbsp;
+        <a href="#" onclick="showPhoneForm();return false;" style="color:var(--muted);text-decoration:underline;">Use a different number</a>
       </p>
     </div>
 
@@ -9497,7 +9539,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.59.0';
+  const APP_VERSION = '1.60.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -9894,7 +9936,10 @@
     document.getElementById('auth-login-form').style.display  = tab === 'login'  ? 'block' : 'none';
     document.getElementById('auth-signup-form').style.display = tab === 'signup' ? 'block' : 'none';
     document.getElementById('auth-code-form').style.display   = 'none';
+    document.getElementById('auth-phone-form').style.display    = 'none';
+    document.getElementById('auth-sms-code-form').style.display = 'none';
     clearInterval(_otpResendTimer);
+    clearInterval(_smsResendTimer);
     document.getElementById('tab-login').style.display  = '';
     document.getElementById('tab-signup').style.display = '';
     document.getElementById('tab-login').classList.toggle('active',  tab === 'login');
@@ -9916,7 +9961,7 @@
     document.getElementById('auth-success').classList.remove('show');
   }
   function setAuthBusy(busy) {
-    ['login-btn','signup-btn','verify-btn'].forEach(id => {
+    ['login-btn','signup-btn','verify-btn','phone-send-btn','sms-verify-btn'].forEach(id => {
       const b = document.getElementById(id);
       if (b) b.disabled = busy;
     });
@@ -10055,6 +10100,166 @@
       return;
     }
     clearInterval(_otpResendTimer);
+    // onAuthStateChange will fire SIGNED_IN and handle the rest
+  }
+
+  // ===== SMS AUTH (phone code via Supabase + Twilio Verify) =====
+  // Log-in only: shouldCreateUser is false, so a number that isn't on an
+  // account yet (e.g. only saved in signup metadata) can't spawn a duplicate
+  // user. Every send costs money, so all requests go through _smsInFlight.
+  let _smsPhone = '';
+  let _smsSentAt = 0;
+  let _smsInFlight = false;
+  let _smsResendTimer = null;
+  const SMS_CODE_TTL_MS = 10 * 60 * 1000; // Twilio Verify default code lifetime
+
+  // Returns E.164 (+XXXXXXXXXXX) or null. Bare 10-digit numbers are US;
+  // anything else needs a +country code (or a 00 international prefix).
+  function normalizePhone(raw) {
+    let s = String(raw || '').trim().replace(/[^\d+]/g, '');
+    if (s.startsWith('00')) s = '+' + s.slice(2);
+    if (!s.startsWith('+')) {
+      if (s.length === 11 && s[0] === '1') s = s.slice(1);
+      if (s.length !== 10) return null;
+      s = '+1' + s;
+    }
+    const digits = s.slice(1);
+    if (!/^[1-9]\d{7,14}$/.test(digits)) return null;
+    // NANP: exactly 10 digits after the 1, area code can't start with 0/1
+    if (digits[0] === '1' && !/^1[2-9]\d{9}$/.test(digits)) return null;
+    return s;
+  }
+
+  function formatPhoneDisplay(e164) {
+    const m = /^\+1(\d{3})(\d{3})(\d{4})$/.exec(e164);
+    return m ? `+1 (${m[1]}) ${m[2]}-${m[3]}` : e164;
+  }
+
+  function phoneError(msg) {
+    const el = document.getElementById('login-phone-error');
+    el.textContent = msg; el.classList.add('show');
+  }
+  function clearPhoneError() {
+    document.getElementById('login-phone-error').classList.remove('show');
+  }
+
+  function showPhoneForm() {
+    document.getElementById('auth-login-form').style.display    = 'none';
+    document.getElementById('auth-signup-form').style.display   = 'none';
+    document.getElementById('auth-code-form').style.display     = 'none';
+    document.getElementById('auth-sms-code-form').style.display = 'none';
+    document.getElementById('auth-phone-form').style.display    = 'block';
+    document.getElementById('tab-login').style.display  = 'none';
+    document.getElementById('tab-signup').style.display = 'none';
+    clearInterval(_smsResendTimer);
+    clearAuthMessages(); clearPhoneError();
+    const input = document.getElementById('login-phone');
+    if (_smsPhone && !input.value) input.value = formatPhoneDisplay(_smsPhone);
+    setTimeout(() => input.focus(), 50);
+  }
+
+  function showSmsCodeScreen(phone) {
+    document.getElementById('auth-phone-form').style.display    = 'none';
+    document.getElementById('auth-sms-code-form').style.display = 'block';
+    document.getElementById('auth-sms-phone').textContent = formatPhoneDisplay(phone);
+    const input = document.getElementById('sms-code');
+    input.value = '';
+    startSmsResendCooldown();
+    setTimeout(() => {
+      input.focus();
+      // iOS Safari: keep the field above the keyboard inside the scrolling auth screen
+      input.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, 50);
+  }
+
+  function startSmsResendCooldown() {
+    const btn = document.getElementById('sms-resend-btn');
+    let left = OTP_RESEND_COOLDOWN;
+    clearInterval(_smsResendTimer);
+    const tick = () => {
+      if (left <= 0) {
+        clearInterval(_smsResendTimer);
+        btn.textContent = 'Resend code';
+        btn.style.pointerEvents = ''; btn.style.opacity = '';
+        return;
+      }
+      btn.textContent = `Resend in ${left}s`;
+      btn.style.pointerEvents = 'none'; btn.style.opacity = '0.5';
+      left--;
+    };
+    tick();
+    _smsResendTimer = setInterval(tick, 1000);
+  }
+
+  function smsErrorMessage(error, stage) {
+    const msg = error.message || '';
+    const code = error.code || '';
+    if (code === 'otp_disabled' || /signups not allowed/i.test(msg)) {
+      return 'No RaveFAM account uses that number yet — log in with email for now.';
+    }
+    if (error.status === 429 || /rate.?limit|security purposes|too many|max check attempts/i.test(code + ' ' + msg)) {
+      return 'Too many tries — texting is capped at 5 attempts per 10 minutes. Take a breather and try again soon.';
+    }
+    if (code === 'phone_provider_disabled' || /provider.*disabled/i.test(msg)) {
+      return "Text login isn't available right now — use email instead.";
+    }
+    if (stage === 'send' && (code === 'validation_failed' || code === 'sms_send_failed' || /invalid.*phone|phone.*invalid|unable to get sms|not a valid/i.test(msg))) {
+      return "We couldn't text that number — double-check it (non-US numbers need the +country code).";
+    }
+    if (stage === 'verify' && (code === 'otp_expired' || /expired|invalid/i.test(msg))) {
+      // Supabase reports wrong and expired codes with the same error, so use the send time.
+      return Date.now() - _smsSentAt > SMS_CODE_TTL_MS
+        ? 'That code has expired — tap Resend code for a fresh one.'
+        : "That code didn't match — double-check the text and try again.";
+    }
+    return msg || 'Something went wrong — please try again.';
+  }
+
+  async function sendSmsCode(phone) {
+    _smsInFlight = true; setAuthBusy(true); clearAuthMessages();
+    const { error } = await sb.auth.signInWithOtp({
+      phone,
+      options: { shouldCreateUser: false, channel: 'sms' }
+    });
+    _smsInFlight = false; setAuthBusy(false);
+    if (!error) _smsSentAt = Date.now();
+    return error;
+  }
+
+  async function doSendSmsCode() {
+    if (_smsInFlight) return;
+    clearPhoneError();
+    const phone = normalizePhone(document.getElementById('login-phone').value);
+    if (!phone) { phoneError('Enter a valid number — e.g. (555) 123-4567, or +44 7700 900123 outside the US.'); return; }
+    const error = await sendSmsCode(phone);
+    if (error) { authError(smsErrorMessage(error, 'send')); return; }
+    _smsPhone = phone;
+    showSmsCodeScreen(phone);
+  }
+
+  async function doResendSmsCode() {
+    if (!_smsPhone || _smsInFlight) return;
+    const error = await sendSmsCode(_smsPhone);
+    if (error) { authError(smsErrorMessage(error, 'send')); return; }
+    authSuccess('New code on the way 📱');
+    startSmsResendCooldown();
+  }
+
+  function onSmsCodeInput(input) {
+    input.value = input.value.replace(/\D/g, '').slice(0, 6);
+    // Auto-submit once complete — iOS/Android one-time-code autofill lands here too.
+    if (input.value.length === 6) doVerifySmsCode();
+  }
+
+  async function doVerifySmsCode() {
+    if (_smsInFlight) return; // already verifying (autofill + tap)
+    const token = document.getElementById('sms-code').value.replace(/\D/g, '');
+    if (token.length !== 6) { authError('Enter the 6-digit code from your text.'); return; }
+    _smsInFlight = true; setAuthBusy(true); clearAuthMessages();
+    const { error } = await sb.auth.verifyOtp({ phone: _smsPhone, token, type: 'sms' });
+    _smsInFlight = false; setAuthBusy(false);
+    if (error) { authError(smsErrorMessage(error, 'verify')); return; }
+    clearInterval(_smsResendTimer);
     // onAuthStateChange will fire SIGNED_IN and handle the rest
   }
 
@@ -10298,6 +10503,8 @@
     if (loginVisible)  doLogin();
     if (signupVisible) doSignup();
     if (codeVisible)   doVerifyCode();
+    if (document.getElementById('auth-phone-form').style.display    !== 'none') doSendSmsCode();
+    if (document.getElementById('auth-sms-code-form').style.display !== 'none') doVerifySmsCode();
   });
 
   // ===== SUPABASE DATA HELPERS =====
