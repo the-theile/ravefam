@@ -47,4 +47,34 @@ test.describe('onboarding', () => {
     await expect(page.locator('#ob-step2')).toBeVisible();
     await expect(page.locator('#ob-step1')).toBeHidden();
   });
+
+  // New phone-only account (no email, just created, no profile) whose verified
+  // number the server says is on someone else's profile.
+  const newPhoneUser = () => makeSession({
+    user: { email: '', phone: '14155550134', created_at: new Date().toISOString() },
+    user_metadata: { onboarded: false },
+  });
+
+  test('a new phone login whose number is on an existing profile gets the "already on RaveFAM" banner', async ({ page }) => {
+    await installSupabaseStub(page, { session: newPhoneUser(), data: { ...EMPTY, phone_profile_match: true } });
+    await page.goto('/app.html');
+    await page.locator('#main-app').waitFor({ state: 'visible' });
+    await expect(page.locator('#ob-step1')).toBeVisible({ timeout: 4000 });
+    await expect(page.locator('#ob-existing-match')).toBeVisible();
+    await expect(page.locator('#ob-have-account')).toBeHidden();
+
+    await page.click('#ob-existing-match >> text=I\'m new here');
+    await expect(page.locator('#ob-existing-match')).toBeHidden();
+  });
+
+  test('no banner when the number is not on any other profile', async ({ page }) => {
+    await installSupabaseStub(page, { session: newPhoneUser(), data: EMPTY });
+    await page.goto('/app.html');
+    await page.locator('#main-app').waitFor({ state: 'visible' });
+    await expect(page.locator('#ob-step1')).toBeVisible({ timeout: 4000 });
+    await page.waitForTimeout(300);
+    await expect(page.locator('#ob-existing-match')).toBeHidden();
+    // The quieter "Already on RaveFAM with your email?" link is still there.
+    await expect(page.locator('#ob-have-account')).toBeVisible();
+  });
 });

@@ -5330,23 +5330,6 @@
     box-shadow: 0 0 20px rgba(255,45,120,0.5);
   }
 
-  .auth-tabs {
-    display: flex; gap: 0;
-    background: rgba(255,255,255,0.05);
-    border-radius: 12px; padding: 4px;
-    margin-bottom: 24px;
-  }
-  .auth-tab {
-    flex: 1; padding: 9px;
-    border: none; background: transparent; cursor: pointer;
-    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.85rem;
-    color: var(--muted); border-radius: 9px; transition: all 0.2s;
-  }
-  .auth-tab.active {
-    background: linear-gradient(135deg, var(--neon-pink), var(--neon-purple));
-    color: #fff;
-    box-shadow: 0 0 16px rgba(255,45,120,0.35);
-  }
   .auth-error {
     background: rgba(255,45,120,0.12);
     border: 1px solid rgba(255,45,120,0.3);
@@ -5381,6 +5364,12 @@
   }
   .auth-invite-btn:hover, .auth-invite-btn:focus-visible { border-color: var(--neon-pink); box-shadow: 0 0 14px rgba(255,45,120,0.3); }
   /* Login method linking — onboarding + Settings + link overlay */
+  .ob-existing-match {
+    background: rgba(0,245,255,0.08); border: 1px solid rgba(0,245,255,0.35); border-radius: 16px;
+    padding: 16px; margin-bottom: 18px; text-align: left; box-shadow: 0 0 24px rgba(0,245,255,0.12);
+  }
+  .ob-existing-match-title { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.95rem; color: var(--neon-cyan); margin-bottom: 6px; }
+  .ob-existing-match-body { font-size: 0.82rem; color: var(--text); line-height: 1.5; margin-bottom: 14px; }
   .ob-have-account { margin: -6px 0 16px; font-size: 0.8rem; color: var(--muted); text-align: center; }
   .ob-have-account button { background: none; border: none; padding: 0 0 0 4px; cursor: pointer; color: var(--neon-cyan); font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.8rem; }
   .ob-link-warning, .login-methods-warn {
@@ -8217,34 +8206,22 @@
   </div>
 
   <div class="auth-card">
-    <!-- One flow for new and returning users: pick how to get a code -->
-    <div class="auth-tabs" id="auth-tabs" role="tablist" aria-label="Get your code by">
-      <button class="auth-tab active" id="tab-email" role="tab" aria-selected="true" onclick="showAuthTab('email', true)">✉️ Email</button>
-      <button class="auth-tab" id="tab-phone" role="tab" aria-selected="false" onclick="showAuthTab('phone', true)">📱 Phone</button>
-    </div>
-
+    <!-- One field for new and returning users: email or phone, auto-detected -->
     <div class="auth-error" id="auth-error" role="alert"></div>
     <div class="auth-success" id="auth-success" role="status" aria-live="polite"></div>
     <div class="auth-captcha" id="auth-captcha"></div>
 
     <div id="auth-login-form">
       <div class="form-group">
-        <label for="login-email" class="form-label">Email</label>
-        <input class="form-input" id="login-email" type="email" enterkeyhint="send" placeholder="you@example.com" autocomplete="email">
+        <label for="login-id" class="form-label">Email or phone</label>
+        <input class="form-input auth-phone-input" id="login-id" type="text" inputmode="email" enterkeyhint="send"
+          autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false"
+          placeholder="Email or mobile number" oninput="onLoginIdInput()" aria-describedby="login-id-hint login-id-error">
+        <div class="auth-field-hint" id="login-id-hint"></div>
+        <div class="auth-phone-error" id="login-id-error"></div>
       </div>
       <button class="auth-btn" id="login-btn" onclick="doLogin()">Send My Code 🔥</button>
-      <p class="auth-flow-note">New here or coming back — same button. We'll email you a 6-digit code.</p>
-    </div>
-
-    <div id="auth-phone-form" style="display:none;">
-      <div class="form-group">
-        <label for="login-phone" class="form-label">Phone Number</label>
-        <input class="form-input auth-phone-input" id="login-phone" type="tel" enterkeyhint="send" inputmode="tel" placeholder="(555) 123-4567" autocomplete="tel" oninput="clearPhoneError()" aria-describedby="login-phone-hint login-phone-error">
-        <div class="auth-field-hint" id="login-phone-hint">US numbers can skip the +1. Outside the US, start with your country code.</div>
-        <div class="auth-phone-error" id="login-phone-error"></div>
-      </div>
-      <button class="auth-btn" id="phone-send-btn" onclick="doSendSmsCode()">Text Me a Code 📱</button>
-      <p class="auth-flow-note">New here or coming back — same button. Msg &amp; data rates may apply.</p>
+      <p class="auth-flow-note">New here or coming back — same button. Msg &amp; data rates may apply for texts.</p>
     </div>
 
     <p class="auth-terms" id="auth-terms">
@@ -9429,6 +9406,13 @@
       <div class="ob-eq-bar"></div>
       <div class="ob-eq-bar"></div>
     </div>
+    <!-- Shown when this new phone login's number is already on someone's profile -->
+    <div class="ob-existing-match" id="ob-existing-match" role="status" style="display:none;">
+      <div class="ob-existing-match-title">📱 Looks like you're already on RaveFAM</div>
+      <div class="ob-existing-match-body">This number is on an existing profile. Log in with your email to add it there — you'll keep your crews and raves.</div>
+      <button class="auth-btn" type="button" onclick="obUseExistingAccount()">Log in with my email</button>
+      <button class="btn btn-ghost" type="button" onclick="obDismissExistingMatch()" style="width:100%;margin-top:10px;padding:12px;font-size:0.85rem;">I'm new here →</button>
+    </div>
     <div class="onboard-title">What's your sound? 🎛️</div>
     <div class="onboard-sub" id="ob-step1-sub">Tap the genres that move you. This is your sonic identity — no wrong answers.</div>
     <div class="ob-have-account" id="ob-have-account" style="display:none;">
@@ -9565,7 +9549,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.63.2';
+  const APP_VERSION = '1.64.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -9958,28 +9942,21 @@
   let _bootedUserId = null; // guard: prevents bootApp() running more than once per session
 
   // ===== AUTH UI helpers =====
-  // Email | Phone picker — one flow for new and returning users. Legacy
-  // 'login'/'signup' values (landing-page ?tab=, claim intercept, QR arrivals)
-  // predate the single flow and land on email. focus=true only from a tap, so
-  // the keyboard opens on iOS without popping up on page load.
+  // Start screen: one email-or-phone field (see parseLoginId). `tab` is
+  // ignored — it's kept so legacy callers (?tab=, claim intercept, QR arrivals,
+  // "Use a different email/number") still land here. The field keeps what was
+  // typed, so going back is an edit, not a retype. focus=true only from a tap,
+  // so the keyboard opens on iOS without popping up on page load.
   function showAuthTab(tab, focus) {
-    if (tab !== 'phone') tab = 'email';
-    document.getElementById('auth-login-form').style.display    = tab === 'email' ? 'block' : 'none';
-    document.getElementById('auth-phone-form').style.display    = tab === 'phone' ? 'block' : 'none';
+    document.getElementById('auth-login-form').style.display    = 'block';
     document.getElementById('auth-code-form').style.display     = 'none';
     document.getElementById('auth-sms-code-form').style.display = 'none';
     clearInterval(_otpResendTimer);
     clearInterval(_smsResendTimer);
     setAuthFocusMode(false);
-    ['email', 'phone'].forEach(t => {
-      const b = document.getElementById('tab-' + t);
-      b.classList.toggle('active', t === tab);
-      b.setAttribute('aria-selected', t === tab);
-    });
-    clearAuthMessages(); clearPhoneError();
-    const input = document.getElementById(tab === 'phone' ? 'login-phone' : 'login-email');
-    if (tab === 'phone' && _smsPhone && !input.value) input.value = formatPhoneDisplay(_smsPhone);
-    if (focus) input.focus();
+    clearAuthMessages();
+    onLoginIdInput();
+    if (focus) document.getElementById('login-id').focus();
   }
 
   // Last method + address used on this device, so "coming back" is one tap.
@@ -10007,12 +9984,11 @@
   // Mid-verify screens (code entry, phone login) hide the tabs and the invite
   // block so nothing competes with the one thing the user needs to do next.
   function setAuthFocusMode(on) {
-    document.getElementById('auth-tabs').style.display         = on ? 'none' : '';
     document.getElementById('auth-invite-block').style.display = on ? 'none' : '';
     document.getElementById('auth-terms').style.display        = on ? 'none' : '';
   }
   const AUTH_BUSY_LABELS = {
-    'login-btn': 'Sending…', 'phone-send-btn': 'Sending…',
+    'login-btn': 'Sending…',
     'verify-btn': 'Checking…', 'sms-verify-btn': 'Checking…',
     'link-send-btn': 'Sending…', 'link-verify-btn': 'Checking…'
   };
@@ -10161,9 +10137,49 @@
     return error.message;
   }
 
+  // Single login field: an '@' means email; anything else is tried as a phone
+  // number (US default, +country code elsewhere — see normalizePhone).
+  function parseLoginId(raw) {
+    const v = String(raw || '').trim();
+    if (!v) return { kind: null };
+    if (v.includes('@')) {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? { kind: 'email', value: v } : { kind: 'partial-email' };
+    }
+    const phone = normalizePhone(v);
+    if (phone) return { kind: 'phone', value: phone };
+    return /[a-z]/i.test(v) ? { kind: 'partial-email' } : { kind: 'partial-phone' };
+  }
+
+  // Live hint under the field, so it's never a guess which way the code goes.
+  function onLoginIdInput() {
+    clearLoginIdError();
+    const id = parseLoginId(document.getElementById('login-id').value);
+    document.getElementById('login-id-hint').textContent =
+        id.kind === 'email'         ? "✉️ We'll email you a 6-digit code."
+      : id.kind === 'phone'         ? `📱 We'll text ${formatPhoneDisplay(id.value)} a 6-digit code.`
+      : id.kind === 'partial-phone' ? '📱 US numbers can skip the +1. Outside the US, start with your country code.'
+      : id.kind === 'partial-email' ? '✉️ Looks like an email — keep going.'
+      : "We'll send a 6-digit code to whichever you enter.";
+  }
+
+  function loginIdError(msg) {
+    const el = document.getElementById('login-id-error');
+    el.textContent = msg; el.classList.add('show');
+  }
+  function clearLoginIdError() {
+    document.getElementById('login-id-error').classList.remove('show');
+  }
+
   async function doLogin() {
-    const email = document.getElementById('login-email').value.trim();
-    if (!email) { authError('Please enter your email.'); return; }
+    const id = parseLoginId(document.getElementById('login-id').value);
+    if (id.kind === 'phone') { doSendSmsCode(id.value); return; }
+    if (id.kind !== 'email') {
+      loginIdError(!id.kind ? 'Enter your email or mobile number.'
+        : id.kind === 'partial-phone' ? "That doesn't look like a full phone number — check the digits."
+        : "That doesn't look like an email address — check it and try again.");
+      return;
+    }
+    const email = id.value;
     setAuthBusy(true); clearAuthMessages();
     const { error } = await sendLoginCode(email);
     setAuthBusy(false);
@@ -10237,16 +10253,8 @@
     return m ? `+1 (${m[1]}) ${m[2]}-${m[3]}` : e164;
   }
 
-  function phoneError(msg) {
-    const el = document.getElementById('login-phone-error');
-    el.textContent = msg; el.classList.add('show');
-  }
-  function clearPhoneError() {
-    document.getElementById('login-phone-error').classList.remove('show');
-  }
-
   function showSmsCodeScreen(phone) {
-    document.getElementById('auth-phone-form').style.display    = 'none';
+    document.getElementById('auth-login-form').style.display    = 'none';
     document.getElementById('auth-sms-code-form').style.display = 'block';
     setAuthFocusMode(true); // "Use a different number" brings the picker back
     document.getElementById('auth-sms-phone').textContent = formatPhoneDisplay(phone);
@@ -10316,11 +10324,9 @@
     return error;
   }
 
-  async function doSendSmsCode() {
-    if (_smsInFlight) return;
-    clearPhoneError();
-    const phone = normalizePhone(document.getElementById('login-phone').value);
-    if (!phone) { phoneError("That doesn't look like a full phone number — check the digits."); return; }
+  // phone is already E.164 — doLogin parsed it from the email-or-phone field.
+  async function doSendSmsCode(phone) {
+    if (_smsInFlight || !phone) return;
     const error = await sendSmsCode(phone);
     if (error) { authError(smsErrorMessage(error, 'send')); return; }
     _smsPhone = phone;
@@ -10763,19 +10769,15 @@
     try { returning = localStorage.getItem('rf_has_logged_in') === '1'; } catch (e) {}
     document.getElementById('auth-screen').classList.toggle('auth-returning', returning);
 
-    // QR/invite arrivals (claim or crew-join tokens) default to Sign Up since
-    // most scanners are new — everyone else still lands on Log In.
+    // QR/invite arrivals carry a claim or crew-join token (used for the intercept below).
     const pendingToken = sessionStorage.getItem('pendingClaim');
     const pendingJoin  = sessionStorage.getItem('pendingCrewJoin');
-    // Coming back on this device: reopen the method they last used, prefilled.
+    // Coming back on this device: prefill the email or number they last used.
     const last = readLastLogin();
-    const tab = last?.method || window._pendingAuthTab || ((pendingToken || pendingJoin) ? 'signup' : 'login');
     window._pendingAuthTab = null;
-    showAuthTab(tab);
-    if (last?.value) {
-      const input = document.getElementById(last.method === 'phone' ? 'login-phone' : 'login-email');
-      if (!input.value) input.value = last.method === 'phone' ? formatPhoneDisplay(last.value) : last.value;
-    }
+    const idInput = document.getElementById('login-id');
+    if (last?.value && !idInput.value) idInput.value = last.method === 'phone' ? formatPhoneDisplay(last.value) : last.value;
+    showAuthTab('login');
     const pendingLink = readPendingLink();
     if (pendingLink) {
       const shown = pendingLink.method === 'phone' ? formatPhoneDisplay(pendingLink.value) : pendingLink.value;
@@ -10871,7 +10873,6 @@
     const codeVisible   = document.getElementById('auth-code-form').style.display   !== 'none';
     if (loginVisible)  doLogin();
     if (codeVisible)   doVerifyCode();
-    if (document.getElementById('auth-phone-form').style.display    !== 'none') doSendSmsCode();
     if (document.getElementById('auth-sms-code-form').style.display !== 'none') doVerifySmsCode();
   });
 
@@ -31577,10 +31578,26 @@
     const fresh = !!u?.created_at && Date.now() - new Date(u.created_at).getTime() < 30 * 60 * 1000;
     const show = !!(fresh && other && !existingRaver);
     document.getElementById('ob-have-account').style.display = show ? '' : 'none';
+    document.getElementById('ob-existing-match').style.display = 'none';
     if (show) {
       document.getElementById('ob-have-account-text').textContent =
         `Already on RaveFAM with your ${loginMethodLabel(other)}?`;
     }
+    // New phone login: the number is SMS-proven, so ask the server whether it's
+    // on someone else's profile (yes/no only). If so, swap the quiet link for a
+    // banner that's hard to miss — that's the "existing user tapped Phone
+    // before linking" case that otherwise ends in a duplicate account.
+    if (show && other === 'email') {
+      sb.rpc('my_phone_matches_other_profile').then(({ data, error }) => {
+        if (error || data !== true || !isOnboarding) return;
+        document.getElementById('ob-have-account').style.display = 'none';
+        document.getElementById('ob-existing-match').style.display = '';
+      }).catch(() => {});
+    }
+  }
+
+  function obDismissExistingMatch() {
+    document.getElementById('ob-existing-match').style.display = 'none';
   }
 
   function obUseExistingAccount() {
