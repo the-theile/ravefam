@@ -924,6 +924,28 @@
   .rf-share-btn { flex: 0 0 auto; }
   .rf-edit-btn { flex: 1; background: var(--neon-pink); color: #0a0a10; box-shadow: 0 0 20px rgba(255,45,120,0.35); }
   .rf-edit-btn:hover { box-shadow: 0 0 28px rgba(255,45,120,0.55); }
+  .rf-ready-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .rf-ready-title { font-family: 'Urbanist', sans-serif; font-weight: 900; font-size: 1.05rem; }
+  .rf-ready-count { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.74rem; color: var(--neon-pink); white-space: nowrap; }
+  .rf-progress-pink > span { background: var(--neon-pink); }
+  .rf-ready-hint { font-size: 0.7rem; color: var(--muted); margin: 6px 0 4px; }
+  .rf-ready-item { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 8px 0; }
+  .rf-ready-item + .rf-ready-item { border-top: 1px solid var(--rf-border); }
+  .rf-ready-check { width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+    border: 1.5px dashed var(--rf-border); font-size: 0.72rem; font-weight: 900; }
+  .rf-ready-item.done .rf-ready-check { border: 0; background: var(--neon-green); color: #050509; }
+  .rf-ready-text { flex: 1; min-width: 0; }
+  .rf-ready-label { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.86rem; }
+  .rf-ready-value { font-size: 0.76rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rf-ready-item.done .rf-ready-value { color: var(--text); }
+  .rf-ready-btn { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.74rem; min-height: 36px; padding: 6px 14px; border-radius: 100px; cursor: pointer; flex-shrink: 0;
+    background: transparent; color: var(--muted); border: 1px solid var(--rf-border); }
+  .rf-ready-btn.add { background: var(--neon-pink); color: #0a0a10; border-color: var(--neon-pink); }
+  .rf-ready-hide { display: block; margin: 6px auto 0; font-size: 0.76rem; color: var(--muted); }
+  .rf-ready-slim { display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.86rem;
+    border-color: rgba(57,255,20,0.35); background: linear-gradient(90deg, rgba(57,255,20,0.08), var(--rf-card)); }
+  .rf-ready-slim .rf-ready-count { color: var(--neon-green); }
+  .rf-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   /* Summary "N GA · N VIP …" chip row next to the Ticket Types section label */
   .ticket-mix-row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 
@@ -9396,7 +9418,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.55.0';
+  const APP_VERSION = '1.56.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -26200,6 +26222,7 @@
     box.innerHTML = `<div class="fav-chip-row" id="lineup-chip-wrap">${chipsOrEmpty}</div>${addHtml}${sightingHint}`;
     const countEl = document.getElementById('rf-lineup-count');
     if (countEl) countEl.textContent = rows.length;
+    refreshRaveReadyChecklist(festId);
   }
 
   function lineupArtistSearchInput(festId, q) {
@@ -28701,7 +28724,7 @@
       : `<div class="rf-card rf-empty">Were you there? Tap <b>＋ Sent It</b> to log it.</div>`;
 
     const planPanel = `
-      ${!isUpcoming ? recapCard : ''}
+      ${isUpcoming ? raveReadyChecklistHTML(f, you) : recapCard}
       ${vibeSection}
       <div class="rf-section-label">Crew</div>
       ${crewSummaryHtml}`;
@@ -28790,6 +28813,81 @@
         <button type="button" class="btn rf-edit-btn" onclick="closeRaveFocus(); openRaveEditor('${escJsAttr(f.id)}')">✏️ Edit rave</button>
       </div>
     `;
+  }
+
+  // "Get rave-ready" checklist — Plan tab, upcoming raves only, and only
+  // ever shows your own state. Unfinished items sort to the top; once all
+  // four are done it collapses to a slim bar you can reopen.
+  function raveReadyOpenIds() {
+    try { return JSON.parse(localStorage.getItem('rf_ready_open') || '[]'); } catch (e) { return []; }
+  }
+  function raveReadyToggle(festId) {
+    const ids = raveReadyOpenIds().map(String);
+    const next = ids.includes(String(festId)) ? ids.filter(id => id !== String(festId)) : [...ids, String(festId)];
+    try { localStorage.setItem('rf_ready_open', JSON.stringify(next)); } catch (e) { /* per-device nicety only */ }
+    refreshRaveReadyChecklist(festId);
+  }
+
+  function raveReadyChecklistHTML(f, you) {
+    if (!f || !you) return '';
+    const youGoing = (you.festIds || []).some(fid => String(fid) === String(f.id));
+    const ticket = youGoing ? ticketTypeInfo((you.ticketTypes || {})[f.id]) : null;
+    const lineupIds = new Set(lineupArtistsFor(f.id).map(a => String(a.artist_id)));
+    const starred = [...myLineupPlanIds(f.id)].filter(id => lineupIds.has(id)).map(id => findArtistById(id)).filter(Boolean);
+    const myVibe = (festVibesCache[String(f.id)] || []).find(v => String(v.raverId) === String(you.id));
+    const fid = escJsAttr(f.id);
+    const starredValue = starred.slice(0, 2).map(a => a.name).join(', ') + (starred.length > 2 ? ` +${starred.length - 2}` : '');
+
+    const items = [
+      { label: "You're going", done: youGoing, value: youGoing ? "You're in" : 'Lock in your RSVP',
+        action: `openGoingOptionsSheet('${fid}')` },
+      { label: 'Your ticket', done: !!ticket, value: ticket ? ticket.label : 'Pick your ticket type',
+        action: `openGoingOptionsSheet('${fid}')` },
+      { label: "Who you're seeing", done: starred.length > 0, value: starred.length ? starredValue : 'Star the artists you want to catch',
+        action: `raveFocusSwitchTab('lineup')` },
+      { label: 'Your vibe', done: !!myVibe, value: myVibe ? `${myVibe.emoji}${myVibe.caption ? ' ' + myVibe.caption : ''}` : 'Drop an emoji + hype line',
+        action: `openVibePicker('${fid}')` },
+    ];
+    const doneCount = items.filter(i => i.done).length;
+    const allDone = doneCount === items.length;
+
+    if (allDone && !raveReadyOpenIds().map(String).includes(String(f.id))) {
+      return `
+        <div class="rf-card rf-ready rf-ready-slim" id="rf-ready" role="button" tabindex="0" aria-label="You're rave-ready — show checklist" onclick="raveReadyToggle('${escJsAttr(f.id)}')">
+          <span>✨ You're rave-ready</span>
+          <span class="rf-ready-count">${doneCount} of ${items.length} <span aria-hidden="true">›</span></span>
+        </div>`;
+    }
+
+    const sorted = [...items.filter(i => !i.done), ...items.filter(i => i.done)];
+    const rows = sorted.map(i => `
+      <div class="rf-ready-item${i.done ? ' done' : ''}">
+        <span class="rf-ready-check" aria-hidden="true">${i.done ? '✓' : ''}</span>
+        <div class="rf-ready-text">
+          <div class="rf-ready-label">${escHtml(i.label)}<span class="rf-sr">${i.done ? ' — done' : ' — to do'}</span></div>
+          <div class="rf-ready-value">${escHtml(i.value)}</div>
+        </div>
+        <button type="button" class="rf-ready-btn${i.done ? '' : ' add'}" onclick="${i.action}">${i.done ? 'Change' : 'Add'}</button>
+      </div>`).join('');
+    return `
+      <div class="rf-card rf-ready" id="rf-ready">
+        <div class="rf-ready-head">
+          <span class="rf-ready-title">Get rave-ready</span>
+          <span class="rf-ready-count">${doneCount} of ${items.length}</span>
+        </div>
+        <div class="rf-progress rf-progress-pink" role="progressbar" aria-label="Rave-ready progress" aria-valuemin="0" aria-valuemax="${items.length}" aria-valuenow="${doneCount}"><span style="width:${Math.round(doneCount / items.length * 100)}%;"></span></div>
+        <div class="rf-ready-hint">🔒 Only you can see this</div>
+        ${rows}
+        ${allDone ? `<button type="button" class="rf-link rf-ready-hide" onclick="raveReadyToggle('${escJsAttr(f.id)}')">Hide checklist</button>` : ''}
+      </div>`;
+  }
+
+  // Swap just the checklist in place (e.g. after starring an artist in the
+  // Lineup tab) without re-rendering the whole popup.
+  function refreshRaveReadyChecklist(festId) {
+    const el = document.getElementById('rf-ready');
+    if (!el || String(editingFestivalId) !== String(festId)) return;
+    el.outerHTML = raveReadyChecklistHTML(getFestival(festId), squad.find(r => r.isYou));
   }
 
   function openRaveEditor(id) {
