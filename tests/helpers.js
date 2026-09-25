@@ -392,6 +392,11 @@ async function installSupabaseStub(page, opts = {}) {
                 }, error: null,
               };
             }
+            // Seed data sets phone_profile_match: true to simulate a new phone
+            // login whose verified number is on someone's existing profile.
+            if (fn === 'my_phone_matches_other_profile') {
+              return { data: !!store.phone_profile_match, error: null };
+            }
             if (fn === 'delete_my_account') {
               window.__deleteAccountCalls = (window.__deleteAccountCalls || 0) + 1;
               return { data: { storage_paths: ['profiles/me.jpg'], crews_transferred: 0, crews_deleted: 0 }, error: null };

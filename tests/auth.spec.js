@@ -7,7 +7,7 @@ test.describe('auth flows', () => {
     await page.goto('/app.html');
     await expect(page.locator('#auth-screen')).toBeVisible();
 
-    await page.fill('#login-email', 'tester@ravefam.test');
+    await page.fill('#login-id', 'tester@ravefam.test');
     await page.evaluate(() => doLogin());
     await expect(page.locator('#auth-code-form')).toBeVisible();
     await expect(page.locator('#auth-code-email')).toHaveText('tester@ravefam.test');
@@ -28,7 +28,7 @@ test.describe('auth flows', () => {
       const orig = sb.auth.signInWithOtp.bind(sb.auth);
       sb.auth.signInWithOtp = (args) => { window.__otpCalls.push(args); return orig(args); };
     });
-    await page.fill('#login-email', 'new@ravefam.test');
+    await page.fill('#login-id', 'new@ravefam.test');
     await page.evaluate(() => doLogin());
     await expect(page.locator('#auth-code-form')).toBeVisible();
     const calls = await page.evaluate(() => window.__otpCalls);
@@ -48,7 +48,7 @@ test.describe('auth flows', () => {
       sb.auth.signInWithOtp = () =>
         Promise.resolve({ data: {}, error: { code: 'otp_disabled', message: 'Signups not allowed for otp' } });
     });
-    await page.fill('#login-email', 'nobody@ravefam.test');
+    await page.fill('#login-id', 'nobody@ravefam.test');
     await page.evaluate(() => doLogin());
     await expect(page.locator('#auth-error')).toHaveClass(/show/);
     await expect(page.locator('#auth-error')).toContainText('paused');
@@ -66,9 +66,9 @@ test.describe('auth flows', () => {
       sb.auth.signInWithOtp = (args) => { window.__authCalls.push(['send', args]); return send(args); };
       sb.auth.verifyOtp = (args) => { window.__authCalls.push(['verify', args]); return verify(args); };
     });
-    await page.click('#tab-phone');
-    await page.fill('#login-phone', '(415) 555-0134');
-    await page.evaluate(() => doSendSmsCode());
+    await page.fill('#login-id', '(415) 555-0134');
+    await expect(page.locator('#login-id-hint')).toContainText("We'll text +1 (415) 555-0134");
+    await page.evaluate(() => doLogin());
     await expect(page.locator('#auth-sms-code-form')).toBeVisible();
     await expect(page.locator('#auth-sms-phone')).toHaveText('+1 (415) 555-0134');
 
@@ -91,10 +91,10 @@ test.describe('auth flows', () => {
       window.__otpCalls = [];
       sb.auth.signInWithOtp = (args) => { window.__otpCalls.push(args); return Promise.resolve({ data: {}, error: null }); };
     });
-    await page.click('#tab-phone');
-    await page.fill('#login-phone', '555-12');
-    await page.evaluate(() => doSendSmsCode());
-    await expect(page.locator('#login-phone-error')).toHaveClass(/show/);
+    await page.fill('#login-id', '555-12');
+    await page.evaluate(() => doLogin());
+    await expect(page.locator('#login-id-error')).toHaveClass(/show/);
+    await expect(page.locator('#login-id-error')).toContainText('phone number');
     await expect(page.locator('#auth-sms-code-form')).toBeHidden();
     expect(await page.evaluate(() => window.__otpCalls)).toHaveLength(0);
   });
@@ -108,26 +108,25 @@ test.describe('auth flows', () => {
     await expect(page.locator('#auth-screen')).toBeVisible();
   });
 
-  test('the Email | Phone picker toggles forms, and legacy tab names land on email', async ({ page }) => {
+  test('one field auto-detects email vs phone, and legacy tab names still land on it', async ({ page }) => {
     await installSupabaseStub(page, { session: null });
     await page.goto('/app.html');
     await expect(page.locator('#auth-screen')).toBeVisible();
+    const hint = page.locator('#login-id-hint');
 
-    await page.click('#tab-phone');
-    await expect(page.locator('#auth-phone-form')).toBeVisible();
-    await expect(page.locator('#auth-login-form')).toBeHidden();
-    await expect(page.locator('#tab-phone')).toHaveAttribute('aria-selected', 'true');
-
-    await page.click('#tab-email');
-    await expect(page.locator('#auth-login-form')).toBeVisible();
-    await expect(page.locator('#auth-phone-form')).toBeHidden();
+    await page.fill('#login-id', 'raver@ravefam.test');
+    await expect(hint).toContainText('email you');
+    await page.fill('#login-id', '+44 7700 900123');
+    await expect(hint).toContainText('text +447700900123');
+    await page.fill('#login-id', '407-79');
+    await expect(hint).toContainText('country code');
 
     // ?tab=signup / ?tab=login links, the claim intercept and QR arrivals
-    // still pass the old names — both should show the email form.
-    for (const legacy of ['signup', 'login']) {
-      await page.evaluate((t) => { showAuthTab('phone'); showAuthTab(t); }, legacy);
+    // still pass the old names — all land on the same field.
+    for (const legacy of ['signup', 'login', 'phone', 'email']) {
+      await page.evaluate((t) => { showCodeScreen('x@y.z'); showAuthTab(t); }, legacy);
       await expect(page.locator('#auth-login-form')).toBeVisible();
-      await expect(page.locator('#auth-phone-form')).toBeHidden();
+      await expect(page.locator('#auth-code-form')).toBeHidden();
     }
   });
 
@@ -136,14 +135,14 @@ test.describe('auth flows', () => {
     await page.goto('/app.html');
     await expect(page.locator('#auth-screen')).toBeVisible();
     await page.evaluate(() => doLogin());
-    await expect(page.locator('#auth-error')).toHaveClass(/show/);
+    await expect(page.locator('#login-id-error')).toHaveClass(/show/);
   });
 
   test('a short code shows a validation error without calling verify', async ({ page }) => {
     await installSupabaseStub(page, { session: null, loginSession: makeSession(), data: seedData() });
     await page.goto('/app.html');
     await expect(page.locator('#auth-screen')).toBeVisible();
-    await page.fill('#login-email', 'tester@ravefam.test');
+    await page.fill('#login-id', 'tester@ravefam.test');
     await page.evaluate(() => doLogin());
     await expect(page.locator('#auth-code-form')).toBeVisible();
     await page.fill('#auth-code', '123');
