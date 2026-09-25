@@ -7840,7 +7840,6 @@
     padding: 26px 22px 18px;
     display: flex;
     flex-direction: column;
-    min-height: 460px;
     box-shadow: 0 20px 60px rgba(0,0,0,0.5);
   }
   .rave-share-eyebrow {
@@ -7924,7 +7923,7 @@
     width: 40px; height: 40px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
     font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.8rem;
-    border: 2px solid rgba(255,255,255,0.5); margin: 0 -8px; flex-shrink: 0;
+    border: 2px solid rgba(255,255,255,0.5); margin: 0 -3px; flex-shrink: 0;
   }
   .rave-share-avatar-more { background: rgba(0,0,0,0.4); color: #fff; }
   .rave-share-count {
@@ -8011,6 +8010,19 @@
   .rave-share-actions { display: flex; gap: 8px; flex-wrap: wrap; }
   .rave-share-actions .wrapped-share-btn,
   .rave-share-actions .wrapped-close-btn { flex: 1; }
+  .rave-share-link-btn {
+    display: block;
+    margin: 10px auto 0;
+    padding: 6px 10px;
+    background: none;
+    border: none;
+    color: var(--neon-cyan);
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.78rem;
+    cursor: pointer;
+  }
+  .rave-share-link-btn:hover { text-decoration: underline; }
 
   /* ===== PM METRICS DASHBOARD ===== */
   .pm-kpi-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }
@@ -9485,7 +9497,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.58.0';
+  const APP_VERSION = '1.59.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -15319,7 +15331,8 @@
       <div class="rave-share-actions">
         <button class="wrapped-share-btn" onclick="shareRaveCardNow('${escJsAttr(fest.id)}')">📲 Share Card</button>
         <button class="wrapped-close-btn" onclick="closeRaveShareCard()">Close</button>
-      </div>`;
+      </div>
+      <button class="rave-share-link-btn" onclick="shareRaveLinkNow('${escJsAttr(fest.id)}')">🔗 Share link instead</button>`;
 
     // Pre-render in the background now, not on tap — see prepareCrewShareImage's
     // note for why. Wait for the QR canvas to actually have pixels first, else
@@ -15341,13 +15354,34 @@
     }, 700);
   }
 
-  // Plain-text fallback — always works regardless of whether image
-  // generation succeeds, so the share button never dead-ends.
+  // Plain-text share — the "Share link instead" button, and the fallback
+  // when image generation fails, so the share button never dead-ends.
+  // Leads with the user's caption (if typed), then name, date · venue,
+  // and the going count as social proof.
   function buildRaveShareText(fest) {
-    return `${fest.name}\n${raveShareUrl(fest)}`;
+    const input = document.querySelector('.rave-share-caption-input');
+    const caption = input ? input.value.trim() : '';
+    const d = festDate(fest);
+    const venue = findVenueById(fest.venueId);
+    const locationLabel = venue ? venue.name : (festivalLocationSource(fest).location || '');
+    const dateLabel = d ? `${DOW_SHORT[d.getDay()]} ${MON_SHORT[d.getMonth()]} ${d.getDate()}${d < TODAY ? ', ' + d.getFullYear() : ''}` : '';
+    const whenWhere = [dateLabel, locationLabel].filter(Boolean).join(' · ');
+    const going = festivalGoers(fest.id).length;
+    const lines = [];
+    if (caption) lines.push(caption);
+    lines.push(`${fest.name} 🎟️`);
+    if (whenWhere) lines.push(whenWhere);
+    if (going && (!d || d >= TODAY)) lines.push(`${going} going — come rave with us!`);
+    lines.push(raveShareUrl(fest));
+    return lines.join('\n');
   }
 
-  async function shareRaveTextFallback(fest) {
+  function shareRaveLinkNow(festId) {
+    const fest = getFestival(festId);
+    if (fest) shareRaveTextFallback(fest, true);
+  }
+
+  async function shareRaveTextFallback(fest, linkOnly = false) {
     const text = buildRaveShareText(fest);
     if (navigator.share) {
       try {
@@ -15361,7 +15395,7 @@
     if (navigator.clipboard && navigator.clipboard.writeText) {
       try {
         await navigator.clipboard.writeText(text);
-        showToast('📋 Copied — screenshot the card to share it too!');
+        showToast(linkOnly ? '🔗 Link copied!' : '📋 Copied — screenshot the card to share it too!');
         return;
       } catch (e) {
         console.error('rave share: clipboard.writeText failed', e);
