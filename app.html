@@ -8266,21 +8266,6 @@
       </p>
     </div>
 
-    <!-- ── SMS login: enter phone number ── -->
-    <div id="auth-phone-form" style="display:none;">
-      <div class="form-group">
-        <label for="login-phone" class="form-label">Phone Number</label>
-        <input class="form-input auth-phone-input" id="login-phone" type="tel" enterkeyhint="send" inputmode="tel" placeholder="(555) 123-4567" autocomplete="tel" oninput="clearPhoneError()" aria-describedby="login-phone-hint login-phone-error">
-        <div class="auth-field-hint" id="login-phone-hint">US numbers can skip the +1. Outside the US, start with your country code.</div>
-        <div class="auth-phone-error" id="login-phone-error"></div>
-      </div>
-      <button class="auth-btn" id="phone-send-btn" onclick="doSendSmsCode()">Text Me a Code 📱</button>
-      <p style="text-align:center;margin-top:12px;font-size:0.75rem;color:var(--muted);">Works for accounts with a verified phone. Msg &amp; data rates may apply.</p>
-      <p style="text-align:center;margin-top:16px;font-size:0.82rem;color:var(--muted);">
-        <a href="#" onclick="showAuthTab('login');return false;" style="color:var(--neon-pink);text-decoration:none;font-weight:600;">← Use email instead</a>
-      </p>
-    </div>
-
     <!-- ── SMS login: enter the texted 6-digit code ── -->
     <div id="auth-sms-code-form" style="display:none;">
       <p style="text-align:center;margin:0 0 20px;font-size:0.9rem;color:var(--muted);line-height:1.5;">We texted a 6-digit code to<br><strong id="auth-sms-phone" style="color:var(--text);"></strong></p>
@@ -9580,7 +9565,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.63.1';
+  const APP_VERSION = '1.63.2';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -10081,7 +10066,7 @@
     catch (e) { console.warn('[captcha] Turnstile failed to load', e); return; }
     if (_captchaWidget !== null || !window.turnstile) return;
     const box = document.getElementById('auth-captcha');
-    _captchaWidget = turnstile.render(box, {
+    _captchaWidget = window.turnstile.render(box, {
       sitekey: TURNSTILE_SITE_KEY,
       action: 'auth',
       theme: 'dark',
@@ -10109,7 +10094,7 @@
       _captchaWaiters.push(done);
     });
     _captchaToken = '';
-    try { turnstile.reset(_captchaWidget); } catch (e) {}
+    try { window.turnstile.reset(_captchaWidget); } catch (e) {}
     return token || undefined;
   }
 
@@ -10614,7 +10599,7 @@
         </div>
         ${value
           ? '<span class="login-method-ok">✓ Can log in</span>'
-          : `<button type="button" class="btn btn-ghost" style="padding:6px 14px;font-size:0.72rem;" onclick="settingsAddLoginMethod('${method}')">Add</button>`}
+          : `<button type="button" class="btn btn-ghost" style="padding:6px 14px;font-size:0.72rem;" onclick="settingsAddLoginMethod('${escJsAttr(method)}')">Add</button>`}
       </div>`;
     const missing = missingLoginMethod(u);
     box.innerHTML = '<div class="login-methods-head">Login methods</div>'

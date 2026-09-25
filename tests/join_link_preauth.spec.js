@@ -70,6 +70,8 @@ test.describe('?join= link while signed out', () => {
     // A dead link is no reason to bar the door.
     await page.evaluate(() => dismissIntercept('signup'));
     await expect(page.locator('#claim-intercept')).not.toHaveClass(/open/);
-    await expect(page.locator('#auth-signup-form')).toBeVisible();
+    // One flow: signing up is the same email/phone form as logging in.
+    await expect(page.locator('#auth-login-form')).toBeVisible();
+    await expect(page.locator('#auth-tabs')).toBeVisible();
   });
 });
