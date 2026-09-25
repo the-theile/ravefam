@@ -30,6 +30,10 @@ begin
 end;
 $$;
 
+-- Trigger functions stay off the REST surface
+-- (see 20260909000001_revoke_trigger_function_execute.sql).
+revoke execute on function public.handle_user_email_change() from public, anon, authenticated;
+
 create trigger on_auth_user_email_changed
   after update of email on auth.users
   for each row
