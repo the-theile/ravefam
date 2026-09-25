@@ -245,6 +245,7 @@ test.describe('Venue Directory · location live-mirror', () => {
     await bootAuthedApp(page);
     const venueId = await page.evaluate(async () => (await dbAddVenue({ name: 'No Overwrite Venue', location: 'Miami, Florida, United States' })).id);
     await page.evaluate(() => openRaveEditor(null));
+    await page.evaluate(() => raveEditGoStep('place')); // Location lives on the wizard's Place step
     await page.fill('#fe-loc', 'Custom Typed Location');
     await page.evaluate((id) => pickFestVenue(id), venueId);
     await expect(page.locator('.fe-loc-from-venue')).toContainText('Miami, Florida, United States');
