@@ -5363,6 +5363,9 @@
     text-align: center; line-height: 1.5;
   }
   .auth-success.show { display: block; }
+  /* Turnstile renders invisibly; only takes space when Cloudflare asks for a tap */
+  .auth-captcha { display: flex; justify-content: center; height: 0; overflow: hidden; }
+  .auth-captcha.show { height: auto; overflow: visible; margin-bottom: 16px; }
   /* SMS login — 16px inputs stop iOS Safari zooming the card on focus */
   .auth-phone-input { font-size: 16px; }
   .auth-phone-error { color: var(--neon-pink); font-size: 0.78rem; margin-top: 6px; min-height: 0; display: none; }
@@ -8208,6 +8211,7 @@
 
     <div class="auth-error" id="auth-error"></div>
     <div class="auth-success" id="auth-success"></div>
+    <div class="auth-captcha" id="auth-captcha"></div>
 
     <div id="auth-login-form">
       <div class="form-group">
@@ -9539,7 +9543,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.60.0';
+  const APP_VERSION = '1.61.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -9989,13 +9993,71 @@
          : base;
   }
 
-  function sendLoginCode(email, mode, data) {
+  // ===== CAPTCHA (Cloudflare Turnstile) =====
+  // Supabase Attack Protection checks this token on every code send (email and
+  // SMS). Supabase ignores the token while CAPTCHA is off there, so this ships
+  // first and the dashboard toggle flips after. Tokens are single-use, so each
+  // send takes the current one and resets the widget for the next. If the
+  // script is blocked or slow we send without a token rather than hang login.
+  const TURNSTILE_SITE_KEY = '0x4AAAAAAFDqdhu6eF46OXdu';
+  const TURNSTILE_JS = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+  const CAPTCHA_WAIT_MS = 15000;
+  let _captchaWidget = null;
+  let _captchaToken = '';
+  let _captchaWaiters = [];
+
+  async function initCaptcha() {
+    if (_captchaWidget !== null) return;
+    try { await loadScriptOnce(TURNSTILE_JS); }
+    catch (e) { console.warn('[captcha] Turnstile failed to load', e); return; }
+    if (_captchaWidget !== null || !window.turnstile) return;
+    const box = document.getElementById('auth-captcha');
+    _captchaWidget = turnstile.render(box, {
+      sitekey: TURNSTILE_SITE_KEY,
+      action: 'auth',
+      theme: 'dark',
+      appearance: 'interaction-only', // invisible unless Cloudflare wants a tap
+      callback: token => {
+        _captchaToken = token;
+        _captchaWaiters.splice(0).forEach(fn => fn(token));
+      },
+      'expired-callback': () => { _captchaToken = ''; }, // auto-refreshes
+      'before-interactive-callback': () => box.classList.add('show'),
+      'after-interactive-callback': () => box.classList.remove('show')
+    });
+  }
+
+  // Resolves to a fresh token, or undefined if Turnstile isn't available.
+  async function getCaptchaToken() {
+    await initCaptcha();
+    if (_captchaWidget === null) return undefined;
+    const token = _captchaToken || await new Promise(resolve => {
+      const done = t => { clearTimeout(timer); resolve(t); };
+      const timer = setTimeout(() => {
+        _captchaWaiters = _captchaWaiters.filter(fn => fn !== done);
+        resolve('');
+      }, CAPTCHA_WAIT_MS);
+      _captchaWaiters.push(done);
+    });
+    _captchaToken = '';
+    try { turnstile.reset(_captchaWidget); } catch (e) {}
+    return token || undefined;
+  }
+
+  function isCaptchaError(error) {
+    return error.code === 'captcha_failed' || /captcha/i.test(error.message || '');
+  }
+  const CAPTCHA_ERROR_MSG = "We couldn't confirm you're human — give it a few seconds and try again.";
+
+  async function sendLoginCode(email, mode, data) {
+    const captchaToken = await getCaptchaToken();
     return sb.auth.signInWithOtp({
       email,
       options: {
         // Log In never creates accounts, so a typo'd email doesn't spawn a ghost user.
         shouldCreateUser: mode === 'signup',
         ...(data ? { data } : {}),
+        ...(captchaToken ? { captchaToken } : {}),
         emailRedirectTo: authRedirectUrl()
       }
     });
@@ -10036,6 +10098,7 @@
   }
 
   function otpErrorMessage(error) {
+    if (isCaptchaError(error)) return CAPTCHA_ERROR_MSG;
     // Log In with an unknown email — Supabase refuses because shouldCreateUser is false.
     if (error.code === 'otp_disabled' || /signups not allowed/i.test(error.message)) {
       return "No account found for that email — tap Sign Up to create one.";
@@ -10194,6 +10257,7 @@
   function smsErrorMessage(error, stage) {
     const msg = error.message || '';
     const code = error.code || '';
+    if (isCaptchaError(error)) return CAPTCHA_ERROR_MSG;
     if (code === 'otp_disabled' || /signups not allowed/i.test(msg)) {
       return 'No RaveFAM account uses that number yet — log in with email for now.';
     }
@@ -10217,9 +10281,10 @@
 
   async function sendSmsCode(phone) {
     _smsInFlight = true; setAuthBusy(true); clearAuthMessages();
+    const captchaToken = await getCaptchaToken();
     const { error } = await sb.auth.signInWithOtp({
       phone,
-      options: { shouldCreateUser: false, channel: 'sms' }
+      options: { shouldCreateUser: false, channel: 'sms', ...(captchaToken ? { captchaToken } : {}) }
     });
     _smsInFlight = false; setAuthBusy(false);
     if (!error) _smsSentAt = Date.now();
@@ -10403,6 +10468,7 @@
     document.getElementById('app-loading').classList.add('hidden');
     document.getElementById('auth-screen').classList.remove('hidden');
     document.getElementById('main-app').style.display = 'none';
+    initCaptcha(); // warm a token so the first Send doesn't wait on Cloudflare
 
     // QR/invite arrivals (claim or crew-join tokens) default to Sign Up since
     // most scanners are new — everyone else still lands on Log In.
