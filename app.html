@@ -9580,7 +9580,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.63.0';
+  const APP_VERSION = '1.63.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -10392,6 +10392,14 @@
   function userPhoneE164(u) { return u?.phone ? '+' + String(u.phone).replace(/^\+/, '') : ''; }
   function userPhoneDisplay(u) { return u?.phone ? formatPhoneDisplay(userPhoneE164(u)) : ''; }
 
+  // Prefill for "Add your phone": the number from the old Sign Up form, else
+  // their crew-contact phone. Only a suggestion — it still has to pass SMS.
+  function guessOwnPhone() {
+    const me = squad.find(r => r.isYou);
+    const e164 = normalizePhone(currentUser?.user_metadata?.phone) || normalizePhone(me?.phone);
+    return e164 ? formatPhoneDisplay(e164) : '';
+  }
+
   function openLinkMethodModal(method, { prefill = '', onDone = null } = {}) {
     clearInterval(_link.timer);
     _link = { method, value: '', sentAt: 0, inFlight: false, timer: null, onDone };
@@ -10618,7 +10626,10 @@
   function settingsAddLoginMethod(method) {
     const me = squad.find(r => r.isYou);
     closePrivacySettingsModal();
-    openLinkMethodModal(method, { onDone: () => { if (me) openPrivacySettingsModal(me.id); } });
+    openLinkMethodModal(method, {
+      prefill: method === 'phone' ? guessOwnPhone() : '',
+      onDone: () => { if (me) openPrivacySettingsModal(me.id); }
+    });
   }
 
   async function doLogout() {
@@ -31630,7 +31641,7 @@
   function obLinkAdd() {
     const missing = missingLoginMethod();
     if (!missing) { obGoToStep(3); return; }
-    openLinkMethodModal(missing, { onDone: () => obGoToStep(3) });
+    openLinkMethodModal(missing, { prefill: missing === 'phone' ? guessOwnPhone() : '', onDone: () => obGoToStep(3) });
   }
 
   function obLinkSkip() {

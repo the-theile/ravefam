@@ -173,6 +173,15 @@ Deno.serve(async () => {
         continue;
       }
 
+      // Phone-only accounts have no email. Skip (not fail) so they don't show
+      // up as delivery errors; once they add an email, email_cached is synced
+      // by on_auth_user_email_changed and later steps send normally.
+      if (!prefs.email_cached) {
+        await markRow(row.id, "skipped", "no_email");
+        skipped++;
+        continue;
+      }
+
       const { data: raver } = await sb
         .from("ravers")
         .select("id, name")
@@ -221,11 +230,6 @@ Deno.serve(async () => {
       }
 
       const to = prefs.email_cached;
-      if (!to) {
-        await markRow(row.id, "failed", "no email on file");
-        failed++;
-        continue;
-      }
 
       const html = wrapEmail(template.subject, template.render({ firstName, crewName }), prefs.unsub_token);
       await sendResendEmail(to, template.subject, html);
