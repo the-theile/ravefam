@@ -5251,11 +5251,6 @@
   .tag-sheet-footer { padding: 12px 16px 18px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; gap: 10px; flex-shrink: 0; }
   .tag-sheet-footer .btn { flex: 1; }
 
-  @keyframes scanAuthGlow {
-    from { box-shadow: 0 0 32px rgba(255,45,120,0.4), 0 0 60px rgba(0,245,255,0.2), 0 4px 20px rgba(0,0,0,0.35); }
-    to   { box-shadow: 0 0 52px rgba(255,45,120,0.7), 0 0 90px rgba(0,245,255,0.4), 0 6px 28px rgba(0,0,0,0.4); }
-  }
-
   /* ===== AUTH SCREEN ===== */
   #auth-screen {
     position: fixed; inset: 0; z-index: 1000;
@@ -5300,6 +5295,20 @@
     .landing-sub { font-size: 0.85rem !important; }
     .lf-item { font-size: 0.75rem !important; padding: 5px 12px !important; }
     .auth-card { max-width: 100%; padding: 28px 20px; }
+    /* Compact hero so the login form lands on the first screen of a phone.
+       !important beats the hero's inline styles. */
+    .auth-inner { gap: 18px; padding-top: 24px; }
+    .landing-wordmark { justify-content: center; margin-bottom: 14px !important; }
+    .landing-beta { display: inline-flex !important; padding: 6px 14px !important; margin: 0 0 14px !important; font-size: 0.78rem !important; gap: 8px !important; border-radius: 100px !important; }
+    .landing-beta .beta-badge { font-size: 0.62rem; padding: 2px 9px; }
+    /* #auth-screen prefix: the base hero rules sit later in the file */
+    #auth-screen .landing-headline { font-size: 1.75rem !important; margin-bottom: 10px; }
+    #auth-screen .landing-headline br { display: none; }
+    #auth-screen .landing-sub { font-size: 0.82rem !important; line-height: 1.5; margin: 0 auto; }
+    #auth-screen .landing-features { display: none; }
+    /* Devices that have logged in before skip the pitch entirely */
+    #auth-screen.auth-returning .landing-headline,
+    #auth-screen.auth-returning .landing-sub { display: none; }
   }
 
   .auth-card {
@@ -5358,6 +5367,19 @@
   /* Turnstile renders invisibly; only takes space when Cloudflare asks for a tap */
   .auth-captcha { display: flex; justify-content: center; height: 0; overflow: hidden; }
   .auth-captcha.show { height: auto; overflow: visible; margin-bottom: 16px; }
+  .auth-field-hint { color: var(--muted); font-size: 0.75rem; margin-top: 6px; line-height: 1.4; }
+  /* Crew invite row — secondary to login, so outline buttons instead of a glowing CTA */
+  .auth-invite-row { text-align: center; }
+  .auth-invite-label { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.85rem; color: var(--text); margin-bottom: 10px; }
+  .auth-invite-label span { display: block; font-weight: 400; font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+  .auth-invite-btns { display: flex; gap: 10px; }
+  .auth-invite-btn {
+    flex: 1; padding: 11px 8px; cursor: pointer;
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.14); border-radius: 12px;
+    color: var(--text); font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.85rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .auth-invite-btn:hover, .auth-invite-btn:focus-visible { border-color: var(--neon-pink); box-shadow: 0 0 14px rgba(255,45,120,0.3); }
   /* SMS login — 16px inputs stop iOS Safari zooming the card on focus */
   .auth-phone-input { font-size: 16px; }
   .auth-phone-error { color: var(--neon-pink); font-size: 0.78rem; margin-top: 6px; min-height: 0; display: none; }
@@ -8122,7 +8144,7 @@
   <div class="auth-inner">
   <div class="landing-hero">
     <!-- Wordmark -->
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:28px;">
+    <div class="landing-wordmark" style="display:flex;align-items:center;gap:10px;margin-bottom:28px;">
       <svg viewBox="0 0 72 72" width="36" height="36" fill="none" style="filter:drop-shadow(0 0 10px rgba(57,255,20,0.3))">
         <defs><filter id="fnc-auth" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
         <line class="freq-nav-bar" x1="36" y1="22" x2="36" y2="9" stroke="#FF2D78" stroke-width="2.2" stroke-linecap="round"/>
@@ -8158,7 +8180,7 @@
     </div>
 
     <!-- Beta banner -->
-    <div style="background:rgba(255,45,120,0.12);border:1px solid rgba(255,45,120,0.3);border-radius:14px;padding:12px 24px;margin:0 0 28px;text-align:center;font-size:0.9rem;color:var(--neon-pink);display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;">
+    <div class="landing-beta" style="background:rgba(255,45,120,0.12);border:1px solid rgba(255,45,120,0.3);border-radius:14px;padding:12px 24px;margin:0 0 28px;text-align:center;font-size:0.9rem;color:var(--neon-pink);display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;">
       <span class="beta-badge">BETA</span>
       🚧 Sound system still warming up!
     </div>
@@ -8243,8 +8265,9 @@
     <!-- ── SMS login: enter phone number ── -->
     <div id="auth-phone-form" style="display:none;">
       <div class="form-group">
-        <label for="login-phone" class="form-label">Phone Number <span style="color:var(--muted);font-weight:400;">— US numbers can skip the +1</span></label>
-        <input class="form-input auth-phone-input" id="login-phone" type="tel" enterkeyhint="send" inputmode="tel" placeholder="(555) 123-4567" autocomplete="tel" oninput="clearPhoneError()">
+        <label for="login-phone" class="form-label">Phone Number</label>
+        <input class="form-input auth-phone-input" id="login-phone" type="tel" enterkeyhint="send" inputmode="tel" placeholder="(555) 123-4567" autocomplete="tel" oninput="clearPhoneError()" aria-describedby="login-phone-hint login-phone-error">
+        <div class="auth-field-hint" id="login-phone-hint">US numbers can skip the +1. Outside the US, start with your country code.</div>
         <div class="auth-phone-error" id="login-phone-error"></div>
       </div>
       <button class="auth-btn" id="phone-send-btn" onclick="doSendSmsCode()">Text Me a Code 📱</button>
@@ -8269,29 +8292,20 @@
       </p>
     </div>
 
-    <!-- ── QR scan alternative (hidden mid-verify) ── -->
+    <!-- ── Crew invite: scan QR or type code (hidden mid-verify) ── -->
     <div id="auth-invite-block">
     <div style="display:flex;align-items:center;gap:12px;margin:24px 0 6px;">
       <div style="flex:1;height:1px;background:rgba(255,255,255,0.08);"></div>
       <span style="font-family:'Outfit',sans-serif;font-size:0.72rem;color:var(--muted);white-space:nowrap;">or</span>
       <div style="flex:1;height:1px;background:rgba(255,255,255,0.08);"></div>
     </div>
-    <button onclick="openScanner()" style="
-      width:100%; padding:15px; border-radius:14px; border:none; cursor:pointer;
-      background:linear-gradient(90deg,var(--neon-pink),var(--neon-cyan));
-      color:#fff; font-family:'Outfit',sans-serif; font-weight:800; font-size:1rem;
-      letter-spacing:0px;
-      box-shadow:0 0 32px rgba(255,45,120,0.4),0 0 60px rgba(0,245,255,0.2),0 4px 20px rgba(0,0,0,0.35);
-      transition:all 0.22s;
-      animation:scanAuthGlow 2.5s ease-in-out infinite alternate;
-      margin-bottom:4px;
-    ">📷 Scan Crew Invite QR</button>
-    <p style="text-align:center;font-size:0.74rem;color:var(--muted);margin-top:6px;font-family:'Outfit',sans-serif;">
-      Got a crew invite? Scan the QR code — see your crew before you sign up
-    </p>
-    <p style="text-align:center;margin-top:8px;font-size:0.78rem;color:var(--muted);font-family:'Outfit',sans-serif;">
-      Have a text invite code? <a href="#" onclick="openScanner();switchScannerTab('code');return false;" style="color:var(--neon-cyan);text-decoration:none;font-weight:600;">Enter it here →</a>
-    </p>
+    <div class="auth-invite-row">
+      <div class="auth-invite-label">Got a crew invite? <span>See your crew before you sign up.</span></div>
+      <div class="auth-invite-btns">
+        <button type="button" class="auth-invite-btn" onclick="openScanner()">📷 Scan QR</button>
+        <button type="button" class="auth-invite-btn" onclick="openScanner();switchScannerTab('code')">⌨️ Enter code</button>
+      </div>
+    </div>
     </div>
 
   </div>
@@ -9522,7 +9536,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.61.1';
+  const APP_VERSION = '1.61.2';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -10285,7 +10299,7 @@
     if (_smsInFlight) return;
     clearPhoneError();
     const phone = normalizePhone(document.getElementById('login-phone').value);
-    if (!phone) { phoneError('Enter a valid number — e.g. (555) 123-4567, or +44 7700 900123 outside the US.'); return; }
+    if (!phone) { phoneError("That doesn't look like a full phone number — check the digits."); return; }
     const error = await sendSmsCode(phone);
     if (error) { authError(smsErrorMessage(error, 'send')); return; }
     _smsPhone = phone;
@@ -10429,6 +10443,7 @@
 
   function showApp(user) {
     currentUser = user;
+    try { localStorage.setItem('rf_has_logged_in', '1'); } catch (e) { /* per-device nicety only */ }
     _seenTips = { ...(user?.user_metadata?.seen_tips || {}) };
     _tipsEnabled = user?.user_metadata?.tips_enabled !== false;
     _feedbackPromptsShown = { ...(user?.user_metadata?.feedback_prompts_shown || {}) };
@@ -10459,6 +10474,9 @@
     document.getElementById('auth-screen').classList.remove('hidden');
     document.getElementById('main-app').style.display = 'none';
     initCaptcha(); // warm a token so the first Send doesn't wait on Cloudflare
+    let returning = false;
+    try { returning = localStorage.getItem('rf_has_logged_in') === '1'; } catch (e) {}
+    document.getElementById('auth-screen').classList.toggle('auth-returning', returning);
 
     // QR/invite arrivals (claim or crew-join tokens) default to Sign Up since
     // most scanners are new — everyone else still lands on Log In.
