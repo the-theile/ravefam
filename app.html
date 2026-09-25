@@ -5380,6 +5380,25 @@
     transition: border-color 0.2s, box-shadow 0.2s;
   }
   .auth-invite-btn:hover, .auth-invite-btn:focus-visible { border-color: var(--neon-pink); box-shadow: 0 0 14px rgba(255,45,120,0.3); }
+  /* Login method linking — onboarding + Settings + link overlay */
+  .ob-have-account { margin: -6px 0 16px; font-size: 0.8rem; color: var(--muted); text-align: center; }
+  .ob-have-account button { background: none; border: none; padding: 0 0 0 4px; cursor: pointer; color: var(--neon-cyan); font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.8rem; }
+  .ob-link-warning, .login-methods-warn {
+    background: rgba(255,45,120,0.1); border: 1px solid rgba(255,45,120,0.3); color: var(--neon-pink);
+    border-radius: 10px; padding: 10px 14px; font-size: 0.8rem; line-height: 1.5; margin-bottom: 14px; text-align: left;
+  }
+  .login-methods-warn { margin: 8px 0 4px; }
+  .login-methods-head { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.72rem; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+  .login-method-ok { font-size: 0.72rem; font-weight: 700; color: var(--neon-green); white-space: nowrap; }
+  .link-method-sub { font-size: 0.82rem; color: var(--muted); line-height: 1.5; margin-bottom: 16px; }
+  .link-error { color: var(--neon-pink); font-size: 0.8rem; margin: -4px 0 12px; display: none; }
+  .link-error.show { display: block; }
+  .link-sent { text-align: center; font-size: 0.88rem; color: var(--muted); line-height: 1.5; margin-bottom: 16px; }
+  .link-sent strong { color: var(--text); }
+  .link-code-input { text-align: center; letter-spacing: 0.5em; font-size: 1.3rem !important; font-weight: 700; }
+  .link-actions { text-align: center; margin-top: 14px; font-size: 0.82rem; color: var(--muted); }
+  .link-actions a { color: var(--neon-pink); text-decoration: none; font-weight: 600; }
+  .link-actions a + a { color: var(--muted); text-decoration: underline; font-weight: 400; }
   /* SMS login — 16px inputs stop iOS Safari zooming the card on focus */
   .auth-phone-input { font-size: 16px; }
   .auth-phone-error { color: var(--neon-pink); font-size: 0.78rem; margin-top: 6px; min-height: 0; display: none; }
@@ -8878,6 +8897,7 @@
         <button type="button" class="btn btn-ghost" id="reset-tips-btn" style="padding:6px 14px;font-size:0.72rem;" onclick="resetTips()">Reset</button>
       </div>
     </div>
+    <div class="poll-modal-settings" style="margin-top:12px;" id="login-methods-rows"><!-- filled by renderLoginMethods() --></div>
     <div class="poll-modal-settings" style="margin-top:12px;">
       <div class="poll-setting-row">
         <div>
@@ -8902,6 +8922,20 @@
 </div>
 
 <!-- Delete Account Modal -->
+<!-- Add a second login method (phone or email) to the signed-in account -->
+<div class="page-panel-overlay" id="link-method-overlay" onclick="if(event.target===this)closeLinkMethodModal()">
+  <div class="page-panel" style="text-align:left;">
+    <div class="page-panel-header">
+      <div class="modal-title" id="link-method-title">📱 Add your phone</div>
+      <button type="button" class="page-panel-back" aria-label="Close" onclick="closeLinkMethodModal()">✕</button>
+    </div>
+    <div class="page-panel-body">
+      <p class="link-method-sub" id="link-method-sub"></p>
+      <div id="link-method-box"><!-- filled by renderLinkEntry / renderLinkCode --></div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="delete-account-overlay" onclick="if(event.target===this)closeDeleteAccountModal()">
   <div class="modal" style="max-width:380px;text-align:left;">
     <div class="modal-title">💔 Delete Account</div>
@@ -9412,6 +9446,10 @@
     </div>
     <div class="onboard-title">What's your sound? 🎛️</div>
     <div class="onboard-sub" id="ob-step1-sub">Tap the genres that move you. This is your sonic identity — no wrong answers.</div>
+    <div class="ob-have-account" id="ob-have-account" style="display:none;">
+      <span id="ob-have-account-text"></span>
+      <button type="button" onclick="obUseExistingAccount()">Log in with it instead →</button>
+    </div>
     <div class="ob-genre-grid" id="ob-genre-grid"></div>
     <div class="ob-genre-reassurance">Pick a few, or skip — nothing here is permanent.</div>
     <button class="auth-btn" id="ob-step1-btn" disabled onclick="obStep1Next()">Lock In My Sound →</button>
@@ -9450,6 +9488,27 @@
   </div>
 
   <!-- Step 3: Build Your Crew -->
+  <!-- Between You and Crew: optional second login method (see obAfterIdentity) -->
+  <div id="ob-step-link" class="onboard-card" style="display:none;">
+    <div class="ob-progress-wrap">
+      <div class="ob-progress-segs">
+        <div class="ob-progress-seg done"></div>
+        <div class="ob-progress-seg active"></div>
+        <div class="ob-progress-seg"></div>
+      </div>
+      <div class="ob-progress-step-labels">
+        <div class="ob-progress-step-label done">Sound</div>
+        <div class="ob-progress-step-label active">You</div>
+        <div class="ob-progress-step-label">Crew</div>
+      </div>
+    </div>
+    <div class="onboard-title" id="ob-link-title">Add your phone too? 📱</div>
+    <div class="onboard-sub" id="ob-link-sub"></div>
+    <div class="ob-link-warning" id="ob-link-warning" role="status" style="display:none;"></div>
+    <button class="auth-btn" id="ob-link-add-btn" onclick="obLinkAdd()">Add my phone</button>
+    <button class="btn btn-ghost" id="ob-link-skip-btn" onclick="obLinkSkip()" style="width:100%;margin-top:10px;padding:12px;font-size:0.85rem;">Skip for now</button>
+  </div>
+
   <div id="ob-step3" class="onboard-card" style="display:none;">
     <div class="ob-progress-wrap">
       <div class="ob-progress-segs">
@@ -9521,7 +9580,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.62.0';
+  const APP_VERSION = '1.63.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -9969,7 +10028,8 @@
   }
   const AUTH_BUSY_LABELS = {
     'login-btn': 'Sending…', 'phone-send-btn': 'Sending…',
-    'verify-btn': 'Checking…', 'sms-verify-btn': 'Checking…'
+    'verify-btn': 'Checking…', 'sms-verify-btn': 'Checking…',
+    'link-send-btn': 'Sending…', 'link-verify-btn': 'Checking…'
   };
   function setAuthBusy(busy) {
     Object.keys(AUTH_BUSY_LABELS).forEach(id => {
@@ -10309,6 +10369,258 @@
     // onAuthStateChange will fire SIGNED_IN and handle the rest
   }
 
+  // ===== LOGIN METHOD LINKING (second way in for the signed-in account) =====
+  // updateUser({ phone }) texts a code checked with verifyOtp type
+  // 'phone_change'; updateUser({ email }) emails one checked with type
+  // 'email_change'. The user id doesn't change, so onAuthStateChange sees the
+  // same user and nothing reboots. Used by onboarding, Settings, and the
+  // "I already have an account" hand-off.
+  const PENDING_LINK_KEY = 'rf_pending_link';
+  const PENDING_LINK_TTL_MS = 30 * 60 * 1000;
+  const EMAIL_CODE_TTL_MS = 60 * 60 * 1000; // Supabase default email OTP lifetime
+  let _link = { method: null, value: '', sentAt: 0, inFlight: false, timer: null, onDone: null };
+
+  // Which login method the account is missing: 'email', 'phone', or null.
+  function missingLoginMethod(u = currentUser) {
+    if (!u) return null;
+    if (!u.email) return 'email';
+    if (!u.phone) return 'phone';
+    return null;
+  }
+  function loginMethodLabel(method) { return method === 'phone' ? 'phone number' : 'email'; }
+  // auth.users.phone is stored without the leading +
+  function userPhoneE164(u) { return u?.phone ? '+' + String(u.phone).replace(/^\+/, '') : ''; }
+  function userPhoneDisplay(u) { return u?.phone ? formatPhoneDisplay(userPhoneE164(u)) : ''; }
+
+  function openLinkMethodModal(method, { prefill = '', onDone = null } = {}) {
+    clearInterval(_link.timer);
+    _link = { method, value: '', sentAt: 0, inFlight: false, timer: null, onDone };
+    const phone = method === 'phone';
+    document.getElementById('link-method-title').textContent = phone ? '📱 Add your phone' : '✉️ Add your email';
+    document.getElementById('link-method-sub').textContent = phone
+      ? "We'll text you a code to confirm it. After that you can log in with your email or your phone."
+      : "We'll email you a code to confirm it. After that you can log in with your phone or your email.";
+    renderLinkEntry(prefill);
+    document.getElementById('link-method-overlay').classList.add('open');
+  }
+  function closeLinkMethodModal() {
+    clearInterval(_link.timer);
+    document.getElementById('link-method-overlay').classList.remove('open');
+  }
+
+  function linkError(msg) {
+    const el = document.getElementById('link-error');
+    if (!el) return;
+    el.textContent = msg || '';
+    el.classList.toggle('show', !!msg);
+  }
+
+  function renderLinkEntry(prefill) {
+    clearInterval(_link.timer);
+    const phone = _link.method === 'phone';
+    document.getElementById('link-method-box').innerHTML = `
+      <div class="form-group">
+        <label for="link-input" class="form-label">${phone ? 'Phone Number' : 'Email'}</label>
+        <input class="form-input auth-phone-input" id="link-input" type="${phone ? 'tel' : 'email'}"
+          inputmode="${phone ? 'tel' : 'email'}" enterkeyhint="send" autocomplete="${phone ? 'tel' : 'email'}"
+          placeholder="${phone ? '(555) 123-4567' : 'you@example.com'}" value="${escHtml(prefill || '')}"
+          oninput="linkError('')" onkeydown="if(event.key==='Enter')linkSendCode()">
+        ${phone ? '<div class="auth-field-hint">US numbers can skip the +1. Outside the US, start with your country code.</div>' : ''}
+      </div>
+      <div class="link-error" id="link-error" role="alert"></div>
+      <button class="auth-btn" id="link-send-btn" onclick="linkSendCode()">${phone ? 'Text Me a Code 📱' : 'Email Me a Code ✉️'}</button>`;
+    setTimeout(() => document.getElementById('link-input')?.focus(), 50);
+  }
+
+  function renderLinkCode() {
+    const phone = _link.method === 'phone';
+    const shown = phone ? formatPhoneDisplay(_link.value) : _link.value;
+    document.getElementById('link-method-box').innerHTML = `
+      <p class="link-sent">We ${phone ? 'texted' : 'emailed'} a 6-digit code to<br><strong>${escHtml(shown)}</strong></p>
+      <div class="form-group">
+        <label for="link-code" class="form-label">Code</label>
+        <input class="form-input auth-phone-input link-code-input" id="link-code" type="text" inputmode="numeric"
+          pattern="[0-9]*" maxlength="6" placeholder="123456" autocomplete="one-time-code" enterkeyhint="go"
+          oninput="onLinkCodeInput(this)">
+      </div>
+      <div class="link-error" id="link-error" role="alert"></div>
+      <button class="auth-btn" id="link-verify-btn" onclick="linkVerifyCode()">Confirm ✅</button>
+      <p class="link-actions">
+        <a href="#" id="link-resend-btn" onclick="linkResend();return false;">Resend code</a>
+        &nbsp;·&nbsp;
+        <a href="#" onclick="linkChangeValue();return false;">Change ${phone ? 'number' : 'email'}</a>
+      </p>`;
+    startLinkCooldown();
+    setTimeout(() => document.getElementById('link-code')?.focus(), 50);
+  }
+
+  function linkChangeValue() {
+    renderLinkEntry(_link.method === 'phone' ? formatPhoneDisplay(_link.value) : _link.value);
+  }
+
+  function startLinkCooldown() {
+    const btn = document.getElementById('link-resend-btn');
+    let left = OTP_RESEND_COOLDOWN;
+    clearInterval(_link.timer);
+    const tick = () => {
+      if (!btn.isConnected || left <= 0) {
+        clearInterval(_link.timer);
+        btn.textContent = 'Resend code';
+        btn.style.pointerEvents = ''; btn.style.opacity = '';
+        return;
+      }
+      btn.textContent = `Resend in ${left}s`;
+      btn.style.pointerEvents = 'none'; btn.style.opacity = '0.5';
+      left--;
+    };
+    tick();
+    _link.timer = setInterval(tick, 1000);
+  }
+
+  function linkErrorMessage(error, stage) {
+    const msg = error.message || '';
+    const code = error.code || '';
+    const phone = _link.method === 'phone';
+    if (code === 'phone_exists' || code === 'email_exists' || /already (been )?registered|already in use|already exists/i.test(msg)) {
+      return phone
+        ? 'That number is already on another RaveFAM account — log in with it to use that account.'
+        : 'That email is already on another RaveFAM account — log in with it to use that account.';
+    }
+    if (error.status === 429 || /rate.?limit|security purposes|too many|max check attempts/i.test(code + ' ' + msg)) {
+      return 'Too many codes requested — give it a few minutes and try again.';
+    }
+    if (stage === 'verify' && (code === 'otp_expired' || /expired|invalid/i.test(msg))) {
+      return Date.now() - _link.sentAt > (phone ? SMS_CODE_TTL_MS : EMAIL_CODE_TTL_MS)
+        ? 'That code has expired — tap Resend code for a fresh one.'
+        : "That code didn't match — double-check it and try again.";
+    }
+    if (stage === 'send' && phone && (code === 'sms_send_failed' || code === 'validation_failed' || /invalid.*phone|phone.*invalid|unable to get sms/i.test(msg))) {
+      return "We couldn't text that number — double-check it (non-US numbers need the +country code).";
+    }
+    if (stage === 'send' && !phone && (code === 'email_address_invalid' || code === 'validation_failed')) {
+      return "That email doesn't look right — double-check it.";
+    }
+    return msg || 'Something went wrong — please try again.';
+  }
+
+  async function linkRequest(value) {
+    _link.inFlight = true; setAuthBusy(true); linkError('');
+    const { error } = _link.method === 'phone'
+      ? await sb.auth.updateUser({ phone: value })
+      : await sb.auth.updateUser({ email: value }, { emailRedirectTo: authRedirectUrl() });
+    _link.inFlight = false; setAuthBusy(false);
+    if (!error) _link.sentAt = Date.now();
+    return error;
+  }
+
+  async function linkSendCode() {
+    if (_link.inFlight) return;
+    const raw = (document.getElementById('link-input')?.value || '').trim();
+    const value = _link.method === 'phone'
+      ? normalizePhone(raw)
+      : (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw) ? raw : null);
+    if (!value) {
+      linkError(_link.method === 'phone'
+        ? "That doesn't look like a full phone number — check the digits."
+        : "That doesn't look like an email address — check it and try again.");
+      return;
+    }
+    const error = await linkRequest(value);
+    if (error) { linkError(linkErrorMessage(error, 'send')); return; }
+    _link.value = value;
+    renderLinkCode();
+  }
+
+  async function linkResend() {
+    if (!_link.value || _link.inFlight) return;
+    const error = await linkRequest(_link.value);
+    if (error) { linkError(linkErrorMessage(error, 'send')); return; }
+    showToast(_link.method === 'phone' ? '📱 New code on the way' : '✉️ New code sent — check your inbox');
+    startLinkCooldown();
+  }
+
+  function onLinkCodeInput(input) {
+    input.value = input.value.replace(/\D/g, '').slice(0, 6);
+    linkError('');
+    // Auto-submit once complete — one-time-code autofill lands here too.
+    if (input.value.length === 6) linkVerifyCode();
+  }
+
+  async function linkVerifyCode() {
+    if (_link.inFlight) return; // already verifying (autofill + tap)
+    const token = (document.getElementById('link-code')?.value || '').replace(/\D/g, '');
+    if (token.length !== 6) { linkError('Enter the 6-digit code.'); return; }
+    _link.inFlight = true; setAuthBusy(true); linkError('');
+    const { data, error } = await sb.auth.verifyOtp(_link.method === 'phone'
+      ? { phone: _link.value, token, type: 'phone_change' }
+      : { email: _link.value, token, type: 'email_change' });
+    _link.inFlight = false; setAuthBusy(false);
+    if (error) { linkError(linkErrorMessage(error, 'verify')); return; }
+    if (data?.user) currentUser = data.user;
+    else {
+      const { data: fresh } = await sb.auth.getUser();
+      if (fresh?.user) currentUser = fresh.user;
+    }
+    const { method, onDone } = _link;
+    clearPendingLink();
+    closeLinkMethodModal();
+    showToast(method === 'phone' ? '📱 Phone added — log in with either one now.' : '✉️ Email added — log in with either one now.');
+    if (onDone) onDone();
+  }
+
+  // "I already have an account" hand-off: remembered across the logout and
+  // the code login (magic links open a new tab, so localStorage, not session).
+  function savePendingLink(method, value) {
+    try { localStorage.setItem(PENDING_LINK_KEY, JSON.stringify({ method, value, at: Date.now() })); } catch (e) {}
+  }
+  function readPendingLink() {
+    try {
+      const p = JSON.parse(localStorage.getItem(PENDING_LINK_KEY) || 'null');
+      return p && Date.now() - p.at < PENDING_LINK_TTL_MS ? p : null;
+    } catch (e) { return null; }
+  }
+  function clearPendingLink() {
+    try { localStorage.removeItem(PENDING_LINK_KEY); } catch (e) {}
+  }
+
+  // Back in the existing account: offer to add the address they first signed
+  // up with. One-shot — if they close it, Settings → Login methods still has it.
+  function resumePendingLink() {
+    const p = readPendingLink();
+    clearPendingLink();
+    if (!p || missingLoginMethod() !== p.method) return false;
+    openLinkMethodModal(p.method, { prefill: p.method === 'phone' ? formatPhoneDisplay(p.value) : p.value });
+    return true;
+  }
+
+  // Settings → Login methods rows (filled each time Settings opens).
+  function renderLoginMethods() {
+    const box = document.getElementById('login-methods-rows');
+    const u = currentUser;
+    if (!box || !u) return;
+    const row = (label, value, method) => `
+      <div class="poll-setting-row">
+        <div>
+          <div class="poll-setting-label">${label}</div>
+          <div class="poll-setting-hint">${value ? escHtml(value) : 'Not added'}</div>
+        </div>
+        ${value
+          ? '<span class="login-method-ok">✓ Can log in</span>'
+          : `<button type="button" class="btn btn-ghost" style="padding:6px 14px;font-size:0.72rem;" onclick="settingsAddLoginMethod('${method}')">Add</button>`}
+      </div>`;
+    const missing = missingLoginMethod(u);
+    box.innerHTML = '<div class="login-methods-head">Login methods</div>'
+      + row('Email', u.email, 'email')
+      + row('Phone', userPhoneDisplay(u), 'phone')
+      + (missing ? `<div class="login-methods-warn">⚠️ You can only log in with your ${missing === 'phone' ? 'email' : 'phone number'}. If you lose access to it, you may have trouble getting back into your account.</div>` : '');
+  }
+
+  function settingsAddLoginMethod(method) {
+    const me = squad.find(r => r.isYou);
+    closePrivacySettingsModal();
+    openLinkMethodModal(method, { onDone: () => { if (me) openPrivacySettingsModal(me.id); } });
+  }
+
   async function doLogout() {
     sessionStorage.removeItem('pendingClaim');
     sessionStorage.removeItem('pendingCrewJoin');
@@ -10467,6 +10779,11 @@
     if (last?.value) {
       const input = document.getElementById(last.method === 'phone' ? 'login-phone' : 'login-email');
       if (!input.value) input.value = last.method === 'phone' ? formatPhoneDisplay(last.value) : last.value;
+    }
+    const pendingLink = readPendingLink();
+    if (pendingLink) {
+      const shown = pendingLink.method === 'phone' ? formatPhoneDisplay(pendingLink.value) : pendingLink.value;
+      authSuccess(`Log in to your existing account — we'll offer to add ${shown} to it right after.`);
     }
 
     // If the user came from the landing page via "Enter code manually", open the
@@ -11741,6 +12058,9 @@
       return true; // onboarding launching — bootApp defers any pending rave link
     } else if (me && !me.handle) {
       setTimeout(showHandlePicker, 400);
+    } else if (me && readPendingLink()) {
+      // Just came back via "I already have an account" — offer the link first.
+      setTimeout(resumePendingLink, 600);
     } else if (allowWelcome && me && me.handle) {
       setTimeout(showWelcomePopup, 600);
     }
@@ -30360,6 +30680,7 @@
     if (!r || !r.isYou) return;
     const versionLabel = document.getElementById('app-version-label');
     if (versionLabel) versionLabel.textContent = `RaveFAM v${APP_VERSION}`;
+    renderLoginMethods();
     const erudaRow = document.getElementById('eruda-toggle-row');
     if (erudaRow && _erudaInited) {
       const erudaEl = document.getElementById('eruda');
@@ -31173,6 +31494,7 @@
     // crew leader before they claimed, or from an earlier session) so this
     // wizard never silently wipes them — it should only ever add to them.
     const existingRaver = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
+    obRenderHaveAccount(existingRaver);
     _obGenres = new Set(existingRaver?.genres || []);
     const grid = document.getElementById('ob-genre-grid');
     if (grid) {
@@ -31245,8 +31567,81 @@
       const el = document.getElementById(id);
       if (el) el.style.display = (i === n-1) ? 'block' : 'none';
     });
+    document.getElementById('ob-step-link').style.display = 'none';
     if (n === 2) setTimeout(() => document.getElementById('ob-name-input')?.focus(), 100);
     if (n === 3) renderOnboardStep3();
+  }
+
+  // Brand-new account (under 30 min old, no profile yet — so never a claimed
+  // crew spot): offer the way back to an account they already have under
+  // their other login method, instead of building a duplicate.
+  function obRenderHaveAccount(existingRaver) {
+    const u = currentUser;
+    const other = missingLoginMethod(u);
+    const fresh = !!u?.created_at && Date.now() - new Date(u.created_at).getTime() < 30 * 60 * 1000;
+    const show = !!(fresh && other && !existingRaver);
+    document.getElementById('ob-have-account').style.display = show ? '' : 'none';
+    if (show) {
+      document.getElementById('ob-have-account-text').textContent =
+        `Already on RaveFAM with your ${loginMethodLabel(other)}?`;
+    }
+  }
+
+  function obUseExistingAccount() {
+    const u = currentUser;
+    const other = missingLoginMethod(u);
+    if (!u || !other) return;
+    const mine = other === 'email'
+      ? { method: 'phone', value: userPhoneE164(u) }
+      : { method: 'email', value: u.email };
+    const shown = mine.method === 'phone' ? formatPhoneDisplay(mine.value) : mine.value;
+    showConfirm('Use your existing account?',
+      `We'll discard this new, empty account and take you to log in with your ${loginMethodLabel(other)}. Once you're in, we'll offer to add ${shown} to that account.`,
+      'Take me there', async () => {
+        // Frees the number/email so it can be linked to the existing account.
+        const { error } = await sb.rpc('delete_my_account');
+        if (error) { showToast('⚠️ Could not switch accounts — ' + error.message); return; }
+        savePendingLink(mine.method, mine.value);
+        saveLastLogin(other, ''); // auth screen opens on the other method, blank
+        isOnboarding = false;
+        document.getElementById('onboarding-screen').classList.remove('show');
+        await doLogout();
+      });
+  }
+
+  // Between "You" and "Crew": offer a second login method. Skippable, but
+  // skipping shows what's at stake once before moving on.
+  function obAfterIdentity() {
+    const missing = missingLoginMethod();
+    if (!missing) { obGoToStep(3); return; }
+    const has = missing === 'phone' ? currentUser.email : userPhoneDisplay(currentUser);
+    document.getElementById('ob-link-title').textContent = missing === 'phone' ? 'Add your phone too? 📱' : 'Add your email too? ✉️';
+    document.getElementById('ob-link-sub').textContent =
+      `Log in with either one — handy if you ever lose access to your ${loginMethodLabel(missing === 'phone' ? 'email' : 'phone')}.`;
+    document.getElementById('ob-link-add-btn').textContent = missing === 'phone' ? 'Add my phone' : 'Add my email';
+    document.getElementById('ob-link-skip-btn').textContent = 'Skip for now';
+    const warn = document.getElementById('ob-link-warning');
+    warn.textContent = `⚠️ Heads up — you can only log in with ${has}. If you lose access to it, you may have trouble getting back into your account. You can add ${missing === 'phone' ? 'a phone' : 'an email'} anytime in Settings.`;
+    warn.style.display = 'none';
+    ['ob-step1','ob-step2','ob-step3'].forEach(id => { document.getElementById(id).style.display = 'none'; });
+    document.getElementById('ob-step-link').style.display = 'block';
+  }
+
+  function obLinkAdd() {
+    const missing = missingLoginMethod();
+    if (!missing) { obGoToStep(3); return; }
+    openLinkMethodModal(missing, { onDone: () => obGoToStep(3) });
+  }
+
+  function obLinkSkip() {
+    const warn = document.getElementById('ob-link-warning');
+    if (warn.style.display === 'none') {
+      warn.style.display = '';
+      document.getElementById('ob-link-skip-btn').textContent = 'Got it — continue →';
+      document.getElementById('ob-link-add-btn').textContent = 'Add it now';
+      return;
+    }
+    obGoToStep(3);
   }
 
   function obToggleGenre(el) {
@@ -31375,7 +31770,7 @@
     }
     addNotification("✨ Profile locked in! You're now on the grid — scan QR codes, join crews, and let the fam find you in the wild.");
     showToast('✅ Identity confirmed. The fam will find you. 🎤');
-    obGoToStep(3);
+    obAfterIdentity();
   }
 
   async function completeOnboarding() {
