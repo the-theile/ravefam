@@ -197,3 +197,26 @@ test.describe('mobile layout · signed-out entry points', () => {
     expect(boxes.every(b => b.inView)).toBe(true);
   });
 });
+
+test.describe('settings panel on a phone', () => {
+  test('long settings list scrolls and Done / close stay reachable', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 664 });
+    await bootAuthedApp(page);
+    await page.evaluate(() => notifDrawerSettings());
+    const overlay = page.locator('#privacy-settings-overlay');
+    await expect(overlay).toHaveClass(/open/);
+
+    // Done sits in a fixed footer, inside the viewport, no matter how long the list is.
+    const done = overlay.locator('.page-panel-footer button', { hasText: 'Done' });
+    await expect(done).toBeInViewport();
+
+    // The body scrolls, so the last row (Delete my account) can be reached.
+    const body = overlay.locator('.page-panel-body');
+    expect(await body.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
+    await page.locator('#delete-account-btn').scrollIntoViewIfNeeded();
+    await expect(page.locator('#delete-account-btn')).toBeInViewport();
+
+    await overlay.locator('button[aria-label="Close settings"]').click();
+    await expect(overlay).not.toHaveClass(/open/);
+  });
+});
