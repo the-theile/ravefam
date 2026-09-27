@@ -1004,7 +1004,7 @@
       sb.rpc('log_pageview', {
         p_path: location.pathname, p_referrer: document.referrer, p_visitor_id: getVisitorId(),
         p_utm_source: utm.source, p_utm_medium: utm.medium, p_utm_campaign: utm.campaign
-      });
+      }).then(function () {}, function () {});
     });
 
     // Best-effort client error logging for the PM dashboard's "Client Errors"
@@ -1018,7 +1018,7 @@
         sb.rpc('log_client_error', {
           p_message: message, p_stack: stack || null, p_path: location.pathname,
           p_visitor_id: getVisitorId(), p_user_agent: navigator.userAgent
-        });
+        }).then(function () {}, function () {});
       });
     }
     window.addEventListener('error', function (e) {
@@ -1035,7 +1035,7 @@
       var el = e.target && e.target.closest && e.target.closest('[data-cta]');
       if (!el) return;
       withClient(function (sb) {
-        sb.rpc('log_cta_click', { p_label: el.getAttribute('data-cta'), p_path: location.pathname, p_visitor_id: getVisitorId() });
+        sb.rpc('log_cta_click', { p_label: el.getAttribute('data-cta'), p_path: location.pathname, p_visitor_id: getVisitorId() }).then(function () {}, function () {});
       });
     }, true);
   })();
