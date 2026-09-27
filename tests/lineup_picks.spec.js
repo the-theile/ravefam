@@ -312,3 +312,34 @@ test.describe('Lineup Explorer hub — members (For You)', () => {
     await expect(badges.locator('.lp-b-fav')).toHaveText('♡ 1 favorite playing: Kaskade');
   });
 });
+
+test.describe('Lineup Explorer header — account button', () => {
+  test.beforeEach(async ({ page }) => { await blockExternal(page); });
+
+  test('visitors get Log in, which opens /app', async ({ page }) => {
+    await installSupabaseStub(page, { session: null, data: {} });
+    await page.goto(PAGE);
+    const btn = page.locator('.brandbar .lp-account');
+    await expect(btn).toHaveText('Log in');
+    await Promise.all([page.waitForURL(/\/app$/), btn.click()]);
+  });
+
+  test('with ☆ picks, Log in carries them into the handoff', async ({ page }) => {
+    await installSupabaseStub(page, { session: null, data: {} });
+    await page.goto(PAGE);
+    await star(page, 'Kaskade').click();
+    await Promise.all([
+      page.waitForURL(/\/app\?picks=1&from=edc-orlando-2026/),
+      page.locator('.brandbar .lp-account').click(),
+    ]);
+  });
+
+  test('members get My RaveFAM, on lineup pages and the hub', async ({ page }) => {
+    await installSupabaseStub(page, { session: makeSession(), data: memberData() });
+    await page.goto(PAGE);
+    await expect(page.locator('.brandbar .lp-account')).toHaveText('My RaveFAM');
+    await expect(page.locator('.brandbar .lp-account')).toHaveAttribute('href', '/app');
+    await page.goto('/lineup-explorer/index.html');
+    await expect(page.locator('.brandbar .lp-account')).toHaveText('My RaveFAM');
+  });
+});

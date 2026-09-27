@@ -1329,6 +1329,54 @@
     all: readAll
   };
 
+  // ----- header: Log in (visitors) / My RaveFAM (members) -----
+  // Sits in the .brandbar next to 📲 Save. A visitor with ☆ picks logs in
+  // through the Save my picks handoff, so the picks come along; otherwise it
+  // simply opens /app. Members get a link back to the app.
+  function injectAccountButton() {
+    var bar = document.querySelector(".brandbar");
+    if (!bar || bar.querySelector(".lp-account")) return;
+    var a = document.createElement("a");
+    a.className = "lp-account";
+    a.href = "/app";
+    a.textContent = "Log in";
+    a.addEventListener("click", function (e) {
+      if (a.dataset.member) return;
+      var all = readAll(), n = 0, latest = null;
+      Object.keys(all).forEach(function (k) {
+        var p = all[k];
+        var c = p && Array.isArray(p.n) ? p.n.length : 0;
+        if (!c) return;
+        n += c;
+        if (!latest || (p.at || "") > (all[latest].at || "")) latest = k;
+      });
+      if (!n) return;
+      e.preventDefault();
+      goSave(slug && all[slug] && all[slug].n && all[slug].n.length ? slug : latest, n);
+    });
+    // Join the right-hand group (📲 Save + year) rather than adding a third
+    // child to the space-between brandbar.
+    var group = bar.querySelector(".a2hs-yr-wrap");
+    if (!group) {
+      var right = bar.querySelector(".a2hs-btn") || bar.querySelector(".yr");
+      group = document.createElement("span");
+      group.className = "a2hs-yr-wrap";
+      if (right) { right.parentNode.insertBefore(group, right); group.appendChild(right); }
+      else bar.appendChild(group);
+    }
+    group.insertBefore(a, group.firstChild);
+    window.LineupMember.ready(function (m) {
+      if (!m || !m.isMember) return;
+      a.dataset.member = "1";
+      a.textContent = "My RaveFAM";
+      a.classList.add("is-member");
+    });
+  }
+  if (window.LineupMember) {
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", injectAccountButton);
+    else injectAccountButton();
+  }
+
   if (window.LineupMember && !window.LineupMember.pageSlug()) {
     var startHub = function () {
       initHub();
