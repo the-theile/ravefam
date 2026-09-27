@@ -9659,7 +9659,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.65.0';
+  const APP_VERSION = '1.66.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -9693,7 +9693,7 @@
     sb.rpc('log_pageview', {
       p_path: location.pathname, p_referrer: document.referrer, p_visitor_id: getVisitorId(),
       p_utm_source: utm.source, p_utm_medium: utm.medium, p_utm_campaign: utm.campaign
-    });
+    }).then(() => {}, () => {});
   })();
 
   // Best-effort client error logging for the PM dashboard's "Client Errors"
@@ -9706,7 +9706,7 @@
     sb.rpc('log_client_error', {
       p_message: message, p_stack: stack || null, p_path: location.pathname,
       p_visitor_id: getVisitorId(), p_user_agent: navigator.userAgent
-    });
+    }).then(() => {}, () => {});
   }
   window.addEventListener('error', (e) => logClientError(e.message, e.error && e.error.stack));
   window.addEventListener('unhandledrejection', (e) => {
@@ -9721,6 +9721,21 @@
     sb.rpc('log_analytics_event', {
       p_event_name: eventName, p_crew_id: crew_id, p_raver_id: raver_id,
       p_visitor_id: getVisitorId(), p_properties: properties
+    }).then(() => {}, () => {});
+  }
+
+  // signup_completed — first boot of a brand-new account (created in the last
+  // 24h; the server keeps only one per user). Lineup Explorer pages store the
+  // first page this browser opened in rf_first_explorer, so the PM dashboard
+  // can tie an explorer visitor (rf_vid) to the account it became.
+  function logSignupCompletedIfNew() {
+    const created = currentUser && Date.parse(currentUser.created_at);
+    if (!created || Date.now() - created > 24 * 60 * 60 * 1000) return;
+    let first = null;
+    try { first = JSON.parse(localStorage.getItem('rf_first_explorer') || 'null'); } catch (e) {}
+    logAnalyticsEvent('signup_completed', {
+      source: first ? 'explorer' : 'other',
+      first_explorer_page: first ? first.slug : null
     });
   }
 
@@ -12113,6 +12128,7 @@
     try {
       await loadAllData();
       logAnalyticsEvent('return_within_7_days', {});
+      logSignupCompletedIfNew();
       maybeInitEruda(); // second call: crew data now available for FAM Testers check
     } catch(err) {
       console.warn('DB load failed, starting fresh:', err);
@@ -17038,6 +17054,7 @@
 
   // ===== PM METRICS DASHBOARD (super-admin only) =====
   let pmDashData = null;
+  let pmExplorerData = null;  // get_explorer_metrics() — Lineup Explorer → member funnel; null if it failed
   let pmDashCharts = {};
   let _chartJsPromise = null;
   function loadChartJs() {
@@ -17079,7 +17096,11 @@
       <div style="font-size:0.86rem;color:var(--muted);margin-bottom:18px;">Live numbers straight from the database — visible to you only.</div>
       <div id="pm-dash-body" class="es-block" style="padding:40px 24px;"><div class="es-icon">⏳</div><div class="es-headline">Loading metrics…</div></div>
     `;
-    const { data, error } = await sb.rpc('get_pm_dashboard_metrics');
+    const [{ data, error }, explorerRes] = await Promise.all([
+      sb.rpc('get_pm_dashboard_metrics'),
+      sb.rpc('get_explorer_metrics')
+    ]);
+    pmExplorerData = explorerRes && explorerRes.data && explorerRes.data.ok ? explorerRes.data : null;
     if (error || !data || !data.ok) {
       const body = document.getElementById('pm-dash-body');
       if (body) body.innerHTML = `<div class="es-block" style="padding:40px 24px;"><div class="es-icon">⚠️</div><div class="es-headline">Couldn't load metrics</div><div class="es-sub">${escHtml(data?.error || error?.message || 'Unknown error')}</div></div>`;
@@ -17149,6 +17170,12 @@
         <div class="pm-section-title">Crew Activation Funnel</div>
         <div class="pm-section-sub">Weekly cohorts: crews created vs. reaching each activation milestone within 7 days of creation</div>
         ${pmChartOrFallback('pm-chart-activation')}
+      </div>
+
+      <div class="pm-section">
+        <div class="pm-section-title">🔭 Lineup Explorer → Members</div>
+        <div class="pm-section-sub">Weekly cohorts of first-time explorer visitors, and how many signed up within 30 days (baseline before explorer member features)</div>
+        ${pmExplorerSection(pmExplorerData)}
       </div>
 
       <div class="pm-section">
@@ -17274,6 +17301,31 @@
         <span class="pm-cohort-pct">${pmPct(c.week12_pct)}</span>
       </div>`).join('');
     return head + rows;
+  }
+
+  function pmExplorerSection(x) {
+    if (!x) return pmEmptyNote("Explorer metrics unavailable right now");
+    const kpis = `<div class="pm-kpi-grid">
+        ${pmKpiCard('Explorer Visitors (7d)', pmFmt(x.visitors_7d), 'unique browsers')}
+        ${pmKpiCard('Signups (7d)', pmFmt(x.signups_7d), `${pmFmt(x.explorer_signups_7d)} came via the explorer`)}
+      </div>`;
+    const weeks = (x.weekly || []).slice().reverse().map(w => `
+      <div class="pm-row">
+        <span class="pm-row-label">${pmWeekLabel(w.week_start)} <span class="pm-pill">n=${pmFmt(w.new_visitors)}</span></span>
+        <span class="pm-row-value">${pmFmt(w.converted)} joined · ${w.rate === null ? '—' : (w.rate * 100).toFixed(1) + '%'}</span>
+      </div>`).join('');
+    const top = (x.top_festivals_7d || []).length
+      ? x.top_festivals_7d.map(t => `
+        <div class="pm-row">
+          <span class="pm-row-label">${escHtml(t.slug)}</span>
+          <span class="pm-row-value">${pmFmt(t.visitors)} visitors</span>
+        </div>`).join('')
+      : pmEmptyNote('No explorer visits in the last 7 days');
+    return `${kpis}
+      <div class="pm-section-sub" style="margin-top:12px;">Explorer-to-member rate by week (newest first)</div>
+      ${weeks || pmEmptyNote('No explorer visitors yet')}
+      <div class="pm-section-sub" style="margin-top:12px;">Top lineups (7d)</div>
+      ${top}`;
   }
 
   function pmTopCrewsRows(crews) {

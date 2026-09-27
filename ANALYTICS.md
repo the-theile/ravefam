@@ -16,9 +16,19 @@ instrumentation follows the same first-party pattern already used for the PM das
   no client can read or write it directly.
 - A single `security definer` RPC, `log_analytics_event(...)`, granted to
   `anon, authenticated`, is the only way to insert a row.
-- The client calls it fire-and-forget via `sb.rpc('log_analytics_event', {...})` —
-  no `await`, no error handling, matching `logClientError`/`log_pageview`
-  (`app.html:7913-7953`). Non-blocking and low-overhead by construction.
+- The client calls it fire-and-forget via
+  `sb.rpc('log_analytics_event', {...}).then(() => {}, () => {})` — no `await`,
+  errors swallowed, matching `logClientError`/`log_pageview`. Non-blocking and
+  low-overhead by construction.
+- **The `.then()` is required.** supabase-js v2 query builders are lazy: a bare
+  `sb.rpc(...)` that is never awaited or `.then()`-ed never sends its request.
+  Until 1.66.0 every fire-and-forget logging call (here, `lineup-common.js` and
+  `index.html`) lacked it, so `pageviews`, `preview_clicks`, `client_errors`,
+  `cta_clicks` and `analytics_events` never received a row. Numbers start from
+  that release.
+- `log_analytics_event()` only accepts event names on its allowlist
+  (`20260927000004_analytics_event_allowlist.sql`); unknown names are dropped.
+  Add a new event's name there when adding the event.
 
 `analytics_events` is **product/growth data**, distinct in purpose from `audit_logs`
 (the moderation trail written by `logAudit()` at `app.html:10938`, used for things like
@@ -39,6 +49,12 @@ All events are logged via `logAnalyticsEvent(eventName, { crew_id, raver_id, ...
 | `first_event_added` | `saveRave()`'s create branch, inside `dbSaveFestival()`'s success callback (`app.html:24552`) — fired once per crew the acting user leads (`_ledCrews`) | ✅ (one row per led crew) | — | `festival_id` | `(crew_id, event_name)` unique |
 | `first_rsvp_updated` | `toggleGoingToFest()` (`app.html:24265`, `direction: 'going'`); `toggleInterestedInFest()` (`app.html:24372`, `direction: 'interested'`) — only on the "add" side of each toggle | — | ✅ | `festival_id`, `direction` | `(raver_id, event_name)` unique |
 | `return_within_7_days` | `bootApp()` (`app.html:9618`), right after `loadAllData()` resolves | — | — | — | `(user_id, event_name, created_at::date)` unique — once per user per calendar day |
+| `signup_completed` | `logSignupCompletedIfNew()` in `bootApp()`, on the first boot of an account created in the last 24h | — | — | `source` (`explorer` if this browser opened a Lineup Explorer page first, via `rf_first_explorer`; else `other`), `first_explorer_page` | once per user (checked in the RPC; signed-in callers only) |
+
+The PM dashboard's **🔭 Lineup Explorer → Members** section (`get_explorer_metrics()`,
+`20260927000005_explorer_metrics.sql`) joins first explorer pageviews to
+`signup_completed` on `visitor_id` (`rf_vid`) to report the weekly
+explorer-to-member rate.
 
 ## Activated Crew definition
 

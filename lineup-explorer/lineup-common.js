@@ -50,7 +50,7 @@
       withClient(function (sb) {
         sb.rpc("log_preview_click", {
           p_path: location.pathname, p_platform: platform, p_query: query, p_visitor_id: getVisitorId()
-        });
+        }).then(function () {}, function () {});
       });
     }
   };
@@ -60,8 +60,67 @@
     sb.rpc("log_pageview", {
       p_path: location.pathname, p_referrer: document.referrer, p_visitor_id: getVisitorId(),
       p_utm_source: utm.source, p_utm_medium: utm.medium, p_utm_campaign: utm.campaign
+    }).then(function () {}, function () {});
+  });
+
+  // Member detection for the Lineup Explorer ↔ RaveFAM integration. The
+  // explorer shares myravefam.com with /app, so a RaveFAM login's Supabase
+  // session is already in this browser's storage — no separate sign-in. This
+  // only reads state; nothing on the page changes yet. Resolves to:
+  //   { isMember, userId, raverId, festival: { id, slug, name, date } | null }
+  // Visitors (no session) resolve right away with isMember: false and make no
+  // extra requests. Festival lookup needs auth (festivals RLS), so it's
+  // member-only; the page slug equals festivals.slug.
+  function pageSlug() {
+    var m = /^\/lineup-explorer\/([a-z0-9-]+?)(?:\.html)?\/?$/.exec(location.pathname);
+    return m ? m[1] : null;
+  }
+
+  var memberPromise = new Promise(function (resolve) {
+    var visitor = { isMember: false, userId: null, raverId: null, festival: null };
+    // supabase-js is loaded from a CDN; if it never arrives, treat as visitor.
+    setTimeout(function () { resolve(visitor); }, 8000);
+    withClient(function (sb) {
+      sb.auth.getSession().then(function (res) {
+        var session = res && res.data && res.data.session;
+        if (!session || !session.user) { resolve(visitor); return; }
+        var uid = session.user.id;
+        var slug = pageSlug();
+        Promise.all([
+          sb.from("ravers").select("id,is_you,status").eq("claimed_by", uid).neq("status", "merged"),
+          slug
+            ? sb.from("festivals").select("id,slug,name,date").eq("slug", slug).is("deleted_at", null).maybeSingle()
+            : Promise.resolve({ data: null })
+        ]).then(function (out) {
+          var rows = (out[0] && out[0].data) || [];
+          var you = rows.filter(function (r) { return r.is_you || r.status === "claimed"; })[0] || null;
+          resolve({
+            isMember: true,
+            userId: uid,
+            raverId: you ? you.id : null,
+            festival: (out[1] && out[1].data) || null
+          });
+        }, function () {
+          resolve({ isMember: true, userId: uid, raverId: null, festival: null });
+        });
+      }, function () { resolve(visitor); });
     });
   });
+
+  window.LineupMember = {
+    ready: function (fn) { return memberPromise.then(fn); },
+    pageSlug: pageSlug
+  };
+
+  // First explorer page this browser ever opened. app.html reads it when a
+  // brand-new account boots, to tag signup_completed with source "explorer".
+  try {
+    if (!window.localStorage.getItem("rf_first_explorer")) {
+      window.localStorage.setItem("rf_first_explorer", JSON.stringify({
+        slug: pageSlug() || "hub", at: new Date().toISOString()
+      }));
+    }
+  } catch (e) {}
 
   // Best-effort client error logging for the PM dashboard's "Client Errors"
   // section — deduped per page load so one repeating bug doesn't spam rows.
@@ -74,7 +133,7 @@
       sb.rpc("log_client_error", {
         p_message: message, p_stack: stack || null, p_path: location.pathname,
         p_visitor_id: getVisitorId(), p_user_agent: navigator.userAgent
-      });
+      }).then(function () {}, function () {});
     });
   }
   window.addEventListener("error", function (e) {

@@ -16,27 +16,12 @@ import path from 'node:path';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const LINEUP_DIR = path.resolve(__dirname, '../../lineup-explorer');
 
-// Maps each lineup-explorer file to its `festivals.id` row (fetched via
-// Supabase MCP `execute_sql`: `select id, name, date from festivals`).
-// Dancefestopia and III Points have no festival row yet -- explicitly
-// skipped (appearances for those two are deferred, see plan doc).
-const FESTIVAL_IDS = {
-  'eternal-nye-2026.html': 'efbf069c-4d3e-418c-9e8c-c05d8c06b495',
-  'metamorphosis-2026.html': '2ab8928e-0872-4edb-b0ac-59c80739214c',
-  'hulaween-2026.html': 'f5eca6ef-8579-4cd3-b590-10ce421d5cac',
-  'edc-orlando-2026.html': '2a7c26e4-e9ec-449d-a07b-baa54b82f9cd',
-  'tapesgiving-2026.html': '0a58fa03-0d13-43d4-8830-664b68e699dc',
-  'lost-lands-2026.html': 'eac58209-4421-4e33-90a7-0e493cad4625',
-  'seven-stars-2026.html': 'cd15fd3b-d1f0-46cf-a029-466647625e98',
-  'cyclops-cove-4-2026.html': '7f3cb19a-8918-4d38-9252-142e36d3da9f',
-  'dancefestopia-2026.html': null,
-  'iii-points-2026.html': null,
-  'lost-in-dreams-los-angeles-2026.html': '031633a9-887d-41df-a762-57c331288523',
-  'night-trip-arizona-2026.html': '4c3bcb15-fff2-45bf-97e8-b861c925d553',
-  'hard-summer-2026.html': '99085234-30bf-4210-a688-3acc013a9152',
-  'day-trip-block-party-denver-2026.html': 'a6d2f284-a63c-44ae-837b-c6379331e9be',
-  'wasteland-2026.html': '1487a613-6380-4b5d-b4e7-b532b36da60e',
-};
+// Each lineup-explorer page resolves to its `festivals` row by slug: the page
+// filename (minus .html) equals `festivals.slug`, which the festivals_slug_insert
+// trigger derives from name + date. Appearances are joined on slug in the
+// emitted SQL, so pages without a festival row are skipped at apply time
+// rather than hardcoded here.
+const NON_FESTIVAL_FILES = new Set(['index.html', 'icon-source.html', 'og-image-source.html']);
 
 // Hand-curated canonicalization for names that appear with inconsistent
 // casing/formatting across different lineup files. Lowercased key -> the
@@ -104,15 +89,15 @@ function sqlStr(s) {
 
 // name (lowercased) -> { displayName, genres: Set<string> }
 const artists = new Map();
-// list of { artistNameLower, festivalId, isHeadliner, night, note }
+// list of { artistNameLower, festivalSlug, isHeadliner, night, note }
 const appearances = [];
 
-const files = readdirSync(LINEUP_DIR).filter(f => f.endsWith('.html') && f !== 'index.html');
+const files = readdirSync(LINEUP_DIR).filter(f => f.endsWith('.html') && !NON_FESTIVAL_FILES.has(f));
 let totalRawEntries = 0;
 let b2bSplits = 0;
-const skippedFestivals = new Set();
 
 for (const file of files) {
+  const festivalSlug = file.replace(/\.html$/, '');
   const text = readFileSync(path.join(LINEUP_DIR, file), 'utf8');
   const actsBody = extractBlock(text, /const ACTS\s*=\s*(\[)/);
   if (!actsBody) {
@@ -121,14 +106,6 @@ for (const file of files) {
   }
   const entries = parseActs(actsBody);
   totalRawEntries += entries.length;
-
-  const festivalId = FESTIVAL_IDS[file];
-  if (festivalId === undefined) {
-    console.warn(`WARN: ${file} has no FESTIVAL_IDS mapping at all -- add one or explicitly set null to skip`);
-  }
-  if (festivalId === null) {
-    skippedFestivals.add(file);
-  }
 
   for (const entry of entries) {
     const names = splitB2B(entry.name);
@@ -142,15 +119,13 @@ for (const file of files) {
       }
       if (entry.genre) artists.get(key).genres.add(entry.genre);
 
-      if (festivalId) {
-        appearances.push({
-          artistNameLower: key,
-          festivalId,
-          isHeadliner: entry.isHeadliner,
-          night: entry.night,
-          note: names.length === 2 ? (entry.note ? `${entry.note}; b2b set` : 'b2b set') : entry.note,
-        });
-      }
+      appearances.push({
+        artistNameLower: key,
+        festivalSlug,
+        isHeadliner: entry.isHeadliner,
+        night: entry.night,
+        note: names.length === 2 ? (entry.note ? `${entry.note}; b2b set` : 'b2b set') : entry.note,
+      });
     }
   }
 }
@@ -159,8 +134,8 @@ console.log(`Parsed ${files.length} lineup-explorer files.`);
 console.log(`Raw ACTS entries: ${totalRawEntries}`);
 console.log(`Unique canonical artists: ${artists.size}`);
 console.log(`b2b entries split: ${b2bSplits}`);
-console.log(`Appearance rows (post-split, excluding skipped festivals): ${appearances.length}`);
-console.log(`Festivals skipped (no festival_id mapping): ${[...skippedFestivals].join(', ') || 'none'}`);
+console.log(`Appearance rows (post-split): ${appearances.length}`);
+console.log(`Festival slugs: ${files.length} (rows without a matching festivals.slug are skipped at apply time)`);
 
 // --- Emit SQL ---
 const lines = [];
@@ -179,17 +154,18 @@ lines.push('on conflict (name_lower) do update set genres = (');
 lines.push('  select array(select distinct unnest(public.artists.genres || excluded.genres))');
 lines.push(');');
 lines.push('');
-lines.push('-- 2) Appearances (resolves artist_id by name_lower at insert time)');
+lines.push('-- 2) Appearances (resolves artist_id by name_lower and festival_id by slug at insert time)');
 lines.push('insert into public.artist_festival_appearances (artist_id, festival_id, is_headliner, night, note)');
-lines.push('select a.id, v.festival_id, v.is_headliner, v.night, v.note');
+lines.push('select a.id, f.id, v.is_headliner, v.night, v.note');
 lines.push('from (values');
 lines.push(
   appearances
-    .map(ap => `  (${sqlStr(ap.artistNameLower)}, ${sqlStr(ap.festivalId)}::uuid, ${ap.isHeadliner}, ${sqlStr(ap.night)}, ${sqlStr(ap.note)})`)
+    .map(ap => `  (${sqlStr(ap.artistNameLower)}, ${sqlStr(ap.festivalSlug)}, ${ap.isHeadliner}, ${sqlStr(ap.night)}, ${sqlStr(ap.note)})`)
     .join(',\n')
 );
-lines.push(') as v(artist_name_lower, festival_id, is_headliner, night, note)');
+lines.push(') as v(artist_name_lower, festival_slug, is_headliner, night, note)');
 lines.push('join public.artists a on a.name_lower = v.artist_name_lower');
+lines.push('join public.festivals f on f.slug = v.festival_slug and f.deleted_at is null');
 lines.push("on conflict (artist_id, festival_id, (coalesce(night, '')), (coalesce(note, ''))) do update set");
 lines.push('  is_headliner = excluded.is_headliner;');
 lines.push('');
