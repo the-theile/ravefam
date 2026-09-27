@@ -1,4 +1,4 @@
-// Lineup Explorer ☆ picks (LineupPicks in lineup-explorer/lineup-common.js).
+// Lineup Explorer 📋 picks (LineupPicks in lineup-explorer/lineup-common.js).
 // Visitors keep picks in localStorage; members sync them to
 // raver_artist_plans after a one-time Going/Interested sheet.
 const { test, expect } = require('@playwright/test');
@@ -32,18 +32,18 @@ function memberData(extra = {}) {
 
 const star = (page, name) => page.locator(`.pick[data-n="${name}"]`);
 
-test.describe('Lineup Explorer ☆ picks — visitor', () => {
+test.describe('Lineup Explorer 📋 picks — visitor', () => {
   test.beforeEach(async ({ page }) => {
     await blockExternal(page);
     await installSupabaseStub(page, { session: null, data: {} });
   });
 
-  test('☆ saves to the browser, survives reload, and My picks filters to it', async ({ page }) => {
+  test('📋 saves to the browser, survives reload, and My picks filters to it', async ({ page }) => {
     const errors = collectPageErrors(page);
     await page.goto(PAGE);
     await expect(star(page, 'Kaskade')).toHaveAttribute('aria-pressed', 'false');
 
-    // Tapping ☆ must not follow the card's music-platform link.
+    // Tapping 📋 must not follow the card's music-platform link.
     const popups = [];
     page.on('popup', p => popups.push(p));
     await star(page, 'Kaskade').click();
@@ -97,10 +97,10 @@ test.describe('Lineup Explorer ☆ picks — visitor', () => {
   });
 });
 
-test.describe('Lineup Explorer ☆ picks — member', () => {
+test.describe('Lineup Explorer 📋 picks — member', () => {
   test.beforeEach(async ({ page }) => { await blockExternal(page); });
 
-  test('first ☆ without an RSVP asks once; Interested saves the RSVP and the plan', async ({ page }) => {
+  test('first 📋 without an RSVP asks once; Interested saves the RSVP and the plan', async ({ page }) => {
     const errors = collectPageErrors(page);
     await installSupabaseStub(page, { session: makeSession(), data: memberData() });
     await page.goto(PAGE);
@@ -327,7 +327,7 @@ test.describe('Lineup Explorer header — account button', () => {
     await Promise.all([page.waitForURL(/\/app$/), btn.click()]);
   });
 
-  test('with ☆ picks, Log in carries them into the handoff', async ({ page }) => {
+  test('with 📋 picks, Log in carries them into the handoff', async ({ page }) => {
     await installSupabaseStub(page, { session: null, data: {} });
     await page.goto(PAGE);
     await star(page, 'Kaskade').click();

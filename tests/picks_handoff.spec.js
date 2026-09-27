@@ -1,4 +1,4 @@
-// Lineup Explorer → /app handoff: browser ☆ picks (rf_picks) become RSVPs
+// Lineup Explorer → /app handoff: browser 📋 picks (rf_picks) become RSVPs
 // + raver_artist_plans after login. See processPendingPicks() in app.html.
 const { test, expect } = require('@playwright/test');
 const { bootAuthedApp, seedData } = require('./helpers');
@@ -113,4 +113,19 @@ test('the Raves page links to the Lineup Explorer', async ({ page }) => {
   const link = page.locator('#page-events .rave-explorer-btn');
   await expect(link).toHaveAttribute('href', '/lineup-explorer/');
   await expect(link).toHaveAccessibleName('Open the Lineup Explorer');
+});
+
+test('app favorites use ♡ / ♥ in the artist modal', async ({ page }) => {
+  const d = data();
+  d.artists.push({ id: 'a6', name: 'Amelie Lens', name_lower: 'amelie lens', genres: [] });
+  await bootAuthedApp(page, { data: d });
+  // Seed: r-you favorites a1 (Charlotte de Witte).
+  await page.evaluate(() => openArtistSightingsModal('a1'));
+  const fav = page.locator('#artist-sightings-overlay .lineup-fav-btn');
+  await expect(fav).toHaveText('♥');
+  await expect(fav).toHaveAttribute('aria-pressed', 'true');
+  await page.evaluate(() => openArtistSightingsModal('a6'));
+  await expect(fav).toHaveText('♡');
+  await fav.click();
+  await expect(page.locator('#artist-sightings-overlay .lineup-fav-btn')).toHaveText('♥');
 });
