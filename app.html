@@ -1734,7 +1734,7 @@
     background: rgba(255,255,255,0.08); cursor: pointer; font-size: 0.72rem; line-height: 1;
     color: var(--muted);
   }
-  .lineup-plan-btn.planned { background: color-mix(in srgb, var(--neon-cyan) 22%, transparent); }
+  .lineup-plan-btn.planned { color: var(--neon-yellow); background: color-mix(in srgb, var(--neon-yellow) 18%, transparent); }
   .lineup-fav-btn {
     display: inline-flex; align-items: center; justify-content: center;
     width: 26px; height: 26px; margin-left: 8px; border-radius: 50%; border: none;
@@ -2828,7 +2828,7 @@
   }
   .bottom-sheet-overlay.open .bottom-sheet { transform: translateY(0); }
 
-  /* Lineup Explorer picks handoff — ☆ = neon yellow, Going = green, Interested = cyan */
+  /* Lineup Explorer picks handoff — 📋 picks = neon yellow, Going = green, Interested = cyan */
   .ph-list { max-height: 52vh; overflow-y: auto; margin: 0 -4px 14px; padding: 0 4px; }
   .ph-card { background: var(--surface); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 14px; margin-bottom: 10px; }
   .ph-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 8px; }
@@ -9690,7 +9690,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.69.0';
+  const APP_VERSION = '1.70.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -11143,7 +11143,7 @@
     const cards = h.items.map((it, i) => `
       <div class="ph-card">
         <div class="ph-card-head"><div class="ph-fest">${escHtml(it.name)}</div><div class="ph-date">${escHtml(it.dateLabel)}</div></div>
-        <div class="ph-chips">${it.names.map(nm => `<span class="ph-chip">☆ ${escHtml(nm)}</span>`).join('')}</div>
+        <div class="ph-chips">${it.names.map(nm => `<span class="ph-chip">📋 ${escHtml(nm)}</span>`).join('')}</div>
         <div class="ph-choice" role="group" aria-label="Your plans for ${escHtml(it.name)}">
           ${opts.map(([v, l]) => `<button type="button" class="ph-opt ph-${v}" aria-pressed="${it.choice === v}" onclick="picksHandoffChoose(${i}, '${escJsAttr(v)}')">${l}</button>`).join('')}
         </div>
@@ -27389,6 +27389,11 @@
     renderFestivalLineupSection(festId);
   }
 
+  // 📋 "My picks" toggle — same clipboard icon as the Lineup Explorer
+  // (lineup-common.js): outline when off, filled with a ✓ when on.
+  const PICK_ICON_OFF = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="5" y="4.5" width="14" height="16.5" rx="2.5"/><path d="M9 4.5v-.7A1.3 1.3 0 0 1 10.3 2.5h3.4A1.3 1.3 0 0 1 15 3.8v.7"/><path d="M8.5 10h7M8.5 13.5h7M8.5 17h4"/></svg>';
+  const PICK_ICON_ON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="5" y="4.5" width="14" height="16.5" rx="2.5" fill="currentColor"/><path d="M9 4.5v-.7A1.3 1.3 0 0 1 10.3 2.5h3.4A1.3 1.3 0 0 1 15 3.8v.7"/><path d="M8.6 13.2l2.4 2.4 4.4-4.8" stroke="#0a0512" stroke-width="2.4"/></svg>';
+
   async function dbToggleArtistPlan(festId, artistId) {
     if (String(festId).startsWith('temp_')) { showToast('Still saving — try again in a moment'); return; }
     const you = squad.find(r => r.isYou);
@@ -27429,7 +27434,7 @@
         : '';
       const planned = myPlans.has(String(a.artist_id));
       const planBtn = !achieved && canEdit
-        ? `<button type="button" class="lineup-plan-btn${planned ? ' planned' : ''}" title="${planned ? "Planning to catch them — tap to unmark" : 'Tap if you plan to catch their set'}" onclick="dbToggleArtistPlan('${escJsAttr(festId)}','${escJsAttr(a.artist_id)}')">${planned ? '⭐' : '☆'}</button>`
+        ? `<button type="button" class="lineup-plan-btn${planned ? ' planned' : ''}" aria-pressed="${planned}" title="${planned ? "Planning to catch them — tap to unmark" : 'Tap if you plan to catch their set'}" aria-label="${planned ? 'Remove from my picks' : 'Add to my picks'}" onclick="dbToggleArtistPlan('${escJsAttr(festId)}','${escJsAttr(a.artist_id)}')">${planned ? PICK_ICON_ON : PICK_ICON_OFF}</button>`
         : '';
       const removeBtn = canEdit
         ? `<button type="button" class="tag-remove-btn" title="Remove ${escHtml(artist.name)}" aria-label="Remove ${escHtml(artist.name)}" onclick="lineupRemoveArtist('${escJsAttr(festId)}','${escJsAttr(a.artist_id)}')">&nbsp;✕</button>`
@@ -32320,7 +32325,7 @@
     }
     const hadPendingRave = !!localStorage.getItem('pendingRaveSlug');
     processPendingRave(); // rave share link that brought this raver in
-    if (!hadPendingRave) processPendingPicks(); // Lineup Explorer ☆ picks that brought them in
+    if (!hadPendingRave) processPendingPicks(); // Lineup Explorer 📋 picks that brought them in
   }
 
   function obFinishExploring() {
