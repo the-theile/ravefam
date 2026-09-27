@@ -73,7 +73,7 @@
   // member-only; the page slug equals festivals.slug.
   function pageSlug() {
     var m = /^\/lineup-explorer\/([a-z0-9-]+?)(?:\.html)?\/?$/.exec(location.pathname);
-    return m ? m[1] : null;
+    return m && m[1] !== "index" ? m[1] : null;
   }
 
   var memberPromise = new Promise(function (resolve) {
@@ -109,7 +109,9 @@
 
   window.LineupMember = {
     ready: function (fn) { return memberPromise.then(fn); },
-    pageSlug: pageSlug
+    pageSlug: pageSlug,
+    client: withClient,
+    visitorId: getVisitorId
   };
 
   // First explorer page this browser ever opened. app.html reads it when a
@@ -438,5 +440,537 @@
     document.addEventListener("DOMContentLoaded", injectButton);
   } else {
     injectButton();
+  }
+})();
+
+// ☆ picks (Lineup Explorer ↔ RaveFAM integration, Phase 1a).
+// Visitors: picks live in this browser (localStorage "rf_picks", keyed by
+// page slug) until they sign up; /app imports them after login. Members:
+// picks are raver_artist_plans rows, which need a Going or Interested RSVP
+// for the festival, so a member's first ☆ on a rave they haven't RSVP'd
+// opens a one-question sheet and holds picks in the browser meanwhile.
+// Writes match app.html's (upsert ignoreDuplicates; Going and Interested are
+// mutually exclusive). Each festival page hooks in with three identical
+// lines: card() returns LineupPicks.wrap(el, a), visible() ANDs
+// LineupPicks.ok(a), and LineupPicks.init(ACTS, render) runs before the first
+// render(). b2b acts ("A b2b B") map to one plan per artist, as in the seed.
+(function () {
+  "use strict";
+
+  var STORE = "rf_picks";
+  var TIP_KEY = "rf_picks_tip";
+  var FROM_KEY = "rf_picks_from";
+  var noop = function () {};
+
+  function readAll() {
+    try {
+      var v = JSON.parse(window.localStorage.getItem(STORE) || "{}");
+      return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+    } catch (e) { return {}; }
+  }
+  function writeAll(all) { try { window.localStorage.setItem(STORE, JSON.stringify(all)); } catch (e) {} }
+
+  function eventMeta() {
+    var nodes = document.querySelectorAll('script[type="application/ld+json"]');
+    for (var i = 0; i < nodes.length; i++) {
+      try {
+        var j = JSON.parse(nodes[i].textContent);
+        if (j && /Event$|Festival$/.test(j["@type"] || "")) return { t: j.name || null, d: j.startDate || null };
+      } catch (e) {}
+    }
+    return { t: null, d: null };
+  }
+
+  function splitKeys(name) {
+    return String(name).split(/\s+b2b\s+/i).map(function (s) { return s.trim().toLowerCase(); });
+  }
+
+  var slug = null, acts = [], onRender = null, onlyPicks = false;
+  var local = [];          // act names picked in this browser for this page
+  var member = null;       // LineupMember result, once it resolves as a member
+  var rsvp = null;         // "going" | "interested" | null (members only)
+  var idsByKey = {};       // artists.name_lower -> artists.id
+  var plans = {};          // artists.id -> true: this member's plans here
+  var barEl = null, saveEl = null;
+
+  var memberLoaded = false; // plans + RSVP fetched for this festival
+  function isMemberMode() { return !!(memberLoaded && member && member.raverId && member.festival); }
+
+  function saveLocal() {
+    if (!slug) return;
+    var all = readAll();
+    if (local.length) {
+      var m = eventMeta();
+      all[slug] = { n: local.slice(), t: m.t, d: m.d, at: new Date().toISOString() };
+    } else {
+      delete all[slug];
+    }
+    writeAll(all);
+  }
+
+  function actIds(a) {
+    var ids = splitKeys(a.name).map(function (k) { return idsByKey[k]; });
+    return ids.every(Boolean) ? ids : null;
+  }
+
+  function isPicked(a) {
+    if (local.indexOf(a.name) !== -1) return true;
+    if (!isMemberMode()) return false;
+    var ids = actIds(a);
+    return !!ids && ids.every(function (id) { return plans[id]; });
+  }
+
+  function pickedActs() { return acts.filter(isPicked); }
+
+  function logEvent(name, props) {
+    window.LineupMember.client(function (sb) {
+      sb.rpc("log_analytics_event", {
+        p_event_name: name,
+        p_raver_id: member && member.raverId ? member.raverId : null,
+        p_visitor_id: window.LineupMember.visitorId(),
+        p_properties: props || {}
+      }).then(noop, noop);
+    });
+  }
+
+  // ----- toast -----
+  var toastEl = null, toastTimer = null;
+  function toast(msg, actionLabel, action) {
+    if (!toastEl) {
+      toastEl = document.createElement("div");
+      toastEl.className = "lp-toast";
+      toastEl.setAttribute("role", "status");
+      toastEl.setAttribute("aria-live", "polite");
+      document.body.appendChild(toastEl);
+    }
+    toastEl.innerHTML = "";
+    var t = document.createElement("span");
+    t.textContent = msg;
+    toastEl.appendChild(t);
+    if (actionLabel && action) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.textContent = actionLabel;
+      b.addEventListener("click", function () { hideToast(); action(); });
+      toastEl.appendChild(b);
+    }
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, actionLabel ? 6000 : 3500);
+  }
+  function hideToast() { if (toastEl) toastEl.classList.remove("show"); }
+
+  // ----- save handoff (visitors) -----
+  function goSave(fromSlug, n) {
+    var from = typeof fromSlug === "string" ? fromSlug : slug;
+    logEvent("explorer_save_click", { slug: from, picks: typeof n === "number" ? n : local.length, page: slug || "hub" });
+    try {
+      window.localStorage.setItem(FROM_KEY, JSON.stringify({ slug: from, back: location.pathname + location.search }));
+    } catch (e) {}
+    location.href = "/app?picks=1" + (from ? "&from=" + encodeURIComponent(from) : "");
+  }
+
+  // ----- hub (/lineup-explorer/): Your picks box + ☆ row on picked cards -----
+  function initHub() {
+    var cards = document.querySelectorAll(".event-card[href^='/lineup-explorer/']");
+    if (!cards.length) return;
+    var all = readAll();
+    var today = new Date().toISOString().slice(0, 10);
+    var rows = [];
+    Array.prototype.forEach.call(cards, function (c) {
+      var s = c.getAttribute("href").replace("/lineup-explorer/", "").replace(/\.html$/, "");
+      var p = all[s];
+      var names = p && Array.isArray(p.n) ? p.n.filter(function (x) { return typeof x === "string"; }) : [];
+      if (!names.length) return;
+      var row = document.createElement("div");
+      row.className = "event-picks";
+      row.textContent = "☆ " + names.length + (names.length === 1 ? " pick: " : " picks: ") +
+        names.slice(0, 3).join(", ") + (names.length > 3 ? ", …" : "");
+      var foot = c.querySelector(".event-footer");
+      c.insertBefore(row, foot || null);
+      var nameEl = c.querySelector(".event-name");
+      rows.push({
+        slug: s, names: names, at: p.at || "", href: c.getAttribute("href"),
+        title: p.t || (nameEl ? nameEl.textContent.replace(/\s+/g, " ").trim() : s),
+        past: c.dataset.date ? c.dataset.date < today : false
+      });
+    });
+    if (!rows.length) return;
+    var upcoming = rows.filter(function (r) { return !r.past; });
+    var total = upcoming.reduce(function (n, r) { return n + r.names.length; }, 0);
+    var latest = upcoming.slice().sort(function (a, b) { return a.at < b.at ? 1 : -1; })[0];
+
+    var box = document.createElement("section");
+    box.className = "lp-hub";
+    box.setAttribute("aria-labelledby", "lpHubTitle");
+    var h = document.createElement("h2");
+    h.id = "lpHubTitle";
+    h.textContent = "☆ Your picks";
+    box.appendChild(h);
+    var list = document.createElement("ul");
+    rows.forEach(function (r) {
+      var li = document.createElement("li");
+      var a = document.createElement("a");
+      a.href = r.href;
+      a.textContent = r.title;
+      li.appendChild(a);
+      var span = document.createElement("span");
+      span.textContent = " · " + r.names.slice(0, 4).join(", ") + (r.names.length > 4 ? " +" + (r.names.length - 4) : "");
+      li.appendChild(span);
+      list.appendChild(li);
+    });
+    box.appendChild(list);
+    var foot = document.createElement("div");
+    foot.className = "lp-save";
+    var msg = document.createElement("span");
+    msg.className = "lp-save-msg";
+    msg.textContent = "Your picks only live on this device. Save them to RaveFAM so they follow you and your crew can see them.";
+    foot.appendChild(msg);
+    if (latest) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.textContent = "Save my picks";
+      b.addEventListener("click", function () { goSave(latest.slug, total); });
+      foot.appendChild(b);
+    }
+    box.appendChild(foot);
+    var anchor = document.querySelector(".controls");
+    if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(box, anchor);
+  }
+
+  // ----- member writes -----
+  function planRows(ids) {
+    var seen = {};
+    return ids.filter(function (id) { if (seen[id]) return false; seen[id] = true; return true; })
+      .map(function (id) { return { raver_id: member.raverId, artist_id: id, festival_id: member.festival.id }; });
+  }
+
+  function upsertPlans(ids, done) {
+    window.LineupMember.client(function (sb) {
+      sb.from("raver_artist_plans")
+        .upsert(planRows(ids), { onConflict: "raver_id,artist_id,festival_id", ignoreDuplicates: true })
+        .then(function (res) { done(!res.error); }, function () { done(false); });
+    });
+  }
+
+  function setPlan(a, on) {
+    var ids = actIds(a);
+    if (on) {
+      ids.forEach(function (id) { plans[id] = true; });
+      upsertPlans(ids, function (ok) {
+        if (ok) return;
+        ids.forEach(function (id) { delete plans[id]; });
+        toast("⚠️ Couldn't save that pick. Try again.");
+        refresh();
+      });
+      return;
+    }
+    // Keep an artist's plan if another picked act still needs it
+    // (e.g. "Prospa" stays picked when "Prospa b2b Josh Baker" is removed).
+    var keep = {};
+    acts.forEach(function (o) {
+      if (o === a || !isPicked(o)) return;
+      (actIds(o) || []).forEach(function (id) { keep[id] = true; });
+    });
+    var drop = ids.filter(function (id) { return !keep[id]; });
+    drop.forEach(function (id) { delete plans[id]; });
+    if (!drop.length) return;
+    window.LineupMember.client(function (sb) {
+      sb.from("raver_artist_plans").delete()
+        .eq("raver_id", member.raverId).eq("festival_id", member.festival.id).in("artist_id", drop)
+        .then(function (res) {
+          if (!res.error) return;
+          drop.forEach(function (id) { plans[id] = true; });
+          toast("⚠️ Couldn't remove that pick. Try again.");
+          refresh();
+        }, noop);
+    });
+  }
+
+  // Moves browser-held picks for this page into raver_artist_plans. Acts
+  // whose artists aren't in the database yet stay in the browser.
+  function flushLocal(done) {
+    var ids = [], moved = [], keep = [];
+    local.forEach(function (name) {
+      var got = actIds({ name: name });
+      if (got) { ids = ids.concat(got); moved.push(name); } else { keep.push(name); }
+    });
+    if (!ids.length) { done(0); return; }
+    upsertPlans(ids, function (ok) {
+      if (!ok) { done(-1); return; }
+      ids.forEach(function (id) { plans[id] = true; });
+      local = keep;
+      saveLocal();
+      done(moved.length);
+    });
+  }
+
+  function writeRsvp(v, done) {
+    var fid = member.festival.id, rid = member.raverId;
+    var add = v === "going" ? "raver_festivals" : "raver_festival_interest";
+    var other = v === "going" ? "raver_festival_interest" : "raver_festivals";
+    window.LineupMember.client(function (sb) {
+      sb.from(add)
+        .upsert([{ raver_id: rid, festival_id: fid }], { onConflict: "raver_id,festival_id", ignoreDuplicates: true })
+        .then(function (res) {
+          if (res.error) { done(false, res.error); return; }
+          sb.from(other).delete().eq("raver_id", rid).eq("festival_id", fid).then(noop, noop);
+          logEvent("first_rsvp_updated", { festival_id: fid, direction: v, source: "explorer" });
+          done(true);
+        }, function (err) { done(false, err); });
+    });
+  }
+
+  // ----- first-star sheet (members) -----
+  var sheetEl = null, sheetLastFocus = null;
+  function askedKey() { return "rf_picks_asked_" + slug; }
+  function asked() { try { return !!window.sessionStorage.getItem(askedKey()); } catch (e) { return false; } }
+  function markAsked() { try { window.sessionStorage.setItem(askedKey(), "1"); } catch (e) {} }
+
+  function openSheet(actName) {
+    if (!isMemberMode()) return;
+    markAsked();
+    var fest = member.festival.name || "this rave";
+    if (!sheetEl) {
+      sheetEl = document.createElement("div");
+      sheetEl.className = "lp-overlay";
+      sheetEl.innerHTML =
+        '<div class="lp-sheet" role="dialog" aria-modal="true" aria-labelledby="lpSheetTitle">' +
+          '<div class="lp-sheet-top"><span class="lp-badge">RaveFAM</span>' +
+          '<button type="button" class="lp-x" aria-label="Close">✕</button></div>' +
+          '<h3 id="lpSheetTitle"></h3>' +
+          '<p class="lp-sub">We only ask once per rave. You can change it anytime.</p>' +
+          '<div class="lp-actions">' +
+            '<button type="button" class="lp-opt lp-going" data-v="going">🎟️ I\'m going</button>' +
+            '<button type="button" class="lp-opt lp-int" data-v="interested">👀 Interested</button>' +
+            '<button type="button" class="lp-opt lp-browse" data-v="browse">Just browsing</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(sheetEl);
+      sheetEl.addEventListener("click", function (e) {
+        if (e.target === sheetEl || e.target.closest(".lp-x")) { answer("browse"); return; }
+        var b = e.target.closest(".lp-opt");
+        if (b) answer(b.dataset.v);
+      });
+      sheetEl.addEventListener("keydown", function (e) { if (e.key === "Escape") answer("browse"); });
+    }
+    var title = sheetEl.querySelector("#lpSheetTitle");
+    title.textContent = (actName ? actName + " added to your picks. " : "") + "Are you going to " + fest + "?";
+    sheetEl.querySelectorAll(".lp-opt").forEach(function (b) {
+      b.setAttribute("aria-pressed", String(b.dataset.v === rsvp));
+      b.disabled = false;
+    });
+    sheetLastFocus = document.activeElement;
+    sheetEl.classList.add("show");
+    var first = sheetEl.querySelector(".lp-going");
+    if (first) first.focus();
+  }
+
+  function closeSheet() {
+    if (!sheetEl) return;
+    sheetEl.classList.remove("show");
+    if (sheetLastFocus && sheetLastFocus.focus && document.body.contains(sheetLastFocus)) sheetLastFocus.focus();
+  }
+
+  function answer(v) {
+    var fest = member.festival.name || "this rave";
+    if (v === "browse" || v === rsvp) {
+      closeSheet();
+      if (v === "browse" && !rsvp && local.length) toast("Picks kept on this device for now.");
+      return;
+    }
+    sheetEl.querySelectorAll(".lp-opt").forEach(function (b) { b.disabled = true; });
+    writeRsvp(v, function (ok, err) {
+      if (!ok) {
+        sheetEl.querySelectorAll(".lp-opt").forEach(function (b) { b.disabled = false; });
+        var blocked = err && /RSVP_BLOCKED/.test(err.message || "");
+        toast(blocked ? "🔒 That RSVP is blocked for this rave." : "⚠️ Couldn't save that. Try again.");
+        return;
+      }
+      rsvp = v;
+      closeSheet();
+      flushLocal(function (n) {
+        var lead = v === "going" ? "✅ You're going to " + fest + "!" : "👀 Watching " + fest + ".";
+        var tail = n > 0 ? " " + n + (n === 1 ? " pick" : " picks") + " saved." : n < 0 ? " Picks are still on this device." : "";
+        toast(lead + tail, "Change", function () { openSheet(null); });
+        refresh();
+      });
+    });
+  }
+
+  // ----- tapping ☆ -----
+  function toggle(a) {
+    var was = isPicked(a);
+    var inLocal = local.indexOf(a.name) !== -1;
+    if (was) {
+      if (inLocal) { local = local.filter(function (n) { return n !== a.name; }); saveLocal(); }
+      if (isMemberMode() && actIds(a) && actIds(a).every(function (id) { return plans[id]; })) setPlan(a, false);
+      refresh(a);
+      return;
+    }
+    if (isMemberMode() && rsvp && actIds(a)) {
+      setPlan(a, true);
+      refresh(a);
+      return;
+    }
+    local.push(a.name);
+    saveLocal();
+    refresh(a);
+    if (isMemberMode()) {
+      if (!asked()) openSheet(a.name);
+      else toast("☆ Saved on this device.", "Add to RaveFAM", function () { openSheet(null); });
+      return;
+    }
+    var tipped = false;
+    try { tipped = !!window.localStorage.getItem(TIP_KEY); window.localStorage.setItem(TIP_KEY, "1"); } catch (e) {}
+    if (!tipped) toast("☆ " + a.name + " saved on this device.", "Save to RaveFAM", function () { goSave(); });
+  }
+
+  // ----- picks bar + signup banner -----
+  function renderBar() {
+    if (!barEl) return;
+    var picked = pickedActs();
+    var n = picked.length;
+    var days = {}, order = [];
+    picked.forEach(function (a) {
+      if (!a.night) return;
+      if (!days[a.night]) { days[a.night] = 0; order.push(a.night); }
+      days[a.night]++;
+    });
+    barEl.dataset.mode = isMemberMode() ? "member" : "visitor";
+    barEl.dataset.rsvp = rsvp || "";
+    barEl.querySelector('[data-v="all"]').setAttribute("aria-pressed", String(!onlyPicks));
+    barEl.querySelector('[data-v="picks"]').setAttribute("aria-pressed", String(onlyPicks));
+    barEl.querySelector(".lp-n").textContent = n;
+    barEl.querySelector(".lp-days").textContent = order.map(function (k) {
+      return String(k).toUpperCase() + " " + days[k];
+    }).join(" · ");
+
+    var msg = "", btn = "";
+    if (onlyPicks && local.length) {
+      if (!member) {
+        msg = "Your picks only live on this device. Save them to RaveFAM so they follow you and your crew can see them.";
+        btn = "Save my picks";
+      } else if (isMemberMode() && !rsvp) {
+        msg = "These picks stay on this device until you're Going or Interested.";
+        btn = "Choose";
+      }
+    } else if (onlyPicks && !n) {
+      msg = "Tap ☆ on any artist to add it to your picks.";
+    }
+    saveEl.hidden = !msg;
+    saveEl.querySelector(".lp-save-msg").textContent = msg;
+    var b = saveEl.querySelector("button");
+    b.hidden = !btn;
+    b.textContent = btn;
+  }
+
+  function buildBar() {
+    var anchor = document.getElementById("count") || document.getElementById("deck");
+    if (!anchor || !anchor.parentNode) return;
+    barEl = document.createElement("div");
+    barEl.className = "lp-bar";
+    barEl.setAttribute("role", "group");
+    barEl.setAttribute("aria-label", "Show all artists or only your picks");
+    barEl.innerHTML =
+      '<button type="button" class="lp-f" data-v="all">All artists</button>' +
+      '<button type="button" class="lp-f" data-v="picks"><span aria-hidden="true">☆</span> My picks <b class="lp-n">0</b></button>' +
+      '<span class="lp-days"></span>';
+    barEl.addEventListener("click", function (e) {
+      var b = e.target.closest(".lp-f");
+      if (!b) return;
+      onlyPicks = b.dataset.v === "picks";
+      refresh();
+    });
+    saveEl = document.createElement("div");
+    saveEl.className = "lp-save";
+    saveEl.hidden = true;
+    saveEl.innerHTML = '<span class="lp-save-msg"></span><button type="button"></button>';
+    saveEl.querySelector("button").addEventListener("click", function () {
+      if (!member) goSave(); else openSheet(null);
+    });
+    anchor.parentNode.insertBefore(barEl, anchor);
+    anchor.parentNode.insertBefore(saveEl, anchor);
+  }
+
+  function refresh(focusAct) {
+    renderBar();
+    if (onRender) onRender();
+    if (focusAct) {
+      var btns = document.querySelectorAll(".pick");
+      for (var i = 0; i < btns.length; i++) {
+        if (btns[i].dataset.n === focusAct.name) { btns[i].focus(); break; }
+      }
+    }
+  }
+
+  // ----- member load -----
+  function loadMember() {
+    window.LineupMember.ready(function (m) {
+      if (!m || !m.isMember) return;
+      member = m;
+      if (!m.raverId || !m.festival) { refresh(); return; }
+      var keys = {};
+      acts.forEach(function (a) { splitKeys(a.name).forEach(function (k) { keys[k] = true; }); });
+      window.LineupMember.client(function (sb) {
+        var fid = m.festival.id, rid = m.raverId;
+        Promise.all([
+          sb.from("artists").select("id,name_lower").in("name_lower", Object.keys(keys)),
+          sb.from("raver_artist_plans").select("artist_id").eq("raver_id", rid).eq("festival_id", fid),
+          sb.from("raver_festivals").select("festival_id").eq("raver_id", rid).eq("festival_id", fid),
+          sb.from("raver_festival_interest").select("festival_id").eq("raver_id", rid).eq("festival_id", fid)
+        ]).then(function (out) {
+          ((out[0] && out[0].data) || []).forEach(function (r) { idsByKey[r.name_lower] = r.id; });
+          ((out[1] && out[1].data) || []).forEach(function (r) { plans[r.artist_id] = true; });
+          rsvp = (out[2].data || []).length ? "going" : (out[3].data || []).length ? "interested" : null;
+          memberLoaded = true;
+          refresh();
+          if (!local.length) return;
+          if (rsvp) {
+            flushLocal(function (n) { if (n > 0) toast("☆ " + n + (n === 1 ? " pick" : " picks") + " synced to your RaveFAM."); refresh(); });
+          } else if (!asked()) {
+            setTimeout(function () { openSheet(null); }, 900);
+          }
+        }, function () { refresh(); });
+      });
+    });
+  }
+
+  window.LineupPicks = {
+    init: function (list, render) {
+      slug = window.LineupMember ? window.LineupMember.pageSlug() : null;
+      acts = list || [];
+      onRender = render;
+      var saved = slug ? readAll()[slug] : null;
+      var names = {};
+      acts.forEach(function (a) { names[a.name] = true; });
+      local = saved && Array.isArray(saved.n) ? saved.n.filter(function (n) { return names[n]; }) : [];
+      buildBar();
+      renderBar();
+      loadMember();
+    },
+    ok: function (a) { return !onlyPicks || isPicked(a); },
+    wrap: function (el, a) {
+      var picked = isPicked(a);
+      var w = document.createElement("div");
+      w.className = "act-wrap" + (picked ? " picked" : "");
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "pick";
+      b.dataset.n = a.name;
+      b.setAttribute("aria-pressed", String(picked));
+      b.setAttribute("aria-label", picked ? "Remove " + a.name + " from my picks" : "Add " + a.name + " to my picks");
+      b.innerHTML = '<span aria-hidden="true">' + (picked ? "★" : "☆") + "</span>";
+      b.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); toggle(a); });
+      w.appendChild(el);
+      w.appendChild(b);
+      return w;
+    },
+    all: readAll
+  };
+
+  if (window.LineupMember && !window.LineupMember.pageSlug()) {
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initHub);
+    else initHub();
   }
 })();
