@@ -9659,7 +9659,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.66.0';
+  const APP_VERSION = '1.66.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -16726,7 +16726,7 @@
 
   async function dbLoadMissingGenreArtists() {
     if (!isModerator()) return [];
-    const { data, error } = await sb.from('artists').select('id,name,genres').order('name');
+    const { data, error } = await sbSelectAll(() => sb.from('artists').select('id,name,genres').order('name').order('id'));
     if (error) { console.error('artists load error', error); return []; }
     return (data || []).filter(a => !a.genres || a.genres.length === 0);
   }
@@ -26965,14 +26965,28 @@
   let artists = [];
   let artistAppearances = [];
 
+  // PostgREST caps every response at 1000 rows (Supabase max_rows) without an
+  // error — a bigger table just comes back short. The artist catalog tables
+  // are past that, so they page through with .range(). build() must return a
+  // fresh query with a stable order, or pages can overlap or skip rows.
+  async function sbSelectAll(build, pageSize = 1000) {
+    const rows = [];
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await build().range(from, from + pageSize - 1);
+      if (error) return { data: null, error };
+      rows.push(...(data || []));
+      if (!data || data.length < pageSize) return { data: rows, error: null };
+    }
+  }
+
   async function dbLoadArtists() {
-    const { data } = await sb.from('artists').select('id,name,genres').order('name');
+    const { data } = await sbSelectAll(() => sb.from('artists').select('id,name,genres').order('name').order('id'));
     if (data) artists = data;
   }
 
   async function dbLoadArtistAppearances() {
-    const { data } = await sb.from('artist_festival_appearances')
-      .select('artist_id,festival_id,is_headliner,night,note');
+    const { data } = await sbSelectAll(() => sb.from('artist_festival_appearances')
+      .select('artist_id,festival_id,is_headliner,night,note').order('id'));
     if (data) artistAppearances = data;
   }
 
@@ -26981,7 +26995,8 @@
   let raverArtistSightings = [];
 
   async function dbLoadArtistSightings() {
-    const { data } = await sb.from('raver_artist_sightings').select('raver_id,artist_id,festival_id');
+    const { data } = await sbSelectAll(() => sb.from('raver_artist_sightings').select('raver_id,artist_id,festival_id')
+      .order('raver_id').order('festival_id').order('artist_id'));
     if (data) raverArtistSightings = data;
   }
 
@@ -26991,7 +27006,8 @@
   let raverArtistPlans = [];
 
   async function dbLoadArtistPlans() {
-    const { data } = await sb.from('raver_artist_plans').select('raver_id,artist_id,festival_id');
+    const { data } = await sbSelectAll(() => sb.from('raver_artist_plans').select('raver_id,artist_id,festival_id')
+      .order('raver_id').order('festival_id').order('artist_id'));
     if (data) raverArtistPlans = data;
   }
 
