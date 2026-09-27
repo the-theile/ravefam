@@ -368,6 +368,8 @@ async function installSupabaseStub(page, opts = {}) {
             return row;
           }
           function exec() {
+            // Canned RPC results a spec can seed: data.__rpc = { fn_name: result }.
+            if (store.__rpc && Object.prototype.hasOwnProperty.call(store.__rpc, fn)) return { data: clone(store.__rpc[fn]), error: null };
             if (fn === 'get_festival_history') return { data: historyRows('festival', args.p_festival_id, args.p_limit), error: null };
             if (fn === 'get_crew_history') return { data: historyRows('crew', args.p_crew_id, args.p_limit), error: null };
             if (fn === 'get_raver_history') return { data: historyRows('raver', args.p_raver_id, args.p_limit), error: null };
