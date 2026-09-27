@@ -505,3 +505,116 @@ test.describe('Lineup Explorer 2b — sharing', () => {
     await expect(page.locator('.lp-share')).toBeHidden();
   });
 });
+
+test.describe('Lineup Explorer 3a — most wanted', () => {
+  test.beforeEach(async ({ page }) => { await blockExternal(page); });
+
+  function mwData(extra = {}) {
+    return memberData({
+      artists: [
+        { id: 1, name: 'Kaskade', name_lower: 'kaskade' },
+        { id: 9, name: 'Alesso', name_lower: 'alesso' },
+      ],
+      raver_festivals: [{ raver_id: 'r1', festival_id: 'f1' }],
+      __rpc: {
+        get_lineup_want_counts: { ok: true, slug: SLUG, total_plans: 40, artists: [
+          { artist_id: 1, name: 'Kaskade', want: 12, gain_7d: 3 },
+          { artist_id: 9, name: 'Alesso', want: 6, gain_7d: 0 },
+          { artist_id: 99, name: 'Not On This Page', want: 5, gain_7d: 0 },
+        ] },
+        get_lineup_crew_pulse: { ok: true,
+          crews: [{ id: 'c1', n: 'Bass Syndicate', col: '#FF2D78' }],
+          mates: { m1: { n: 'Sam', a: null, g: null, s: 'going', u: false, c: ['c1'] },
+                   m2: { n: 'Kai', a: null, g: null, s: 'going', u: false, c: ['c1'] } },
+          going: ['m1', 'm2'], interested: [], picks: { 1: ['m1', 'm2'] } },
+      },
+      ...extra,
+    });
+  }
+
+  test('visitors see the top acts on this page, with a Join prompt', async ({ page }) => {
+    const errors = collectPageErrors(page);
+    await installSupabaseStub(page, { session: null, data: mwData() });
+    await page.goto(PAGE);
+    const mw = page.locator('.lp-mw');
+    await expect(mw).toBeVisible();
+    await expect(mw.locator('h2')).toHaveText('🔥 Most wanted here');
+    const rows = mw.locator('.lp-mw-row');
+    await expect(rows).toHaveCount(2); // the act that isn't on this page is left out
+    await expect(rows.nth(0).locator('.lp-mw-name')).toHaveText('Kaskade');
+    await expect(rows.nth(0).locator('.lp-want')).toHaveText('12 want to see');
+    await expect(rows.nth(0).locator('.lp-mw-gain')).toHaveText('+3 this week');
+    await expect(rows.nth(0).locator('.lp-heat i')).toHaveAttribute('style', /width: 100%/);
+    await expect(rows.nth(1).locator('.lp-mw-name')).toHaveText('Alesso');
+    await expect(rows.nth(1).locator('.lp-mw-gain')).toHaveCount(0);
+    await expect(mw.locator('.lp-faces')).toHaveCount(0);
+    await expect(mw.locator('.lp-mw-join')).toContainText('Make your picks count');
+
+    // 📋 in the panel is the same pick as on the card.
+    await rows.nth(1).locator('.lp-mw-pick').click();
+    await expect(rows.nth(1).locator('.lp-mw-pick')).toHaveAttribute('aria-pressed', 'true');
+    await expect(star(page, 'Alesso')).toHaveAttribute('aria-pressed', 'true');
+    await expect(rows.nth(1).locator('.lp-mw-pick')).toBeFocused();
+
+    // Tapping a name brings its card into view.
+    await rows.nth(0).locator('.lp-mw-name').click();
+    await expect(page.locator('.act-wrap', { has: star(page, 'Kaskade') })).toHaveClass(/lp-flash/);
+
+    await Promise.all([
+      page.waitForURL(/\/app\?picks=1&from=edc-orlando-2026/),
+      mw.getByRole('button', { name: 'Join free' }).click(),
+    ]);
+    expect(errors).toEqual([]);
+  });
+
+  test('members see crew faces and 📋 saves a plan', async ({ page }) => {
+    await installSupabaseStub(page, { session: makeSession(), data: mwData() });
+    await page.goto(PAGE);
+    await expect(page.locator('.lp-bar')).toHaveAttribute('data-mode', 'member');
+    const mw = page.locator('.lp-mw');
+    await expect(mw.locator('.lp-mw-join')).toHaveCount(0);
+    const kaskade = mw.locator('.lp-mw-row').nth(0);
+    await expect(kaskade.locator('.lp-faces')).toHaveAttribute('aria-label', '2 crewmates picked this');
+    await expect(kaskade.locator('.lp-face')).toHaveCount(2);
+
+    await mw.locator('.lp-mw-row').nth(1).locator('.lp-mw-pick').click();
+    await expect(mw.locator('.lp-mw-row').nth(1).locator('.lp-mw-pick')).toHaveAttribute('aria-pressed', 'true');
+    await expect.poll(() => page.evaluate(() =>
+      window.__store.raver_artist_plans.map(p => p.artist_id + ':' + p.festival_id))).toEqual(['9:f1']);
+  });
+
+  test('stays hidden when nothing has 5+ picks yet', async ({ page }) => {
+    const d = mwData();
+    d.__rpc.get_lineup_want_counts = { ok: true, slug: SLUG, total_plans: null, artists: [] };
+    await installSupabaseStub(page, { session: null, data: d });
+    await page.goto(PAGE);
+    await expect(page.locator('.lp-bar')).toBeVisible();
+    await expect(page.locator('.lp-mw')).toBeHidden();
+  });
+
+  test('hub cards show the top artist and can sort by most wanted', async ({ page }) => {
+    await installSupabaseStub(page, { session: null, data: memberData({
+      __rpc: { get_lineup_hub_most_wanted: { ok: true, fests: [
+        { slug: 'iii-points-2026', top: 'Four Tet', want: 40, fans: 55 },
+        { slug: SLUG, top: 'Kaskade', want: 12, fans: 20 },
+        { slug: 'seven-stars-2026', top: null, want: null, fans: 6 },
+      ] } },
+    }) });
+    await page.goto('/lineup-explorer/index.html');
+    const edc = page.locator(`.event-card[href="/lineup-explorer/${SLUG}"]`);
+    await expect(edc.locator('.lp-hub-mw')).toHaveText('🔥 Most wanted: Kaskade (12)');
+    await expect(page.locator('.event-card[href="/lineup-explorer/seven-stars-2026"] .lp-hub-mw')).toHaveCount(0);
+
+    const firstHref = () => page.evaluate(() =>
+      Array.from(document.querySelectorAll('.grid .event-card')).find(c => c.style.display !== 'none').getAttribute('href'));
+    const before = await firstHref();
+    const sort = page.locator('.controls .lp-sort');
+    await sort.click();
+    await expect(sort).toHaveAttribute('aria-pressed', 'true');
+    expect(await firstHref()).toBe('/lineup-explorer/iii-points-2026');
+    const order = await page.evaluate(() => Array.from(document.querySelectorAll('.grid .event-card')).slice(0, 3).map(c => c.getAttribute('href')));
+    expect(order).toEqual(['/lineup-explorer/iii-points-2026', `/lineup-explorer/${SLUG}`, '/lineup-explorer/seven-stars-2026']);
+    await sort.click();
+    expect(await firstHref()).toBe(before);
+  });
+});
