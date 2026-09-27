@@ -52,6 +52,9 @@ All events are logged via `logAnalyticsEvent(eventName, { crew_id, raver_id, ...
 | `signup_completed` | `logSignupCompletedIfNew()` in `bootApp()`, on the first boot of an account created in the last 24h | — | — | `source` (`explorer` if this browser opened a Lineup Explorer page first, via `rf_first_explorer`; else `other`), `first_explorer_page` | once per user (checked in the RPC; signed-in callers only) |
 | `explorer_save_click` | `goSave()` in `lineup-explorer/lineup-common.js`: "Save my picks" / "Save to RaveFAM" on a lineup page or the hub | — | ✅ if a member | `slug` (rave the handoff starts on), `picks`, `page` (`hub` or the page slug) | none (one row per tap) |
 | `picks_handoff_saved` | `savePicksHandoff()` in `app.html`, after the Welcome to the fam sheet saves browser ☆ picks | — | — | `festivals`, `picks`, `failed` | none (one row per save) |
+| `lineup_share_created` | Share sheet opened in `lineup-common.js` (`openShareSheet()`), after `get_or_create_share_link` returns | — | ✅ | `slug`, `picks` | none |
+| `lineup_share_posted` | `postToHuddle()` in `lineup-common.js`, after the `lineup` message is posted to a crew's rave Huddle | — | ✅ | `slug`, `picks` | none |
+| `lineup_share_opened` | `loadShared()` in `lineup-common.js`, when a `?by=` link resolves for the page | — | ✅ if a member | `slug`, `picks` | none |
 
 The PM dashboard's **🔭 Lineup Explorer → Members** section (`get_explorer_metrics()`,
 `20260927000005_explorer_metrics.sql`) joins first explorer pageviews to

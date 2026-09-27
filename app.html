@@ -4265,6 +4265,10 @@
   .hd-vdur { font-family: var(--hd-mono); font-size: 0.66rem; color: var(--muted); flex-shrink: 0; }
 
   .hd-meetup { display: flex; flex-direction: column; gap: 4px; }
+  .hd-lineup { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,230,0,0.35); background: rgba(255,230,0,0.07); }
+  .hd-lineup-title { font-weight: 600; line-height: 1.4; }
+  .hd-lineup-open { align-self: flex-start; font-size: 0.8rem; font-weight: 700; color: var(--neon-yellow); text-decoration: none; min-height: 32px; display: inline-flex; align-items: center; }
+  .hd-lineup-open:hover { text-decoration: underline; }
   .hd-meetup-title { font-family: var(--hd-mono); font-weight: 600; font-size: 0.78rem; color: var(--neon-yellow); text-transform: uppercase; }
   .hd-meetup-when { font-size: 0.7rem; color: var(--muted); }
   .hd-meetup-map {
@@ -9690,7 +9694,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.71.0';
+  const APP_VERSION = '1.72.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -18826,12 +18830,32 @@
     if (m.kind === 'photo') return '📸 Photo';
     if (m.kind === 'voice') return '🎤 Voice note';
     if (m.kind === 'meetup') return `📍 ${m.body || 'Meetup pin'}`;
+    if (m.kind === 'lineup') return m.body || '📋 Shared their lineup picks';
     if (m.kind === 'beacon') return `📣 ${m.body || 'Beacon'}`;
     return m.body || '';
   }
 
+  // A shared Lineup Explorer picks link ('lineup' messages, posted from the
+  // explorer's Share sheet). Only ever links back into /lineup-explorer/ on
+  // this site, as a relative path, whatever the stored URL says.
+  function huddleLineupHref(url) {
+    try {
+      const u = new URL(url, location.origin);
+      if (!/^\/lineup-explorer\/[a-z0-9-]+$/.test(u.pathname)) return null;
+      const by = u.searchParams.get('by');
+      return u.pathname + (by && /^[a-z0-9-]{4,40}$/.test(by) ? '?by=' + by : '');
+    } catch (e) { return null; }
+  }
+
   // ── Message stream ──
   function huddleMessageBodyHTML(m, senderRaver, senderName) {
+    if (m.kind === 'lineup') {
+      const href = huddleLineupHref(m.media_url);
+      return `<div class="hd-lineup">
+          <span class="hd-lineup-title">${escHtml(m.body || '📋 Shared their lineup picks')}</span>
+          ${href ? `<a class="hd-lineup-open" href="${escHtml(href)}">Open the lineup →</a>` : ''}
+        </div>`;
+    }
     if (m.kind === 'photo') {
       return `<img class="huddle-bubble-photo" src="${escHtml(m.media_url)}" alt="Shared photo" loading="lazy" role="button" tabindex="0" onclick="openPhotoLightbox && openPhotoLightbox(this.src)">`;
     }
