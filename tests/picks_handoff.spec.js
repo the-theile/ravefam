@@ -106,3 +106,11 @@ test('?picks=1&from= sets the pending handoff and is stripped from the URL', asy
   await expect(page.locator('#picks-handoff-overlay.open')).toHaveCount(0);
   expect(await page.evaluate(() => localStorage.getItem('pendingPicksHandoff'))).toBeNull();
 });
+
+test('the Raves page links to the Lineup Explorer', async ({ page }) => {
+  await bootAuthedApp(page, { data: data() });
+  await page.evaluate(() => switchTab('events'));
+  const link = page.locator('#page-events .rave-explorer-btn');
+  await expect(link).toHaveAttribute('href', '/lineup-explorer/');
+  await expect(link).toHaveAccessibleName('Open the Lineup Explorer');
+});
