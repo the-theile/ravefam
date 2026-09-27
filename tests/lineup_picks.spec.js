@@ -50,7 +50,10 @@ test.describe('Lineup Explorer ☆ picks — visitor', () => {
     await expect(star(page, 'Kaskade')).toHaveAttribute('aria-pressed', 'true');
     expect(popups).toHaveLength(0);
 
-    await expect(page.locator('.lp-toast')).toContainText('saved on this device');
+    await expect(page.locator('.lp-toast')).toContainText('added to your picks on this device');
+    // 📋 toggle: outline clipboard off, filled clipboard with a ✓ on.
+    await expect(star(page, 'Kaskade').locator('rect[fill="currentColor"]')).toHaveCount(1);
+    await expect(star(page, 'Alesso').locator('rect[fill="currentColor"]')).toHaveCount(0);
     await expect(page.locator('.lp-toast button')).toHaveText('Save to RaveFAM');
 
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('rf_picks')));
@@ -199,7 +202,7 @@ test.describe('Lineup Explorer hub — Your picks', () => {
     await expect(hub).toBeVisible();
     await expect(hub.locator('li')).toHaveCount(2);
     await expect(hub).toContainText('EDC Orlando 2026');
-    await expect(page.locator('.event-card[href="/lineup-explorer/edc-orlando-2026"] .event-picks')).toHaveText('☆ 2 picks: Kaskade, Alesso');
+    await expect(page.locator('.event-card[href="/lineup-explorer/edc-orlando-2026"] .event-picks')).toHaveText('📋 2 picks: Kaskade, Alesso');
     await Promise.all([
       page.waitForURL(/\/app\?picks=1&from=edc-orlando-2026/),
       hub.getByRole('button', { name: 'Save my picks' }).click(),
@@ -297,7 +300,7 @@ test.describe('Lineup Explorer hub — members (For You)', () => {
     await expect(row).toHaveCount(1);
     await expect(row.locator('.lp-b')).toHaveText('Going');
     await expect(row.locator('.lp-season-name')).toHaveText('EDC Orlando 2026');
-    await expect(row.locator('.lp-season-meta')).toContainText('☆ 1 · ♡ 1');
+    await expect(row.locator('.lp-season-meta')).toContainText('📋 1 · ♡ 1');
     await expect(row.locator('.lp-season-open')).toHaveAttribute('href', '/app?rave=edc-orlando-2026');
 
     const chip = fy.locator('.lp-tour-chip', { hasText: 'Kaskade' });
@@ -308,7 +311,7 @@ test.describe('Lineup Explorer hub — members (For You)', () => {
 
     const badges = page.locator('.event-card[href="/lineup-explorer/edc-orlando-2026"] .lp-badges');
     await expect(badges.locator('.lp-b-going')).toHaveText('🎟️ Going');
-    await expect(badges.locator('.lp-b-picks')).toHaveText('☆ 1 pick');
+    await expect(badges.locator('.lp-b-picks')).toHaveText('📋 1 pick');
     await expect(badges.locator('.lp-b-fav')).toHaveText('♡ 1 favorite playing: Kaskade');
   });
 });

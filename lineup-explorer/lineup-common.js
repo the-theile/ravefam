@@ -457,6 +457,14 @@
 (function () {
   "use strict";
 
+  // 📋 pick toggle: outline clipboard (off) / filled clipboard with a ✓ (on).
+  var CLIP_OFF = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+    '<rect x="5" y="4.5" width="14" height="16.5" rx="2.5"/><path d="M9 4.5v-.7A1.3 1.3 0 0 1 10.3 2.5h3.4A1.3 1.3 0 0 1 15 3.8v.7"/>' +
+    '<path d="M8.5 10h7M8.5 13.5h7M8.5 17h4"/></svg>';
+  var CLIP_ON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+    '<rect x="5" y="4.5" width="14" height="16.5" rx="2.5" fill="currentColor"/><path d="M9 4.5v-.7A1.3 1.3 0 0 1 10.3 2.5h3.4A1.3 1.3 0 0 1 15 3.8v.7"/>' +
+    '<path d="M8.6 13.2l2.4 2.4 4.4-4.8" stroke="#0a0512" stroke-width="2.2"/></svg>';
+
   var STORE = "rf_picks";
   var TIP_KEY = "rf_picks_tip";
   var FROM_KEY = "rf_picks_from";
@@ -726,7 +734,7 @@
       if (!names.length) return;
       var row = document.createElement("div");
       row.className = "event-picks";
-      row.textContent = "☆ " + names.length + (names.length === 1 ? " pick: " : " picks: ") +
+      row.textContent = "📋 " + names.length + (names.length === 1 ? " pick: " : " picks: ") +
         names.slice(0, 3).join(", ") + (names.length > 3 ? ", …" : "");
       var foot = c.querySelector(".event-footer");
       c.insertBefore(row, foot || null);
@@ -747,7 +755,7 @@
     box.setAttribute("aria-labelledby", "lpHubTitle");
     var h = document.createElement("h2");
     h.id = "lpHubTitle";
-    h.textContent = "☆ Your picks";
+    h.textContent = "📋 Your picks";
     box.appendChild(h);
     var list = document.createElement("ul");
     rows.forEach(function (r) {
@@ -853,7 +861,7 @@
       if (!st && !picks && !fav.length) return;
       var row = el("div", "lp-badges");
       if (st) row.appendChild(el("span", "lp-b lp-b-" + st, st === "going" ? "🎟️ Going" : "👀 Interested"));
-      if (picks) row.appendChild(el("span", "lp-b lp-b-picks", "☆ " + picks + (picks === 1 ? " pick" : " picks")));
+      if (picks) row.appendChild(el("span", "lp-b lp-b-picks", "📋 " + picks + (picks === 1 ? " pick" : " picks")));
       if (fav.length) row.appendChild(el("span", "lp-b lp-b-fav",
         "♡ " + fav.length + (fav.length === 1 ? " favorite playing: " : " favorites playing: ") +
         fav.slice(0, 3).join(", ") + (fav.length > 3 ? ", …" : "")));
@@ -889,7 +897,7 @@
           var days = Math.round((new Date(p[0], p[1] - 1, p[2]) - today) / 86400000);
           parts.push(days > 1 ? "in " + days + " days" : days === 1 ? "tomorrow" : days === 0 ? "today" : "on now");
         }
-        if (planN[f.id]) parts.push("☆ " + planN[f.id]);
+        if (planN[f.id]) parts.push("📋 " + planN[f.id]);
         if (favPlaying[f.slug]) parts.push("♡ " + favPlaying[f.slug].length);
         li.appendChild(el("span", "lp-season-meta", parts.join(" · ")));
         var open = el("a", "lp-season-open", "Open in RaveFAM");
@@ -1118,12 +1126,12 @@
     refresh(a);
     if (isMemberMode()) {
       if (!asked()) openSheet(a.name);
-      else toast("☆ Saved on this device.", "Add to RaveFAM", function () { openSheet(null); });
+      else toast("📋 Saved on this device.", "Add to RaveFAM", function () { openSheet(null); });
       return;
     }
     var tipped = false;
     try { tipped = !!window.localStorage.getItem(TIP_KEY); window.localStorage.setItem(TIP_KEY, "1"); } catch (e) {}
-    if (!tipped) toast("☆ " + a.name + " saved on this device.", "Save to RaveFAM", function () { goSave(); });
+    if (!tipped) toast("📋 " + a.name + " added to your picks on this device.", "Save to RaveFAM", function () { goSave(); });
   }
 
   // ----- picks bar + signup banner -----
@@ -1170,7 +1178,7 @@
         btn = "Choose";
       }
     } else if (view === "picks" && !n) {
-      msg = "Tap ☆ on any artist to add it to your picks.";
+      msg = "Tap 📋 on any artist to add it to your picks.";
     } else if (view === "favs" && !favN) {
       msg = "Tap ♡ on an artist to follow them across every lineup.";
     }
@@ -1190,7 +1198,7 @@
     barEl.setAttribute("aria-label", "Show all artists or only your picks");
     barEl.innerHTML =
       '<button type="button" class="lp-f" data-v="all">All artists</button>' +
-      '<button type="button" class="lp-f" data-v="picks"><span aria-hidden="true">☆</span> My picks <b class="lp-n">0</b></button>' +
+      '<button type="button" class="lp-f" data-v="picks"><span aria-hidden="true">📋</span> My picks <b class="lp-n">0</b></button>' +
       '<button type="button" class="lp-f lp-fav-f" data-v="favs" hidden><span aria-hidden="true">♡</span> Favorites <b class="lp-nf">0</b></button>' +
       '<button type="button" class="lp-sort" hidden aria-pressed="false">🔥 Most wanted</button>' +
       '<span class="lp-days"></span>' +
@@ -1269,7 +1277,7 @@
           refresh();
           if (!local.length) return;
           if (rsvp) {
-            flushLocal(function (n) { if (n > 0) toast("☆ " + n + (n === 1 ? " pick" : " picks") + " synced to your RaveFAM."); refresh(); });
+            flushLocal(function (n) { if (n > 0) toast("📋 " + n + (n === 1 ? " pick" : " picks") + " synced to your RaveFAM."); refresh(); });
           } else if (!asked()) {
             setTimeout(function () { openSheet(null); }, 900);
           }
@@ -1304,7 +1312,7 @@
       b.dataset.n = a.name;
       b.setAttribute("aria-pressed", String(picked));
       b.setAttribute("aria-label", picked ? "Remove " + a.name + " from my picks" : "Add " + a.name + " to my picks");
-      b.innerHTML = '<span aria-hidden="true">' + (picked ? "★" : "☆") + "</span>";
+      b.innerHTML = picked ? CLIP_ON : CLIP_OFF;
       b.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); toggle(a); });
       var pulse = pulseEl(a);
       if (pulse) el.insertBefore(pulse, el.querySelector(".foot"));
