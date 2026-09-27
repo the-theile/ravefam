@@ -145,3 +145,22 @@ test('?invite=<raverId> opens the claim sheet for an unclaimed squad profile', a
   await expect(page.locator('#qr-modal')).toContainText('QRJOTO');
   expect(await page.evaluate(() => localStorage.getItem('pendingInviteRaver'))).toBeNull();
 });
+
+test('Huddle lineup cards only link back into the Lineup Explorer', async ({ page }) => {
+  await bootAuthedApp(page, { data: data() });
+  const r = await page.evaluate(() => ({
+    ok: huddleLineupHref('https://myravefam.com/lineup-explorer/edc-orlando-2026?by=jo-0a1b2c3d4e'),
+    offsite: huddleLineupHref('https://evil.example/lineup-explorer/edc-orlando-2026?by=jo-0a1b2c3d4e'),
+    badPath: huddleLineupHref('https://myravefam.com/app?x=1'),
+    js: huddleLineupHref('javascript:alert(1)'),
+    badToken: huddleLineupHref('/lineup-explorer/edc-orlando-2026?by=<script>'),
+    html: huddleMessageBodyHTML({ kind: 'lineup', body: '📋 My picks for EDC: <b>x</b>', media_url: '/lineup-explorer/edc-orlando-2026?by=jo-0a1b2c3d4e' }),
+  }));
+  expect(r.ok).toBe('/lineup-explorer/edc-orlando-2026?by=jo-0a1b2c3d4e');
+  expect(r.offsite).toBe('/lineup-explorer/edc-orlando-2026?by=jo-0a1b2c3d4e'); // rebuilt as a relative path
+  expect(r.badPath).toBeNull();
+  expect(r.js).toBeNull();
+  expect(r.badToken).toBe('/lineup-explorer/edc-orlando-2026');
+  expect(r.html).toContain('&lt;b&gt;x&lt;/b&gt;');
+  expect(r.html).toContain('href="/lineup-explorer/edc-orlando-2026?by=jo-0a1b2c3d4e"');
+});

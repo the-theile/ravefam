@@ -494,7 +494,7 @@
   }
 
   var slug = null, acts = [], onRender = null;
-  var view = "all";        // "all" | "picks" | "favs" | "crew" (favs, crew: members only)
+  var view = "all";        // "all" | "picks" | "favs" | "crew" | "shared" (favs, crew: members only)
   var sortWanted = false;  // "🔥 Most wanted" sort (members only)
   var local = [];          // act names picked in this browser for this page
   var member = null;       // LineupMember result, once it resolves as a member
@@ -1294,7 +1294,7 @@
     });
     barEl.dataset.mode = isMemberMode() ? "member" : "visitor";
     barEl.dataset.rsvp = rsvp || "";
-    ["all", "picks", "favs", "crew"].forEach(function (v) {
+    ["all", "picks", "favs", "crew", "shared"].forEach(function (v) {
       barEl.querySelector('[data-v="' + v + '"]').setAttribute("aria-pressed", String(view === v));
     });
     var member = isMemberMode();
@@ -1302,6 +1302,13 @@
     var crewN = member ? acts.filter(function (a) { return actCrew(a).length; }).length : 0;
     barEl.querySelector('[data-v="crew"]').hidden = !crewN && view !== "crew";
     barEl.querySelector(".lp-nc").textContent = crewN;
+    var shBtn = barEl.querySelector('[data-v="shared"]');
+    shBtn.hidden = !shared;
+    if (shared) {
+      shBtn.querySelector(".lp-sn").textContent = shared.first + "'s picks";
+      shBtn.querySelector(".lp-nsh").textContent = shared.n;
+    }
+    barEl.querySelector(".lp-share").hidden = !member || !rsvp;
     var sortBtn = barEl.querySelector(".lp-sort");
     sortBtn.hidden = !member;
     sortBtn.setAttribute("aria-pressed", String(sortWanted));
@@ -1320,6 +1327,7 @@
     }).join(" · ");
 
     renderCrewPanel();
+    renderShareBanner();
     var msg = "", btn = "";
     if (view === "picks" && local.length) {
       if (!member) {
@@ -1353,11 +1361,14 @@
       '<button type="button" class="lp-f" data-v="picks"><span aria-hidden="true">📋</span> My picks <b class="lp-n">0</b></button>' +
       '<button type="button" class="lp-f lp-fav-f" data-v="favs" hidden><span aria-hidden="true">♡</span> Favorites <b class="lp-nf">0</b></button>' +
       '<button type="button" class="lp-f lp-crew-f" data-v="crew" hidden><span aria-hidden="true">👥</span> Crew picks <b class="lp-nc">0</b></button>' +
+      '<button type="button" class="lp-f lp-shared-f" data-v="shared" hidden><span aria-hidden="true">📋</span> <span class="lp-sn"></span> <b class="lp-nsh">0</b></button>' +
+      '<button type="button" class="lp-share" hidden>📤 Share my picks</button>' +
       '<button type="button" class="lp-sort" hidden aria-pressed="false">🔥 Most wanted</button>' +
       '<span class="lp-days"></span>' +
       '<span class="lp-meta" hidden></span>';
     barEl.addEventListener("click", function (e) {
       if (e.target.closest(".lp-sort")) { sortWanted = !sortWanted; refresh(); return; }
+      if (e.target.closest(".lp-share")) { openShareSheet(); return; }
       var b = e.target.closest(".lp-f");
       if (!b) return;
       view = b.dataset.v;
@@ -1399,6 +1410,184 @@
         });
         refresh();
       }, noop);
+    });
+  }
+
+  // ----- sharing (Phase 2b) -----
+  // Owner: one link per raver per festival (?by=<token>) from
+  // get_or_create_share_link; Copy / phone share / Post to a crew Huddle /
+  // Turn off. Viewer: get_shared_lineup(token) returns the sharer's first
+  // name and picks for this page only.
+  var shared = null;       // { first, keys: { name_lower: true }, n }
+  var sharedGone = false;  // link was turned off or expired
+  var shareSheet = null;
+
+  function isShared(a) {
+    return !!shared && splitKeys(a.name).every(function (k) { return shared.keys[k]; });
+  }
+
+  function loadShared(token) {
+    window.LineupMember.client(function (sb) {
+      sb.rpc("get_shared_lineup", { p_token: token }).then(function (res) {
+        var d = res && res.data;
+        if (!d || !d.ok || d.slug !== slug) { sharedGone = true; refresh(); return; }
+        var keys = {}, n = 0;
+        (d.artists || []).forEach(function (nm) { keys[String(nm).toLowerCase()] = true; });
+        acts.forEach(function (a) { if (splitKeys(a.name).every(function (k) { return keys[k]; })) n++; });
+        shared = { first: d.first_name || "A friend", keys: keys, n: n };
+        logEvent("lineup_share_opened", { slug: slug, picks: n });
+        refresh();
+      }, noop);
+    });
+  }
+
+  var shareBannerEl = null;
+  function renderShareBanner() {
+    if (!barEl) return;
+    if (!shareBannerEl) {
+      shareBannerEl = document.createElement("div");
+      shareBannerEl.className = "lp-sharebanner";
+      shareBannerEl.setAttribute("role", "status");
+      var anchor = document.querySelector(".lp-crew") || barEl;
+      anchor.parentNode.insertBefore(shareBannerEl, anchor);
+    }
+    shareBannerEl.innerHTML = "";
+    if (sharedGone) {
+      shareBannerEl.hidden = false;
+      shareBannerEl.appendChild(document.createTextNode("This shared lineup was turned off or has expired."));
+      return;
+    }
+    if (!shared) { shareBannerEl.hidden = true; return; }
+    shareBannerEl.hidden = false;
+    var t = document.createElement("span");
+    t.className = "lp-sharebanner-msg";
+    t.textContent = "📋 " + shared.first + " shared their picks" + (shared.n ? " (" + shared.n + ")" : "") + ".";
+    shareBannerEl.appendChild(t);
+    if (!member) {
+      var j = document.createElement("button");
+      j.type = "button";
+      j.textContent = "Join " + shared.first + " on RaveFAM";
+      j.addEventListener("click", function () {
+        if (local.length) goSave(); else location.href = "/app";
+      });
+      shareBannerEl.appendChild(j);
+    }
+  }
+
+  function shareUrl(token) {
+    return location.origin + "/lineup-explorer/" + slug + "?by=" + encodeURIComponent(token);
+  }
+
+  function openShareSheet() {
+    if (!isMemberMode()) return;
+    window.LineupMember.client(function (sb) {
+      sb.rpc("get_or_create_share_link", { p_festival_id: member.festival.id }).then(function (res) {
+        var d = res && res.data;
+        if (!d || !d.ok || !d.token) { toast("⚠️ Couldn't make a share link. Try again."); return; }
+        logEvent("lineup_share_created", { slug: slug, picks: pickedActs().length });
+        showShareSheet(sb, d.token);
+      }, function () { toast("⚠️ Couldn't make a share link. Try again."); });
+    });
+  }
+
+  function showShareSheet(sb, token) {
+    var url = shareUrl(token);
+    var fest = member.festival.name || "this rave";
+    if (!shareSheet) {
+      shareSheet = document.createElement("div");
+      shareSheet.className = "lp-overlay lp-share-overlay";
+      shareSheet.addEventListener("click", function (e) { if (e.target === shareSheet) closeShareSheet(); });
+      shareSheet.addEventListener("keydown", function (e) { if (e.key === "Escape") closeShareSheet(); });
+      document.body.appendChild(shareSheet);
+    }
+    shareSheet.innerHTML =
+      '<div class="lp-sheet" role="dialog" aria-modal="true" aria-labelledby="lpShareTitle">' +
+        '<div class="lp-sheet-top"><span class="lp-badge">RaveFAM</span>' +
+        '<button type="button" class="lp-x" aria-label="Close">✕</button></div>' +
+        '<h3 id="lpShareTitle"></h3>' +
+        '<p class="lp-sub">Anyone with the link sees your first name and your picks for this rave. It updates as your picks change and stops working 30 days after the rave.</p>' +
+        '<div class="lp-share-url"><input type="text" readonly aria-label="Share link"><button type="button" class="lp-copy">Copy link</button></div>' +
+        '<div class="lp-share-actions"></div>' +
+        '<div class="lp-share-crews" hidden><p class="lp-share-label">Post to a crew Huddle</p><div class="lp-share-crew-list"></div></div>' +
+        '<button type="button" class="lp-opt lp-browse lp-share-off">Turn off this link</button>' +
+      '</div>';
+    shareSheet.querySelector("#lpShareTitle").textContent = "Share your " + fest + " picks";
+    var input = shareSheet.querySelector("input");
+    input.value = url;
+    shareSheet.querySelector(".lp-x").addEventListener("click", closeShareSheet);
+    shareSheet.querySelector(".lp-copy").addEventListener("click", function () {
+      var done = function () { toast("🔗 Link copied."); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, function () { input.select(); });
+      else { input.select(); try { document.execCommand("copy"); done(); } catch (e) {} }
+    });
+    var actions = shareSheet.querySelector(".lp-share-actions");
+    if (navigator.share) {
+      var sh = document.createElement("button");
+      sh.type = "button";
+      sh.className = "lp-opt";
+      sh.textContent = "📤 Share…";
+      sh.addEventListener("click", function () {
+        navigator.share({ title: "My " + fest + " picks", url: url }).then(noop, noop);
+      });
+      actions.appendChild(sh);
+    }
+    shareSheet.querySelector(".lp-share-off").addEventListener("click", function () {
+      sb.rpc("turn_off_share_link", { p_festival_id: member.festival.id }).then(function (res) {
+        if (res && res.data && res.data.ok) { closeShareSheet(); toast("Link turned off. Old links won't open your picks."); }
+        else toast("⚠️ Couldn't turn the link off. Try again.");
+      }, noop);
+    });
+    // Crews you can post in (crews RLS already limits this to crews you lead
+    // or belong to that aren't Secret).
+    sb.from("crews").select("id,name").is("deleted_at", null).then(function (res) {
+      var rows = (res && res.data) || [];
+      if (!rows.length) return;
+      var box = shareSheet.querySelector(".lp-share-crews");
+      var list = box.querySelector(".lp-share-crew-list");
+      rows.forEach(function (c) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "lp-opt lp-share-crew";
+        b.textContent = "💬 " + c.name;
+        b.addEventListener("click", function () { postToHuddle(sb, c, url, b); });
+        list.appendChild(b);
+      });
+      box.hidden = false;
+    }, noop);
+    shareSheet.classList.add("show");
+    var first = shareSheet.querySelector(".lp-copy");
+    if (first) first.focus();
+  }
+
+  function closeShareSheet() { if (shareSheet) shareSheet.classList.remove("show"); }
+
+  // Same two steps as app.html's postHuddleSystemMessage: materialize the
+  // crew's room for this rave (upsert, ignore duplicates), look it up, post.
+  function postToHuddle(sb, c, url, btn) {
+    var fid = member.festival.id;
+    var names = pickedActs().map(function (a) { return a.name; });
+    var body = "📋 My picks for " + (member.festival.name || "this rave") + ": " +
+      (names.length ? names.slice(0, 5).join(", ") + (names.length > 5 ? " +" + (names.length - 5) : "") : "none yet");
+    var roomKey = "festival:" + fid;
+    btn.disabled = true;
+    sb.from("huddle_rooms").upsert([{
+      crew_id: c.id, created_by: member.userId, room_key: roomKey, kind: "festival",
+      name: (member.festival.name || "Rave") + " Huddle", festival_id: fid
+    }], { onConflict: "crew_id,room_key", ignoreDuplicates: true }).then(function () {
+      return sb.from("huddle_rooms").select("id").eq("crew_id", c.id).eq("room_key", roomKey).limit(1);
+    }).then(function (res) {
+      var room = res && res.data && res.data[0];
+      if (!room) throw new Error("no room");
+      return sb.from("huddle_messages").insert({
+        room_id: room.id, crew_id: c.id, sender_id: member.userId, kind: "lineup", body: body, media_url: url
+      });
+    }).then(function (res) {
+      if (res && res.error) throw res.error;
+      btn.textContent = "✅ Posted to " + c.name;
+      logEvent("lineup_share_posted", { slug: slug, picks: names.length });
+    }).catch(function () {
+      btn.disabled = false;
+      toast("⚠️ Couldn't post to " + c.name + ". Try again.");
     });
   }
 
@@ -1453,9 +1642,13 @@
       watchDeck();
       loadWantCounts();
       loadMember();
+      var by = null;
+      try { by = new URLSearchParams(location.search).get("by"); } catch (e) {}
+      if (by && /^[a-z0-9-]{4,40}$/.test(by)) loadShared(by);
     },
     ok: function (a) {
       if (view === "all") return true;
+      if (view === "shared") return isShared(a);
       if (view === "picks") return isPicked(a);
       if (view === "crew") return actCrew(a).length > 0;
       return isFav(a);
@@ -1472,6 +1665,12 @@
       b.setAttribute("aria-label", picked ? "Remove " + a.name + " from my picks" : "Add " + a.name + " to my picks");
       b.innerHTML = picked ? CLIP_ON : CLIP_OFF;
       b.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); toggle(a); });
+      if (isShared(a)) {
+        var sp = document.createElement("div");
+        sp.className = "lp-shared";
+        sp.textContent = "📋 " + (picked ? "You both picked this" : shared.first + " picked this");
+        el.insertBefore(sp, el.querySelector(".foot"));
+      }
       var pulse = pulseEl(a);
       if (pulse) el.insertBefore(pulse, el.querySelector(".foot"));
       w.appendChild(el);

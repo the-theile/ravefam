@@ -424,3 +424,84 @@ test.describe('Lineup Explorer 2a — crew layer', () => {
     await expect(page.locator('.lp-f[data-v="crew"]')).toBeHidden();
   });
 });
+
+test.describe('Lineup Explorer 2b — sharing', () => {
+  test.beforeEach(async ({ page }) => { await blockExternal(page); });
+
+  const SHARED = { ok: true, slug: SLUG, festival: 'EDC Orlando 2026', first_name: 'Jo', artists: ['Benda', 'Kaskade', 'Vastive'] };
+
+  test('a shared link shows the banner, the filter and matching picks to a visitor', async ({ page }) => {
+    const errors = collectPageErrors(page);
+    await installSupabaseStub(page, { session: null, data: { __rpc: { get_shared_lineup: SHARED } } });
+    await page.goto(PAGE + '?by=jo-0a1b2c3d4e');
+    const banner = page.locator('.lp-sharebanner');
+    await expect(banner).toContainText('📋 Jo shared their picks (2).');
+    const filter = page.locator('.lp-f[data-v="shared"]');
+    await expect(filter).toBeVisible();
+    await expect(filter).toContainText("Jo's picks");
+    await filter.click();
+    await expect(page.locator('#deck .act-wrap')).toHaveCount(2);
+    const kaskade = page.locator('.act-wrap', { has: star(page, 'Kaskade') });
+    await expect(kaskade.locator('.lp-shared')).toHaveText('📋 Jo picked this');
+    await star(page, 'Kaskade').click();
+    await expect(page.locator('.act-wrap', { has: star(page, 'Kaskade') }).locator('.lp-shared')).toHaveText('📋 You both picked this');
+    // Join goes through the picks handoff when the visitor has picks.
+    await Promise.all([
+      page.waitForURL(/\/app\?picks=1&from=edc-orlando-2026/),
+      banner.getByRole('button', { name: 'Join Jo on RaveFAM' }).click(),
+    ]);
+    expect(errors).toEqual([]);
+  });
+
+  test('a turned-off or expired link says so', async ({ page }) => {
+    await installSupabaseStub(page, { session: null, data: { __rpc: { get_shared_lineup: { ok: false, error: 'expired' } } } });
+    await page.goto(PAGE + '?by=jo-0a1b2c3d4e');
+    await expect(page.locator('.lp-sharebanner')).toHaveText('This shared lineup was turned off or has expired.');
+    await expect(page.locator('.lp-f[data-v="shared"]')).toBeHidden();
+  });
+
+  test('owners get a link, can post it to a crew Huddle, and can turn it off', async ({ page }) => {
+    const errors = collectPageErrors(page);
+    await installSupabaseStub(page, {
+      session: makeSession(),
+      data: memberData({
+        raver_festivals: [{ raver_id: 'r1', festival_id: 'f1' }],
+        raver_artist_plans: [{ raver_id: 'r1', artist_id: 1, festival_id: 'f1' }],
+        crews: [{ id: 'c1', name: 'Bass Syndicate', deleted_at: null }],
+        huddle_rooms: [], huddle_messages: [],
+        __rpc: {
+          get_or_create_share_link: { ok: true, token: 'te-0a1b2c3d4e' },
+          turn_off_share_link: { ok: true },
+        },
+      }),
+    });
+    await page.goto(PAGE);
+    await expect(page.locator('.lp-bar')).toHaveAttribute('data-rsvp', 'going');
+    await page.locator('.lp-share').click();
+    const sheet = page.locator('.lp-share-overlay.show');
+    await expect(sheet.locator('#lpShareTitle')).toHaveText('Share your EDC Orlando 2026 picks');
+    await expect(sheet.locator('input')).toHaveValue(/\/lineup-explorer\/edc-orlando-2026\?by=te-0a1b2c3d4e$/);
+
+    const crewBtn = sheet.getByRole('button', { name: '💬 Bass Syndicate' });
+    await crewBtn.click();
+    await expect(sheet.getByRole('button', { name: '✅ Posted to Bass Syndicate' })).toBeVisible();
+    const msgs = await page.evaluate(() => window.__store.huddle_messages);
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0]).toMatchObject({ crew_id: 'c1', kind: 'lineup', body: '📋 My picks for EDC Orlando 2026: Kaskade' });
+    expect(msgs[0].media_url).toMatch(/\?by=te-0a1b2c3d4e$/);
+    const rooms = await page.evaluate(() => window.__store.huddle_rooms);
+    expect(rooms[0]).toMatchObject({ crew_id: 'c1', room_key: 'festival:f1', kind: 'festival' });
+
+    await sheet.getByRole('button', { name: 'Turn off this link' }).click();
+    await expect(page.locator('.lp-share-overlay.show')).toHaveCount(0);
+    await expect(page.locator('.lp-toast')).toContainText('Link turned off');
+    expect(errors).toEqual([]);
+  });
+
+  test('the Share button needs an RSVP', async ({ page }) => {
+    await installSupabaseStub(page, { session: makeSession(), data: memberData() });
+    await page.goto(PAGE);
+    await expect(page.locator('.lp-bar')).toHaveAttribute('data-mode', 'member');
+    await expect(page.locator('.lp-share')).toBeHidden();
+  });
+});
