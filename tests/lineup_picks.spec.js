@@ -206,3 +206,109 @@ test.describe('Lineup Explorer hub — Your picks', () => {
     ]);
   });
 });
+
+test.describe('Lineup Explorer 1b — ♡ favorites and Pulse', () => {
+  test.beforeEach(async ({ page }) => { await blockExternal(page); });
+
+  function pulseData(extra = {}) {
+    return memberData({
+      raver_festivals: [{ raver_id: 'r1', festival_id: 'f1' }],
+      raver_favorite_artists: [{ raver_id: 'r1', artist_id: 1 }],
+      __rpc: {
+        get_lineup_want_counts: { ok: true, slug: SLUG, total_plans: 40, artists: [
+          { artist_id: 1, name: 'Kaskade', want: 12, gain_7d: 3 },
+          { artist_id: 9, name: 'Alesso', want: 6, gain_7d: 0 },
+        ] },
+        get_lineup_crew_pulse: { ok: true,
+          mates: { m1: { n: 'Sam', a: null, g: null }, m2: { n: 'Kai', a: null, g: null } },
+          going: ['m1', 'm2'], interested: [], picks: { 1: ['m1', 'm2'] } },
+      },
+      ...extra,
+    });
+  }
+
+  test('visitors see public want counts but no ♡', async ({ page }) => {
+    await installSupabaseStub(page, { session: null, data: pulseData() });
+    await page.goto(PAGE);
+    const card = page.locator('.act-wrap', { has: star(page, 'Kaskade') });
+    await expect(card.locator('.lp-want')).toHaveText('12 want to see · +3 this week');
+    await expect(card.locator('.lp-heat')).toHaveCount(0);
+    await expect(page.locator('.fav')).toHaveCount(0);
+    await expect(page.locator('.lp-f[data-v="favs"]')).toBeHidden();
+  });
+
+  test('members see ♡, heat, crew faces and the header line', async ({ page }) => {
+    await installSupabaseStub(page, { session: makeSession(), data: pulseData() });
+    await page.goto(PAGE);
+    await expect(page.locator('.lp-bar')).toHaveAttribute('data-mode', 'member');
+    const card = page.locator('.act-wrap', { has: star(page, 'Kaskade') });
+    await expect(card.locator('.fav')).toHaveAttribute('aria-pressed', 'true');
+    await expect(card.locator('.lp-heat i')).toHaveAttribute('style', /width: 100%/);
+    await expect(card.locator('.lp-faces')).toHaveAttribute('aria-label', 'Sam, Kai from your crew picked this');
+    await expect(page.locator('.lp-meta')).toHaveText('1 of your favorites plays here · 2 crew going');
+
+    await page.locator('.lp-f[data-v="favs"]').click();
+    await expect(page.locator('#deck .act-wrap')).toHaveCount(1);
+  });
+
+  test('♡ toggles raver_favorite_artists', async ({ page }) => {
+    await installSupabaseStub(page, { session: makeSession(), data: pulseData({ raver_favorite_artists: [] }) });
+    await page.goto(PAGE);
+    await expect(page.locator('.lp-bar')).toHaveAttribute('data-mode', 'member');
+    const heart = page.locator('.fav[data-n="Benda b2b Vastive"]');
+    await heart.click();
+    await expect(heart).toHaveAttribute('aria-pressed', 'true');
+    await expect.poll(() => page.evaluate(() => window.__store.raver_favorite_artists.map(f => f.artist_id).sort())).toEqual([2, 3]);
+    await expect(page.locator('.lp-toast')).toContainText('added to your favorites');
+    await page.locator('.fav[data-n="Benda b2b Vastive"]').click();
+    await expect.poll(() => page.evaluate(() => window.__store.raver_favorite_artists.length)).toBe(0);
+  });
+
+  test('🔥 Most wanted sorts the deck by want count', async ({ page }) => {
+    await installSupabaseStub(page, { session: makeSession(), data: pulseData() });
+    await page.goto(PAGE);
+    await expect(page.locator('.lp-bar')).toHaveAttribute('data-mode', 'member');
+    await page.locator('.lp-sort').click();
+    await expect(page.locator('.lp-sort')).toHaveAttribute('aria-pressed', 'true');
+    const firstTwo = await page.locator('#deck .pick').evaluateAll(els => els.slice(0, 2).map(e => e.dataset.n));
+    expect(firstTwo).toEqual(['Kaskade', 'Alesso']);
+    // Still sorted after the page re-renders for a day filter.
+    await page.locator('.night[data-key="sat"]').click();
+    await expect(page.locator('#deck .pick').first()).toHaveAttribute('data-n', 'Kaskade');
+  });
+});
+
+test.describe('Lineup Explorer hub — members (For You)', () => {
+  test.beforeEach(async ({ page }) => { await blockExternal(page); });
+
+  test('shows Your season, artists on tour and card badges', async ({ page }) => {
+    await installSupabaseStub(page, {
+      session: makeSession(),
+      data: memberData({
+        raver_festivals: [{ raver_id: 'r1', festival_id: 'f1' }],
+        raver_artist_plans: [{ raver_id: 'r1', artist_id: 1, festival_id: 'f1' }],
+        raver_favorite_artists: [{ raver_id: 'r1', artist_id: 1 }],
+      }),
+    });
+    await page.goto('/lineup-explorer/index.html');
+    const fy = page.locator('.lp-foryou');
+    await expect(fy).toBeVisible();
+    const row = fy.locator('.lp-season li');
+    await expect(row).toHaveCount(1);
+    await expect(row.locator('.lp-b')).toHaveText('Going');
+    await expect(row.locator('.lp-season-name')).toHaveText('EDC Orlando 2026');
+    await expect(row.locator('.lp-season-meta')).toContainText('☆ 1 · ♡ 1');
+    await expect(row.locator('.lp-season-open')).toHaveAttribute('href', '/app?rave=edc-orlando-2026');
+
+    const chip = fy.locator('.lp-tour-chip', { hasText: 'Kaskade' });
+    await expect(chip).toHaveAttribute('aria-expanded', 'false');
+    await chip.click();
+    await expect(chip).toHaveAttribute('aria-expanded', 'true');
+    await expect(fy.locator('.lp-tour-list a', { hasText: 'EDC Orlando 2026' })).toHaveAttribute('href', '/lineup-explorer/edc-orlando-2026?q=Kaskade');
+
+    const badges = page.locator('.event-card[href="/lineup-explorer/edc-orlando-2026"] .lp-badges');
+    await expect(badges.locator('.lp-b-going')).toHaveText('🎟️ Going');
+    await expect(badges.locator('.lp-b-picks')).toHaveText('☆ 1 pick');
+    await expect(badges.locator('.lp-b-fav')).toHaveText('♡ 1 favorite playing: Kaskade');
+  });
+});

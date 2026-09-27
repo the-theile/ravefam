@@ -48,6 +48,7 @@ test('saves picks per upcoming rave, starting the one they came from as Interest
   await expect(cards.nth(0).locator('.ph-going')).toHaveAttribute('aria-pressed', 'true');   // already Going
   await expect(cards.nth(1).locator('.ph-interested')).toHaveAttribute('aria-pressed', 'true'); // came from here
   await expect(sheet.locator('#ph-save')).toHaveText('Save 4 picks');
+  await expect(sheet.locator('.ph-fav')).toContainText('Favorite artists');
 
   await sheet.locator('#ph-save').click();
   await expect(sheet.locator('#picks-handoff-title')).toHaveText('Who are you rolling with to EDC Orlando 2099? 🎟️');
