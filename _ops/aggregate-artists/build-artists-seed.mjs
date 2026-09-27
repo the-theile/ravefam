@@ -8,6 +8,11 @@
 // Output: writes seed.sql next to this file. Review it, then apply via the
 // Supabase MCP `apply_migration` tool. This script never talks to the DB
 // directly.
+//
+// Note: the live DB was synced for the 21 festivals added in 2026-09 by
+// supabase/migrations/20260927000001_explorer_lineup_sync.sql, not by this
+// full seed. The older 13 festivals' rows use different night/note formats,
+// so re-applying the full seed.sql would duplicate their appearances.
 
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

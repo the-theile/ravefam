@@ -98,4 +98,6 @@ end;
 $$;
 
 revoke all on function public.get_explorer_metrics() from public;
+-- Supabase grants anon directly by default, so revoking from public isn't enough.
+revoke execute on function public.get_explorer_metrics() from anon;
 grant execute on function public.get_explorer_metrics() to authenticated;
