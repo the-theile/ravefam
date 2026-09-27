@@ -2823,6 +2823,22 @@
   }
   .bottom-sheet-overlay.open .bottom-sheet { transform: translateY(0); }
 
+  /* Lineup Explorer picks handoff — ☆ = neon yellow, Going = green, Interested = cyan */
+  .ph-list { max-height: 52vh; overflow-y: auto; margin: 0 -4px 14px; padding: 0 4px; }
+  .ph-card { background: var(--surface); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 14px; margin-bottom: 10px; }
+  .ph-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+  .ph-fest { font-weight: 800; font-size: 0.95rem; }
+  .ph-date { font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
+  .ph-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .ph-chip { font-size: 0.72rem; font-weight: 600; padding: 4px 9px; border-radius: 999px; color: var(--neon-yellow); background: rgba(255,230,0,0.08); border: 1px solid rgba(255,230,0,0.3); }
+  .ph-choice { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  .ph-opt { min-height: 40px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.12); background: transparent; color: var(--muted); font-family: inherit; font-size: 0.78rem; font-weight: 700; cursor: pointer; }
+  .ph-opt[aria-pressed="true"] { color: var(--text); background: rgba(255,255,255,0.06); border-color: var(--text); }
+  .ph-opt.ph-going[aria-pressed="true"] { color: var(--neon-green); border-color: var(--neon-green); background: rgba(57,255,20,0.1); }
+  .ph-opt.ph-interested[aria-pressed="true"] { color: var(--neon-cyan); border-color: var(--neon-cyan); background: rgba(0,245,255,0.1); }
+  .ph-stack { display: flex; flex-direction: column; gap: 10px; }
+  .ph-stack .btn { width: 100%; }
+
   /* Location autocomplete */
   .loc-autocomplete-wrap { position: relative; }
   .loc-dropdown {
@@ -9110,6 +9126,13 @@
   </div>
 </div>
 
+<!-- Lineup Explorer picks handoff (Welcome to the fam) -->
+<div class="bottom-sheet-overlay" id="picks-handoff-overlay" onclick="if(event.target===this)closePicksHandoff()">
+  <div class="bottom-sheet" role="dialog" aria-modal="true" aria-labelledby="picks-handoff-title">
+    <div id="picks-handoff-content"></div>
+  </div>
+</div>
+
 <!-- Welcome Back Modal -->
 <div class="modal-overlay" id="welcome-back-overlay" onclick="if(event.target===this)closeWelcomePopup()">
   <div class="modal" id="welcome-back-modal" style="padding:0;overflow:hidden;max-width:400px;">
@@ -9659,7 +9682,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.66.1';
+  const APP_VERSION = '1.67.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -10753,6 +10776,7 @@
     sessionStorage.removeItem('pendingCrewJoin');
     localStorage.removeItem('pendingClaimToken');
     localStorage.removeItem('pendingRaveSlug');
+    localStorage.removeItem('pendingPicksHandoff');
     await sb.auth.signOut();
     // onAuthStateChange will fire SIGNED_OUT and flip back to auth screen
   }
@@ -11026,7 +11050,15 @@
     // pendingClaimToken. Consumed by processPendingRave().
     const raveSlug = params.get('rave');
     if (raveSlug && /^[a-z0-9-]{1,80}$/.test(raveSlug)) localStorage.setItem('pendingRaveSlug', raveSlug);
-    if (token || joinToken || raveSlug) history.replaceState(null, '', window.location.pathname + window.location.hash);
+    // ?picks=1[&from=<slug>] from a Lineup Explorer "Save my picks" button.
+    // The picks themselves are already in localStorage (rf_picks, written by
+    // lineup-common.js on the same domain). Consumed by processPendingPicks().
+    const picks = params.get('picks');
+    if (picks) {
+      const from = params.get('from');
+      localStorage.setItem('pendingPicksHandoff', from && /^[a-z0-9-]{1,80}$/.test(from) ? from : '1');
+    }
+    if (token || joinToken || raveSlug || picks) history.replaceState(null, '', window.location.pathname + window.location.hash);
   })();
 
   // processPendingRave: opens the rave a /rave/:slug share link pointed at.
@@ -11040,6 +11072,214 @@
     const fest = festivals.find(f => f.slug === slug);
     if (fest) openRaveFocus(fest.id);
     else showToast('⚠️ That rave link is no longer active.');
+  }
+
+  // ===== Lineup Explorer picks handoff =====
+  // A visitor's ☆ picks live in localStorage (rf_picks: { slug: { n: [act
+  // names] } }, written by lineup-explorer/lineup-common.js). "Save my picks"
+  // there sends them here with ?picks=1&from=<slug>. After login/onboarding
+  // this sheet asks Going / Interested / Not now per upcoming rave, then saves
+  // RSVPs + raver_artist_plans. Browser picks are cleared only once saved;
+  // Not now keeps them. The rave they came from starts as Interested.
+  let _picksHandoff = null;
+
+  function picksSplitKeys(name) {
+    return String(name).split(/\s+b2b\s+/i).map(s => s.trim().toLowerCase());
+  }
+
+  function readBrowserPicks() {
+    try {
+      const v = JSON.parse(localStorage.getItem('rf_picks') || '{}');
+      return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+    } catch (e) { return {}; }
+  }
+
+  function processPendingPicks() {
+    const pending = localStorage.getItem('pendingPicksHandoff');
+    if (!pending || !currentUser || isOnboarding) return;
+    const you = squad.find(r => r.isYou);
+    if (!you) return;
+    localStorage.removeItem('pendingPicksHandoff');
+    let from = null;
+    try { from = JSON.parse(localStorage.getItem('rf_picks_from') || 'null'); } catch (e) {}
+    const fromSlug = pending !== '1' ? pending : (from && from.slug) || null;
+    const all = readBrowserPicks();
+    const items = Object.keys(all).map(slug => {
+      const f = festivals.find(x => x.slug === slug);
+      const d = f && festDate(f);
+      const names = Array.isArray(all[slug] && all[slug].n) ? all[slug].n.filter(n => typeof n === 'string').slice(0, 200) : [];
+      if (!f || !d || d < TODAY || !names.length) return null;
+      const going = (you.festIds || []).some(id => String(id) === String(f.id));
+      const interested = (you.interestedFestIds || []).some(id => String(id) === String(f.id));
+      return {
+        festId: f.id, slug, name: f.name, date: d, names,
+        dateLabel: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        choice: going ? 'going' : interested ? 'interested' : slug === fromSlug ? 'interested' : 'none'
+      };
+    }).filter(Boolean).sort((a, b) => a.date - b.date);
+    if (!items.length) return;
+    const back = from && typeof from.back === 'string' && from.back.startsWith('/lineup-explorer/') ? from.back : null;
+    _picksHandoff = { items, fromSlug, back, saved: 0, savedNames: [] };
+    renderPicksHandoffChoices();
+    document.getElementById('picks-handoff-overlay').classList.add('open');
+  }
+
+  function picksHandoffCount() {
+    return _picksHandoff ? _picksHandoff.items.filter(it => it.choice !== 'none').reduce((n, it) => n + it.names.length, 0) : 0;
+  }
+
+  function renderPicksHandoffChoices() {
+    const h = _picksHandoff;
+    const n = picksHandoffCount();
+    const opts = [['going', '🎟️ Going'], ['interested', '👀 Interested'], ['none', 'Not now']];
+    const cards = h.items.map((it, i) => `
+      <div class="ph-card">
+        <div class="ph-card-head"><div class="ph-fest">${escHtml(it.name)}</div><div class="ph-date">${escHtml(it.dateLabel)}</div></div>
+        <div class="ph-chips">${it.names.map(nm => `<span class="ph-chip">☆ ${escHtml(nm)}</span>`).join('')}</div>
+        <div class="ph-choice" role="group" aria-label="Your plans for ${escHtml(it.name)}">
+          ${opts.map(([v, l]) => `<button type="button" class="ph-opt ph-${v}" aria-pressed="${it.choice === v}" onclick="picksHandoffChoose(${i}, '${escJsAttr(v)}')">${l}</button>`).join('')}
+        </div>
+      </div>`).join('');
+    document.getElementById('picks-handoff-content').innerHTML = `
+      <div style="display:flex;justify-content:flex-end;margin:-8px -8px 0;">
+        <button type="button" class="page-panel-back" aria-label="Close" onclick="closePicksHandoff()">✕</button>
+      </div>
+      <div style="text-align:center;padding:0 0 12px;">
+        <div class="modal-title" id="picks-handoff-title" style="margin-bottom:4px;">Welcome to the fam 🎉</div>
+        <p style="font-size:0.8rem;color:var(--muted);">Your lineup picks came with you. Tell us which raves you're hitting and we'll save them.</p>
+      </div>
+      <div class="ph-list">${cards}</div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" style="flex:1;" onclick="closePicksHandoff()">Later</button>
+        <button class="btn btn-primary" style="flex:2;" id="ph-save" ${n ? '' : 'disabled'} onclick="savePicksHandoff()">Save ${n} ${n === 1 ? 'pick' : 'picks'}</button>
+      </div>`;
+  }
+
+  function picksHandoffChoose(i, v) {
+    if (!_picksHandoff || !_picksHandoff.items[i]) return;
+    _picksHandoff.items[i].choice = v;
+    renderPicksHandoffChoices();
+    document.querySelectorAll('#picks-handoff-content .ph-card')[i]?.querySelector('.ph-' + v)?.focus();
+  }
+
+  function closePicksHandoff() {
+    document.getElementById('picks-handoff-overlay').classList.remove('open');
+    _picksHandoff = null;
+    localStorage.removeItem('rf_picks_from');
+  }
+
+  // Same writes as toggleGoingToFest / toggleInterestedInFest (Going and
+  // Interested are mutually exclusive), minus their per-rave toasts.
+  async function picksHandoffRsvp(you, festId, choice) {
+    const going = choice === 'going';
+    const isGoing = (you.festIds || []).some(id => String(id) === String(festId));
+    const isInterested = (you.interestedFestIds || []).some(id => String(id) === String(festId));
+    if ((going && isGoing) || (!going && isInterested)) return true;
+    const { error } = await sb.from(going ? 'raver_festivals' : 'raver_festival_interest')
+      .upsert([{ raver_id: you.id, festival_id: festId }], { onConflict: 'raver_id,festival_id', ignoreDuplicates: true });
+    if (error) { console.error('picks handoff RSVP error', error); return false; }
+    if (going) {
+      you.festIds = [...(you.festIds || []), festId];
+      if (isInterested) {
+        you.interestedFestIds = you.interestedFestIds.filter(id => String(id) !== String(festId));
+        dbRemoveRaverFestivalInterest(you.id, festId);
+      }
+    } else {
+      you.interestedFestIds = [...(you.interestedFestIds || []), festId];
+      if (isGoing) {
+        you.festIds = you.festIds.filter(id => String(id) !== String(festId));
+        dbRemoveRaverFestival(you.id, festId);
+      }
+    }
+    logAnalyticsEvent('first_rsvp_updated', { raver_id: you.id, festival_id: festId, direction: choice, source: 'explorer_handoff' });
+    return true;
+  }
+
+  async function savePicksHandoff() {
+    const h = _picksHandoff;
+    const you = squad.find(r => r.isYou);
+    if (!h || !you || !currentUser) return;
+    const btn = document.getElementById('ph-save');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    const chosen = h.items.filter(it => it.choice !== 'none');
+    const keys = [...new Set(chosen.flatMap(it => it.names.flatMap(picksSplitKeys)))];
+    const { data: arts, error: aErr } = await sb.from('artists').select('id,name_lower').in('name_lower', keys);
+    if (aErr) {
+      console.error('picks handoff artists error', aErr);
+      showToast('⚠️ Could not save your picks — try again');
+      renderPicksHandoffChoices();
+      return;
+    }
+    const idBy = {};
+    (arts || []).forEach(a => { idBy[a.name_lower] = a.id; });
+    const all = readBrowserPicks();
+    let saved = 0, failed = 0;
+    const savedFests = [];
+    for (const it of chosen) {
+      if (!(await picksHandoffRsvp(you, it.festId, it.choice))) { failed++; continue; }
+      const resolved = it.names.filter(nm => picksSplitKeys(nm).every(k => idBy[k]));
+      const ids = [...new Set(resolved.flatMap(nm => picksSplitKeys(nm).map(k => idBy[k])))];
+      if (ids.length) {
+        const rows = ids.map(id => ({ raver_id: you.id, artist_id: id, festival_id: it.festId }));
+        const { error } = await sb.from('raver_artist_plans')
+          .upsert(rows, { onConflict: 'raver_id,artist_id,festival_id', ignoreDuplicates: true });
+        if (error) { console.error('picks handoff plans error', error); failed++; continue; }
+        rows.forEach(r => {
+          if (!raverArtistPlans.some(p => String(p.raver_id) === String(r.raver_id) && String(p.festival_id) === String(r.festival_id) && String(p.artist_id) === String(r.artist_id))) raverArtistPlans.push(r);
+        });
+      }
+      // Acts whose artists aren't in the catalog yet stay in the browser.
+      const left = it.names.filter(nm => !resolved.includes(nm));
+      if (left.length) all[it.slug] = { ...all[it.slug], n: left }; else delete all[it.slug];
+      saved += resolved.length;
+      savedFests.push(it);
+    }
+    try { localStorage.setItem('rf_picks', JSON.stringify(all)); } catch (e) {}
+    renderEvents();
+    logAnalyticsEvent('picks_handoff_saved', { festivals: savedFests.length, picks: saved, failed });
+    if (!savedFests.length) {
+      showToast('⚠️ Could not save your picks — try again');
+      renderPicksHandoffChoices();
+      return;
+    }
+    if (failed) showToast('⚠️ Some picks didn\'t save — they\'re still on this device');
+    h.saved = saved;
+    h.crewFest = savedFests.find(it => it.slug === h.fromSlug) || savedFests[0];
+    renderPicksHandoffCrew();
+  }
+
+  function renderPicksHandoffCrew() {
+    const h = _picksHandoff;
+    document.getElementById('picks-handoff-content').innerHTML = `
+      <div style="display:flex;justify-content:flex-end;margin:-8px -8px 0;">
+        <button type="button" class="page-panel-back" aria-label="Close" onclick="picksHandoffSolo()">✕</button>
+      </div>
+      <div style="text-align:center;padding:0 0 16px;">
+        <div class="modal-title" id="picks-handoff-title" style="margin-bottom:4px;">Who are you rolling with to ${escHtml(h.crewFest.name)}? 🎟️</div>
+        <p style="font-size:0.8rem;color:var(--muted);">${h.saved} ${h.saved === 1 ? 'pick' : 'picks'} saved. Raves hit different with your crew.</p>
+      </div>
+      <div class="ph-stack">
+        <button class="btn btn-primary" onclick="picksHandoffStartCrew()">🔒 Start a crew</button>
+        <button class="btn btn-ghost" onclick="picksHandoffJoinCode()">🔢 Join with a 6-digit code</button>
+        <button class="btn btn-ghost" style="color:var(--muted);" onclick="picksHandoffSolo()">Solo for now</button>
+      </div>`;
+  }
+
+  function picksHandoffStartCrew() { closePicksHandoff(); openModal(); }
+  function picksHandoffJoinCode() { closePicksHandoff(); openScanner(); switchScannerTab('code'); }
+
+  function picksHandoffSolo() {
+    const h = _picksHandoff;
+    if (!h) return;
+    document.getElementById('picks-handoff-content').innerHTML = `
+      <div style="text-align:center;padding:4px 0 16px;">
+        <div class="modal-title" id="picks-handoff-title" style="margin-bottom:4px;">You're locked in ✨</div>
+        <p style="font-size:0.8rem;color:var(--muted);">Your picks are on your RaveFAM now. Add your crew anytime from the Crews tab.</p>
+      </div>
+      <div class="ph-stack">
+        ${h.back ? `<a class="btn btn-primary" style="text-align:center;text-decoration:none;" href="${escHtml(h.back)}">🎧 Back to the lineup</a>` : ''}
+        <button class="btn ${h.back ? 'btn-ghost' : 'btn-primary'}" onclick="closePicksHandoff()">Explore RaveFAM</button>
+      </div>`;
   }
 
   // processPendingClaim: now shows the rich preview/confirm flow instead of
@@ -12158,8 +12398,12 @@
       // over it. New ravers finish onboarding first (completeOnboarding()
       // opens the rave after).
       const pendingRave = !!localStorage.getItem('pendingRaveSlug');
-      const onboarding = runFirstTimeSetup({ allowWelcome: !deepLink && !pendingRave });
-      if (!onboarding && !deepLink) processPendingRave();
+      const pendingPicks = !!localStorage.getItem('pendingPicksHandoff');
+      const onboarding = runFirstTimeSetup({ allowWelcome: !deepLink && !pendingRave && !pendingPicks });
+      if (!onboarding && !deepLink) {
+        processPendingRave();
+        if (!pendingRave) processPendingPicks();
+      }
     }
   }
 
@@ -32065,7 +32309,9 @@
       if (error) console.error('completeOnboarding: failed to persist onboarded flag', error);
       else if (data?.user) currentUser = data.user;
     }
+    const hadPendingRave = !!localStorage.getItem('pendingRaveSlug');
     processPendingRave(); // rave share link that brought this raver in
+    if (!hadPendingRave) processPendingPicks(); // Lineup Explorer ☆ picks that brought them in
   }
 
   function obFinishExploring() {
