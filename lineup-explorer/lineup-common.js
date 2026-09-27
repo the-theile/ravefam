@@ -506,6 +506,7 @@
   var wantMax = 0;
   var wantTop = [];        // [{ key, want, gain_7d }] in the server's most-wanted order
   var crew = null;         // get_lineup_crew_pulse() result (members)
+  var votes = null;        // get_lineup_crew_votes() result (members)
   var barEl = null, saveEl = null;
 
   var memberLoaded = false; // plans + RSVP fetched for this festival
@@ -895,6 +896,14 @@
       ol.appendChild(li);
     });
     mwEl.appendChild(ol);
+    if (memberMode && votes && (votes.crews || []).length) {
+      var vb = document.createElement("button");
+      vb.type = "button";
+      vb.className = "lp-mw-vote";
+      vb.textContent = "🗳️ Start a crew vote";
+      vb.addEventListener("click", function () { openVoteSheet(null); });
+      mwEl.appendChild(vb);
+    }
     if (!member) {
       var foot = document.createElement("div");
       foot.className = "lp-mw-join";
@@ -1523,6 +1532,7 @@
     }).join(" · ");
 
     renderCrewPanel();
+    renderVotes();
     renderMostWanted();
     renderShareBanner();
     var msg = "", btn = "";
@@ -1762,31 +1772,502 @@
 
   // Same two steps as app.html's postHuddleSystemMessage: materialize the
   // crew's room for this rave (upsert, ignore duplicates), look it up, post.
-  function postToHuddle(sb, c, url, btn) {
+  // A "lineup" card in the crew's Huddle room for this rave (festival:<id>),
+  // creating the room first if needed, as the app's postHuddleSystemMessage does.
+  function huddleLineupPost(sb, crewId, body, url) {
     var fid = member.festival.id;
-    var names = pickedActs().map(function (a) { return a.name; });
-    var body = "📋 My picks for " + (member.festival.name || "this rave") + ": " +
-      (names.length ? names.slice(0, 5).join(", ") + (names.length > 5 ? " +" + (names.length - 5) : "") : "none yet");
     var roomKey = "festival:" + fid;
-    btn.disabled = true;
-    sb.from("huddle_rooms").upsert([{
-      crew_id: c.id, created_by: member.userId, room_key: roomKey, kind: "festival",
+    return sb.from("huddle_rooms").upsert([{
+      crew_id: crewId, created_by: member.userId, room_key: roomKey, kind: "festival",
       name: (member.festival.name || "Rave") + " Huddle", festival_id: fid
     }], { onConflict: "crew_id,room_key", ignoreDuplicates: true }).then(function () {
-      return sb.from("huddle_rooms").select("id").eq("crew_id", c.id).eq("room_key", roomKey).limit(1);
+      return sb.from("huddle_rooms").select("id").eq("crew_id", crewId).eq("room_key", roomKey).limit(1);
     }).then(function (res) {
       var room = res && res.data && res.data[0];
       if (!room) throw new Error("no room");
       return sb.from("huddle_messages").insert({
-        room_id: room.id, crew_id: c.id, sender_id: member.userId, kind: "lineup", body: body, media_url: url
+        room_id: room.id, crew_id: crewId, sender_id: member.userId, kind: "lineup", body: body, media_url: url
       });
     }).then(function (res) {
       if (res && res.error) throw res.error;
+    });
+  }
+
+  function postToHuddle(sb, c, url, btn) {
+    var names = pickedActs().map(function (a) { return a.name; });
+    var body = "📋 My picks for " + (member.festival.name || "this rave") + ": " +
+      (names.length ? names.slice(0, 5).join(", ") + (names.length > 5 ? " +" + (names.length - 5) : "") : "none yet");
+    btn.disabled = true;
+    huddleLineupPost(sb, c.id, body, url).then(function () {
       btn.textContent = "✅ Posted to " + c.name;
       logEvent("lineup_share_posted", { slug: slug, picks: names.length });
     }).catch(function () {
       btn.disabled = false;
       toast("⚠️ Couldn't post to " + c.name + ". Try again.");
+    });
+  }
+
+  // ----- crew votes + Fam Faves (Phase 3b; get_lineup_crew_votes) -----
+  // A pick_many FAM Poll for this rave: each voter picks up to N sets. Only
+  // crewmates who are Going or Interested can vote, and once voting starts
+  // sets can be added but not removed (both enforced on the server). When a
+  // vote closes its top sets become that crew's Fam Faves.
+  var voteEl = null, voteSheet = null;
+  var ballot = {};         // poll id -> { artist id: true } while choosing
+
+  function visibleVotes() {
+    var list = (votes && votes.votes) || [];
+    return list.filter(function (v) { return crewSel === "all" || v.crew_id === crewSel; });
+  }
+
+  // Crews whose closed vote made an act a Fam Fave (current switcher).
+  function actFaves(a) {
+    var ids = actIds(a) || [];
+    if (!ids.length) return [];
+    var out = [];
+    visibleVotes().forEach(function (v) {
+      if (!v.closed || !Array.isArray(v.faves)) return;
+      var hit = ids.some(function (id) { return v.faves.indexOf(id) !== -1; });
+      if (hit && out.indexOf(v.crew) === -1) out.push(v.crew);
+    });
+    return out;
+  }
+
+  function closesText(v) {
+    if (v.closed) return "Closed";
+    var ms = new Date(v.closes) - Date.now();
+    if (!(ms > 0)) return "Closed";
+    var d = Math.floor(ms / 86400000), h = Math.floor(ms / 3600000);
+    return "Closes in " + (d >= 1 ? d + (d === 1 ? " day" : " days") : h >= 1 ? h + "h" : "under an hour");
+  }
+
+  function voteCrewColor(el, col) {
+    if (col && /^#[0-9a-fA-F]{3,8}$/.test(col)) el.style.setProperty("--cc", col);
+  }
+
+  function renderVotes() {
+    if (!barEl) return;
+    if (!voteEl) {
+      voteEl = document.createElement("section");
+      voteEl.className = "lp-vote";
+      voteEl.setAttribute("aria-labelledby", "lpVoteTitle");
+      barEl.parentNode.insertBefore(voteEl, barEl);
+    }
+    var list = isMemberMode() ? visibleVotes() : [];
+    var canStart = isMemberMode() && votes && (votes.crews || []).length > 0;
+    if (!list.length && !canStart) { voteEl.hidden = true; return; }
+    voteEl.hidden = false;
+    voteEl.innerHTML = "";
+    var top = document.createElement("div");
+    top.className = "lp-vote-top";
+    var h = document.createElement("h2");
+    h.id = "lpVoteTitle";
+    h.textContent = "🗳️ Crew votes";
+    top.appendChild(h);
+    if (canStart) {
+      var sb = document.createElement("button");
+      sb.type = "button";
+      sb.className = "lp-vote-start";
+      sb.textContent = "Start a crew vote";
+      sb.addEventListener("click", function () { openVoteSheet(null); });
+      top.appendChild(sb);
+    }
+    voteEl.appendChild(top);
+    if (!list.length) {
+      var hint = document.createElement("p");
+      hint.className = "lp-vote-hint";
+      hint.textContent = "Can't agree on sets? Put your crew's picks to a vote. The top sets become your Fam Faves.";
+      voteEl.appendChild(hint);
+      return;
+    }
+    list.forEach(function (v) { voteEl.appendChild(voteCard(v)); });
+  }
+
+  function voteCard(v) {
+    var card = document.createElement("div");
+    card.className = "lp-vcard" + (v.closed ? " is-closed" : "");
+    voteCrewColor(card, v.col);
+    var head = document.createElement("div");
+    head.className = "lp-vcard-head";
+    var chip = document.createElement("span");
+    chip.className = "lp-vcrew";
+    chip.textContent = v.crew;
+    head.appendChild(chip);
+    var meta = document.createElement("span");
+    meta.className = "lp-vmeta";
+    meta.textContent = "Pick up to " + v.max + " · " + closesText(v);
+    head.appendChild(meta);
+    card.appendChild(head);
+    var q = document.createElement("p");
+    q.className = "lp-vq";
+    q.textContent = v.q;
+    card.appendChild(q);
+
+    var opts = Array.isArray(v.options) ? v.options : [];
+    var voting = !v.closed && votes.can_vote && !v.my;
+    if (voting) {
+      var sel = ballot[v.id] || (ballot[v.id] = {});
+      var n = Object.keys(sel).length;
+      var grid = document.createElement("div");
+      grid.className = "lp-vopts";
+      grid.setAttribute("role", "group");
+      grid.setAttribute("aria-label", "Pick up to " + v.max);
+      opts.forEach(function (o) {
+        var on = !!sel[o.id];
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "lp-vopt";
+        b.dataset.id = String(o.id);
+        b.setAttribute("aria-pressed", String(on));
+        b.disabled = !on && n >= v.max;
+        b.textContent = o.n;
+        b.addEventListener("click", function () {
+          if (sel[o.id]) delete sel[o.id]; else sel[o.id] = true;
+          renderVotes();
+          var again = voteEl.querySelector('.lp-vcard[data-id="' + v.id + '"] .lp-vopt[data-id="' + o.id + '"]');
+          if (again) again.focus();
+        });
+        grid.appendChild(b);
+      });
+      card.appendChild(grid);
+      var go = document.createElement("button");
+      go.type = "button";
+      go.className = "lp-vgo";
+      go.disabled = !n;
+      go.textContent = n ? "Vote (" + n + "/" + v.max + ")" : "Pick up to " + v.max;
+      go.addEventListener("click", function () { castCrewVote(v, go); });
+      card.appendChild(go);
+    } else {
+      var max = opts.reduce(function (m, o) { return Math.max(m, o.v || 0); }, 0) || 1;
+      var mine = Array.isArray(v.my) ? v.my : [];
+      var faves = Array.isArray(v.faves) ? v.faves : [];
+      var ol = document.createElement("ol");
+      ol.className = "lp-vres";
+      opts.slice().sort(function (x, y) { return (y.v || 0) - (x.v || 0); }).forEach(function (o) {
+        var li = document.createElement("li");
+        if (faves.indexOf(o.id) !== -1) li.className = "is-fave";
+        var nm = document.createElement("span");
+        nm.className = "lp-vres-n";
+        nm.textContent = (faves.indexOf(o.id) !== -1 ? "⭐ " : "") + o.n + (mine.indexOf(o.id) !== -1 ? " ✓" : "");
+        li.appendChild(nm);
+        var bar = document.createElement("span");
+        bar.className = "lp-vres-bar";
+        bar.setAttribute("aria-hidden", "true");
+        var fill = document.createElement("i");
+        fill.style.width = Math.round(100 * (o.v || 0) / max) + "%";
+        bar.appendChild(fill);
+        li.appendChild(bar);
+        var c = document.createElement("span");
+        c.className = "lp-vres-c";
+        c.textContent = String(o.v || 0);
+        c.setAttribute("aria-label", (o.v || 0) + ((o.v || 0) === 1 ? " vote" : " votes"));
+        li.appendChild(c);
+        ol.appendChild(li);
+      });
+      card.appendChild(ol);
+    }
+
+    var foot = document.createElement("p");
+    foot.className = "lp-vfoot";
+    var parts = [v.voters + (v.voters === 1 ? " voted" : " voted")];
+    if (v.closed) {
+      var names = opts.filter(function (o) { return (v.faves || []).indexOf(o.id) !== -1; }).map(function (o) { return o.n; });
+      parts.unshift(names.length ? "⭐ Fam Faves: " + names.join(", ") : "No votes were cast");
+    } else if (v.my) {
+      parts.unshift("You voted");
+    } else if (!votes.can_vote) {
+      parts.unshift("Only crewmates who are Going or Interested can vote");
+    }
+    foot.textContent = parts.join(" · ");
+    card.appendChild(foot);
+    if (v.own && !v.closed && opts.length < 30) {
+      var add = document.createElement("button");
+      add.type = "button";
+      add.className = "lp-vadd";
+      add.textContent = "＋ Add sets";
+      add.addEventListener("click", function () { openVoteSheet(v); });
+      card.appendChild(add);
+    }
+    card.dataset.id = v.id;
+    return card;
+  }
+
+  function reloadVotes(then) {
+    if (!isMemberMode()) return;
+    window.LineupMember.client(function (sb) {
+      sb.rpc("get_lineup_crew_votes", { p_festival_id: member.festival.id }).then(function (res) {
+        var d = res && res.data;
+        if (d && d.ok) votes = d;
+        refresh();
+        if (then) then();
+      }, noop);
+    });
+  }
+
+  function castCrewVote(v, btn) {
+    var ids = Object.keys(ballot[v.id] || {}).map(Number).filter(function (x) { return x > 0; });
+    if (!ids.length) return;
+    btn.disabled = true;
+    window.LineupMember.client(function (sb) {
+      sb.from("crew_poll_votes").insert({
+        poll_id: v.id, voter_user_id: member.userId, vote_value: JSON.stringify(ids)
+      }).then(function (res) {
+        if (res && res.error) {
+          btn.disabled = false;
+          var rsvpErr = /pick_many_rsvp/.test(res.error.message || "");
+          toast(rsvpErr ? "Only crewmates who are Going or Interested can vote." : "⚠️ Couldn't save your vote. Try again.");
+          return;
+        }
+        delete ballot[v.id];
+        toast("🗳️ Vote in for " + v.crew + ".");
+        reloadVotes();
+      }, function () { btn.disabled = false; toast("⚠️ Couldn't save your vote. Try again."); });
+    });
+  }
+
+  // Ballot candidates: one per catalog artist on this page (a b2b act lists
+  // each half), in lineup order.
+  function voteCandidates() {
+    var seen = {}, out = [];
+    acts.forEach(function (a) {
+      splitKeys(a.name).forEach(function (k, i) {
+        var id = idsByKey[k];
+        if (!id || seen[id]) return;
+        seen[id] = true;
+        var parts = String(a.name).split(/\s+b2b\s+/i);
+        out.push({ id: id, n: parts[i] || a.name, act: a });
+      });
+    });
+    return out;
+  }
+
+  // Start a vote (existing === null) or add sets to one you run.
+  function openVoteSheet(existing) {
+    if (!isMemberMode() || !votes) return;
+    var crews = votes.crews || [];
+    var fest = member.festival.name || "this rave";
+    var cands = voteCandidates();
+    var byId = {};
+    cands.forEach(function (c) { byId[c.id] = c; });
+    var state = {
+      crew: existing ? existing.crew_id : (crewSel !== "all" && crews.some(function (c) { return c.id === crewSel; }) ? crewSel : (crews[0] && crews[0].id)),
+      max: existing ? existing.max : 3,
+      picked: {},
+      locked: {},
+      extra: [] // ids shown in the list beyond the prefill
+    };
+    if (existing) (existing.options || []).forEach(function (o) { state.locked[o.id] = true; });
+
+    function prefill() {
+      state.picked = {};
+      if (existing) return;
+      // Your 📋 picks plus what this crew picked.
+      cands.forEach(function (c) {
+        if (plans[c.id] || isPicked(c.act)) state.picked[c.id] = true;
+        var mates = crew && crew.picks && crew.picks[c.id] || [];
+        if (mates.some(function (rid) { var m = crew.mates[rid]; return m && Array.isArray(m.c) && m.c.indexOf(state.crew) !== -1; })) state.picked[c.id] = true;
+      });
+    }
+    prefill();
+
+    if (!voteSheet) {
+      voteSheet = document.createElement("div");
+      voteSheet.className = "lp-overlay lp-vote-overlay";
+      voteSheet.addEventListener("click", function (e) { if (e.target === voteSheet) closeVoteSheet(); });
+      voteSheet.addEventListener("keydown", function (e) { if (e.key === "Escape") closeVoteSheet(); });
+      document.body.appendChild(voteSheet);
+    }
+
+    function draw() {
+      var picked = Object.keys(state.picked).filter(function (id) { return !state.locked[id]; });
+      var total = Object.keys(state.locked).length + picked.length;
+      voteSheet.innerHTML =
+        '<div class="lp-sheet lp-vsheet" role="dialog" aria-modal="true" aria-labelledby="lpVoteSheetTitle">' +
+          '<div class="lp-sheet-top"><span class="lp-badge">RaveFAM</span>' +
+          '<button type="button" class="lp-x" aria-label="Close">✕</button></div>' +
+          '<h3 id="lpVoteSheetTitle"></h3><p class="lp-sub"></p>' +
+          '<div class="lp-vs-body"></div>' +
+          '<button type="button" class="lp-vgo lp-vs-go"></button>' +
+        '</div>';
+      voteSheet.querySelector("#lpVoteSheetTitle").textContent = existing ? "Add sets to " + existing.crew + "'s vote" : "Start a crew vote";
+      voteSheet.querySelector(".lp-sub").textContent = existing
+        ? "Sets can be added once voting starts, but not removed."
+        : "Your crew picks up to " + state.max + " sets each. It closes when " + fest + " starts, and the top sets become your Fam Faves.";
+      voteSheet.querySelector(".lp-x").addEventListener("click", closeVoteSheet);
+      var body = voteSheet.querySelector(".lp-vs-body");
+
+      if (!existing) {
+        if (crews.length > 1) {
+          body.appendChild(chips("Crew", crews.map(function (c) { return { v: c.id, t: c.n, col: c.col }; }), state.crew, function (val) {
+            state.crew = val; prefill(); draw();
+          }));
+        }
+        body.appendChild(chips("Each person picks up to", [2, 3, 5].map(function (x) { return { v: x, t: String(x) }; }), state.max, function (val) {
+          state.max = val; draw();
+        }));
+        var ql = document.createElement("label");
+        ql.className = "lp-vs-label";
+        ql.textContent = "Question";
+        var qi = document.createElement("input");
+        qi.type = "text";
+        qi.className = "lp-vs-q";
+        qi.maxLength = 200;
+        qi.value = state.q || ("Which sets are we hitting at " + fest + "?");
+        qi.addEventListener("input", function () { state.q = qi.value; });
+        ql.appendChild(qi);
+        body.appendChild(ql);
+      }
+
+      var lab = document.createElement("p");
+      lab.className = "lp-vs-label";
+      lab.textContent = "Ballot · " + total + (total === 1 ? " set" : " sets");
+      body.appendChild(lab);
+      var list = document.createElement("div");
+      list.className = "lp-vs-list";
+      // Locked (already on the ballot), then picked, then Most wanted
+      // suggestions and anything added from search.
+      var order = [], seen = {};
+      function push(id) { id = Number(id); if (!byId[id] || seen[id]) return; seen[id] = true; order.push(id); }
+      Object.keys(state.locked).forEach(push);
+      Object.keys(state.picked).forEach(push);
+      mostWantedActs().forEach(function (x) { (actIds(x.act) || []).forEach(push); });
+      state.extra.forEach(push);
+      order.forEach(function (id) {
+        var c = byId[id];
+        var row = document.createElement("label");
+        row.className = "lp-vs-row";
+        var cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = !!(state.locked[id] || state.picked[id]);
+        cb.disabled = !!state.locked[id];
+        cb.addEventListener("change", function () {
+          if (cb.checked) state.picked[id] = true; else delete state.picked[id];
+          draw();
+        });
+        row.appendChild(cb);
+        var nm = document.createElement("span");
+        nm.textContent = c.n;
+        row.appendChild(nm);
+        var tags = [];
+        if (state.locked[id]) tags.push("on the ballot");
+        else {
+          if (plans[id] || isPicked(c.act)) tags.push("📋 you");
+          var w = actWant(c.act);
+          if (w) tags.push("🔥 " + w.want);
+        }
+        if (tags.length) {
+          var t = document.createElement("small");
+          t.textContent = tags.join(" · ");
+          row.appendChild(t);
+        }
+        list.appendChild(row);
+      });
+      body.appendChild(list);
+
+      var find = document.createElement("input");
+      find.type = "search";
+      find.className = "lp-vs-find";
+      find.placeholder = "Add another artist from this lineup…";
+      find.setAttribute("aria-label", "Add another artist from this lineup");
+      var hits = document.createElement("div");
+      hits.className = "lp-vs-hits";
+      find.addEventListener("input", function () {
+        var q = find.value.trim().toLowerCase();
+        hits.innerHTML = "";
+        if (q.length < 2) return;
+        cands.filter(function (c) { return !seen[c.id] && c.n.toLowerCase().indexOf(q) !== -1; }).slice(0, 6).forEach(function (c) {
+          var b = document.createElement("button");
+          b.type = "button";
+          b.className = "lp-vs-hit";
+          b.textContent = "＋ " + c.n;
+          b.addEventListener("click", function () { state.extra.push(c.id); state.picked[c.id] = true; draw(); });
+          hits.appendChild(b);
+        });
+      });
+      body.appendChild(find);
+      body.appendChild(hits);
+
+      var go = voteSheet.querySelector(".lp-vs-go");
+      if (existing) {
+        go.textContent = picked.length ? "Add " + picked.length + (picked.length === 1 ? " set" : " sets") : "Pick sets to add";
+        go.disabled = !picked.length || total > 30;
+      } else {
+        go.textContent = total >= 2 ? "Start the vote (" + total + " sets)" : "Pick at least 2 sets";
+        go.disabled = total < 2 || total > 30 || !state.crew;
+      }
+      if (total > 30) go.textContent = "30 sets max";
+      go.addEventListener("click", function () {
+        go.disabled = true;
+        if (existing) addVoteSets(existing, picked.map(Number), go);
+        else startCrewVote(state, picked.map(Number), go);
+      });
+    }
+
+    draw();
+    voteSheet.classList.add("show");
+    var first = voteSheet.querySelector(".lp-x");
+    if (first) first.focus();
+  }
+
+  function chips(label, items, value, onPick) {
+    var wrap = document.createElement("div");
+    wrap.className = "lp-vs-chips";
+    var l = document.createElement("p");
+    l.className = "lp-vs-label";
+    l.textContent = label;
+    wrap.appendChild(l);
+    var row = document.createElement("div");
+    row.className = "lp-vs-chiprow";
+    row.setAttribute("role", "group");
+    row.setAttribute("aria-label", label);
+    items.forEach(function (it) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "lp-crew-chip";
+      b.textContent = it.t;
+      b.setAttribute("aria-pressed", String(it.v === value));
+      if (it.col && /^#[0-9a-fA-F]{3,8}$/.test(it.col)) b.style.setProperty("--cc", it.col);
+      b.addEventListener("click", function () { onPick(it.v); });
+      row.appendChild(b);
+    });
+    wrap.appendChild(row);
+    return wrap;
+  }
+
+  function closeVoteSheet() { if (voteSheet) voteSheet.classList.remove("show"); }
+
+  function startCrewVote(state, ids, btn) {
+    var c = (votes.crews || []).filter(function (x) { return x.id === state.crew; })[0];
+    if (!c) return;
+    var fest = member.festival.name || "this rave";
+    var question = String(state.q || ("Which sets are we hitting at " + fest + "?")).trim().slice(0, 200) || ("Which sets are we hitting at " + fest + "?");
+    window.LineupMember.client(function (sb) {
+      sb.from("crew_polls").insert({
+        crew_id: c.id, created_by: member.userId, question: question, poll_type: "pick_many",
+        options: ids.map(function (id) { return { id: id }; }),
+        festival_id: member.festival.id, max_picks: state.max, is_anonymous: false
+      }).then(function (res) {
+        if (res && res.error) { btn.disabled = false; toast("⚠️ Couldn't start the vote. Try again."); return; }
+        closeVoteSheet();
+        toast("🗳️ Vote started for " + c.name + ".");
+        huddleLineupPost(sb, c.id,
+          "🗳️ Crew vote: " + question + " Pick up to " + state.max + ".",
+          "/lineup-explorer/" + slug).then(noop, noop);
+        reloadVotes();
+      }, function () { btn.disabled = false; toast("⚠️ Couldn't start the vote. Try again."); });
+    });
+  }
+
+  function addVoteSets(v, ids, btn) {
+    var options = (v.options || []).map(function (o) { return { id: o.id }; })
+      .concat(ids.map(function (id) { return { id: id }; }));
+    window.LineupMember.client(function (sb) {
+      sb.from("crew_polls").update({ options: options }).eq("id", v.id).then(function (res) {
+        if (res && res.error) { btn.disabled = false; toast("⚠️ Couldn't add those sets. Try again."); return; }
+        closeVoteSheet();
+        toast("＋ " + ids.length + (ids.length === 1 ? " set added." : " sets added."));
+        reloadVotes();
+      }, function () { btn.disabled = false; toast("⚠️ Couldn't add those sets. Try again."); });
     });
   }
 
@@ -1806,8 +2287,11 @@
           sb.from("raver_festivals").select("festival_id").eq("raver_id", rid).eq("festival_id", fid),
           sb.from("raver_festival_interest").select("festival_id").eq("raver_id", rid).eq("festival_id", fid),
           sb.from("raver_favorite_artists").select("artist_id").eq("raver_id", rid),
-          sb.rpc("get_lineup_crew_pulse", { p_festival_id: fid })
+          sb.rpc("get_lineup_crew_pulse", { p_festival_id: fid }),
+          sb.rpc("get_lineup_crew_votes", { p_festival_id: fid })
         ]).then(function (out) {
+          var cv = out[6] && out[6].data;
+          votes = cv && cv.ok ? cv : null;
           ((out[4] && out[4].data) || []).forEach(function (r) { favs[r.artist_id] = true; });
           var cp = out[5] && out[5].data;
           crew = cp && cp.ok ? cp : null;
@@ -1869,6 +2353,13 @@
         sp.className = "lp-shared";
         sp.textContent = "📋 " + (picked ? "You both picked this" : shared.first + " picked this");
         el.insertBefore(sp, el.querySelector(".foot"));
+      }
+      var fam = actFaves(a);
+      if (fam.length) {
+        var ff = document.createElement("div");
+        ff.className = "lp-famfave";
+        ff.textContent = "⭐ Fam Fave · " + fam.join(", ");
+        el.insertBefore(ff, el.querySelector(".foot"));
       }
       var pulse = pulseEl(a);
       if (pulse) el.insertBefore(pulse, el.querySelector(".foot"));
