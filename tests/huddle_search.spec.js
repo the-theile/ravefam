@@ -148,10 +148,14 @@ test.describe('huddle search · jumping to a result', () => {
     expect(readRow).toBeFalsy();
 
     // Reading forward reaches the live end, and then the room does count as read.
-    await page.click('#hd-loadnewer');
-    await page.waitForTimeout(400);
+    // Click through the DOM rather than page.click: Playwright scrolls the
+    // button into view first, which can hit the stream's own scroll-to-bottom
+    // auto-load (huddleAtBottom → loadNewerHuddleMessages) and detach the
+    // button mid-click, leaving page.click waiting for it forever. Either path
+    // reaches the live end, which is what this test is about.
+    await page.evaluate(() => { const b = document.getElementById('hd-loadnewer'); if (b) b.click(); });
     await expect(page.locator('#hd-loadnewer')).toHaveCount(0);
-    expect(await page.evaluate(() => _huddleHasNewer)).toBe(false);
+    await expect.poll(() => page.evaluate(() => _huddleHasNewer)).toBe(false);
     const readAfter = await page.evaluate(() =>
       (window.__store.huddle_room_reads || []).find(r => r.room_id === 'room-f1'));
     expect(readAfter).toBeTruthy();
