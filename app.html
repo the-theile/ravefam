@@ -9690,7 +9690,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.70.1';
+  const APP_VERSION = '1.71.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -10785,6 +10785,7 @@
     localStorage.removeItem('pendingClaimToken');
     localStorage.removeItem('pendingRaveSlug');
     localStorage.removeItem('pendingPicksHandoff');
+    localStorage.removeItem('pendingInviteRaver');
     await sb.auth.signOut();
     // onAuthStateChange will fire SIGNED_OUT and flip back to auth screen
   }
@@ -11066,7 +11067,11 @@
       const from = params.get('from');
       localStorage.setItem('pendingPicksHandoff', from && /^[a-z0-9-]{1,80}$/.test(from) ? from : '1');
     }
-    if (token || joinToken || raveSlug || picks) history.replaceState(null, '', window.location.pathname + window.location.hash);
+    // ?invite=<raverId> from the Lineup Explorer crew panel ("Send claim link"
+    // on an unclaimed crewmate). Consumed by processPendingInvite().
+    const inviteId = params.get('invite');
+    if (inviteId && /^[0-9a-f-]{36}$/i.test(inviteId)) localStorage.setItem('pendingInviteRaver', inviteId);
+    if (token || joinToken || raveSlug || picks || inviteId) history.replaceState(null, '', window.location.pathname + window.location.hash);
   })();
 
   // processPendingRave: opens the rave a /rave/:slug share link pointed at.
@@ -11080,6 +11085,19 @@
     const fest = festivals.find(f => f.slug === slug);
     if (fest) openRaveFocus(fest.id);
     else showToast('⚠️ That rave link is no longer active.');
+  }
+
+  // processPendingInvite: opens the claim-link / QR sheet for an unclaimed
+  // crewmate the explorer asked about. Same checks as the squad's own invite
+  // button: the profile must be in your squad and still unclaimed.
+  function processPendingInvite() {
+    const id = localStorage.getItem('pendingInviteRaver');
+    if (!id || !currentUser || isOnboarding) return false;
+    localStorage.removeItem('pendingInviteRaver');
+    const r = getRaver(id);
+    if (!r || r.claimedBy) { showToast('⚠️ That profile is already claimed or not in your squad.'); return false; }
+    showQRModal(id);
+    return true;
   }
 
   // ===== Lineup Explorer picks handoff =====
@@ -12407,11 +12425,11 @@
       // over it. New ravers finish onboarding first (completeOnboarding()
       // opens the rave after).
       const pendingRave = !!localStorage.getItem('pendingRaveSlug');
-      const pendingPicks = !!localStorage.getItem('pendingPicksHandoff');
+      const pendingPicks = !!localStorage.getItem('pendingPicksHandoff') || !!localStorage.getItem('pendingInviteRaver');
       const onboarding = runFirstTimeSetup({ allowWelcome: !deepLink && !pendingRave && !pendingPicks });
       if (!onboarding && !deepLink) {
         processPendingRave();
-        if (!pendingRave) processPendingPicks();
+        if (!pendingRave && !processPendingInvite()) processPendingPicks();
       }
     }
   }

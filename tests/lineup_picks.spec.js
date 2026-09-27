@@ -223,7 +223,9 @@ test.describe('Lineup Explorer 1b — ♡ favorites and Pulse', () => {
           { artist_id: 9, name: 'Alesso', want: 6, gain_7d: 0 },
         ] },
         get_lineup_crew_pulse: { ok: true,
-          mates: { m1: { n: 'Sam', a: null, g: null }, m2: { n: 'Kai', a: null, g: null } },
+          crews: [{ id: 'c1', n: 'Bass Syndicate', col: '#FF2D78' }],
+          mates: { m1: { n: 'Sam', a: null, g: null, s: 'going', u: false, c: ['c1'] },
+                   m2: { n: 'Kai', a: null, g: null, s: 'going', u: false, c: ['c1'] } },
           going: ['m1', 'm2'], interested: [], picks: { 1: ['m1', 'm2'] } },
       },
       ...extra,
@@ -247,7 +249,7 @@ test.describe('Lineup Explorer 1b — ♡ favorites and Pulse', () => {
     const card = page.locator('.act-wrap', { has: star(page, 'Kaskade') });
     await expect(card.locator('.fav')).toHaveAttribute('aria-pressed', 'true');
     await expect(card.locator('.lp-heat i')).toHaveAttribute('style', /width: 100%/);
-    await expect(card.locator('.lp-faces')).toHaveAttribute('aria-label', 'Sam, Kai from your crew picked this');
+    await expect(page.locator('.act-cell', { has: star(page, 'Kaskade') }).locator('.lp-tray-btn')).toHaveAttribute('aria-label', 'Sam, Kai from your crew picked Kaskade');
     await expect(page.locator('.lp-meta')).toHaveText('1 of your favorites plays here · 2 crew going');
 
     await page.locator('.lp-f[data-v="favs"]').click();
@@ -344,5 +346,81 @@ test.describe('Lineup Explorer header — account button', () => {
     await expect(page.locator('.brandbar .lp-account')).toHaveAttribute('href', '/app');
     await page.goto('/lineup-explorer/index.html');
     await expect(page.locator('.brandbar .lp-account')).toHaveText('My RaveFAM');
+  });
+});
+
+
+test.describe('Lineup Explorer 2a — crew layer', () => {
+  test.beforeEach(async ({ page }) => { await blockExternal(page); });
+
+  function crewData(extra = {}) {
+    return memberData({
+      raver_festivals: [{ raver_id: 'r1', festival_id: 'f1' }],
+      raver_artist_plans: [{ raver_id: 'r1', artist_id: 1, festival_id: 'f1' }],
+      __rpc: {
+        get_lineup_crew_pulse: { ok: true,
+          crews: [{ id: 'c1', n: 'Bass Syndicate', col: '#FF2D78' }, { id: 'c2', n: 'Tech Heads', col: '#00F5FF' }],
+          mates: {
+            m1: { n: 'Sam', s: 'going', u: false, c: ['c1'] },
+            m2: { n: 'Kai', s: 'interested', u: false, c: ['c2'] },
+            m3: { n: 'Jo', s: 'going', u: true, c: ['c1'], inv: true },
+            m4: { n: 'Lee', s: 'going', u: true, c: ['c2'], inv: false },
+          },
+          going: ['m1', 'm3', 'm4'], interested: ['m2'],
+          picks: { 1: ['m1'], 2: ['m2'], 3: ['m2'] } },
+      },
+      ...extra,
+    });
+  }
+
+  test('panel shows who is here, the overlap, and switches crews', async ({ page }) => {
+    const errors = collectPageErrors(page);
+    await installSupabaseStub(page, { session: makeSession(), data: crewData() });
+    await page.goto(PAGE);
+    const panel = page.locator('.lp-crew');
+    await expect(panel).toBeVisible();
+    await expect(panel.locator('.lp-crew-sum')).toHaveText('3 going · 1 interested');
+    await expect(panel.locator('.lp-crew-mate')).toHaveCount(4);
+    await expect(panel.locator('.lp-face.is-unclaimed')).toHaveCount(2);
+    await expect(panel.locator('.lp-crew-overlap')).toHaveText('📋 You and your crew both picked: Kaskade');
+
+    await panel.getByRole('button', { name: 'Tech Heads' }).click();
+    await expect(panel.locator('.lp-crew-sum')).toHaveText('1 going · 1 interested');
+    await expect(panel.locator('.lp-crew-overlap')).toHaveCount(0);
+    // Kaskade's tray only showed Sam (Bass Syndicate) → gone under Tech Heads.
+    await expect(page.locator('.act-cell', { has: page.locator('.pick[data-n="Kaskade"]') }).locator('.lp-tray')).toHaveCount(0);
+    await expect(page.locator('.act-cell', { has: page.locator('.pick[data-n="Benda b2b Vastive"]') }).locator('.lp-tray-btn')).toContainText('1 crew · Kai');
+    expect(errors).toEqual([]);
+  });
+
+  test('unclaimed crewmates offer a claim link only when you can send one', async ({ page }) => {
+    await installSupabaseStub(page, { session: makeSession(), data: crewData() });
+    await page.goto(PAGE);
+    const jo = page.getByRole('button', { name: 'Jo, Going, not on RaveFAM yet' });
+    await jo.click();
+    await expect(page.getByRole('link', { name: 'Send claim link' })).toHaveAttribute('href', '/app?invite=m3');
+    const lee = page.getByRole('button', { name: 'Lee, Going, not on RaveFAM yet' });
+    await lee.click();
+    await expect(lee.locator('xpath=following-sibling::span[contains(@class,"lp-crew-pop")]')).toContainText('Your crew leader can send them a claim link.');
+  });
+
+  test('Crew picks filter and the tray list', async ({ page }) => {
+    await installSupabaseStub(page, { session: makeSession(), data: crewData() });
+    await page.goto(PAGE);
+    await expect(page.locator('.lp-f[data-v="crew"] .lp-nc')).toHaveText('2');
+    await page.locator('.lp-f[data-v="crew"]').click();
+    await expect(page.locator('#deck .act-wrap')).toHaveCount(2);
+    const tray = page.locator('.act-cell', { has: page.locator('.pick[data-n="Kaskade"]') }).locator('.lp-tray');
+    await tray.locator('.lp-tray-btn').click();
+    await expect(tray.locator('.lp-tray-btn')).toHaveAttribute('aria-expanded', 'true');
+    await expect(tray.locator('.lp-tray-list li')).toHaveText(['SSam · Going']);
+  });
+
+  test('no crew here → no panel and no Crew picks filter', async ({ page }) => {
+    await installSupabaseStub(page, { session: makeSession(), data: memberData({ raver_festivals: [{ raver_id: 'r1', festival_id: 'f1' }] }) });
+    await page.goto(PAGE);
+    await expect(page.locator('.lp-bar')).toHaveAttribute('data-rsvp', 'going');
+    await expect(page.locator('.lp-crew')).toBeHidden();
+    await expect(page.locator('.lp-f[data-v="crew"]')).toBeHidden();
   });
 });

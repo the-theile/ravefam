@@ -129,3 +129,19 @@ test('app favorites use ♡ / ♥ in the artist modal', async ({ page }) => {
   await fav.click();
   await expect(page.locator('#artist-sightings-overlay .lineup-fav-btn')).toHaveText('♥');
 });
+
+
+test('?invite=<raverId> opens the claim sheet for an unclaimed squad profile', async ({ page }) => {
+  const d = data();
+  d.ravers.push({ id: '11111111-2222-3333-4444-555555555555', name: 'Jo', handle: 'jo', is_you: false, created_by: 'test-user-id', claimed_by: null, status: 'unclaimed', qr_token: 'qr-jo-token', blocked_tags: [], genres: [], vibe_tags: [], custom_vibe_tags: [], deleted_at: null });
+  d.crew_members.push({ crew_id: 'c1', raver_id: '11111111-2222-3333-4444-555555555555', added_at: '2024-01-01T00:00:00Z', added_by: 'test-user-id', deleted_at: null });
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem('seeded')) return;
+    sessionStorage.setItem('seeded', '1');
+    localStorage.setItem('pendingInviteRaver', '11111111-2222-3333-4444-555555555555');
+  });
+  await bootAuthedApp(page, { data: d });
+  // bootAuthedApp closes open overlays after boot, so check what the sheet rendered.
+  await expect(page.locator('#qr-modal')).toContainText('QRJOTO');
+  expect(await page.evaluate(() => localStorage.getItem('pendingInviteRaver'))).toBeNull();
+});
