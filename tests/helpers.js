@@ -199,6 +199,9 @@ async function installSupabaseStub(page, opts = {}) {
               }
               if (st.limit != null) rows = rows.slice(0, st.limit);
               if (st.range) rows = rows.slice(st.range[0], st.range[1] + 1);
+              // Supabase's max_rows: a response never holds more than 1000
+              // rows, and says nothing when it cuts one short.
+              rows = rows.slice(0, 1000);
               return { data: attach(rows, parseRelations(st.sel)), error: null };
             }
             if (st.op === 'insert') {
