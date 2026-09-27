@@ -494,7 +494,7 @@
   }
 
   var slug = null, acts = [], onRender = null;
-  var view = "all";        // "all" | "picks" | "favs" (favs: members only)
+  var view = "all";        // "all" | "picks" | "favs" | "crew" (favs, crew: members only)
   var sortWanted = false;  // "🔥 Most wanted" sort (members only)
   var local = [];          // act names picked in this browser for this page
   var member = null;       // LineupMember result, once it resolves as a member
@@ -554,27 +554,63 @@
     return best;
   }
 
-  // Crewmates (from get_lineup_crew_pulse) who picked any artist in the act.
+  // ----- crew layer (Phase 2a; data from get_lineup_crew_pulse) -----
+  var crewSel = "all";     // crew switcher: "all" or a crew id
+
+  function mateOk(id) {
+    var m = crew && crew.mates && crew.mates[id];
+    if (!m) return false;
+    return crewSel === "all" || (Array.isArray(m.c) && m.c.indexOf(crewSel) !== -1);
+  }
+
+  // Visible crewmates here (Going first), for the panel and header line.
+  function crewHere() {
+    if (!crew || !crew.mates) return [];
+    return Object.keys(crew.mates).filter(mateOk).map(function (id) {
+      var m = crew.mates[id]; m.id = id; return m;
+    }).sort(function (x, y) {
+      return (x.s === y.s ? 0 : x.s === "going" ? -1 : 1) || (x.u === y.u ? 0 : x.u ? 1 : -1) ||
+        String(x.n).localeCompare(String(y.n));
+    });
+  }
+
+  // Claimed crewmates (current switcher) who picked any artist in the act.
   function actCrew(a) {
     if (!crew || !crew.picks) return [];
     var seen = {}, out = [];
     (actIds(a) || []).forEach(function (id) {
       (crew.picks[id] || []).forEach(function (rid) {
-        if (seen[rid] || !crew.mates[rid]) return;
+        if (seen[rid] || !mateOk(rid)) return;
         seen[rid] = true;
-        out.push(crew.mates[rid]);
+        var m = crew.mates[rid]; m.id = rid;
+        out.push(m);
       });
     });
     return out;
   }
 
+  function faceEl(m, tag) {
+    var f = document.createElement(tag || "span");
+    f.className = "lp-face" + (m.s === "going" ? " is-going" : " is-interested") + (m.u ? " is-unclaimed" : "");
+    if (m.a && /^https:\/\//.test(m.a)) {
+      var img = document.createElement("img");
+      img.src = m.a; img.alt = ""; img.loading = "lazy";
+      f.appendChild(img);
+    } else {
+      f.appendChild(document.createTextNode((m.n || "?").charAt(0).toUpperCase()));
+      if (m.g && /^linear-gradient\([#0-9a-zA-Z,.%() ]+\)$/.test(m.g)) f.style.background = m.g;
+    }
+    return f;
+  }
+
+  function statusWord(m) { return m.s === "going" ? "Going" : "Interested"; }
+
   function pulseEl(a) {
     var w = actWant(a);
-    var mates = isMemberMode() ? actCrew(a) : [];
-    if (!w && !mates.length) return null;
+    if (!w) return null;
     var row = document.createElement("div");
     row.className = "lp-pulse";
-    if (w && isMemberMode()) {
+    if (isMemberMode()) {
       var heat = document.createElement("span");
       heat.className = "lp-heat";
       heat.setAttribute("aria-hidden", "true");
@@ -583,41 +619,152 @@
       heat.appendChild(fill);
       row.appendChild(heat);
     }
-    if (w) {
-      var t = document.createElement("span");
-      t.className = "lp-want";
-      t.textContent = w.want + " want to see" + (w.gain_7d ? " · +" + w.gain_7d + " this week" : "");
-      row.appendChild(t);
-    }
-    if (mates.length) {
-      var names = mates.map(function (m) { return m.n || "Crewmate"; });
-      var faces = document.createElement("span");
-      faces.className = "lp-faces";
-      faces.setAttribute("role", "img");
-      faces.setAttribute("aria-label", names.join(", ") + (names.length === 1 ? " from your crew picked this" : " from your crew picked this"));
-      faces.title = names.join(", ");
-      mates.slice(0, 3).forEach(function (m) {
-        var f = document.createElement("span");
-        f.className = "lp-face";
-        if (m.a && /^https:\/\//.test(m.a)) {
-          var img = document.createElement("img");
-          img.src = m.a; img.alt = ""; img.loading = "lazy";
-          f.appendChild(img);
-        } else {
-          f.textContent = (m.n || "?").charAt(0).toUpperCase();
-          if (m.g && /^linear-gradient\([#0-9a-zA-Z,.%() ]+\)$/.test(m.g)) f.style.background = m.g;
-        }
-        faces.appendChild(f);
-      });
-      if (mates.length > 3) {
-        var more = document.createElement("span");
-        more.className = "lp-face lp-more";
-        more.textContent = "+" + (mates.length - 3);
-        faces.appendChild(more);
-      }
-      row.appendChild(faces);
-    }
+    var t = document.createElement("span");
+    t.className = "lp-want";
+    t.textContent = w.want + " want to see" + (w.gain_7d ? " · +" + w.gain_7d + " this week" : "");
+    row.appendChild(t);
     return row;
+  }
+
+  // "👥 2 crew" tray under a card; expands in place to names and statuses.
+  // Lives outside the card's <a> so it can be a real button.
+  function crewTrayEl(a) {
+    var mates = isMemberMode() ? actCrew(a) : [];
+    if (!mates.length) return null;
+    var tray = document.createElement("div");
+    tray.className = "lp-tray";
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "lp-tray-btn";
+    b.setAttribute("aria-expanded", "false");
+    var faces = document.createElement("span");
+    faces.className = "lp-faces";
+    faces.setAttribute("aria-hidden", "true");
+    mates.slice(0, 3).forEach(function (m) { faces.appendChild(faceEl(m)); });
+    b.appendChild(faces);
+    var names = mates.map(function (m) { return m.n || "Crewmate"; });
+    b.appendChild(document.createTextNode(mates.length + " crew · " + names.slice(0, 2).join(", ") + (names.length > 2 ? " +" + (names.length - 2) : "")));
+    b.setAttribute("aria-label", names.join(", ") + " from your crew picked " + a.name);
+    var list = document.createElement("ul");
+    list.className = "lp-tray-list";
+    list.hidden = true;
+    mates.forEach(function (m) {
+      var li = document.createElement("li");
+      li.appendChild(faceEl(m));
+      li.appendChild(document.createTextNode((m.n || "Crewmate") + " · " + statusWord(m)));
+      list.appendChild(li);
+    });
+    b.addEventListener("click", function (e) {
+      e.preventDefault();
+      var open = list.hidden;
+      list.hidden = !open;
+      b.setAttribute("aria-expanded", String(open));
+    });
+    tray.appendChild(b);
+    tray.appendChild(list);
+    return tray;
+  }
+
+  // "Your crew here" panel above the picks bar.
+  var crewEl = null;
+  function renderCrewPanel() {
+    if (!barEl) return;
+    var mates = isMemberMode() ? crewHere() : [];
+    if (!crewEl) {
+      crewEl = document.createElement("section");
+      crewEl.className = "lp-crew";
+      crewEl.setAttribute("aria-labelledby", "lpCrewTitle");
+      barEl.parentNode.insertBefore(crewEl, barEl);
+    }
+    var crews = (crew && crew.crews) || [];
+    if (!isMemberMode() || (!mates.length && crewSel === "all")) { crewEl.hidden = true; return; }
+    crewEl.hidden = false;
+    crewEl.innerHTML = "";
+    var top = document.createElement("div");
+    top.className = "lp-crew-top";
+    var h = document.createElement("h2");
+    h.id = "lpCrewTitle";
+    h.textContent = "Your crew here";
+    top.appendChild(h);
+    var going = mates.filter(function (m) { return m.s === "going"; }).length;
+    var interested = mates.length - going;
+    var sum = document.createElement("span");
+    sum.className = "lp-crew-sum";
+    sum.textContent = [going ? going + " going" : "", interested ? interested + " interested" : ""].filter(Boolean).join(" · ") || "No one from this crew yet";
+    top.appendChild(sum);
+    crewEl.appendChild(top);
+
+    if (crews.length > 1) {
+      var sw = document.createElement("div");
+      sw.className = "lp-crew-switch";
+      sw.setAttribute("role", "group");
+      sw.setAttribute("aria-label", "Show one crew");
+      [{ id: "all", n: "All crews" }].concat(crews).forEach(function (c) {
+        var cb = document.createElement("button");
+        cb.type = "button";
+        cb.className = "lp-crew-chip";
+        cb.textContent = c.n;
+        cb.setAttribute("aria-pressed", String(crewSel === c.id));
+        if (c.col && /^#[0-9a-fA-F]{3,8}$/.test(c.col)) cb.style.setProperty("--cc", c.col);
+        cb.addEventListener("click", function () { crewSel = c.id; refresh(); });
+        sw.appendChild(cb);
+      });
+      crewEl.appendChild(sw);
+    }
+
+    var row = document.createElement("div");
+    row.className = "lp-crew-faces";
+    mates.forEach(function (m) {
+      var wrap = document.createElement("span");
+      wrap.className = "lp-crew-mate";
+      if (m.u) {
+        var fb = faceEl(m, "button");
+        fb.type = "button";
+        fb.setAttribute("aria-label", (m.n || "Crewmate") + ", " + statusWord(m) + ", not on RaveFAM yet");
+        fb.setAttribute("aria-expanded", "false");
+        var pop = document.createElement("span");
+        pop.className = "lp-crew-pop";
+        pop.hidden = true;
+        pop.appendChild(document.createTextNode((m.n || "They") + " isn't on RaveFAM yet. "));
+        if (m.inv) {
+          var link = document.createElement("a");
+          link.href = "/app?invite=" + encodeURIComponent(m.id);
+          link.textContent = "Send claim link";
+          pop.appendChild(link);
+        } else {
+          pop.appendChild(document.createTextNode("Your crew leader can send them a claim link."));
+        }
+        fb.addEventListener("click", function () {
+          var open = pop.hidden;
+          pop.hidden = !open;
+          fb.setAttribute("aria-expanded", String(open));
+        });
+        wrap.appendChild(fb);
+        wrap.appendChild(pop);
+      } else {
+        var f = faceEl(m);
+        f.setAttribute("role", "img");
+        f.setAttribute("aria-label", (m.n || "Crewmate") + ", " + statusWord(m));
+        f.title = (m.n || "Crewmate") + " · " + statusWord(m);
+        wrap.appendChild(f);
+      }
+      var nm = document.createElement("span");
+      nm.className = "lp-crew-name";
+      nm.setAttribute("aria-hidden", "true");
+      nm.textContent = m.n || "Crewmate";
+      wrap.appendChild(nm);
+      row.appendChild(wrap);
+    });
+    crewEl.appendChild(row);
+
+    var overlap = pickedActs().filter(function (a) { return actCrew(a).length; });
+    if (overlap.length) {
+      var ov = document.createElement("p");
+      ov.className = "lp-crew-overlap";
+      var names = overlap.map(function (a) { return a.name; });
+      ov.textContent = "📋 You and your crew both picked: " + names.slice(0, 6).join(", ") + (names.length > 6 ? " +" + (names.length - 6) : "");
+      crewEl.appendChild(ov);
+    }
   }
 
   function toggleFav(a) {
@@ -1147,11 +1294,14 @@
     });
     barEl.dataset.mode = isMemberMode() ? "member" : "visitor";
     barEl.dataset.rsvp = rsvp || "";
-    ["all", "picks", "favs"].forEach(function (v) {
+    ["all", "picks", "favs", "crew"].forEach(function (v) {
       barEl.querySelector('[data-v="' + v + '"]').setAttribute("aria-pressed", String(view === v));
     });
     var member = isMemberMode();
     barEl.querySelector('[data-v="favs"]').hidden = !member;
+    var crewN = member ? acts.filter(function (a) { return actCrew(a).length; }).length : 0;
+    barEl.querySelector('[data-v="crew"]').hidden = !crewN && view !== "crew";
+    barEl.querySelector(".lp-nc").textContent = crewN;
     var sortBtn = barEl.querySelector(".lp-sort");
     sortBtn.hidden = !member;
     sortBtn.setAttribute("aria-pressed", String(sortWanted));
@@ -1159,7 +1309,8 @@
     barEl.querySelector(".lp-nf").textContent = favN;
     var meta = [];
     if (member && favN) meta.push(favN + (favN === 1 ? " of your favorites plays here" : " of your favorites play here"));
-    if (member && crew && crew.going && crew.going.length) meta.push(crew.going.length + " crew going");
+    var goingHere = member ? crewHere().filter(function (m) { return m.s === "going"; }).length : 0;
+    if (goingHere) meta.push(goingHere + " crew going");
     var metaEl = barEl.querySelector(".lp-meta");
     metaEl.textContent = meta.join(" · ");
     metaEl.hidden = !meta.length;
@@ -1168,6 +1319,7 @@
       return String(k).toUpperCase() + " " + days[k];
     }).join(" · ");
 
+    renderCrewPanel();
     var msg = "", btn = "";
     if (view === "picks" && local.length) {
       if (!member) {
@@ -1200,6 +1352,7 @@
       '<button type="button" class="lp-f" data-v="all">All artists</button>' +
       '<button type="button" class="lp-f" data-v="picks"><span aria-hidden="true">📋</span> My picks <b class="lp-n">0</b></button>' +
       '<button type="button" class="lp-f lp-fav-f" data-v="favs" hidden><span aria-hidden="true">♡</span> Favorites <b class="lp-nf">0</b></button>' +
+      '<button type="button" class="lp-f lp-crew-f" data-v="crew" hidden><span aria-hidden="true">👥</span> Crew picks <b class="lp-nc">0</b></button>' +
       '<button type="button" class="lp-sort" hidden aria-pressed="false">🔥 Most wanted</button>' +
       '<span class="lp-days"></span>' +
       '<span class="lp-meta" hidden></span>';
@@ -1301,7 +1454,12 @@
       loadWantCounts();
       loadMember();
     },
-    ok: function (a) { return view === "all" || (view === "picks" ? isPicked(a) : isFav(a)); },
+    ok: function (a) {
+      if (view === "all") return true;
+      if (view === "picks") return isPicked(a);
+      if (view === "crew") return actCrew(a).length > 0;
+      return isFav(a);
+    },
     wrap: function (el, a) {
       var picked = isPicked(a);
       var w = document.createElement("div");
@@ -1318,6 +1476,9 @@
       if (pulse) el.insertBefore(pulse, el.querySelector(".foot"));
       w.appendChild(el);
       w.appendChild(b);
+      // The crew tray sits under the card in an outer cell, so ♡/📋 stay
+      // anchored to the card itself.
+      var tray = crewTrayEl(a);
       if (isMemberMode()) {
         var fav = isFav(a);
         var h = document.createElement("button");
@@ -1332,7 +1493,12 @@
         w.classList.add("member");
         if (fav) w.classList.add("faved");
       }
-      return w;
+      if (!tray) return w;
+      var cell = document.createElement("div");
+      cell.className = "act-cell";
+      cell.appendChild(w);
+      cell.appendChild(tray);
+      return cell;
     },
     all: readAll
   };
