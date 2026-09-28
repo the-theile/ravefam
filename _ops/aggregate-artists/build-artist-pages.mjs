@@ -81,7 +81,7 @@ function hash(s) {
   return h.toString(36);
 }
 function slugify(name) {
-  const base = name.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  const base = name.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/æ/g, 'ae')
     .replace(/&/g, ' and ').replace(/\$/g, 's').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   return base || 'artist-' + hash(name.toLowerCase());
 }
