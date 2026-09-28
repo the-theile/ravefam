@@ -3393,8 +3393,110 @@
     else injectAccountButton();
   }
 
+  // ----- artist pages (Phase 4c-2; /lineup-explorer/artist/<slug>) -----
+  // Static pages from _ops/aggregate-artists/build-artist-pages.mjs. Here:
+  // past festivals move under their own heading, and members get the layer
+  // from get_artist_member_info — ♡ Favorite, raves seen at, which festivals
+  // it's on their 📋 picks for, and crewmates planning to catch them — in
+  // place of the "Never miss a set" Join prompt.
+  function localToday() {
+    var t = new Date();
+    return t.getFullYear() + "-" + String(t.getMonth() + 1).padStart(2, "0") + "-" + String(t.getDate()).padStart(2, "0");
+  }
+
+  function uniqNames(list) {
+    var seen = {};
+    return list.filter(function (n) { if (!n || seen[n]) return false; return (seen[n] = true); });
+  }
+
+  function initArtistPage(root) {
+    var list = document.getElementById("arFests");
+    if (list) {
+      var today = localToday();
+      var past = [].filter.call(list.children, function (li) { return (li.getAttribute("data-end") || "") < today; });
+      past.forEach(function (li) { li.classList.add("is-past"); });
+      if (past.length && past.length < list.children.length) {
+        var ol = el("ol", "ar-fests");
+        past.forEach(function (li) { ol.appendChild(li); });
+        list.parentNode.appendChild(el("h3", null, "Past"));
+        list.parentNode.appendChild(ol);
+      }
+    }
+    window.LineupMember.ready(function (m) {
+      if (!m || !m.isMember) return;
+      var join = document.getElementById("arJoin");
+      if (join) join.hidden = true;
+      var names = [];
+      try { names = JSON.parse(root.getAttribute("data-rf-names") || "[]"); } catch (e) {}
+      if (!names.length) names = [String(root.getAttribute("data-rf-artist") || "").toLowerCase()];
+      window.LineupMember.client(function (sb) {
+        sb.rpc("get_artist_member_info", { p_names: names.slice(0, 5) }).then(function (res) {
+          var d = res && res.data;
+          if (d && d.ok) renderArtistMember(root, m, d);
+        }, noop);
+      });
+    });
+  }
+
+  function renderArtistMember(root, m, d) {
+    var box = document.getElementById("arMember");
+    if (!box) return;
+    var name = root.getAttribute("data-rf-artist") || "this artist";
+    box.innerHTML = "";
+    box.hidden = false;
+    if (d.artist_id && m.raverId) {
+      var fav = !!d.fav;
+      var b = el("button", "ar-fav");
+      b.type = "button";
+      var paint = function () {
+        b.textContent = fav ? "♥ Favorite" : "♡ Favorite";
+        b.setAttribute("aria-pressed", String(fav));
+        b.setAttribute("aria-label", fav ? "Remove " + name + " from favorites" : "Add " + name + " to favorites");
+      };
+      paint();
+      b.addEventListener("click", function () {
+        b.disabled = true;
+        window.LineupMember.client(function (sb) {
+          var q = fav
+            ? sb.from("raver_favorite_artists").delete().eq("raver_id", m.raverId).eq("artist_id", d.artist_id)
+            : sb.from("raver_favorite_artists").insert({ raver_id: m.raverId, artist_id: d.artist_id });
+          q.then(function (res) {
+            b.disabled = false;
+            if (res && res.error) { toast("⚠️ Couldn't save that. Try again."); return; }
+            fav = !fav;
+            paint();
+            toast(fav ? "♡ " + name + " is a favorite. We'll ping you when they land on a lineup." : "Removed " + name + " from your favorites.");
+          }, function () { b.disabled = false; toast("⚠️ Couldn't save that. Try again."); });
+        });
+      });
+      box.appendChild(b);
+    }
+    var seen = d.seen || 0;
+    box.appendChild(el("span", "ar-stat", seen ? "👁️ Seen live at " + seen + (seen === 1 ? " rave" : " raves") : "👁️ Not seen live yet"));
+    var crew = d.crew || [];
+    var crewNames = uniqNames(crew.map(function (c) { return c.n; }));
+    if (crewNames.length) {
+      box.appendChild(el("span", "ar-stat", "👥 " + (crewNames.length > 3 ? crewNames.slice(0, 3).join(", ") + " +" + (crewNames.length - 3) : crewNames.join(", ")) + " want" + (crewNames.length === 1 ? "s" : "") + " to catch them"));
+    }
+    var mine = {};
+    (d.my_plans || []).forEach(function (sl) { mine[sl] = true; });
+    var bySlug = {};
+    crew.forEach(function (c) { if (c.slug) (bySlug[c.slug] = bySlug[c.slug] || []).push(c.n); });
+    [].forEach.call(document.querySelectorAll(".ar-fest"), function (li) {
+      var sl = li.getAttribute("data-slug");
+      var me = li.querySelector(".ar-fest-me");
+      if (!me) return;
+      me.innerHTML = "";
+      if (mine[sl]) me.appendChild(el("span", "ar-badge ar-badge-pick", "📋 On your picks"));
+      if (bySlug[sl]) me.appendChild(el("span", "ar-badge ar-badge-crew", "👥 " + uniqNames(bySlug[sl]).join(", ")));
+      me.hidden = !me.childNodes.length;
+    });
+  }
+
   if (window.LineupMember && !window.LineupMember.pageSlug()) {
     var startHub = function () {
+      var artistRoot = document.querySelector("[data-rf-artist]");
+      if (artistRoot) { initArtistPage(artistRoot); return; }
       initHub();
       initHubWanted();
       window.LineupMember.ready(function (m) { if (m && m.isMember && m.raverId) initHubMember(m); });

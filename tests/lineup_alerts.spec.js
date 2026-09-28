@@ -86,3 +86,47 @@ test.describe('Settings — Lineup alerts', () => {
     expect(prefs).toEqual([['postfest', false], ['set_times', true]]);
   });
 });
+
+test.describe('Artist sheet — coming up, crew history, artist page (4c-2)', () => {
+  function sheetData() {
+    const d = seedData();
+    d.festivals[0].slug = 'tomorrowland-2099';
+    d.festivals.push(
+      { id: 'f-p1', name: 'Old Fest One', date: '2024-06-01', location: 'Detroit, US', color: '#39FF14', days: 1, deleted_at: null },
+      { id: 'f-p2', name: 'Old Fest Two', date: '2025-06-01', location: 'Detroit, US', color: '#39FF14', days: 1, deleted_at: null });
+    d.raver_festivals.push({ raver_id: 'r-you', festival_id: 'f-p1' });
+    d.ravers.find(r => r.id === 'r-kai').privacy_show_rsvps = false; // claimed, RSVPs hidden
+    d.artist_festival_appearances = [
+      { artist_id: 'a1', festival_id: 'f1' }, { artist_id: 'a1', festival_id: 'f-p1' }, { artist_id: 'a1', festival_id: 'f-p2' },
+    ];
+    d.raver_artist_plans = ['r-you', 'r-sam', 'r-kai'].map(r => ({ raver_id: r, artist_id: 'a1', festival_id: 'f1' }));
+    d.raver_artist_sightings = [
+      { raver_id: 'r-sam', artist_id: 'a1', festival_id: 'f-p1' },
+      { raver_id: 'r-sam', artist_id: 'a1', festival_id: 'f-p2' },
+      { raver_id: 'r-kai', artist_id: 'a1', festival_id: 'f-p1' },
+    ];
+    return d;
+  }
+
+  test('shows upcoming raves with your pick and visible crewmates, who has seen them, and the artist page', async ({ page }) => {
+    const errors = await bootAuthedApp(page, { data: sheetData() });
+    await page.evaluate(() => openArtistSightingsModal('a1'));
+    const modal = page.locator('#artist-sightings-modal');
+    await expect(modal.locator('.artist-sheet-upcoming .rlog-item-name')).toHaveText(['Tomorrowland']);
+    // Kai's RSVPs are private, so only Sam shows.
+    await expect(modal.locator('.artist-sheet-upcoming .rlog-item-sub')).toContainText('📋 On your picks · 👥 Sam');
+    await expect(modal.locator('.artist-sheet-upcoming .rlog-item-sub')).not.toContainText('Kai');
+    await expect(modal.locator('.artist-sheet-crew')).toHaveText('Sam ×2');
+    await expect(modal.locator('.artist-sheet-page')).toHaveAttribute('href', '/lineup-explorer/artist/charlotte-de-witte');
+    expect(errors).toEqual([]);
+  });
+
+  test('no artist page link for an artist only on app raves', async ({ page }) => {
+    const d = sheetData();
+    d.festivals[0].slug = null;
+    await bootAuthedApp(page, { data: d });
+    await page.evaluate(() => openArtistSightingsModal('a1'));
+    await expect(page.locator('#artist-sightings-modal .artist-sheet-label').first()).toHaveText('Coming up');
+    await expect(page.locator('#artist-sightings-modal .artist-sheet-page')).toHaveCount(0);
+  });
+});

@@ -1735,6 +1735,10 @@
     color: var(--muted);
   }
   .lineup-plan-btn.planned { color: var(--neon-yellow); background: color-mix(in srgb, var(--neon-yellow) 18%, transparent); }
+  /* Artist sheet extras (artistSheetExtrasHTML) */
+  .artist-sheet-label { font-size: 0.66rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 12px 0 6px; }
+  .artist-sheet-crew { font-size: 0.82rem; line-height: 1.5; }
+  .artist-sheet-page { margin-top: 12px; }
   /* "Who'd you catch? 📼" — post-fest check-off on a past rave (postfestCardHTML) */
   .postfest-card { margin: 0 0 10px; padding: 10px 12px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--neon-yellow) 45%, transparent); background: color-mix(in srgb, var(--neon-yellow) 6%, transparent); }
   .postfest-title { font-weight: 800; font-size: 0.88rem; color: var(--neon-yellow); }
@@ -9752,7 +9756,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.76.0';
+  const APP_VERSION = '1.77.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -35073,6 +35077,64 @@
       .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   }
 
+  // Artist sheet extras (Lineup Explorer 4c-2): upcoming raves with this
+  // artist and whether they're on your 📋 picks, crewmates planning to catch
+  // them (only crewmates whose RSVPs are visible, like the explorer's crew
+  // layer), crewmates who've seen them, and the explorer's artist page.
+  function artistCrewName(raverId) {
+    const r = squad.find(x => String(x.id) === String(raverId) && !x.isYou);
+    return r && raverPerms(r).rsvpsVisible ? (r.name || '').split(' ')[0] : null;
+  }
+
+  function artistUpcomingRows(artistId) {
+    const you = squad.find(r => r.isYou);
+    const festIds = new Set(artistAppearances.filter(a => String(a.artist_id) === String(artistId)).map(a => String(a.festival_id)));
+    return festivals
+      .filter(f => festIds.has(String(f.id)) && !f.archived && !isFestAchieved(f))
+      .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+      .map(f => {
+        const crew = [...new Set(raverArtistPlans
+          .filter(p => String(p.festival_id) === String(f.id) && String(p.artist_id) === String(artistId) && (!you || String(p.raver_id) !== String(you.id)))
+          .map(p => artistCrewName(p.raver_id)).filter(Boolean))];
+        return { f, mine: myLineupPlanIds(f.id).has(String(artistId)), crew };
+      });
+  }
+
+  function artistCrewSeen(artistId) {
+    const counts = {};
+    raverArtistSightings.forEach(s => {
+      if (String(s.artist_id) !== String(artistId)) return;
+      const n = artistCrewName(s.raver_id);
+      if (n) counts[n] = (counts[n] || 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }
+
+  // Same slug rule as _ops/aggregate-artists/build-artist-pages.mjs.
+  function artistPageSlug(name) {
+    return String(name || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+      .replace(/&/g, ' and ').replace(/\$/g, 's').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  }
+
+  function artistSheetExtrasHTML(artistId, artist) {
+    const upcoming = artistUpcomingRows(artistId);
+    const crewSeen = artistCrewSeen(artistId);
+    const onExplorer = artistAppearances.some(a => String(a.artist_id) === String(artistId) && getFestival(a.festival_id)?.slug);
+    const slug = onExplorer ? artistPageSlug(artist.name) : '';
+    const upHtml = upcoming.map(({ f, mine, crew }) => `
+        <div class="rlog-item" style="cursor:default;">
+          <span class="rlog-item-dot" style="background:${raveSwatchGradient(festColor(f))};"></span>
+          <div class="rlog-item-main">
+            <div class="rlog-item-name">${escHtml(f.name)}</div>
+            <div class="rlog-item-sub">${festDate(f) ? festDate(f).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}${mine ? ' · 📋 On your picks' : ''}${crew.length ? ' · 👥 ' + escHtml(crew.join(', ')) : ''}</div>
+          </div>
+        </div>`).join('');
+    return `
+      ${upHtml ? `<div class="artist-sheet-label">Coming up</div><div class="rlog-list artist-sheet-upcoming">${upHtml}</div>` : ''}
+      ${crewSeen.length ? `<div class="artist-sheet-label">Crew who've seen them</div><div class="artist-sheet-crew">${crewSeen.map(([n, c]) => escHtml(n) + (c > 1 ? ' ×' + c : '')).join(' · ')}</div>` : ''}
+      ${slug ? `<a class="lineup-explorer-btn artist-sheet-page" href="/lineup-explorer/artist/${escHtml(slug)}" target="_blank" rel="noopener">🔭 Artist page</a>` : ''}`;
+  }
+
   function renderArtistSightingsModalBody(artistId) {
     const modal = document.getElementById('artist-sightings-modal');
     if (!modal) return;
@@ -35097,6 +35159,8 @@
       <div class="modal-title">${escHtml(artist.name)}
         <button type="button" class="lineup-fav-btn${isFav ? ' favorited' : ''}" aria-pressed="${isFav}" title="${isFav ? 'Remove from favorite artists' : 'Add to favorite artists'}" aria-label="${isFav ? 'Remove from favorite artists' : 'Add to favorite artists'}" onclick="dbToggleFavoriteArtist('${escJsAttr(artistId)}')">${isFav ? '♥' : '♡'}</button>
       </div>
+      ${artistSheetExtrasHTML(artistId, artist)}
+      <div class="artist-sheet-label">Seen live</div>
       <div class="stats-empty-sub" style="margin-bottom:12px;">Tap a rave to toggle whether you caught them live</div>
       <div class="rlog-list">${rows || '<div class="fest-empty">No past raves with this artist tagged</div>'}</div>
       <div class="modal-actions"><button class="btn btn-ghost" onclick="closeArtistSightingsModal()">Close</button></div>

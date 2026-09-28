@@ -1227,3 +1227,72 @@ test.describe("Lineup Explorer 4c — Who'd you catch? 📼", () => {
     await expect(panel(page)).toHaveCount(0);
   });
 });
+
+test.describe('Lineup Explorer 4c-2 — artist pages', () => {
+  test.beforeEach(async ({ page }) => { await blockExternal(page); });
+  const ARTIST = '/lineup-explorer/artist/kaskade.html';
+
+  test('visitors see every festival, past ones apart, preview links and Never miss a set', async ({ page }) => {
+    const errors = collectPageErrors(page);
+    await page.clock.setFixedTime(new Date('2026-10-05T12:00:00'));
+    await installSupabaseStub(page, { session: null, data: { festivals: [], artists: [] } });
+    await page.goto(ARTIST);
+    await expect(page.locator('h1')).toHaveText('Kaskade');
+    await expect(page).toHaveTitle('Kaskade — Upcoming Festivals & Set Times | RaveFAM');
+    // Breakaway Utah (Oct 2–3) is over by Oct 5.
+    await expect(page.locator('#arFests .ar-fest-name')).toHaveText(['EDC Colombia 2026', 'EDC Orlando 2026']);
+    await expect(page.locator('.ar-sec h3')).toHaveText('Past');
+    await expect(page.locator('.ar-fest.is-past .ar-fest-name')).toHaveText('Breakaway Utah 2026');
+    await expect(page.locator('.ar-fest-name', { hasText: 'EDC Orlando 2026' })).toHaveAttribute('href', '/lineup-explorer/edc-orlando-2026?q=Kaskade');
+    await expect(page.locator('.ar-link')).toHaveCount(5);
+    await expect(page.locator('.ar-link', { hasText: 'Spotify' })).toHaveAttribute('href', 'https://open.spotify.com/search/Kaskade');
+    await expect(page.locator('#arJoin')).toBeVisible();
+    await expect(page.locator('#arMember')).toBeHidden();
+    // The hub's own panels never boot here.
+    await expect(page.locator('.lp-hub')).toHaveCount(0);
+    const ld = JSON.parse(await page.locator('script[type="application/ld+json"]').first().textContent());
+    expect(ld).toMatchObject({ '@type': 'MusicGroup', name: 'Kaskade' });
+    expect(ld.event.map(e => e.name)).toEqual(['Breakaway Utah 2026', 'EDC Colombia 2026', 'EDC Orlando 2026']);
+    expect(errors).toEqual([]);
+  });
+
+  test('members get ♡, raves seen, their picks and crewmates planning to catch them', async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-10-05T12:00:00'));
+    await installSupabaseStub(page, { session: makeSession(), data: memberData({
+      raver_favorite_artists: [],
+      __rpc: { get_artist_member_info: { ok: true, artist_id: 1, fav: false, seen: 2, my_plans: ['edc-orlando-2026'],
+        crew: [{ n: 'Sam', slug: 'edc-orlando-2026', fest: 'EDC Orlando' }, { n: 'Kai', slug: null, fest: 'Basement Party' }] } },
+    }) });
+    await page.goto(ARTIST);
+    const box = page.locator('#arMember');
+    await expect(box).toBeVisible();
+    await expect(page.locator('#arJoin')).toBeHidden();
+    await expect(box.locator('.ar-stat')).toHaveText(['👁️ Seen live at 2 raves', '👥 Sam, Kai want to catch them']);
+    const edc = page.locator('.ar-fest', { hasText: 'EDC Orlando 2026' });
+    await expect(edc.locator('.ar-badge')).toHaveText(['📋 On your picks', '👥 Sam']);
+    await expect(page.locator('.ar-fest', { hasText: 'EDC Colombia 2026' }).locator('.ar-fest-me')).toBeHidden();
+    const call = await page.evaluate(() => window.__store.__rpcCalls.find(c => c.fn === 'get_artist_member_info'));
+    expect(call.args).toEqual({ p_names: ['kaskade'] });
+
+    await box.locator('.ar-fav').click();
+    await expect(box.locator('.ar-fav')).toHaveAttribute('aria-pressed', 'true');
+    await expect(box.locator('.ar-fav')).toHaveText('♥ Favorite');
+    expect(await page.evaluate(() => window.__store.raver_favorite_artists)).toEqual([expect.objectContaining({ raver_id: 'r1', artist_id: 1 })]);
+  });
+
+  test('spellings merged onto one page are all looked up', async ({ page }) => {
+    await installSupabaseStub(page, { session: makeSession(), data: memberData({ __rpc: { get_artist_member_info: { ok: true, artist_id: null, crew: [] } } }) });
+    await page.goto('/lineup-explorer/artist/d-o-d.html');
+    await expect(page.locator('#arMember')).toBeVisible();
+    const call = await page.evaluate(() => window.__store.__rpcCalls.find(c => c.fn === 'get_artist_member_info'));
+    expect(call.args.p_names.sort()).toEqual(['d.o.d', 'd.o.d.']);
+    await expect(page.locator('#arMember .ar-fav')).toHaveCount(0); // not in the DB yet
+  });
+
+  test('the hub search links an artist to their page', async ({ page }) => {
+    await installSupabaseStub(page, { session: null, data: {} });
+    await page.goto('/lineup-explorer/index.html');
+    await page.locator('#globalQ').fill('kaskade');
+    await expect(page.locator('#artistMatches a.artist-page')).toHaveAttribute('href', '/lineup-explorer/artist/kaskade');
+  });
+});
