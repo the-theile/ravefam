@@ -910,3 +910,33 @@ test.describe('Lineup Explorer 4a — set times and My schedule', () => {
     await expect(page.locator('.lp-sched-row', { hasText: 'Afrojack' }).locator('.lp-sched-act')).toHaveAccessibleName('Report a change to Afrojack');
   });
 });
+
+test.describe('Lineup Explorer — Hulaween official set times (page data)', () => {
+  test.beforeEach(async ({ page }) => { await blockExternal(page); });
+
+  test("every card carries its own time; String Cheese Incident's three days each show up in My schedule", async ({ page }) => {
+    const errors = collectPageErrors(page);
+    await page.addInitScript(() => {
+      if (sessionStorage.getItem('seeded')) return;
+      sessionStorage.setItem('seeded', '1');
+      localStorage.setItem('rf_picks', JSON.stringify({ 'hulaween-2026': { n: ['The String Cheese Incident', 'Pretty Lights', 'Green Velvet'] } }));
+    });
+    // No DB set times: the page's own ACTS times and <meta name="rf-timezone"> carry it.
+    await installSupabaseStub(page, { session: null, data: { festivals: [], artists: [] } });
+    await page.goto('/lineup-explorer/hulaween-2026.html');
+    const excision = page.locator('.act-wrap', { has: star(page, 'Excision') });
+    await expect(excision.locator('.lp-time')).toHaveText('🕘 Thu 10:30 PM–12 AM · The Meadow');
+    const sci = page.locator('.act-wrap', { has: star(page, 'The String Cheese Incident') }).locator('.lp-time');
+    await expect(sci).toHaveText(['🕘 Fri 7:30 PM–9 PM · The Meadow', '🕘 Sat 5:45 PM–7 PM · The Meadow', '🕘 Sun 3 PM–5 PM · The Meadow']);
+
+    await page.locator('.lp-f[data-v="schedule"]').click();
+    await expect(page.locator('.lp-sched-days .lp-crew-chip')).toHaveText(['Fri', 'Sat', 'Sun']);
+    await page.locator('.lp-sched-days .lp-crew-chip', { hasText: 'Sat' }).click();
+    // Pretty Lights and Green Velvet overlap from 11 PM.
+    await expect(page.locator('.lp-sched-row .lp-sched-name')).toHaveText(['The String Cheese Incident', 'Green Velvet', 'Pretty Lights']); // same 11 PM start: by name
+    await expect(page.locator('.lp-clash-t')).toHaveText('⚡ Green Velvet and Pretty Lights overlap (11 PM–1 AM)');
+    await page.locator('.lp-sched-days .lp-crew-chip', { hasText: 'Sun' }).click();
+    await expect(page.locator('.lp-sched-row .lp-sched-time')).toHaveText(['3 PM–5 PM']);
+    expect(errors).toEqual([]);
+  });
+});

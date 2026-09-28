@@ -2314,7 +2314,42 @@
   var schedDay = null, schedEl = null, suggestSheet = null;
   var CLASH_KEY = "rf_clash";
 
+  // Festival-local wall time ("2026-10-24T23:00") to an ISO instant in tz.
+  function zonedToIso(local, tz) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(local || "");
+    if (!m || !tz) return null;
+    var want = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+    var guess = want;
+    try {
+      var f = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23",
+        year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+      for (var i = 0; i < 2; i++) {
+        var p = {};
+        f.formatToParts(new Date(guess)).forEach(function (x) { p[x.type] = x.value; });
+        var seen = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute);
+        guess += want - seen;
+      }
+    } catch (e) { return null; }
+    return new Date(guess).toISOString();
+  }
+
+  // A page's own ACTS start/end/stage (official schedules; one card per set,
+  // so an act playing several days keeps each time) win over the DB's single
+  // set per artist, which holds approved member suggestions.
+  // The festival's zone: from the DB, or a page's <meta name="rf-timezone">
+  // so its own times show before (or without) get_lineup_set_times.
+  function pageTz() {
+    if (sets && sets.tz) return sets.tz;
+    var m = document.querySelector('meta[name="rf-timezone"]');
+    return m ? m.getAttribute("content") : null;
+  }
+
   function actSet(a) {
+    var tz = a && a.start ? pageTz() : null;
+    if (tz) {
+      var st = zonedToIso(a.start, tz);
+      if (st) return { start_at: st, end_at: a.end ? zonedToIso(a.end, tz) : null, stage: a.stage || null, page: true };
+    }
     if (!sets) return null;
     var keys = splitKeys(a.name);
     for (var i = 0; i < keys.length; i++) if (sets.byKey[keys[i]]) return sets.byKey[keys[i]];
@@ -2323,7 +2358,7 @@
 
   function fmtParts(iso, opts) {
     try {
-      return new Intl.DateTimeFormat("en-US", Object.assign({ timeZone: sets && sets.tz || undefined }, opts)).format(new Date(iso));
+      return new Intl.DateTimeFormat("en-US", Object.assign({ timeZone: pageTz() || undefined }, opts)).format(new Date(iso));
     } catch (e) {
       return new Intl.DateTimeFormat("en-US", opts).format(new Date(iso));
     }
@@ -2377,10 +2412,11 @@
   function scheduleActs() {
     var seen = {}, out = [];
     acts.forEach(function (a) {
-      if (seen[a.name]) return;
+      var key = a.name + "|" + (a.night || "");
+      if (seen[key]) return;
       var mine = isPicked(a), fam = isMemberMode() ? actFaves(a) : [];
       if (!mine && !fam.length) return;
-      seen[a.name] = true;
+      seen[key] = true;
       out.push({ act: a, mine: mine, fam: fam, set: actSet(a) });
     });
     return out;
@@ -2441,7 +2477,20 @@
       if (!groups[d]) { groups[d] = []; order.push(d); }
       groups[d].push(x);
     });
-    order.sort(function (p, q) { return (p === "tba") - (q === "tba"); });
+    // Days in calendar order: by each day's earliest set, then the page's
+    // night order (fri before sat) for days with no times yet; TBA last.
+    var NIGHTS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+    var firstAt = {};
+    order.forEach(function (d) {
+      groups[d].forEach(function (x) {
+        var t = x.set && x.set.start_at ? +new Date(x.set.start_at) : Infinity;
+        if (!(firstAt[d] <= t)) firstAt[d] = t;
+      });
+    });
+    order.sort(function (p, q) {
+      return (p === "tba") - (q === "tba") || firstAt[p] - firstAt[q] ||
+        NIGHTS.indexOf(p.slice(0, 3)) - NIGHTS.indexOf(q.slice(0, 3));
+    });
     if (order.indexOf(schedDay) === -1) schedDay = order[0];
 
     if (order.length > 1) {
@@ -2486,7 +2535,9 @@
       if (skipped[x.act.name]) sub.push("skipping for " + skipped[x.act.name]);
       main.appendChild(el("span", "lp-sched-sub", sub.join(" · ")));
       li.appendChild(main);
-      if (isMemberMode() && actIds(x.act)) {
+      // Times from the page's own ACTS data are the official schedule; changes
+      // go in the page, so only DB-sourced (or missing) times take reports.
+      if (isMemberMode() && actIds(x.act) && !(x.set && x.set.page)) {
         var timed = x.set && x.set.start_at;
         var sb = el("button", "lp-sched-act", timed ? "✏️ Fix" : "＋ Time");
         sb.type = "button";
