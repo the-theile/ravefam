@@ -72,3 +72,51 @@ test('a closed vote shows its Fam Faves, ties at the cut-off included', async ({
   await expect(card.locator('.poll-fam-faves')).toHaveText('⭐ Fam Faves: Amelie Lens, Adam Beyer, Boris Brejcha');
   await expect(card.locator('.poll-result-row').first()).toContainText('⭐ Amelie Lens');
 });
+
+test('change my vote while the crew vote is open', async ({ page }) => {
+  const votes = [{ id: 'v1', poll_id: 'p1', voter_user_id: TEST_UID, vote_value: '[11,12]', created_at: '2024-02-02T00:00:00Z' }];
+  await bootAuthedApp(page, { data: voteData({}, votes) });
+  await openPolls(page);
+  await page.locator('#poll-card-p1 .poll-pick-change').click();
+  await expect(page.locator('#poll-card-p1 .poll-pick-btn.picked')).toHaveCount(2);
+  await page.locator('#poll-card-p1 .poll-pick-btn', { hasText: 'Adam Beyer' }).click();
+  await page.locator('#poll-card-p1 .poll-pick-btn', { hasText: 'Boris Brejcha' }).click();
+  await expect(page.locator('#poll-card-p1 .poll-pick-submit')).toHaveText('Update vote (2/2)');
+  await page.locator('#poll-card-p1 .poll-pick-submit').click();
+  await expect(page.locator('#poll-card-p1 .poll-result-row.my-vote')).toHaveCount(2);
+  const stored = await page.evaluate(() => window.__store.crew_poll_votes.filter(v => v.poll_id === 'p1'));
+  expect(stored).toHaveLength(1);
+  expect(JSON.parse(stored[0].vote_value).sort()).toEqual([11, 13]);
+  await expect(page.locator('#poll-card-p1 .poll-pick-change')).toHaveText('✏️ Change my vote');
+});
+
+test('Crew vote on a lineup links to upcoming raves with a lineup page', async ({ page }) => {
+  const d = voteData();
+  d.festivals.push({ id: 'f9', name: 'EDC Orlando 2026', date: '2026-11-06', location: 'Orlando, FL', slug: 'edc-orlando-2026', deleted_at: null });
+  d.raver_festivals.push({ raver_id: 'r-sam', festival_id: 'f9' });
+  await bootAuthedApp(page, { data: d });
+  await openPolls(page);
+  const list = page.locator('#crew-vote-lineups');
+  await expect(list).toBeHidden();
+  await page.locator('.crew-vote-lineup-btn').click();
+  await expect(list).toBeVisible();
+  const link = list.locator('.crew-vote-lineup', { hasText: 'EDC Orlando 2026' });
+  await expect(link).toHaveAttribute('href', '/lineup-explorer/edc-orlando-2026?vote=1&crew=c1');
+  await expect(link.locator('small')).toHaveText('👥 1 going');
+});
+
+test('Settings lists live share links and can turn one off', async ({ page }) => {
+  const d = voteData();
+  d.lineup_share_links = [{ token: 'th-0a1b2c3d4e', raver_id: 'r-you', festival_id: 'f1', created_at: '2026-09-01T00:00:00Z', revoked_at: null }];
+  d.__rpc = { turn_off_share_link: { ok: true } };
+  await bootAuthedApp(page, { data: d });
+  await page.evaluate(() => openPrivacySettingsModal('r-you'));
+  const box = page.locator('#share-links-settings');
+  await expect(box).toBeVisible();
+  await expect(box.locator('.share-link-row')).toHaveCount(1);
+  await expect(box.locator('.share-link-row')).toContainText('Tomorrowland');
+  await expect(box.locator('.share-link-open')).toHaveAttribute('href', '/lineup-explorer/tomorrowland-2099?by=th-0a1b2c3d4e');
+  await page.evaluate(() => { window.__store.lineup_share_links[0].revoked_at = '2026-09-28T00:00:00Z'; });
+  await box.locator('.share-link-off').click();
+  await expect(box).toBeHidden();
+});

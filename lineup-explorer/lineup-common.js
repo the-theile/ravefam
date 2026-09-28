@@ -1814,6 +1814,8 @@
   // vote closes its top sets become that crew's Fam Faves.
   var voteEl = null, voteSheet = null;
   var ballot = {};         // poll id -> { artist id: true } while choosing
+  var changing = {};       // poll id -> true while re-choosing a cast vote
+  var voteIntent = null;   // { crew } from ?vote=1&crew= (the app's "Crew vote on a lineup")
 
   function visibleVotes() {
     var list = (votes && votes.votes) || [];
@@ -1904,8 +1906,12 @@
     card.appendChild(q);
 
     var opts = Array.isArray(v.options) ? v.options : [];
-    var voting = !v.closed && votes.can_vote && !v.my;
+    var voting = !v.closed && votes.can_vote && (!v.my || changing[v.id]);
     if (voting) {
+      if (changing[v.id] && !ballot[v.id]) {
+        ballot[v.id] = {};
+        (v.my || []).forEach(function (id) { ballot[v.id][id] = true; });
+      }
       var sel = ballot[v.id] || (ballot[v.id] = {});
       var n = Object.keys(sel).length;
       var grid = document.createElement("div");
@@ -1934,9 +1940,17 @@
       go.type = "button";
       go.className = "lp-vgo";
       go.disabled = !n;
-      go.textContent = n ? "Vote (" + n + "/" + v.max + ")" : "Pick up to " + v.max;
+      go.textContent = n ? (v.my ? "Update vote (" : "Vote (") + n + "/" + v.max + ")" : "Pick up to " + v.max;
       go.addEventListener("click", function () { castCrewVote(v, go); });
       card.appendChild(go);
+      if (changing[v.id]) {
+        var keep = document.createElement("button");
+        keep.type = "button";
+        keep.className = "lp-vadd";
+        keep.textContent = "Keep my vote";
+        keep.addEventListener("click", function () { delete changing[v.id]; delete ballot[v.id]; renderVotes(); });
+        card.appendChild(keep);
+      }
     } else {
       var max = opts.reduce(function (m, o) { return Math.max(m, o.v || 0); }, 0) || 1;
       var mine = Array.isArray(v.my) ? v.my : [];
@@ -1980,6 +1994,14 @@
     }
     foot.textContent = parts.join(" · ");
     card.appendChild(foot);
+    if (v.my && !v.closed && votes.can_vote && !changing[v.id]) {
+      var ch = document.createElement("button");
+      ch.type = "button";
+      ch.className = "lp-vadd";
+      ch.textContent = "✏️ Change my vote";
+      ch.addEventListener("click", function () { changing[v.id] = true; delete ballot[v.id]; renderVotes(); });
+      card.appendChild(ch);
+    }
     if (v.own && !v.closed && opts.length < 30) {
       var add = document.createElement("button");
       add.type = "button";
@@ -2008,10 +2030,12 @@
     var ids = Object.keys(ballot[v.id] || {}).map(Number).filter(function (x) { return x > 0; });
     if (!ids.length) return;
     btn.disabled = true;
+    var value = JSON.stringify(ids);
     window.LineupMember.client(function (sb) {
-      sb.from("crew_poll_votes").insert({
-        poll_id: v.id, voter_user_id: member.userId, vote_value: JSON.stringify(ids)
-      }).then(function (res) {
+      var q = v.my
+        ? sb.from("crew_poll_votes").update({ vote_value: value }).eq("poll_id", v.id).eq("voter_user_id", member.userId)
+        : sb.from("crew_poll_votes").insert({ poll_id: v.id, voter_user_id: member.userId, vote_value: value });
+      q.then(function (res) {
         if (res && res.error) {
           btn.disabled = false;
           var rsvpErr = /pick_many_rsvp/.test(res.error.message || "");
@@ -2019,7 +2043,9 @@
           return;
         }
         delete ballot[v.id];
-        toast("🗳️ Vote in for " + v.crew + ".");
+        var was = changing[v.id];
+        delete changing[v.id];
+        toast(was ? "🗳️ Vote updated for " + v.crew + "." : "🗳️ Vote in for " + v.crew + ".");
         reloadVotes();
       }, function () { btn.disabled = false; toast("⚠️ Couldn't save your vote. Try again."); });
     });
@@ -2042,7 +2068,7 @@
   }
 
   // Start a vote (existing === null) or add sets to one you run.
-  function openVoteSheet(existing) {
+  function openVoteSheet(existing, prefCrew) {
     if (!isMemberMode() || !votes) return;
     var crews = votes.crews || [];
     var fest = member.festival.name || "this rave";
@@ -2050,7 +2076,10 @@
     var byId = {};
     cands.forEach(function (c) { byId[c.id] = c; });
     var state = {
-      crew: existing ? existing.crew_id : (crewSel !== "all" && crews.some(function (c) { return c.id === crewSel; }) ? crewSel : (crews[0] && crews[0].id)),
+      crew: existing ? existing.crew_id
+        : prefCrew && crews.some(function (c) { return c.id === prefCrew; }) ? prefCrew
+        : crewSel !== "all" && crews.some(function (c) { return c.id === crewSel; }) ? crewSel
+        : (crews[0] && crews[0].id),
       max: existing ? existing.max : 3,
       picked: {},
       locked: {},
@@ -2300,6 +2329,11 @@
           rsvp = (out[2].data || []).length ? "going" : (out[3].data || []).length ? "interested" : null;
           memberLoaded = true;
           refresh();
+          if (voteIntent && votes && (votes.crews || []).length) {
+            var vi = voteIntent;
+            voteIntent = null;
+            setTimeout(function () { openVoteSheet(null, vi.crew); }, 300);
+          }
           if (!local.length) return;
           if (rsvp) {
             flushLocal(function (n) { if (n > 0) toast("📋 " + n + (n === 1 ? " pick" : " picks") + " synced to your RaveFAM."); refresh(); });
@@ -2325,6 +2359,17 @@
       watchDeck();
       loadWantCounts();
       loadMember();
+      // ?vote=1&crew=<id>: the app's "Crew vote on a lineup" lands here and the
+      // start sheet opens once member data loads. Stripped from the URL.
+      try {
+        var sp = new URLSearchParams(location.search);
+        if (sp.get("vote") === "1") {
+          voteIntent = { crew: sp.get("crew") };
+          sp.delete("vote"); sp.delete("crew");
+          var rest = sp.toString();
+          history.replaceState(null, "", location.pathname + (rest ? "?" + rest : "") + location.hash);
+        }
+      } catch (e) {}
       var by = null;
       try { by = new URLSearchParams(location.search).get("by"); } catch (e) {}
       if (by && /^[a-z0-9-]{4,40}$/.test(by)) loadShared(by);

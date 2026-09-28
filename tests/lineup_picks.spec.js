@@ -759,3 +759,48 @@ test.describe('Lineup Explorer 3b — crew votes and Fam Faves', () => {
     await expect(page.locator('.lp-vote')).toBeHidden();
   });
 });
+
+test.describe('Lineup Explorer follow-ups — change vote, ?vote=1', () => {
+  test.beforeEach(async ({ page }) => { await blockExternal(page); });
+
+  function data(votes) {
+    return memberData({
+      artists: [
+        { id: 1, name: 'Kaskade', name_lower: 'kaskade' },
+        { id: 9, name: 'Alesso', name_lower: 'alesso' },
+        { id: 3, name: 'Vastive', name_lower: 'vastive' },
+      ],
+      raver_festivals: [{ raver_id: 'r1', festival_id: 'f1' }],
+      crew_poll_votes: [{ id: 'v1', poll_id: 'p1', voter_user_id: TEST_UID, vote_value: '[1]' }],
+      __rpc: {
+        get_lineup_crew_votes: { ok: true, can_vote: true,
+          crews: [{ id: 'c1', n: 'Bass Syndicate', col: '#FF2D78' }, { id: 'c2', n: 'Vibe Tribe', col: '#0066ff' }], votes },
+      },
+    });
+  }
+  const V = { id: 'p1', crew_id: 'c1', crew: 'Bass Syndicate', col: '#FF2D78', q: 'Which sets?', max: 2,
+    closes: '2099-11-06T00:00:00Z', closed: false, own: false,
+    options: [{ id: 1, n: 'Kaskade', v: 1 }, { id: 9, n: 'Alesso', v: 0 }, { id: 3, n: 'Vastive', v: 0 }],
+    my: [1], voters: 1, faves: [] };
+
+  test('change my vote updates the same row', async ({ page }) => {
+    await installSupabaseStub(page, { session: makeSession(), data: data([V]) });
+    await page.goto(PAGE);
+    await page.locator('.lp-vcard .lp-vadd', { hasText: 'Change my vote' }).click();
+    await expect(page.locator('.lp-vcard .lp-vopt[aria-pressed="true"]')).toHaveText(['Kaskade']);
+    await page.locator('.lp-vcard .lp-vopt', { hasText: 'Alesso' }).click();
+    await expect(page.locator('.lp-vcard .lp-vgo')).toHaveText('Update vote (2/2)');
+    await page.locator('.lp-vcard .lp-vgo').click();
+    await expect.poll(() => page.evaluate(() => JSON.parse(window.__store.crew_poll_votes[0].vote_value).sort())).toEqual([1, 9]);
+    expect(await page.evaluate(() => window.__store.crew_poll_votes.length)).toBe(1);
+  });
+
+  test('?vote=1&crew= opens the start sheet on that crew and leaves the URL clean', async ({ page }) => {
+    await installSupabaseStub(page, { session: makeSession(), data: data([]) });
+    await page.goto(PAGE + '?vote=1&crew=c2');
+    const sheet = page.locator('.lp-vote-overlay.show');
+    await expect(sheet.locator('h3')).toHaveText('Start a crew vote');
+    await expect(sheet.locator('.lp-crew-chip[aria-pressed="true"]').first()).toHaveText('Vibe Tribe');
+    expect(new URL(page.url()).search).toBe('');
+  });
+});

@@ -2401,6 +2401,20 @@
   .poll-fam-faves { font-size: 0.8rem; font-weight: 700; color: #FFE600; margin-top: 6px; }
   .poll-lineup-link { display: inline-flex; align-items: center; min-height: 36px; margin-top: 6px; font-size: 0.8rem; font-weight: 700; color: #d98cff; text-decoration: none; }
   .poll-lineup-link:hover { text-decoration: underline; }
+  .poll-pick-change { margin-top: 6px; }
+  .crew-vote-lineups { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 10px; }
+  .crew-vote-lineups[hidden] { display: none; }
+  .crew-vote-lineup {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; padding: 8px 12px;
+    border-radius: 9px; border: 1.5px solid rgba(191,0,255,0.35); background: rgba(191,0,255,0.06);
+    color: #fff; font-size: 0.85rem; text-decoration: none;
+  }
+  .crew-vote-lineup:hover { background: rgba(191,0,255,0.14); }
+  .crew-vote-lineup small { color: #39FF14; font-size: 0.72rem; font-weight: 700; white-space: nowrap; }
+  .share-links-hint { margin-bottom: 6px; }
+  .share-link-open { color: #d98cff; text-decoration: none; }
+  .share-link-open:hover { text-decoration: underline; }
+  .share-link-off { flex: none; min-height: 36px; }
   .poll-yesno-row { display: flex; gap: 8px; }
   .poll-yesno-btn {
     flex: 1; padding: 10px 8px; border-radius: 9px; border: 1.5px solid rgba(255,255,255,0.1);
@@ -8977,6 +8991,7 @@
     <div class="page-panel-body">
     <p style="font-size:0.8rem;color:var(--muted);margin-bottom:16px;line-height:1.5;">Control what your crew can do on your profile, what other ravers can see, and how you get notified.</p>
     <div class="poll-modal-settings" id="privacy-settings-rows"><!-- filled by JS --></div>
+    <div class="poll-modal-settings" id="share-links-settings" style="margin-top:12px;display:none;"><!-- filled by renderShareLinkSettings --></div>
     <div class="poll-modal-settings" style="margin-top:12px;">
       <div class="poll-setting-row">
         <div>
@@ -9704,7 +9719,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.73.0';
+  const APP_VERSION = '1.74.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -21759,6 +21774,7 @@
   // artist ids, and only crewmates Going/Interested for poll.festival_id can
   // vote (the server enforces both). Top sets become the crew's Fam Faves.
   let pickManyDraft = {}; // poll id -> [artist id strings] while choosing
+  let pickManyChanging = {}; // poll id -> true while re-choosing a cast vote
 
   function pickManyIds(voteValue) {
     try { const a = JSON.parse(voteValue); return Array.isArray(a) ? a.map(String) : []; } catch (e) { return []; }
@@ -21795,8 +21811,77 @@
   async function submitPickManyVote(pollId, crewId) {
     const picked = pickManyDraft[pollId] || [];
     if (!picked.length) return;
-    await castVote(pollId, crewId, JSON.stringify(picked.map(Number)));
+    const value = JSON.stringify(picked.map(Number));
+    if (pickManyChanging[pollId]) {
+      const ok = await dbChangePickManyVote(pollId, value);
+      if (!ok) return;
+      delete pickManyChanging[pollId];
+      delete pickManyDraft[pollId];
+      showToast('🗳️ Vote updated');
+      rerenderPolls(crewId);
+      return;
+    }
+    await castVote(pollId, crewId, value);
     delete pickManyDraft[pollId];
+  }
+
+  function startPickManyChange(pollId, crewId) {
+    const mine = (crewPollVotes[pollId] || []).find(v => v.voter_user_id === currentUser?.id);
+    if (!mine) return;
+    pickManyChanging[pollId] = true;
+    pickManyDraft[pollId] = pickManyIds(mine.vote_value);
+    rerenderPolls(crewId);
+  }
+
+  function cancelPickManyChange(pollId, crewId) {
+    delete pickManyChanging[pollId];
+    delete pickManyDraft[pollId];
+    rerenderPolls(crewId);
+  }
+
+  // A crew vote's ballot can be re-cast while it's open (own row only; the
+  // server re-checks it). Other poll types stay one vote, no edits.
+  async function dbChangePickManyVote(pollId, voteValue) {
+    const { data, error } = await sb.from('crew_poll_votes').update({ vote_value: voteValue })
+      .eq('poll_id', pollId).eq('voter_user_id', currentUser.id).select().single();
+    if (error || !data) {
+      showToast(/pick_many_rsvp/.test(error?.message || '') ? '🗳️ Only crewmates who are Going or Interested can vote' : '⚠️ Could not change your vote — try again');
+      return null;
+    }
+    const list = crewPollVotes[pollId] || (crewPollVotes[pollId] = []);
+    const i = list.findIndex(v => v.voter_user_id === currentUser.id);
+    if (i >= 0) list[i] = data; else list.push(data);
+    return data;
+  }
+
+  // "Crew vote on a lineup": crew votes are built on the Lineup Explorer page
+  // (the ballot comes from that rave's lineup), so this lists upcoming raves
+  // with an explorer page and links to it with ?vote=1&crew=, which opens the
+  // start sheet there. Raves the crew is going to come first.
+  function crewVoteLineupsHTML(crewId) {
+    const crew = getCrew(crewId);
+    const mates = crew ? crewSquad(crew) : [];
+    const rows = festivals
+      .filter(f => !f.archived && festDate(f) && festDate(f) >= TODAY && getLineupExplorerUrl(f))
+      .map(f => {
+        const fid = String(f.id);
+        const n = mates.filter(r => (r.festIds || []).some(id => String(id) === fid) ||
+          (r.interestedFestIds || []).some(id => String(id) === fid)).length;
+        return { f, n };
+      })
+      .sort((a, b) => (b.n > 0) - (a.n > 0) || festDate(a.f) - festDate(b.f))
+      .slice(0, 8);
+    if (!rows.length) return '';
+    return `<div class="crew-vote-lineups" id="crew-vote-lineups" hidden>
+      <div class="poll-pick-note">Pick a rave. The ballot is built from its lineup.</div>
+      ${rows.map(({ f, n }) => `<a class="crew-vote-lineup" href="${escHtml(getLineupExplorerUrl(f))}?vote=1&amp;crew=${encodeURIComponent(crewId)}">
+        <span>${escHtml(f.name)}</span>${n ? `<small>👥 ${n} going</small>` : ''}</a>`).join('')}
+    </div>`;
+  }
+
+  function toggleCrewVoteLineups() {
+    const el = document.getElementById('crew-vote-lineups');
+    if (el) el.hidden = !el.hidden;
   }
 
   async function dbLoadPolls(crewId) {
@@ -21911,6 +21996,8 @@
         ${uid ? `<button class="btn btn-ghost poll-drop-btn"
           data-crew-id="${escHtml(crewId)}"
           onclick="openCreatePollModal(this.dataset.crewId)">+ Drop a poll</button>` : ''}
+        ${uid && crewVoteLineupsHTML(crewId) ? `<button class="btn btn-ghost poll-drop-btn crew-vote-lineup-btn"
+          onclick="toggleCrewVoteLineups()">🗳️ Crew vote on a lineup</button>${crewVoteLineupsHTML(crewId)}` : ''}
         <div class="poll-cards-list">
           ${emptyState}
           ${cards}
@@ -21925,8 +22012,9 @@
     const expired = pollIsExpired(poll);
     const open = pollIsOpen(poll);
     const pickMany = poll.poll_type === 'pick_many';
-    const canVote = open && uid && !hasVoted && (!pickMany || pickManyCanVote(poll));
-    const showResults = hasVoted || expired || poll.is_locked || (pickMany && !canVote);
+    const changing = pickMany && open && hasVoted && !!pickManyChanging[poll.id];
+    const canVote = open && uid && (!hasVoted || changing) && (!pickMany || pickManyCanVote(poll));
+    const showResults = (hasVoted && !changing) || expired || poll.is_locked || (pickMany && !canVote);
     const canManage = crewPerms(getCrew(poll.crew_id)).canEdit;
     const timeLeft = pollTimeLeft(poll.expires_at);
     const escId = escJsAttr(poll.id);
@@ -21989,6 +22077,13 @@
       if (open && uid && !hasVoted && !canVote) {
         interactiveHTML += `<div class="poll-pick-note">Only crewmates who are Going or Interested can vote.</div>`;
       }
+      if (open && hasVoted && pickManyCanVote(poll)) {
+        interactiveHTML += changing
+          ? `<button class="btn btn-ghost poll-pick-change" data-poll-id="${escId}" data-crew-id="${escCrewId}"
+              onclick="cancelPickManyChange(this.dataset.pollId, this.dataset.crewId)">Keep my vote</button>`
+          : `<button class="btn btn-ghost poll-pick-change" data-poll-id="${escId}" data-crew-id="${escCrewId}"
+              onclick="startPickManyChange(this.dataset.pollId, this.dataset.crewId)">✏️ Change my vote</button>`;
+      }
       const fest = festivals.find(f => String(f.id) === String(poll.festival_id));
       if (fest && fest.slug) {
         interactiveHTML += `<a class="poll-lineup-link" href="/lineup-explorer/${encodeURIComponent(fest.slug)}">🔭 Open the ${escHtml(fest.name)} lineup →</a>`;
@@ -22042,7 +22137,7 @@
       return `<div class="poll-options-list poll-pick-list">${btns}</div>
         <button class="btn btn-primary poll-pick-submit"${picked.length ? '' : ' disabled'}
           data-poll-id="${escId}" data-crew-id="${escCrewId}"
-          onclick="submitPickManyVote(this.dataset.pollId, this.dataset.crewId)">${picked.length ? `Vote (${picked.length}/${max})` : `Pick up to ${max}`}</button>`;
+          onclick="submitPickManyVote(this.dataset.pollId, this.dataset.crewId)">${picked.length ? `${pickManyChanging[poll.id] ? 'Update vote' : 'Vote'} (${picked.length}/${max})` : `Pick up to ${max}`}</button>`;
     }
     if (poll.poll_type === 'choice') {
       const options = poll.options || [];
@@ -31381,6 +31476,7 @@
     pushToggle.classList.remove('on');
     mentionToggle.classList.remove('on');
     document.getElementById('tips-settings-toggle').classList.toggle('on', _tipsEnabled);
+    renderShareLinkSettings();
     document.getElementById('privacy-settings-overlay').classList.add('open');
     if ('serviceWorker' in navigator && 'PushManager' in window) {
       try {
@@ -31403,6 +31499,41 @@
     const on = !btn.classList.contains('on');
     btn.classList.toggle('on', on);
     savePrivacySettings(raverId, { [key]: on });
+  }
+
+  // Shared lineup links (Lineup Explorer "Share my picks", ?by=<token>) that
+  // are still live. RLS on lineup_share_links returns only your own rows;
+  // turning one off is turn_off_share_link(festival), same as the explorer.
+  async function renderShareLinkSettings() {
+    const el = document.getElementById('share-links-settings');
+    if (!el || !currentUser) return;
+    const { data, error } = await sb.from('lineup_share_links')
+      .select('token, festival_id, created_at').is('revoked_at', null).order('created_at', { ascending: false });
+    if (error || !data || !data.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.style.display = '';
+    el.innerHTML = `
+      <div class="poll-setting-label">Shared lineup links</div>
+      <div class="poll-setting-hint share-links-hint">Anyone with one of these links sees your first name and your picks for that rave.</div>` +
+      data.map(l => {
+        const f = festivals.find(x => String(x.id) === String(l.festival_id));
+        const href = f && f.slug ? `/lineup-explorer/${encodeURIComponent(f.slug)}?by=${encodeURIComponent(l.token)}` : '';
+        return `
+      <div class="poll-setting-row share-link-row">
+        <div>
+          <div class="poll-setting-label">${escHtml(f ? f.name : 'A rave')}</div>
+          ${href ? `<a class="poll-setting-hint share-link-open" href="${escHtml(href)}" target="_blank" rel="noopener">Open link ↗</a>` : ''}
+        </div>
+        <button class="btn btn-ghost share-link-off" data-fest-id="${escHtml(String(l.festival_id))}" onclick="turnOffShareLinkSetting(this)">Turn off</button>
+      </div>`;
+      }).join('');
+  }
+
+  async function turnOffShareLinkSetting(btn) {
+    btn.disabled = true;
+    const { data, error } = await sb.rpc('turn_off_share_link', { p_festival_id: btn.dataset.festId });
+    if (error || !data?.ok) { btn.disabled = false; showToast('⚠️ Could not turn that link off — try again'); return; }
+    showToast("🔗 Link turned off. Old links won't open your picks.");
+    renderShareLinkSettings();
   }
 
   function closePrivacySettingsModal() {
