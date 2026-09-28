@@ -494,7 +494,7 @@
   }
 
   var slug = null, acts = [], onRender = null;
-  var view = "all";        // "all" | "picks" | "favs" | "crew" | "shared" (favs, crew: members only)
+  var view = "all";        // "all" | "picks" | "favs" | "crew" | "shared" | "schedule" (favs, crew: members only)
   var sortWanted = false;  // "🔥 Most wanted" sort (members only)
   var local = [];          // act names picked in this browser for this page
   var member = null;       // LineupMember result, once it resolves as a member
@@ -1499,7 +1499,7 @@
     });
     barEl.dataset.mode = isMemberMode() ? "member" : "visitor";
     barEl.dataset.rsvp = rsvp || "";
-    ["all", "picks", "favs", "crew", "shared"].forEach(function (v) {
+    ["all", "picks", "favs", "crew", "shared", "schedule"].forEach(function (v) {
       barEl.querySelector('[data-v="' + v + '"]').setAttribute("aria-pressed", String(view === v));
     });
     var member = isMemberMode();
@@ -1532,6 +1532,7 @@
     }).join(" · ");
 
     renderCrewPanel();
+    renderSchedule();
     renderVotes();
     renderMostWanted();
     renderShareBanner();
@@ -1568,6 +1569,7 @@
       '<button type="button" class="lp-f" data-v="picks"><span aria-hidden="true">📋</span> My picks <b class="lp-n">0</b></button>' +
       '<button type="button" class="lp-f lp-fav-f" data-v="favs" hidden><span aria-hidden="true">♡</span> Favorites <b class="lp-nf">0</b></button>' +
       '<button type="button" class="lp-f lp-crew-f" data-v="crew" hidden><span aria-hidden="true">👥</span> Crew picks <b class="lp-nc">0</b></button>' +
+      '<button type="button" class="lp-f lp-sched-f" data-v="schedule"><span aria-hidden="true">🗓️</span> My schedule</button>' +
       '<button type="button" class="lp-f lp-shared-f" data-v="shared" hidden><span aria-hidden="true">📋</span> <span class="lp-sn"></span> <b class="lp-nsh">0</b></button>' +
       '<button type="button" class="lp-share" hidden>📤 Share my picks</button>' +
       '<button type="button" class="lp-sort" hidden aria-pressed="false">🔥 Most wanted</button>' +
@@ -2300,6 +2302,337 @@
     });
   }
 
+  // ----- set times + My schedule (Phase 4a; get_lineup_set_times) -----
+  // Times live on artist_festival_appearances (official schedules from the
+  // pages' ACTS data, member suggestions once a moderator approves them) and
+  // show in the festival's own time zone. My schedule lists your 📋 picks and
+  // your crew's ⭐ Fam Faves by day, flags overlapping sets and saves a
+  // Split / keep-one choice (raver_clash_choices for members, this browser
+  // for visitors).
+  var sets = null;         // { tz, date, days, byKey: { name_lower: set } }
+  var clash = {};          // "Act A|Act B" (sorted) -> "split" | kept act name
+  var schedDay = null, schedEl = null, suggestSheet = null;
+  var CLASH_KEY = "rf_clash";
+
+  function actSet(a) {
+    if (!sets) return null;
+    var keys = splitKeys(a.name);
+    for (var i = 0; i < keys.length; i++) if (sets.byKey[keys[i]]) return sets.byKey[keys[i]];
+    return null;
+  }
+
+  function fmtParts(iso, opts) {
+    try {
+      return new Intl.DateTimeFormat("en-US", Object.assign({ timeZone: sets && sets.tz || undefined }, opts)).format(new Date(iso));
+    } catch (e) {
+      return new Intl.DateTimeFormat("en-US", opts).format(new Date(iso));
+    }
+  }
+  function fmtTime(iso) { return fmtParts(iso, { hour: "numeric", minute: "2-digit" }).replace(":00", ""); }
+  function fmtDay(iso) { return fmtParts(iso, { weekday: "short" }); }
+
+  function timeText(s) {
+    if (!s) return "";
+    var bits = [];
+    if (s.start_at) bits.push(fmtDay(s.start_at) + " " + fmtTime(s.start_at) + (s.end_at ? "–" + fmtTime(s.end_at) : ""));
+    if (s.stage) bits.push(s.stage);
+    return bits.join(" · ");
+  }
+
+  function loadSetTimes() {
+    if (!slug) return;
+    window.LineupMember.client(function (sb) {
+      sb.rpc("get_lineup_set_times", { p_slug: slug }).then(function (res) {
+        var d = res && res.data;
+        if (!d || !d.ok) return;
+        var byKey = {};
+        (d.sets || []).forEach(function (x) { if (x && x.name) byKey[String(x.name).toLowerCase()] = x; });
+        sets = { tz: d.tz || null, date: d.date || null, days: d.days || null, byKey: byKey, any: (d.sets || []).some(function (x) { return x.start_at; }) };
+        refresh();
+      }, noop);
+    });
+  }
+
+  function readClashLocal() {
+    try { var all = JSON.parse(window.localStorage.getItem(CLASH_KEY) || "{}"); return (all && all[slug]) || {}; } catch (e) { return {}; }
+  }
+  function saveClash() {
+    if (isMemberMode()) {
+      window.LineupMember.client(function (sb) {
+        sb.from("raver_clash_choices").upsert({
+          raver_id: member.raverId, festival_id: member.festival.id, choices: clash, updated_at: new Date().toISOString()
+        }, { onConflict: "raver_id,festival_id" }).then(function (res) {
+          if (res && res.error) toast("⚠️ Couldn't save that choice. Try again.");
+        }, noop);
+      });
+      return;
+    }
+    try {
+      var all = JSON.parse(window.localStorage.getItem(CLASH_KEY) || "{}") || {};
+      all[slug] = clash;
+      window.localStorage.setItem(CLASH_KEY, JSON.stringify(all));
+    } catch (e) {}
+  }
+
+  function scheduleActs() {
+    var seen = {}, out = [];
+    acts.forEach(function (a) {
+      if (seen[a.name]) return;
+      var mine = isPicked(a), fam = isMemberMode() ? actFaves(a) : [];
+      if (!mine && !fam.length) return;
+      seen[a.name] = true;
+      out.push({ act: a, mine: mine, fam: fam, set: actSet(a) });
+    });
+    return out;
+  }
+
+  function dayOf(x) {
+    if (x.act.night) return String(x.act.night);
+    if (x.set && x.set.start_at) return fmtDay(x.set.start_at).toLowerCase();
+    return "tba";
+  }
+
+  function clashPairs(items) {
+    var timed = items.filter(function (x) { return x.set && x.set.start_at; });
+    var pairs = [];
+    for (var i = 0; i < timed.length; i++) {
+      for (var j = i + 1; j < timed.length; j++) {
+        var a = timed[i], b = timed[j];
+        var aS = +new Date(a.set.start_at), bS = +new Date(b.set.start_at);
+        var aE = a.set.end_at ? +new Date(a.set.end_at) : aS + 3600000;
+        var bE = b.set.end_at ? +new Date(b.set.end_at) : bS + 3600000;
+        if (aS < bE && bS < aE) {
+          var names = [a.act.name, b.act.name].sort();
+          pairs.push({ key: names.join("|"), a: names[0], b: names[1], from: Math.max(aS, bS), to: Math.min(aE, bE) });
+        }
+      }
+    }
+    return pairs;
+  }
+
+  function renderSchedule() {
+    var on = view === "schedule";
+    document.body.classList.toggle("lp-schedule-mode", on);
+    if (!barEl) return;
+    if (!schedEl) {
+      schedEl = document.createElement("section");
+      schedEl.className = "lp-sched";
+      schedEl.setAttribute("aria-labelledby", "lpSchedTitle");
+      var anchor = document.getElementById("deck");
+      if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(schedEl, anchor);
+      else barEl.parentNode.insertBefore(schedEl, barEl.nextSibling);
+    }
+    schedEl.hidden = !on;
+    if (!on) return;
+    schedEl.innerHTML = "";
+    var h = document.createElement("h2");
+    h.id = "lpSchedTitle";
+    h.textContent = "🗓️ My schedule";
+    schedEl.appendChild(h);
+
+    var items = scheduleActs();
+    if (!items.length) {
+      schedEl.appendChild(el("p", "lp-sched-note", "Tap 📋 on the sets you want to catch and they'll line up here by day."));
+      return;
+    }
+    var order = [], groups = {};
+    items.forEach(function (x) {
+      var d = dayOf(x);
+      if (!groups[d]) { groups[d] = []; order.push(d); }
+      groups[d].push(x);
+    });
+    order.sort(function (p, q) { return (p === "tba") - (q === "tba"); });
+    if (order.indexOf(schedDay) === -1) schedDay = order[0];
+
+    if (order.length > 1) {
+      var tabs = el("div", "lp-sched-days");
+      tabs.setAttribute("role", "group");
+      tabs.setAttribute("aria-label", "Day");
+      order.forEach(function (d) {
+        var b = el("button", "lp-crew-chip", d === "tba" ? "Day TBA" : d.charAt(0).toUpperCase() + d.slice(1));
+        b.type = "button";
+        b.setAttribute("aria-pressed", String(d === schedDay));
+        b.addEventListener("click", function () { schedDay = d; renderSchedule(); });
+        tabs.appendChild(b);
+      });
+      schedEl.appendChild(tabs);
+    }
+
+    var list = groups[schedDay].slice().sort(function (x, y) {
+      var xs = x.set && x.set.start_at ? +new Date(x.set.start_at) : Infinity;
+      var ys = y.set && y.set.start_at ? +new Date(y.set.start_at) : Infinity;
+      return xs - ys || (x.act.name < y.act.name ? -1 : 1);
+    });
+    var pairs = clashPairs(list);
+    var skipped = {};
+    pairs.forEach(function (p) {
+      var c = clash[p.key];
+      if (c === p.a) skipped[p.b] = p.a;
+      else if (c === p.b) skipped[p.a] = p.b;
+    });
+
+    var ol = el("ol", "lp-sched-list");
+    list.forEach(function (x) {
+      var li = el("li", "lp-sched-row" + (skipped[x.act.name] ? " is-skipped" : ""));
+      var t = el("span", "lp-sched-time", x.set && x.set.start_at
+        ? fmtTime(x.set.start_at) + (x.set.end_at ? "–" + fmtTime(x.set.end_at) : "")
+        : "Time TBA");
+      li.appendChild(t);
+      var main = el("div", "lp-sched-main");
+      main.appendChild(el("span", "lp-sched-name", x.act.name));
+      var sub = [x.set && x.set.stage ? x.set.stage : "Stage TBA"];
+      if (x.mine) sub.push("📋 you");
+      if (x.fam.length) sub.push("⭐ " + x.fam.join(", "));
+      if (skipped[x.act.name]) sub.push("skipping for " + skipped[x.act.name]);
+      main.appendChild(el("span", "lp-sched-sub", sub.join(" · ")));
+      li.appendChild(main);
+      if (isMemberMode() && actIds(x.act)) {
+        var timed = x.set && x.set.start_at;
+        var sb = el("button", "lp-sched-act", timed ? "✏️ Fix" : "＋ Time");
+        sb.type = "button";
+        sb.setAttribute("aria-label", (timed ? "Report a change to " : "Suggest a set time for ") + x.act.name);
+        sb.addEventListener("click", function () { openSuggestSheet(x.act, timed ? "report" : "suggest"); });
+        li.appendChild(sb);
+      }
+      ol.appendChild(li);
+    });
+    schedEl.appendChild(ol);
+
+    pairs.forEach(function (p) {
+      var box = el("div", "lp-clash");
+      box.appendChild(el("p", "lp-clash-t", "⚡ " + p.a + " and " + p.b + " overlap (" + fmtTime(new Date(p.from).toISOString()) + "–" + fmtTime(new Date(p.to).toISOString()) + ")"));
+      var row = el("div", "lp-clash-opts");
+      row.setAttribute("role", "group");
+      row.setAttribute("aria-label", "Choose for " + p.a + " and " + p.b);
+      [{ v: "split", t: "Split" }, { v: p.a, t: "Only " + p.a }, { v: p.b, t: "Only " + p.b }].forEach(function (o) {
+        var b = el("button", "lp-crew-chip", o.t);
+        b.type = "button";
+        b.setAttribute("aria-pressed", String(clash[p.key] === o.v));
+        b.addEventListener("click", function () {
+          if (clash[p.key] === o.v) delete clash[p.key]; else clash[p.key] = o.v;
+          saveClash();
+          renderSchedule();
+        });
+        row.appendChild(b);
+      });
+      box.appendChild(row);
+      schedEl.appendChild(box);
+    });
+
+    if (!list.some(function (x) { return x.set && x.set.start_at; })) {
+      schedEl.appendChild(el("p", "lp-sched-note", "Clash check turns on when set times drop."));
+    }
+    if (!member) {
+      schedEl.appendChild(el("p", "lp-sched-note", "Log in to suggest set times and see your crew's Fam Faves here."));
+    }
+  }
+
+  // Suggest a time (Going/Interested) or Report a change (any member); a
+  // moderator approves it before it shows for everyone.
+  function festDays() {
+    if (!sets || !sets.date) return [];
+    var p = String(sets.date).split("-").map(Number);
+    var n = Math.max(1, sets.days || 1), out = [];
+    for (var i = 0; i < n; i++) {
+      var d = new Date(Date.UTC(p[0], p[1] - 1, p[2] + i));
+      out.push({
+        v: d.toISOString().slice(0, 10),
+        t: new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }).format(d)
+      });
+    }
+    return out;
+  }
+
+  function openSuggestSheet(a, kind) {
+    var ids = actIds(a);
+    if (!isMemberMode() || !ids) return;
+    if (kind === "suggest" && !rsvp) { toast("Set Going or Interested first to suggest times."); return; }
+    var days = festDays();
+    if (!suggestSheet) {
+      suggestSheet = document.createElement("div");
+      suggestSheet.className = "lp-overlay lp-suggest-overlay";
+      suggestSheet.addEventListener("click", function (e) { if (e.target === suggestSheet) closeSuggestSheet(); });
+      suggestSheet.addEventListener("keydown", function (e) { if (e.key === "Escape") closeSuggestSheet(); });
+      document.body.appendChild(suggestSheet);
+    }
+    var cur = actSet(a);
+    suggestSheet.innerHTML =
+      '<div class="lp-sheet lp-vsheet" role="dialog" aria-modal="true" aria-labelledby="lpSuggestTitle">' +
+        '<div class="lp-sheet-top"><span class="lp-badge">RaveFAM</span>' +
+        '<button type="button" class="lp-x" aria-label="Close">✕</button></div>' +
+        '<h3 id="lpSuggestTitle"></h3><p class="lp-sub"></p>' +
+        '<label class="lp-vs-label">Day<select class="lp-vs-q lp-sg-day"></select></label>' +
+        '<div class="lp-sg-times">' +
+          '<label class="lp-vs-label">Starts<input type="time" class="lp-vs-q lp-sg-start"></label>' +
+          '<label class="lp-vs-label">Ends<input type="time" class="lp-vs-q lp-sg-end"></label>' +
+        '</div>' +
+        '<label class="lp-vs-label">Stage<input type="text" maxlength="60" class="lp-vs-q lp-sg-stage" placeholder="e.g. kineticFIELD"></label>' +
+        '<label class="lp-vs-label">Note<input type="text" maxlength="280" class="lp-vs-q lp-sg-note" placeholder="Where you saw it (optional)"></label>' +
+        '<button type="button" class="lp-vgo lp-sg-go">Send to a moderator</button>' +
+      '</div>';
+    suggestSheet.querySelector("#lpSuggestTitle").textContent = (kind === "report" ? "Report a change: " : "Suggest a set time: ") + a.name;
+    suggestSheet.querySelector(".lp-sub").textContent = (cur && cur.start_at ? "Posted now: " + timeText(cur) + ". " : "") +
+      "Times are in the festival's local time. A moderator checks it before it goes live.";
+    var daySel = suggestSheet.querySelector(".lp-sg-day");
+    days.forEach(function (d) {
+      var o = document.createElement("option");
+      o.value = d.v; o.textContent = d.t;
+      daySel.appendChild(o);
+    });
+    var nightIdx = { fri: 5, sat: 6, sun: 0, mon: 1, tue: 2, wed: 3, thu: 4 }[String(a.night || "").slice(0, 3).toLowerCase()];
+    if (nightIdx != null) days.forEach(function (d) { if (new Date(d.v + "T12:00:00Z").getUTCDay() === nightIdx) daySel.value = d.v; });
+    suggestSheet.querySelector(".lp-x").addEventListener("click", closeSuggestSheet);
+    var go = suggestSheet.querySelector(".lp-sg-go");
+    go.addEventListener("click", function () {
+      var day = daySel.value;
+      var st = suggestSheet.querySelector(".lp-sg-start").value;
+      var en = suggestSheet.querySelector(".lp-sg-end").value;
+      var stage = suggestSheet.querySelector(".lp-sg-stage").value;
+      var note = suggestSheet.querySelector(".lp-sg-note").value;
+      if (!st && !stage.trim() && !note.trim()) { toast("Add a time, a stage or a note."); return; }
+      if (en && !st) { toast("Add a start time too."); return; }
+      var start = st && day ? day + "T" + st : null;
+      var end = null;
+      if (start && en) {
+        var endDay = day;
+        if (en <= st) {
+          var p = day.split("-").map(Number);
+          endDay = new Date(Date.UTC(p[0], p[1] - 1, p[2] + 1)).toISOString().slice(0, 10);
+        }
+        end = endDay + "T" + en;
+      }
+      go.disabled = true;
+      window.LineupMember.client(function (sb) {
+        sb.rpc("suggest_set_time", {
+          p_festival_id: member.festival.id, p_artist_id: ids[0], p_kind: kind,
+          p_start: start, p_end: end, p_stage: stage || null, p_note: note || null
+        }).then(function (res) {
+          var d = res && res.data;
+          if (d && d.ok) {
+            closeSuggestSheet();
+            toast("🙏 Thanks! A moderator will check it before it goes live.");
+            logEvent("set_time_suggested", { slug: slug, kind: kind });
+            return;
+          }
+          go.disabled = false;
+          var msg = {
+            rsvp: "Set Going or Interested first to suggest times.",
+            out_of_range: "That time is outside the festival's dates.",
+            end_before_start: "The end time has to be after the start (within 12 hours).",
+            no_timezone: "This rave doesn't have a time zone yet, so times can't be added.",
+            rate_limited: "You've sent a lot for this rave. Wait for a moderator to catch up."
+          }[d && d.error] || "⚠️ Couldn't send that. Try again.";
+          toast(msg);
+        }, function () { go.disabled = false; toast("⚠️ Couldn't send that. Try again."); });
+      });
+    });
+    suggestSheet.classList.add("show");
+    var first = suggestSheet.querySelector(".lp-sg-start");
+    if (first) first.focus();
+  }
+
+  function closeSuggestSheet() { if (suggestSheet) suggestSheet.classList.remove("show"); }
+
   // ----- member load -----
   function loadMember() {
     window.LineupMember.ready(function (m) {
@@ -2317,8 +2650,11 @@
           sb.from("raver_festival_interest").select("festival_id").eq("raver_id", rid).eq("festival_id", fid),
           sb.from("raver_favorite_artists").select("artist_id").eq("raver_id", rid),
           sb.rpc("get_lineup_crew_pulse", { p_festival_id: fid }),
-          sb.rpc("get_lineup_crew_votes", { p_festival_id: fid })
+          sb.rpc("get_lineup_crew_votes", { p_festival_id: fid }),
+          sb.from("raver_clash_choices").select("choices").eq("raver_id", rid).eq("festival_id", fid)
         ]).then(function (out) {
+          var cc = out[7] && out[7].data && out[7].data[0];
+          if (cc && cc.choices && typeof cc.choices === "object") clash = cc.choices;
           var cv = out[6] && out[6].data;
           votes = cv && cv.ok ? cv : null;
           ((out[4] && out[4].data) || []).forEach(function (r) { favs[r.artist_id] = true; });
@@ -2358,6 +2694,9 @@
       renderBar();
       watchDeck();
       loadWantCounts();
+      loadSetTimes();
+      clash = readClashLocal();
+      try { if (new URLSearchParams(location.search).get("view") === "schedule") view = "schedule"; } catch (e) {}
       loadMember();
       // ?vote=1&crew=<id>: the app's "Crew vote on a lineup" lands here and the
       // start sheet opens once member data loads. Stripped from the URL.
@@ -2377,6 +2716,7 @@
     ok: function (a) {
       if (view === "all") return true;
       if (view === "shared") return isShared(a);
+      if (view === "schedule") return isPicked(a);
       if (view === "picks") return isPicked(a);
       if (view === "crew") return actCrew(a).length > 0;
       return isFav(a);
@@ -2398,6 +2738,13 @@
         sp.className = "lp-shared";
         sp.textContent = "📋 " + (picked ? "You both picked this" : shared.first + " picked this");
         el.insertBefore(sp, el.querySelector(".foot"));
+      }
+      var st = actSet(a);
+      if (st && (st.start_at || st.stage)) {
+        var tl = document.createElement("div");
+        tl.className = "lp-time";
+        tl.textContent = "🕘 " + timeText(st);
+        el.insertBefore(tl, el.querySelector(".foot"));
       }
       var fam = actFaves(a);
       if (fam.length) {

@@ -368,6 +368,8 @@ async function installSupabaseStub(page, opts = {}) {
             return row;
           }
           function exec() {
+            // Every call is recorded (store.__rpcCalls) so a spec can check the args.
+            (store.__rpcCalls = store.__rpcCalls || []).push({ fn, args: clone(args || {}) });
             // Canned RPC results a spec can seed: data.__rpc = { fn_name: result }.
             if (store.__rpc && Object.prototype.hasOwnProperty.call(store.__rpc, fn)) return { data: clone(store.__rpc[fn]), error: null };
             if (fn === 'get_festival_history') return { data: historyRows('festival', args.p_festival_id, args.p_limit), error: null };
