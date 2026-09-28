@@ -9719,7 +9719,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.74.0';
+  const APP_VERSION = '1.75.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -12549,7 +12549,7 @@
 
     if (!fErr && dbFests) {
       dbFests.forEach(f => {
-        festivals.push({ id: f.id, name: f.name, date: f.date, location: f.location || '', color: f.color || null, days: f.days || null, createdBy: f.created_by || null, archived: !!f.archived_at, mapUrl: f.map_url || null, slug: f.slug || null, lat: f.lat ?? null, lng: f.lng ?? null, venueId: f.venue_id ?? null });
+        festivals.push({ id: f.id, name: f.name, date: f.date, location: f.location || '', color: f.color || null, days: f.days || null, createdBy: f.created_by || null, archived: !!f.archived_at, mapUrl: f.map_url || null, slug: f.slug || null, lat: f.lat ?? null, lng: f.lng ?? null, venueId: f.venue_id ?? null, timezone: f.timezone || null });
       });
     }
 
@@ -16955,7 +16955,7 @@
   }
 
   // ===== MOD DASHBOARD =====
-  let modDashTab = 'reports';  // 'reports' | 'recent' | 'genres' | 'guide'
+  let modDashTab = 'reports';  // 'reports' | 'recent' | 'genres' | 'settimes' | 'guide'
   let modDashRecentRows = [];  // last-loaded audit_logs rows, keyed by id for Restore lookups
 
   async function openModDashboard() {
@@ -16970,9 +16970,10 @@
   function closeModDashboard() { closeDetail(); }
 
   async function renderModDashboard() {
-    const [flags, recent, missingGenreArtists] = await Promise.all([dbLoadFlags(), dbLoadRecentDestructiveActions(), dbLoadMissingGenreArtists()]);
+    const [flags, recent, missingGenreArtists, setTimeReports] = await Promise.all([dbLoadFlags(), dbLoadRecentDestructiveActions(), dbLoadMissingGenreArtists(), dbLoadSetTimeReports()]);
     modDashRecentRows = recent;
     modMissingGenreArtists = missingGenreArtists;
+    modSetTimeReports = setTimeReports;
     updateModBadge();
     const openCount = flags.filter(f => f.status === 'open').length;
     const page = document.getElementById('page-mod-dashboard');
@@ -16987,6 +16988,7 @@
         <button class="status-opt ${modDashTab==='reports'?'active':''}" onclick="switchModDashTab('reports')">🚩 Reports${openCount ? ` (${openCount})` : ''}</button>
         <button class="status-opt ${modDashTab==='recent'?'active':''}" onclick="switchModDashTab('recent')">🗑️ Recent Deletes${recent.length ? ` (${recent.length})` : ''}</button>
         <button class="status-opt ${modDashTab==='genres'?'active':''}" onclick="switchModDashTab('genres')">🎵 Missing Genres${missingGenreArtists.length ? ` (${missingGenreArtists.length})` : ''}</button>
+        <button class="status-opt ${modDashTab==='settimes'?'active':''}" onclick="switchModDashTab('settimes')">🕘 Set times${setTimeReports.length ? ` (${setTimeReports.length})` : ''}</button>
         <button class="status-opt ${modDashTab==='guide'?'active':''}" onclick="switchModDashTab('guide')">📖 Guide</button>
       </div>
       <div id="mod-dash-body"></div>
@@ -17010,9 +17012,89 @@
         : `<div class="es-block" style="padding:40px 24px;"><div class="es-icon">🗑️</div><div class="es-headline">No deletes yet</div><div class="es-sub">Destructive actions will show up here.</div></div>`;
     } else if (modDashTab === 'genres') {
       body.innerHTML = renderMissingGenresHTML();
+    } else if (modDashTab === 'settimes') {
+      body.innerHTML = renderSetTimeReportsHTML();
     } else if (modDashTab === 'guide') {
       body.innerHTML = renderModGuideHTML();
     }
+  }
+
+  // ===== MOD DASHBOARD: Set times tab =====
+  // Member suggestions and "Report a change" from the Lineup Explorer's My
+  // schedule (suggest_set_time). Approving writes the time and/or stage onto
+  // the appearance via review_set_time(); nothing is public until then.
+  let modSetTimeReports = [];
+
+  async function dbLoadSetTimeReports() {
+    if (!isModerator()) return [];
+    const { data, error } = await sb.from('set_time_reports').select('*')
+      .eq('status', 'pending').order('created_at', { ascending: true }).limit(200);
+    if (error) { console.error('set time reports load error', error); return []; }
+    const rows = data || [];
+    const apIds = [...new Set(rows.map(r => r.appearance_id))];
+    if (apIds.length) {
+      const { data: aps } = await sb.from('artist_festival_appearances')
+        .select('id,start_at,end_at,stage').in('id', apIds);
+      const byId = new Map((aps || []).map(a => [a.id, a]));
+      rows.forEach(r => { r._current = byId.get(r.appearance_id) || null; });
+    }
+    return rows;
+  }
+
+  function fmtSetTimeRange(startAt, endAt, tz) {
+    if (!startAt) return '';
+    const opts = { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' };
+    let fmt, fmtEnd;
+    try {
+      fmt = new Intl.DateTimeFormat('en-US', { ...opts, timeZone: tz || undefined });
+      fmtEnd = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz || undefined });
+    } catch (e) {
+      fmt = new Intl.DateTimeFormat('en-US', opts);
+      fmtEnd = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' });
+    }
+    return fmt.format(new Date(startAt)) + (endAt ? '–' + fmtEnd.format(new Date(endAt)) : '');
+  }
+
+  function renderSetTimeReportsHTML() {
+    if (!modSetTimeReports.length) {
+      return `<div class="es-block" style="padding:40px 24px;"><div class="es-icon">🕘</div><div class="es-headline">No set times to check</div><div class="es-sub">Member suggestions and change reports land here.</div></div>`;
+    }
+    return `
+      <div style="font-size:0.8rem;color:var(--muted);margin-bottom:14px;">Times are in each festival's local time. Approving puts the time and stage live on the Lineup Explorer.</div>
+      <div class="events-list">${modSetTimeReports.map(setTimeReportCardHTML).join('')}</div>`;
+  }
+
+  function setTimeReportCardHTML(r) {
+    const f = festivals.find(x => String(x.id) === String(r.festival_id));
+    const a = artists.find(x => String(x.id) === String(r.artist_id));
+    const tz = f && f.timezone;
+    const proposed = [fmtSetTimeRange(r.start_at, r.end_at, tz), r.stage].filter(Boolean).join(' · ');
+    const cur = r._current;
+    const current = cur ? [fmtSetTimeRange(cur.start_at, cur.end_at, tz), cur.stage].filter(Boolean).join(' · ') : '';
+    return `
+      <div class="event-item set-time-report" id="set-time-report-${escHtml(r.id)}">
+        <div class="event-item-body" style="align-items:flex-start;">
+          <div class="event-info" style="width:100%;">
+            <div class="event-name">${escHtml(a ? a.name : 'Artist')} <span style="color:var(--muted);font-weight:500;">@ ${escHtml(f ? f.name : 'Festival')}</span></div>
+            <div class="event-meta"><span class="stats-pill ${r.kind === 'report' ? 'yellow' : 'cyan'}">${r.kind === 'report' ? '🚩 Change report' : '💡 Suggestion'}</span></div>
+            <div class="event-meta">Proposed: <b>${escHtml(proposed || '—')}</b></div>
+            ${current ? `<div class="event-meta">Posted now: ${escHtml(current)}</div>` : ''}
+            ${r.note ? `<div class="event-meta">“${escHtml(r.note)}”</div>` : ''}
+            <div style="display:flex;gap:8px;margin-top:10px;">
+              <button class="btn btn-primary" ${!r.start_at && !r.stage ? 'disabled title="Nothing to apply — reject or leave for later"' : ''} onclick="reviewSetTimeReport('${escJsAttr(r.id)}', true)">✅ Approve</button>
+              <button class="btn btn-ghost" onclick="reviewSetTimeReport('${escJsAttr(r.id)}', false)">✕ Reject</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  async function reviewSetTimeReport(id, approve) {
+    const { data, error } = await sb.rpc('review_set_time', { p_report_id: id, p_approve: approve });
+    if (error || !data?.ok) { showToast('⚠️ Could not update that report — try again'); return; }
+    showToast(approve ? '🕘 Set time is live' : 'Report rejected');
+    modSetTimeReports = modSetTimeReports.filter(r => r.id !== id);
+    renderModDashboard();
   }
 
   // ===== MOD DASHBOARD: Missing Genres tab =====
@@ -30271,7 +30353,8 @@
     const lineupUrl = getLineupExplorerUrl(f);
     const lineupPanel = `
       <div id="lineup-section"></div>
-      ${lineupUrl ? `<a class="lineup-explorer-btn" style="margin-top:14px;" href="${lineupUrl}" target="_blank" rel="noopener">🔭 Lineup Explorer</a>` : ''}`;
+      ${lineupUrl ? `<a class="lineup-explorer-btn" style="margin-top:14px;" href="${lineupUrl}" target="_blank" rel="noopener">🔭 Lineup Explorer</a>
+        <a class="lineup-explorer-btn lineup-schedule-btn" style="margin-top:8px;" href="${lineupUrl}?view=schedule" target="_blank" rel="noopener">🗓️ My schedule</a>` : ''}`;
 
     // Info tab — venue, location, dates, festival map.
     const fmtFull = x => `${DOW_SHORT[x.getDay()]} ${x.getDate()} ${MON_SHORT[x.getMonth()]} ${x.getFullYear()}`;

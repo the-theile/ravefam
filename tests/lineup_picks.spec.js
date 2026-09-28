@@ -804,3 +804,139 @@ test.describe('Lineup Explorer follow-ups — change vote, ?vote=1', () => {
     expect(new URL(page.url()).search).toBe('');
   });
 });
+
+test.describe('Lineup Explorer 4a — set times and My schedule', () => {
+  test.beforeEach(async ({ page }) => { await blockExternal(page); });
+
+  // EDC Orlando is Eastern: Fri Nov 6 9:30 PM EST = 02:30Z on Nov 7.
+  const SETS = { ok: true, tz: 'America/New_York', date: '2026-11-06', days: 3, sets: [
+    { artist_id: 5, name: 'Afrojack', start_at: '2026-11-07T02:30:00Z', end_at: '2026-11-07T03:45:00Z', stage: 'kineticFIELD' },
+    { artist_id: 9, name: 'Alesso', start_at: '2026-11-07T03:00:00Z', end_at: '2026-11-07T04:00:00Z', stage: 'cosmicMEADOW' },
+  ] };
+
+  function schedData(extra = {}) {
+    return memberData({
+      artists: [
+        { id: 5, name: 'Afrojack', name_lower: 'afrojack' },
+        { id: 9, name: 'Alesso', name_lower: 'alesso' },
+        { id: 1, name: 'Kaskade', name_lower: 'kaskade' },
+      ],
+      __rpc: { get_lineup_set_times: SETS },
+      ...extra,
+    });
+  }
+
+  async function seedLocalPicks(page, names) {
+    await page.addInitScript(([s, n]) => {
+      if (sessionStorage.getItem('seeded')) return;
+      sessionStorage.setItem('seeded', '1');
+      localStorage.setItem('rf_picks', JSON.stringify({ [s]: { n } }));
+    }, [SLUG, names]);
+  }
+
+  test('cards show the set time in festival time; My schedule flags a clash and saves the choice', async ({ page }) => {
+    const errors = collectPageErrors(page);
+    await seedLocalPicks(page, ['Afrojack', 'Alesso', 'Kaskade']);
+    await installSupabaseStub(page, { session: null, data: schedData() });
+    await page.goto(PAGE);
+    const card = page.locator('.act-wrap', { has: star(page, 'Afrojack') });
+    await expect(card.locator('.lp-time')).toHaveText('🕘 Fri 9:30 PM–10:45 PM · kineticFIELD');
+
+    await page.locator('.lp-f[data-v="schedule"]').click();
+    const sched = page.locator('.lp-sched');
+    await expect(sched).toBeVisible();
+    await expect(page.locator('#deck')).toBeHidden();
+    // Fri first (it has the timed sets), Sat second.
+    await expect(sched.locator('.lp-sched-days .lp-crew-chip')).toHaveText(['Fri', 'Sat']);
+    const rows = sched.locator('.lp-sched-row');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(0).locator('.lp-sched-name')).toHaveText('Afrojack');
+    await expect(rows.nth(0).locator('.lp-sched-time')).toHaveText('9:30 PM–10:45 PM');
+    await expect(rows.nth(1).locator('.lp-sched-sub')).toContainText('cosmicMEADOW');
+    await expect(sched.locator('.lp-clash-t')).toHaveText('⚡ Afrojack and Alesso overlap (10 PM–10:45 PM)');
+
+    await sched.locator('.lp-clash .lp-crew-chip', { hasText: 'Only Afrojack' }).click();
+    await expect(page.locator('.lp-sched-row', { hasText: 'Alesso' })).toHaveClass(/is-skipped/);
+    await expect(page.locator('.lp-sched-row', { hasText: 'Alesso' }).locator('.lp-sched-sub')).toContainText('skipping for Afrojack');
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('rf_clash')));
+    expect(saved[SLUG]).toEqual({ 'Afrojack|Alesso': 'Afrojack' });
+
+    // Saturday has no times yet.
+    await page.locator('.lp-sched-days .lp-crew-chip', { hasText: 'Sat' }).click();
+    await expect(page.locator('.lp-sched-row .lp-sched-time')).toHaveText(['Time TBA']);
+    await expect(page.locator('.lp-sched-note').first()).toHaveText('Clash check turns on when set times drop.');
+
+    await page.locator('.lp-f[data-v="all"]').click();
+    await expect(page.locator('.lp-sched')).toBeHidden();
+    await expect(page.locator('#deck')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
+  test('members save clash choices to their profile and can suggest a time', async ({ page }) => {
+    await installSupabaseStub(page, { session: makeSession(), data: schedData({
+      raver_festivals: [{ raver_id: 'r1', festival_id: 'f1' }],
+      raver_artist_plans: [
+        { raver_id: 'r1', artist_id: 5, festival_id: 'f1' },
+        { raver_id: 'r1', artist_id: 9, festival_id: 'f1' },
+        { raver_id: 'r1', artist_id: 1, festival_id: 'f1' },
+      ],
+      raver_clash_choices: [],
+      __rpc: { get_lineup_set_times: SETS, suggest_set_time: { ok: true, id: 'st1' } },
+    }) });
+    await page.goto(PAGE + '?view=schedule');
+    await expect(page.locator('.lp-bar')).toHaveAttribute('data-mode', 'member');
+    await expect(page.locator('.lp-sched')).toBeVisible();
+    await page.locator('.lp-clash .lp-crew-chip', { hasText: 'Split' }).click();
+    await expect.poll(() => page.evaluate(() => (window.__store.raver_clash_choices || [])[0] && window.__store.raver_clash_choices[0].choices))
+      .toEqual({ 'Afrojack|Alesso': 'split' });
+
+    // Saturday's Kaskade has no time: suggest one (festival-local).
+    await page.locator('.lp-sched-days .lp-crew-chip', { hasText: 'Sat' }).click();
+    await page.locator('.lp-sched-row', { hasText: 'Kaskade' }).locator('.lp-sched-act').click();
+    const sheet = page.locator('.lp-suggest-overlay.show');
+    await expect(sheet.locator('h3')).toHaveText('Suggest a set time: Kaskade');
+    await expect(sheet.locator('.lp-sg-day')).toHaveValue('2026-11-07'); // Kaskade plays Saturday
+    await sheet.locator('.lp-sg-start').fill('23:30');
+    await sheet.locator('.lp-sg-end').fill('00:45');
+    await sheet.locator('.lp-sg-stage').fill('circuitGROUNDS');
+    await sheet.locator('.lp-sg-go').click();
+    await expect(page.locator('.lp-suggest-overlay.show')).toHaveCount(0);
+    const call = await page.evaluate(() => window.__store.__rpcCalls.find(c => c.fn === 'suggest_set_time'));
+    expect(call.args).toMatchObject({ p_festival_id: 'f1', p_artist_id: 1, p_kind: 'suggest',
+      p_start: '2026-11-07T23:30', p_end: '2026-11-08T00:45', p_stage: 'circuitGROUNDS' });
+
+    // A posted time offers Report a change instead.
+    await page.locator('.lp-sched-days .lp-crew-chip', { hasText: 'Fri' }).click();
+    await expect(page.locator('.lp-sched-row', { hasText: 'Afrojack' }).locator('.lp-sched-act')).toHaveAccessibleName('Report a change to Afrojack');
+  });
+});
+
+test.describe('Lineup Explorer — Hulaween official set times (page data)', () => {
+  test.beforeEach(async ({ page }) => { await blockExternal(page); });
+
+  test("every card carries its own time; String Cheese Incident's three days each show up in My schedule", async ({ page }) => {
+    const errors = collectPageErrors(page);
+    await page.addInitScript(() => {
+      if (sessionStorage.getItem('seeded')) return;
+      sessionStorage.setItem('seeded', '1');
+      localStorage.setItem('rf_picks', JSON.stringify({ 'hulaween-2026': { n: ['The String Cheese Incident', 'Pretty Lights', 'Green Velvet'] } }));
+    });
+    // No DB set times: the page's own ACTS times and <meta name="rf-timezone"> carry it.
+    await installSupabaseStub(page, { session: null, data: { festivals: [], artists: [] } });
+    await page.goto('/lineup-explorer/hulaween-2026.html');
+    const excision = page.locator('.act-wrap', { has: star(page, 'Excision') });
+    await expect(excision.locator('.lp-time')).toHaveText('🕘 Thu 10:30 PM–12 AM · The Meadow');
+    const sci = page.locator('.act-wrap', { has: star(page, 'The String Cheese Incident') }).locator('.lp-time');
+    await expect(sci).toHaveText(['🕘 Fri 7:30 PM–9 PM · The Meadow', '🕘 Sat 5:45 PM–7 PM · The Meadow', '🕘 Sun 3 PM–5 PM · The Meadow']);
+
+    await page.locator('.lp-f[data-v="schedule"]').click();
+    await expect(page.locator('.lp-sched-days .lp-crew-chip')).toHaveText(['Fri', 'Sat', 'Sun']);
+    await page.locator('.lp-sched-days .lp-crew-chip', { hasText: 'Sat' }).click();
+    // Pretty Lights and Green Velvet overlap from 11 PM.
+    await expect(page.locator('.lp-sched-row .lp-sched-name')).toHaveText(['The String Cheese Incident', 'Green Velvet', 'Pretty Lights']); // same 11 PM start: by name
+    await expect(page.locator('.lp-clash-t')).toHaveText('⚡ Green Velvet and Pretty Lights overlap (11 PM–1 AM)');
+    await page.locator('.lp-sched-days .lp-crew-chip', { hasText: 'Sun' }).click();
+    await expect(page.locator('.lp-sched-row .lp-sched-time')).toHaveText(['3 PM–5 PM']);
+    expect(errors).toEqual([]);
+  });
+});

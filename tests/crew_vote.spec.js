@@ -120,3 +120,25 @@ test('Settings lists live share links and can turn one off', async ({ page }) =>
   await box.locator('.share-link-off').click();
   await expect(box).toBeHidden();
 });
+
+test('Mod Dashboard lists pending set times and approving calls review_set_time', async ({ page }) => {
+  const d = voteData();
+  d.moderators = [{ user_id: TEST_UID, added_at: '2024-01-01T00:00:00Z', added_by: null }];
+  d.festivals[0].timezone = 'Europe/Brussels';
+  d.artists.push({ id: 11, name: 'Amelie Lens', name_lower: 'amelie lens', genres: ['techno'] });
+  d.artist_festival_appearances = [{ id: 501, artist_id: 11, festival_id: 'f1', start_at: null, end_at: null, stage: null }];
+  d.set_time_reports = [{ id: 'st1', appearance_id: 501, festival_id: 'f1', artist_id: 11, kind: 'suggest',
+    start_at: '2099-07-18T20:00:00Z', end_at: '2099-07-18T21:30:00Z', stage: 'Mainstage', note: 'from the app',
+    status: 'pending', created_at: '2099-07-01T00:00:00Z', user_id: 'kai-uid' }];
+  d.__rpc = { review_set_time: { ok: true } };
+  await bootAuthedApp(page, { data: d });
+  await page.evaluate(async () => { modDashTab = 'settimes'; await openModDashboard(); });
+  const card = page.locator('#set-time-report-st1');
+  await expect(card).toContainText('Amelie Lens');
+  await expect(card).toContainText('@ Tomorrowland');
+  // 20:00Z in Brussels summer time is 10 PM.
+  await expect(card).toContainText('Sat, Jul 18, 10:00 PM–11:30 PM · Mainstage');
+  await card.getByRole('button', { name: '✅ Approve' }).click();
+  await expect.poll(() => page.evaluate(() => (window.__store.__rpcCalls || []).find(c => c.fn === 'review_set_time')?.args))
+    .toEqual({ p_report_id: 'st1', p_approve: true });
+});
