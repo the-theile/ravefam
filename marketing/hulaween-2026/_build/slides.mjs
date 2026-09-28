@@ -76,7 +76,7 @@ function frame(s) {
   const dots = Array.from({ length: s.count }, (_, i) => `<i class="${i === s.idx - 1 ? 'on' : ''}"></i>`).join('');
   return `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}</style></head><body>
 <div class="bg"></div><div class="grid"></div>
-<div class="top"><div class="brand"><img src="../brand-mark.svg" alt=""><span>Rave<span class="g">FAM</span></span></div><div class="day">DAY ${s.day}/5</div></div>
+<div class="top"><div class="brand"><img src="../brand-mark.svg" alt=""><span>Rave<span class="g">FAM</span></span></div></div>
 ${s.body}
 <div class="foot"><span>Free · no signup · <b>myravefam.com/lineup-explorer</b></span><span class="dots">${dots}</span></div>
 </body></html>`;
