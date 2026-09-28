@@ -56,6 +56,8 @@ All events are logged via `logAnalyticsEvent(eventName, { crew_id, raver_id, ...
 | `lineup_share_posted` | `postToHuddle()` in `lineup-common.js`, after the `lineup` message is posted to a crew's rave Huddle | — | ✅ | `slug`, `picks` | none |
 | `lineup_share_opened` | `loadShared()` in `lineup-common.js`, when a `?by=` link resolves for the page | — | ✅ if a member | `slug`, `picks` | none |
 | `set_time_suggested` | `openSuggestSheet()` in `lineup-common.js`, when `suggest_set_time()` accepts a suggestion or change report | — | ✅ | `slug`, `kind` (`suggest` / `report`) | none |
+| `now_next_opened` | `renderNow()` in `lineup-common.js`, the first time 🎧 On deck shows on a page load | — | ✅ if a member | `slug`, `auto` (opened itself during festival hours vs. tapped) | none |
+| `reminder_enabled` | `toggleReminders()` in `lineup-common.js`, when `set_set_reminders()` turns set reminders on | — | ✅ | `slug`, `n` (sets queued for a reminder) | none |
 
 The PM dashboard's **🔭 Lineup Explorer → Members** section (`get_explorer_metrics()`,
 `20260927000005_explorer_metrics.sql`) joins first explorer pageviews to

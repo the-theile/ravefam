@@ -1,4 +1,4 @@
-const CACHE = 'ravefam-v9';
+const CACHE = 'ravefam-v10';
 // jsQR is no longer precached — the app fetches it on demand, and only on
 // browsers without BarcodeDetector, so precaching it cost every install ~250KB
 // for a decoder most never use. The cache-first handler below still stores it
@@ -22,6 +22,25 @@ self.addEventListener('activate', e => {
       Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
+});
+
+function isExplorer(url) {
+  try {
+    const u = new URL(url);
+    return u.origin === self.location.origin && u.pathname.startsWith('/lineup-explorer/');
+  } catch (e) { return false; }
+}
+
+// The Lineup Explorer asks for its page and assets to be kept for offline use
+// once a member opens it (the first visit happens before this worker controls
+// the page, so the fetch handler never saw it). Same-origin paths only.
+self.addEventListener('message', e => {
+  const d = e.data || {};
+  if (d.type !== 'rf-cache-urls' || !Array.isArray(d.urls)) return;
+  const urls = d.urls.filter(u => isExplorer(new URL(u, self.location.origin).href)).slice(0, 10);
+  e.waitUntil(caches.open(CACHE).then(c => Promise.all(urls.map(u =>
+    fetch(u, { credentials: 'same-origin' }).then(res => { if (res.ok) return c.put(u, res); }).catch(() => {})
+  ))));
 });
 
 function isHTMLRequest(req) {
@@ -68,9 +87,29 @@ self.addEventListener('fetch', e => {
         return res;
       }).catch(async () =>
         (await caches.match(req)) ||
+        // A Lineup Explorer page opened from a reminder (?view=now) or with any
+        // other query string still has its plain copy cached.
+        (isExplorer(url) && await caches.match(req, { ignoreSearch: true })) ||
         (await caches.match('/app.html')) ||
         (await caches.match('/'))
       )
+    );
+    return;
+  }
+
+  // Network-first for the Lineup Explorer's shared script and styles: they
+  // change with every explorer release but keep the same URL, so cache-first
+  // pinned phones to whatever version they first saw. The cached copy is the
+  // offline fallback (Phase 4b: the page works at the festival without signal).
+  if (isExplorer(url)) {
+    e.respondWith(
+      fetch(req).then(res => {
+        if (res && res.ok) {
+          const clone = res.clone();
+          caches.open(CACHE).then(c => c.put(req, clone));
+        }
+        return res;
+      }).catch(async () => (await caches.match(req)) || Response.error())
     );
     return;
   }
@@ -93,7 +132,8 @@ self.addEventListener('push', e => {
     body: data.body || '',
     icon: '/icon-192.png',
     badge: '/icon-192.png',
-    data: { crewId: data.crewId, roomId: data.roomId, messageId: data.messageId }
+    tag: data.tag,
+    data: { crewId: data.crewId, roomId: data.roomId, messageId: data.messageId, url: data.url }
   }));
 });
 
@@ -112,7 +152,20 @@ function logPushClick(messageId, crewId) {
 
 self.addEventListener('notificationclick', e => {
   e.notification.close();
-  const { messageId, crewId, roomId } = e.notification.data || {};
+  const { messageId, crewId, roomId, url: target } = e.notification.data || {};
+
+  // Set reminders (send-set-reminders) carry their own page: the explorer's
+  // On deck view. Reuse a tab already on that lineup, else open one.
+  if (target && isExplorer(new URL(target, self.location.origin).href)) {
+    const path = new URL(target, self.location.origin).pathname;
+    e.waitUntil(clients.matchAll({ type: 'window' }).then(list => {
+      for (const c of list) {
+        if (new URL(c.url).pathname === path && 'navigate' in c) return c.navigate(target).then(w => (w || c).focus()).catch(() => clients.openWindow(target));
+      }
+      return clients.openWindow(target);
+    }));
+    return;
+  }
 
   // Carry the notification's target through to the app. A cold start gets it as
   // query params; an already-open window gets it by postMessage, because
