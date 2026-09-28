@@ -618,3 +618,144 @@ test.describe('Lineup Explorer 3a — most wanted', () => {
     expect(await firstHref()).toBe(before);
   });
 });
+
+test.describe('Lineup Explorer 3b — crew votes and Fam Faves', () => {
+  test.beforeEach(async ({ page }) => { await blockExternal(page); });
+
+  const PULSE = { ok: true,
+    crews: [{ id: 'c1', n: 'Bass Syndicate', col: '#FF2D78' }],
+    mates: { m1: { n: 'Sam', a: null, g: null, s: 'going', u: false, c: ['c1'] } },
+    going: ['m1'], interested: [], picks: { 3: ['m1'] } };
+
+  function vote(extra = {}) {
+    return {
+      id: 'p1', crew_id: 'c1', crew: 'Bass Syndicate', col: '#FF2D78',
+      q: 'Which sets are we hitting at EDC Orlando 2026?', max: 2,
+      closes: '2099-11-06T00:00:00Z', closed: false, own: false,
+      options: [{ id: 1, n: 'Kaskade', v: 2 }, { id: 9, n: 'Alesso', v: 1 }, { id: 3, n: 'Vastive', v: 0 }],
+      my: null, voters: 2, faves: [], ...extra,
+    };
+  }
+
+  function voteData(votes, extra = {}) {
+    return memberData({
+      artists: [
+        { id: 1, name: 'Kaskade', name_lower: 'kaskade' },
+        { id: 9, name: 'Alesso', name_lower: 'alesso' },
+        { id: 3, name: 'Vastive', name_lower: 'vastive' },
+        { id: 2, name: 'Benda', name_lower: 'benda' },
+      ],
+      raver_festivals: [{ raver_id: 'r1', festival_id: 'f1' }],
+      raver_artist_plans: [{ raver_id: 'r1', artist_id: 1, festival_id: 'f1' }],
+      __rpc: {
+        get_lineup_crew_pulse: PULSE,
+        get_lineup_crew_votes: { ok: true, can_vote: true, crews: [{ id: 'c1', n: 'Bass Syndicate', col: '#FF2D78' }], votes },
+      },
+      ...extra,
+    });
+  }
+
+  test('pick up to N sets and vote', async ({ page }) => {
+    const errors = collectPageErrors(page);
+    await installSupabaseStub(page, { session: makeSession(), data: voteData([vote()]) });
+    await page.goto(PAGE);
+    const card = page.locator('.lp-vcard');
+    await expect(card.locator('.lp-vcrew')).toHaveText('Bass Syndicate');
+    await expect(card.locator('.lp-vmeta')).toContainText('Pick up to 2 · Closes in');
+    const go = card.locator('.lp-vgo');
+    await expect(go).toBeDisabled();
+    await card.locator('.lp-vopt', { hasText: 'Kaskade' }).click();
+    await page.locator('.lp-vcard .lp-vopt', { hasText: 'Vastive' }).click();
+    await expect(page.locator('.lp-vcard .lp-vopt', { hasText: 'Alesso' })).toBeDisabled();
+    await expect(page.locator('.lp-vcard .lp-vgo')).toHaveText('Vote (2/2)');
+
+    // The server now reports the vote as cast.
+    await page.evaluate(() => {
+      const v = window.__store.__rpc.get_lineup_crew_votes.votes[0];
+      v.my = [1, 3]; v.voters = 3; v.options[0].v = 3; v.options[2].v = 1;
+    });
+    await page.locator('.lp-vcard .lp-vgo').click();
+    await expect(page.locator('.lp-vcard .lp-vres li')).toHaveCount(3);
+    await expect(page.locator('.lp-vcard .lp-vres li').first()).toContainText('Kaskade ✓');
+    await expect(page.locator('.lp-vcard .lp-vfoot')).toHaveText('You voted · 3 voted');
+    const stored = await page.evaluate(() => window.__store.crew_poll_votes);
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({ poll_id: 'p1', voter_user_id: TEST_UID });
+    expect(JSON.parse(stored[0].vote_value).sort()).toEqual([1, 3]);
+    expect(errors).toEqual([]);
+  });
+
+  test('without an RSVP you see results, not a ballot', async ({ page }) => {
+    const d = voteData([vote()]);
+    d.__rpc.get_lineup_crew_votes.can_vote = false;
+    await installSupabaseStub(page, { session: makeSession(), data: d });
+    await page.goto(PAGE);
+    const card = page.locator('.lp-vcard');
+    await expect(card.locator('.lp-vres li')).toHaveCount(3);
+    await expect(card.locator('.lp-vopt')).toHaveCount(0);
+    await expect(card.locator('.lp-vfoot')).toContainText('Only crewmates who are Going or Interested can vote');
+  });
+
+  test('a closed vote puts ⭐ Fam Fave on the winning cards', async ({ page }) => {
+    await installSupabaseStub(page, { session: makeSession(), data: voteData([vote({ closed: true, faves: [1] })]) });
+    await page.goto(PAGE);
+    await expect(page.locator('.lp-vcard .lp-vfoot')).toHaveText('⭐ Fam Faves: Kaskade · 2 voted');
+    await expect(page.locator('.act-wrap', { has: star(page, 'Kaskade') }).locator('.lp-famfave')).toHaveText('⭐ Fam Fave · Bass Syndicate');
+    await expect(page.locator('.act-wrap', { has: star(page, 'Alesso') }).locator('.lp-famfave')).toHaveCount(0);
+  });
+
+  test('starting a vote pre-fills the ballot and posts to the Huddle', async ({ page }) => {
+    await installSupabaseStub(page, { session: makeSession(), data: voteData([]) });
+    await page.goto(PAGE);
+    await expect(page.locator('.lp-vote-hint')).toContainText("Can't agree on sets?");
+    await page.locator('.lp-vote-start').click();
+    const sheet = page.locator('.lp-vote-overlay.show');
+    await expect(sheet.locator('h3')).toHaveText('Start a crew vote');
+    // Your 📋 pick (Kaskade) and Sam's (Vastive) start checked.
+    const checked = () => sheet.locator('.lp-vs-row:has(input:checked) span').allTextContents();
+    expect((await checked()).sort()).toEqual(['Kaskade', 'Vastive']);
+    await sheet.locator('.lp-crew-chip', { hasText: '2' }).click();
+    await sheet.locator('.lp-vs-find').fill('ben');
+    await sheet.locator('.lp-vs-hit', { hasText: 'Benda' }).click();
+    expect((await checked()).sort()).toEqual(['Benda', 'Kaskade', 'Vastive']);
+    await expect(sheet.locator('.lp-vs-go')).toHaveText('Start the vote (3 sets)');
+    await sheet.locator('.lp-vs-go').click();
+    await expect(page.locator('.lp-vote-overlay.show')).toHaveCount(0);
+
+    const s = await page.evaluate(() => window.__store);
+    expect(s.crew_polls).toHaveLength(1);
+    expect(s.crew_polls[0]).toMatchObject({ crew_id: 'c1', created_by: TEST_UID, poll_type: 'pick_many', festival_id: 'f1', max_picks: 2,
+      question: 'Which sets are we hitting at EDC Orlando 2026?' });
+    expect(s.crew_polls[0].options.map(o => o.id).sort((a, b) => a - b)).toEqual([1, 2, 3]);
+    await expect.poll(() => page.evaluate(() => (window.__store.huddle_messages || []).length)).toBe(1);
+    const msg = await page.evaluate(() => window.__store.huddle_messages[0]);
+    expect(msg).toMatchObject({ crew_id: 'c1', kind: 'lineup', media_url: '/lineup-explorer/' + 'edc-orlando-2026' });
+    expect(msg.body).toContain('Pick up to 2');
+  });
+
+  test('whoever runs a vote can add sets but not remove them', async ({ page }) => {
+    const d = voteData([vote({ own: true })]);
+    d.crew_polls = [{ id: 'p1', crew_id: 'c1', poll_type: 'pick_many', options: [{ id: 1 }, { id: 9 }, { id: 3 }] }];
+    await installSupabaseStub(page, { session: makeSession(), data: d });
+    await page.goto(PAGE);
+    await page.locator('.lp-vadd').click();
+    const sheet = page.locator('.lp-vote-overlay.show');
+    await expect(sheet.locator('h3')).toHaveText("Add sets to Bass Syndicate's vote");
+    await expect(sheet.locator('.lp-vs-row input:disabled')).toHaveCount(3);
+    await expect(sheet.locator('.lp-vs-go')).toBeDisabled();
+    await sheet.locator('.lp-vs-find').fill('ben');
+    await sheet.locator('.lp-vs-hit', { hasText: 'Benda' }).click();
+    await expect(sheet.locator('.lp-vs-go')).toHaveText('Add 1 set');
+    await sheet.locator('.lp-vs-go').click();
+    await expect(page.locator('.lp-vote-overlay.show')).toHaveCount(0);
+    const opts = await page.evaluate(() => window.__store.crew_polls[0].options.map(o => o.id));
+    expect(opts).toEqual([1, 9, 3, 2]);
+  });
+
+  test('visitors never see crew votes', async ({ page }) => {
+    await installSupabaseStub(page, { session: null, data: voteData([vote()]) });
+    await page.goto(PAGE);
+    await expect(page.locator('.lp-bar')).toBeVisible();
+    await expect(page.locator('.lp-vote')).toBeHidden();
+  });
+});

@@ -2391,6 +2391,16 @@
     font-family: 'DM Sans', sans-serif;
   }
   .poll-option-btn:hover { background: rgba(255,45,120,0.08); border-color: rgba(255,45,120,0.35); }
+  /* Crew votes (pick_many): toggle up to N sets, then Vote */
+  .poll-pick-btn.picked { background: rgba(191,0,255,0.16); border-color: #BF00FF; box-shadow: 0 0 0 1px #BF00FF inset; }
+  .poll-pick-btn.picked::after { content: ' ✓'; color: #d98cff; }
+  .poll-pick-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .poll-pick-submit { width: 100%; margin-top: 8px; }
+  .poll-pick-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+  .poll-pick-note { font-size: 0.76rem; color: var(--muted); margin-top: 6px; }
+  .poll-fam-faves { font-size: 0.8rem; font-weight: 700; color: #FFE600; margin-top: 6px; }
+  .poll-lineup-link { display: inline-flex; align-items: center; min-height: 36px; margin-top: 6px; font-size: 0.8rem; font-weight: 700; color: #d98cff; text-decoration: none; }
+  .poll-lineup-link:hover { text-decoration: underline; }
   .poll-yesno-row { display: flex; gap: 8px; }
   .poll-yesno-btn {
     flex: 1; padding: 10px 8px; border-radius: 9px; border: 1.5px solid rgba(255,255,255,0.1);
@@ -9694,7 +9704,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.72.0';
+  const APP_VERSION = '1.73.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -21744,6 +21754,51 @@
     return !pollIsExpired(poll) && !poll.is_locked;
   }
 
+  // Crew votes (poll_type 'pick_many', started from the Lineup Explorer):
+  // options are [{ id: artist id, n: name }], vote_value is a JSON array of
+  // artist ids, and only crewmates Going/Interested for poll.festival_id can
+  // vote (the server enforces both). Top sets become the crew's Fam Faves.
+  let pickManyDraft = {}; // poll id -> [artist id strings] while choosing
+
+  function pickManyIds(voteValue) {
+    try { const a = JSON.parse(voteValue); return Array.isArray(a) ? a.map(String) : []; } catch (e) { return []; }
+  }
+
+  function pickManyCanVote(poll) {
+    const you = squad.find(r => r.isYou);
+    const fid = String(poll.festival_id);
+    return !!you && ((you.festIds || []).some(id => String(id) === fid) ||
+      (you.interestedFestIds || []).some(id => String(id) === fid));
+  }
+
+  // Votes per option; a Fam Fave ranks within max_picks (ties at the cut-off
+  // included), matching finalize_crew_vote() on the server.
+  function pickManyTally(poll, votes) {
+    const counts = {};
+    votes.forEach(v => pickManyIds(v.vote_value).forEach(id => { counts[id] = (counts[id] || 0) + 1; }));
+    const opts = (poll.options || []).map(o => ({ id: String(o.id), n: o.n || '', v: counts[String(o.id)] || 0 }));
+    const max = poll.max_picks || 3;
+    opts.forEach(o => { o.fave = o.v > 0 && opts.filter(x => x.v > o.v).length < max; });
+    return opts;
+  }
+
+  function togglePickManyChoice(pollId, crewId, artistId) {
+    const poll = crewPolls.find(p => p.id === pollId);
+    if (!poll) return;
+    const picked = pickManyDraft[pollId] || [];
+    const id = String(artistId);
+    if (picked.includes(id)) pickManyDraft[pollId] = picked.filter(x => x !== id);
+    else if (picked.length < (poll.max_picks || 3)) pickManyDraft[pollId] = [...picked, id];
+    rerenderPolls(crewId);
+  }
+
+  async function submitPickManyVote(pollId, crewId) {
+    const picked = pickManyDraft[pollId] || [];
+    if (!picked.length) return;
+    await castVote(pollId, crewId, JSON.stringify(picked.map(Number)));
+    delete pickManyDraft[pollId];
+  }
+
   async function dbLoadPolls(crewId) {
     if (!currentUser) return;
     const { data: polls, error: pErr } = await sb.from('crew_polls')
@@ -21785,7 +21840,10 @@
       voter_user_id: currentUser.id,
       vote_value: voteValue
     }).select().single();
-    if (error) { showToast('⚠️ Vote failed — try again'); return null; }
+    if (error) {
+      showToast(/pick_many_rsvp/.test(error.message || '') ? '🗳️ Only crewmates who are Going or Interested can vote' : '⚠️ Vote failed — try again');
+      return null;
+    }
     if (!crewPollVotes[pollId]) crewPollVotes[pollId] = [];
     crewPollVotes[pollId].push(data);
     return data;
@@ -21866,8 +21924,9 @@
     const hasVoted = !!myVote;
     const expired = pollIsExpired(poll);
     const open = pollIsOpen(poll);
-    const canVote = open && uid && !hasVoted;
-    const showResults = hasVoted || expired || poll.is_locked;
+    const pickMany = poll.poll_type === 'pick_many';
+    const canVote = open && uid && !hasVoted && (!pickMany || pickManyCanVote(poll));
+    const showResults = hasVoted || expired || poll.is_locked || (pickMany && !canVote);
     const canManage = crewPerms(getCrew(poll.crew_id)).canEdit;
     const timeLeft = pollTimeLeft(poll.expires_at);
     const escId = escJsAttr(poll.id);
@@ -21883,7 +21942,8 @@
     }
 
     // Type badge label
-    const typeBadge = { choice: 'Multiple Choice', yes_no: 'Yes/No', rating: 'Rate This' }[poll.poll_type] || '';
+    const typeBadge = pickMany ? `Crew Vote · Pick ${poll.max_picks || 3}`
+      : ({ choice: 'Multiple Choice', yes_no: 'Yes/No', rating: 'Rate This' }[poll.poll_type] || '');
 
     // Lead-only actions
     let actions = '';
@@ -21925,6 +21985,15 @@
     } else if (showResults) {
       interactiveHTML = buildPollResultsUI(poll, votes, myVote, uid);
     }
+    if (pickMany) {
+      if (open && uid && !hasVoted && !canVote) {
+        interactiveHTML += `<div class="poll-pick-note">Only crewmates who are Going or Interested can vote.</div>`;
+      }
+      const fest = festivals.find(f => String(f.id) === String(poll.festival_id));
+      if (fest && fest.slug) {
+        interactiveHTML += `<a class="poll-lineup-link" href="/lineup-explorer/${encodeURIComponent(fest.slug)}">🔭 Open the ${escHtml(fest.name)} lineup →</a>`;
+      }
+    }
 
     // Reactions (only after voting or when expired/locked)
     let reactionsHTML = '';
@@ -21959,6 +22028,22 @@
   }
 
   function buildPollVoteUI(poll, escId, escCrewId) {
+    if (poll.poll_type === 'pick_many') {
+      const picked = pickManyDraft[poll.id] || [];
+      const max = poll.max_picks || 3;
+      const btns = (poll.options || []).map(o => {
+        const id = String(o.id);
+        const on = picked.includes(id);
+        return `
+        <button class="poll-option-btn poll-pick-btn${on ? ' picked' : ''}" aria-pressed="${on}"${!on && picked.length >= max ? ' disabled' : ''}
+          data-poll-id="${escId}" data-crew-id="${escCrewId}" data-value="${escHtml(id)}"
+          onclick="togglePickManyChoice(this.dataset.pollId, this.dataset.crewId, this.dataset.value)">${escHtml(o.n || '')}</button>`;
+      }).join('');
+      return `<div class="poll-options-list poll-pick-list">${btns}</div>
+        <button class="btn btn-primary poll-pick-submit"${picked.length ? '' : ' disabled'}
+          data-poll-id="${escId}" data-crew-id="${escCrewId}"
+          onclick="submitPickManyVote(this.dataset.pollId, this.dataset.crewId)">${picked.length ? `Vote (${picked.length}/${max})` : `Pick up to ${max}`}</button>`;
+    }
     if (poll.poll_type === 'choice') {
       const options = poll.options || [];
       const btns = options.map((opt, i) => `
@@ -21997,6 +22082,27 @@
 
   function buildPollResultsUI(poll, votes, myVote, uid) {
     const total = votes.length;
+    if (poll.poll_type === 'pick_many') {
+      const closed = !pollIsOpen(poll);
+      const mine = myVote ? pickManyIds(myVote.vote_value) : [];
+      const opts = pickManyTally(poll, votes).sort((a, b) => b.v - a.v);
+      const faves = opts.filter(o => o.fave).map(o => o.n);
+      return `<div class="poll-results-list">` + opts.map(o => {
+        const pct = total > 0 ? Math.round((o.v / total) * 100) : 0;
+        const fave = closed && o.fave;
+        return `<div class="poll-result-row${fave ? ' winner' : ''}${mine.includes(o.id) ? ' my-vote' : ''}">
+          <div class="poll-result-meta">
+            <span class="poll-result-label">${fave ? '⭐ ' : ''}${escHtml(o.n)}</span>
+            <span class="poll-result-pct">${o.v}</span>
+          </div>
+          <div class="poll-result-bar-wrap">
+            <div class="poll-result-bar" style="width:${pct}%"></div>
+          </div>
+        </div>`;
+      }).join('') + `<div style="font-size:0.72rem;color:var(--muted);margin-top:2px;">${total} voted</div>` +
+        (closed ? `<div class="poll-fam-faves">${faves.length ? '⭐ Fam Faves: ' + escHtml(faves.join(', ')) : 'No votes were cast'}</div>` : '') +
+        `</div>`;
+    }
     if (poll.poll_type === 'choice') {
       const options = poll.options || [];
       const counts = options.map((_, i) => votes.filter(v => v.vote_value === String(i)).length);
