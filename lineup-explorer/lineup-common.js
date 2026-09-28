@@ -494,7 +494,7 @@
   }
 
   var slug = null, acts = [], onRender = null;
-  var view = "all";        // "all" | "picks" | "favs" | "crew" | "shared" | "schedule" (favs, crew: members only)
+  var view = "all";        // "all" | "picks" | "favs" | "crew" | "shared" | "schedule" | "now" (favs, crew: members only)
   var sortWanted = false;  // "🔥 Most wanted" sort (members only)
   var local = [];          // act names picked in this browser for this page
   var member = null;       // LineupMember result, once it resolves as a member
@@ -1499,11 +1499,13 @@
     });
     barEl.dataset.mode = isMemberMode() ? "member" : "visitor";
     barEl.dataset.rsvp = rsvp || "";
-    ["all", "picks", "favs", "crew", "shared", "schedule"].forEach(function (v) {
+    maybeAutoNow();
+    ["all", "picks", "favs", "crew", "shared", "schedule", "now"].forEach(function (v) {
       barEl.querySelector('[data-v="' + v + '"]').setAttribute("aria-pressed", String(view === v));
     });
     var member = isMemberMode();
     barEl.querySelector('[data-v="favs"]').hidden = !member;
+    barEl.querySelector('[data-v="now"]').hidden = view !== "now" && !(festLive(Date.now()) && nowItems().length);
     var crewN = member ? acts.filter(function (a) { return actCrew(a).length; }).length : 0;
     barEl.querySelector('[data-v="crew"]').hidden = !crewN && view !== "crew";
     barEl.querySelector(".lp-nc").textContent = crewN;
@@ -1533,6 +1535,7 @@
 
     renderCrewPanel();
     renderSchedule();
+    renderNow();
     renderVotes();
     renderMostWanted();
     renderShareBanner();
@@ -1555,6 +1558,8 @@
     var b = saveEl.querySelector("button");
     b.hidden = !btn;
     b.textContent = btn;
+    saveSnap();
+    syncReminders();
   }
 
   function buildBar() {
@@ -1570,6 +1575,7 @@
       '<button type="button" class="lp-f lp-fav-f" data-v="favs" hidden><span aria-hidden="true">♡</span> Favorites <b class="lp-nf">0</b></button>' +
       '<button type="button" class="lp-f lp-crew-f" data-v="crew" hidden><span aria-hidden="true">👥</span> Crew picks <b class="lp-nc">0</b></button>' +
       '<button type="button" class="lp-f lp-sched-f" data-v="schedule"><span aria-hidden="true">🗓️</span> My schedule</button>' +
+      '<button type="button" class="lp-f lp-now-f" data-v="now" hidden><span aria-hidden="true">🎧</span> On deck</button>' +
       '<button type="button" class="lp-f lp-shared-f" data-v="shared" hidden><span aria-hidden="true">📋</span> <span class="lp-sn"></span> <b class="lp-nsh">0</b></button>' +
       '<button type="button" class="lp-share" hidden>📤 Share my picks</button>' +
       '<button type="button" class="lp-sort" hidden aria-pressed="false">🔥 Most wanted</button>' +
@@ -1581,6 +1587,7 @@
       var b = e.target.closest(".lp-f");
       if (!b) return;
       view = b.dataset.v;
+      autoNowDone = true;
       refresh();
     });
     saveEl = document.createElement("div");
@@ -2315,7 +2322,13 @@
   var CLASH_KEY = "rf_clash";
 
   // Festival-local wall time ("2026-10-24T23:00") to an ISO instant in tz.
+  var zonedMemo = {};
   function zonedToIso(local, tz) {
+    var mk = local + "|" + tz;
+    if (mk in zonedMemo) return zonedMemo[mk];
+    return (zonedMemo[mk] = zonedToIsoRaw(local, tz));
+  }
+  function zonedToIsoRaw(local, tz) {
     var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(local || "");
     if (!m || !tz) return null;
     var want = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
@@ -2377,14 +2390,18 @@
   function loadSetTimes() {
     if (!slug) return;
     window.LineupMember.client(function (sb) {
+      var fromSnap = function () {
+        var s = readSnap();
+        if (s && s.sets && !sets) { sets = s.sets; refresh(); }
+      };
       sb.rpc("get_lineup_set_times", { p_slug: slug }).then(function (res) {
         var d = res && res.data;
-        if (!d || !d.ok) return;
+        if (!d || !d.ok) { if (res && res.error) fromSnap(); return; }
         var byKey = {};
         (d.sets || []).forEach(function (x) { if (x && x.name) byKey[String(x.name).toLowerCase()] = x; });
         sets = { tz: d.tz || null, date: d.date || null, days: d.days || null, byKey: byKey, any: (d.sets || []).some(function (x) { return x.start_at; }) };
         refresh();
-      }, noop);
+      }, fromSnap);
     });
   }
 
@@ -2444,6 +2461,17 @@
       }
     }
     return pairs;
+  }
+
+  // Act name -> the act kept instead, from the Split / keep-one choices.
+  function skipMap(pairs) {
+    var skipped = {};
+    pairs.forEach(function (p) {
+      var c = clash[p.key];
+      if (c === p.a) skipped[p.b] = p.a;
+      else if (c === p.b) skipped[p.a] = p.b;
+    });
+    return skipped;
   }
 
   function renderSchedule() {
@@ -2513,12 +2541,7 @@
       return xs - ys || (x.act.name < y.act.name ? -1 : 1);
     });
     var pairs = clashPairs(list);
-    var skipped = {};
-    pairs.forEach(function (p) {
-      var c = clash[p.key];
-      if (c === p.a) skipped[p.b] = p.a;
-      else if (c === p.b) skipped[p.a] = p.b;
-    });
+    var skipped = skipMap(pairs);
 
     var ol = el("ol", "lp-sched-list");
     list.forEach(function (x) {
@@ -2563,6 +2586,8 @@
           if (clash[p.key] === o.v) delete clash[p.key]; else clash[p.key] = o.v;
           saveClash();
           renderSchedule();
+          saveSnap();
+          syncReminders();
         });
         row.appendChild(b);
       });
@@ -2573,9 +2598,336 @@
     if (!list.some(function (x) { return x.set && x.set.start_at; })) {
       schedEl.appendChild(el("p", "lp-sched-note", "Clash check turns on when set times drop."));
     }
+    if (isMemberMode() && nowItems().length) schedEl.appendChild(remindRow());
     if (!member) {
       schedEl.appendChild(el("p", "lp-sched-note", "Log in to suggest set times and see your crew's Fam Faves here."));
     }
+  }
+
+  // ----- 🎧 On deck + set reminders + offline (Phase 4b) -----
+  // During festival hours (2 h before a set on this page to 1 h after one
+  // ends) the bar offers 🎧 On deck: the set playing now from My schedule with
+  // its progress, what's up next and how long until it starts. Members with
+  // timed picks land on it once per visit; "Full lineup" goes back. Reminders
+  // (set_set_reminders) push 15 min before each set on My schedule, and the
+  // list is re-synced whenever the schedule changes. Members' pages, assets
+  // and schedule are kept on the phone (sw.js + a localStorage snapshot) so
+  // all of this still works without signal.
+  var nowEl = null, nowTimer = null, autoNowDone = false, nowAuto = false, nowLogged = false;
+  var remind = false, remindSig = null, remindTimer = null, offlineAsked = false, onlineHooked = false;
+  var SNAP_KEY = "rf_lp_offline";
+  var VAPID_PUBLIC_KEY = "BCF_mOzUV61zYqsbcN-NuAiGrmuc3pPx6qQDCmRV057Dw8JNy-IwvrPb9mpYDvqDBLruXtLCk9-Q1E7caAfn_6M";
+  var HOUR = 3600000;
+
+  function setSpan(st) {
+    var s = +new Date(st.start_at);
+    return { s: s, e: st.end_at ? +new Date(st.end_at) : s + HOUR };
+  }
+
+  // Timed sets from My schedule, minus the ones skipped for a clash.
+  function nowItems() {
+    var items = scheduleActs().filter(function (x) { return x.set && x.set.start_at; });
+    var skipped = skipMap(clashPairs(items));
+    return items.filter(function (x) { return !skipped[x.act.name]; }).map(function (x) {
+      var sp = setSpan(x.set);
+      return { x: x, s: sp.s, e: sp.e };
+    }).sort(function (p, q) { return p.s - q.s || (p.x.act.name < q.x.act.name ? -1 : 1); });
+  }
+
+  function festLive(t) {
+    for (var i = 0; i < acts.length; i++) {
+      var st = actSet(acts[i]);
+      if (!st || !st.start_at) continue;
+      var sp = setSpan(st);
+      if (t >= sp.s - 2 * HOUR && t <= sp.e + HOUR) return true;
+    }
+    return false;
+  }
+
+  function maybeAutoNow() {
+    if (autoNowDone || view !== "all" || !isMemberMode()) return;
+    if (!festLive(Date.now()) || !nowItems().length) return;
+    autoNowDone = true;
+    nowAuto = true;
+    view = "now";
+  }
+
+  function untilText(ms, at) {
+    var mins = Math.max(1, Math.ceil(ms / 60000));
+    if (mins < 60) return "in " + mins + " min";
+    if (mins < 6 * 60) return "in " + Math.floor(mins / 60) + " h" + (mins % 60 ? " " + (mins % 60) + " min" : "");
+    return fmtDay(new Date(at).toISOString()) + " " + fmtTime(new Date(at).toISOString());
+  }
+
+  function nowCard(label, p, live, t) {
+    var c = el("div", "lp-now-card" + (live ? " is-live" : ""));
+    c.appendChild(el("span", "lp-now-label", label));
+    c.appendChild(el("span", "lp-now-name", p.x.act.name));
+    var sub = [p.x.set.stage || "Stage TBA"];
+    sub.push(live ? "until " + fmtTime(new Date(p.e).toISOString()) : fmtTime(p.x.set.start_at));
+    if (p.x.fam.length) sub.push("⭐ " + p.x.fam.join(", "));
+    c.appendChild(el("span", "lp-now-sub", sub.join(" · ")));
+    if (live) {
+      var pct = Math.max(0, Math.min(100, Math.round((t - p.s) / (p.e - p.s) * 100)));
+      var bar = el("div", "lp-now-prog");
+      bar.setAttribute("role", "progressbar");
+      bar.setAttribute("aria-label", p.x.act.name + " set progress");
+      bar.setAttribute("aria-valuemin", "0");
+      bar.setAttribute("aria-valuemax", "100");
+      bar.setAttribute("aria-valuenow", String(pct));
+      var fill = document.createElement("i");
+      fill.style.width = pct + "%";
+      bar.appendChild(fill);
+      c.appendChild(bar);
+    }
+    return c;
+  }
+
+  function renderNow() {
+    var on = view === "now";
+    document.body.classList.toggle("lp-now-mode", on);
+    if (!barEl) return;
+    if (!on) {
+      if (nowEl) nowEl.hidden = true;
+      if (nowTimer) { clearInterval(nowTimer); nowTimer = null; }
+      return;
+    }
+    if (!nowEl) {
+      nowEl = document.createElement("section");
+      nowEl.className = "lp-now";
+      nowEl.setAttribute("aria-labelledby", "lpNowTitle");
+      var anchor = document.getElementById("deck");
+      if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(nowEl, anchor);
+      else barEl.parentNode.insertBefore(nowEl, barEl.nextSibling);
+    }
+    nowEl.hidden = false;
+    if (!nowTimer) nowTimer = setInterval(function () { if (view === "now") renderNow(); }, 30000);
+    if (!nowLogged) { nowLogged = true; logEvent("now_next_opened", { slug: slug, auto: nowAuto }); }
+
+    var t = Date.now();
+    nowEl.innerHTML = "";
+    var head = el("div", "lp-now-head");
+    var h = el("h2", null, "🎧 On deck");
+    h.id = "lpNowTitle";
+    head.appendChild(h);
+    var back = el("button", "lp-now-back", "Full lineup");
+    back.type = "button";
+    back.addEventListener("click", function () {
+      view = "all";
+      autoNowDone = true;
+      try { window.sessionStorage.setItem("rf_now_off_" + slug, "1"); } catch (e) {}
+      refresh();
+    });
+    head.appendChild(back);
+    nowEl.appendChild(head);
+    if (member && member.offline) nowEl.appendChild(el("p", "lp-now-gap", "📴 No signal. Showing your saved schedule."));
+
+    var list = nowItems();
+    if (!list.length) {
+      nowEl.appendChild(el("p", "lp-sched-note", "Tap 📋 on the sets you want to catch and they'll show up here with their times."));
+      return;
+    }
+    var live = list.filter(function (p) { return p.s <= t && t < p.e; });
+    var later = list.filter(function (p) { return p.s > t; });
+    var nextAt = later.length ? later[0].s : null;
+    live.forEach(function (p) { nowEl.appendChild(nowCard("Now playing", p, true, t)); });
+    if (!live.length) nowEl.appendChild(el("p", "lp-now-gap", later.length ? "Nothing on your schedule right now." : "That's a wrap on your schedule. 📼"));
+    later.filter(function (p) { return p.s === nextAt; }).forEach(function (p) {
+      nowEl.appendChild(nowCard("Up next · " + untilText(p.s - t, p.s), p, false, t));
+    });
+    var rest = later.filter(function (p) { return p.s !== nextAt; }).slice(0, 4);
+    if (rest.length) {
+      nowEl.appendChild(el("p", "lp-now-later", "Later: " + rest.map(function (p) {
+        return p.x.act.name + " " + (p.s - t < 18 * HOUR ? fmtTime(p.x.set.start_at) : fmtDay(p.x.set.start_at) + " " + fmtTime(p.x.set.start_at));
+      }).join(" · ")));
+    }
+    nowEl.appendChild(remindRow());
+  }
+
+  function remindRow() {
+    var box = el("div", "lp-remind");
+    if (!isMemberMode()) {
+      box.appendChild(el("p", "lp-sched-note", "Log in to get a push 15 minutes before each set."));
+      return box;
+    }
+    var b = el("button", "lp-remind-btn", remind ? "🔔 Set reminders on" : "🔔 Remind me 15 min before each set");
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(!!remind));
+    b.disabled = !!member.offline;
+    b.addEventListener("click", function () { toggleReminders(b); });
+    box.appendChild(b);
+    if (remind) box.appendChild(el("span", "lp-remind-sub", "For your 📋 picks and ⭐ Fam Faves. Tap to turn off."));
+    return box;
+  }
+
+  function reminderList() {
+    var seen = {};
+    return nowItems().filter(function (p) {
+      var k = p.x.act.name + "|" + p.s;
+      if (seen[k]) return false;
+      return (seen[k] = true);
+    }).slice(0, 150).map(function (p) {
+      return { name: p.x.act.name, stage: p.x.set.stage || null, start_at: new Date(p.s).toISOString(), kind: p.x.mine ? "pick" : "fam" };
+    });
+  }
+
+  function b64ToBytes(b64) {
+    var raw = atob((b64 + "===".slice((b64.length + 3) % 4)).replace(/-/g, "+").replace(/_/g, "/"));
+    var out = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+
+  // Same push_subscriptions row the app's Beacon / mention toggles use; one
+  // browser subscription serves every channel.
+  function ensurePush(cb) {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window) || !window.Notification) {
+      toast("Push notifications aren't supported on this browser.");
+      cb(false);
+      return;
+    }
+    Notification.requestPermission().then(function (perm) {
+      if (perm !== "granted") {
+        toast(perm === "denied" ? "🔕 Notifications are blocked. Turn them on in your browser settings." : "Allow notifications to get set reminders.");
+        cb(false);
+        return;
+      }
+      return navigator.serviceWorker.register("/sw.js").then(function () { return navigator.serviceWorker.ready; }).then(function (reg) {
+        return reg.pushManager.getSubscription().then(function (sub) {
+          return sub || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(VAPID_PUBLIC_KEY) });
+        });
+      }).then(function (sub) {
+        var j = sub.toJSON();
+        window.LineupMember.client(function (sb) {
+          sb.from("push_subscriptions").select("id").eq("endpoint", j.endpoint).then(function (res) {
+            if (res && res.data && res.data.length) { cb(true); return; }
+            sb.from("push_subscriptions").insert({
+              user_id: member.userId, endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, user_agent: navigator.userAgent
+            }).then(function (r2) {
+              if (r2 && r2.error) { toast("⚠️ Couldn't save this phone for push. Try again."); cb(false); } else cb(true);
+            }, function () { cb(false); });
+          }, function () { cb(false); });
+        });
+      });
+    }).catch(function () { toast("⚠️ Couldn't turn on push here."); cb(false); });
+  }
+
+  function toggleReminders(btn) {
+    if (!isMemberMode() || member.offline) return;
+    var on = !remind;
+    btn.disabled = true;
+    var go = function () {
+      var list = on ? reminderList() : [];
+      window.LineupMember.client(function (sb) {
+        sb.rpc("set_set_reminders", { p_festival_id: member.festival.id, p_on: on, p_sets: list }).then(function (res) {
+          btn.disabled = false;
+          var d = res && res.data;
+          if (!d || !d.ok) { toast("⚠️ Couldn't update set reminders. Try again."); return; }
+          remind = on;
+          remindSig = on ? JSON.stringify(list) : null;
+          if (on) {
+            logEvent("reminder_enabled", { slug: slug, n: d.n || 0 });
+            toast("🔔 We'll ping you 15 min before each set.");
+          } else {
+            toast("🔕 Set reminders off.");
+          }
+          refresh();
+        }, function () { btn.disabled = false; toast("⚠️ Couldn't update set reminders. Try again."); });
+      });
+    };
+    if (!on) { go(); return; }
+    ensurePush(function (ok) { if (ok) go(); else btn.disabled = false; });
+  }
+
+  // Picks, Split / keep-one choices or times changed while reminders are on:
+  // push the new list (debounced; once per page load at least, so a set added
+  // in the app or a moved time is picked up).
+  function syncReminders() {
+    if (!remind || !isMemberMode() || member.offline) return;
+    var list = reminderList();
+    var sig = JSON.stringify(list);
+    if (sig === remindSig) return;
+    clearTimeout(remindTimer);
+    remindTimer = setTimeout(function () {
+      window.LineupMember.client(function (sb) {
+        sb.rpc("set_set_reminders", { p_festival_id: member.festival.id, p_on: true, p_sets: list }).then(function (res) {
+          if (res && res.data && res.data.ok) remindSig = sig;
+        }, noop);
+      });
+    }, 1500);
+  }
+
+  // ----- offline -----
+  function sessionUid() {
+    try {
+      var s = JSON.parse(window.localStorage.getItem("sb-tvpgopciioqbqmjjjigh-auth-token") || "null");
+      return (s && s.user && s.user.id) || null;
+    } catch (e) { return null; }
+  }
+
+  function readSnap() {
+    try {
+      var all = JSON.parse(window.localStorage.getItem(SNAP_KEY) || "{}");
+      return (all && slug && all[slug]) || null;
+    } catch (e) { return null; }
+  }
+
+  // The member's schedule for this page, for the next visit without signal.
+  // Keyed by user; the 6 most recently opened festivals are kept.
+  function saveSnap() {
+    if (!slug || !isMemberMode() || member.offline) return;
+    try {
+      var all = JSON.parse(window.localStorage.getItem(SNAP_KEY) || "{}") || {};
+      all[slug] = {
+        uid: member.userId, at: new Date().toISOString(), raverId: member.raverId, festival: member.festival,
+        rsvp: rsvp, plans: Object.keys(plans), favs: Object.keys(favs), ids: idsByKey, votes: votes,
+        clash: clash, sets: sets, remind: !!remind
+      };
+      Object.keys(all).sort(function (a, b) { return String(all[b].at).localeCompare(String(all[a].at)); })
+        .slice(6).forEach(function (k) { delete all[k]; });
+      window.localStorage.setItem(SNAP_KEY, JSON.stringify(all));
+    } catch (e) {}
+  }
+
+  // Only for the user whose session this browser still holds, so a shared
+  // phone that logged out doesn't show the last member's schedule.
+  function hydrateSnap(uid) {
+    var s = readSnap();
+    if (s && s.sets && !sets) sets = s.sets;
+    if (!s || !uid || s.uid !== uid || !s.raverId || !s.festival) {
+      if (s && s.sets) refresh();
+      return false;
+    }
+    member = { isMember: true, userId: uid, raverId: s.raverId, festival: s.festival, offline: true };
+    rsvp = s.rsvp || null;
+    (s.plans || []).forEach(function (k) { plans[k] = true; });
+    (s.favs || []).forEach(function (k) { favs[k] = true; });
+    if (s.ids) idsByKey = s.ids;
+    votes = s.votes || null;
+    if (s.clash) clash = s.clash;
+    remind = !!s.remind;
+    memberLoaded = true;
+    refresh();
+    if (!onlineHooked) {
+      onlineHooked = true;
+      window.addEventListener("online", function () {
+        toast("📶 Back online.", "Refresh", function () { location.reload(); });
+      }, { once: true });
+    }
+    return true;
+  }
+
+  // Members: register the site's service worker (sw.js) and have it keep this
+  // page and the explorer's script and styles for offline use.
+  function keepOffline() {
+    if (offlineAsked || !slug || !("serviceWorker" in navigator)) return;
+    offlineAsked = true;
+    navigator.serviceWorker.register("/sw.js").then(function () { return navigator.serviceWorker.ready; }).then(function (reg) {
+      if (reg && reg.active) reg.active.postMessage({
+        type: "rf-cache-urls",
+        urls: [location.pathname, "/lineup-explorer/lineup-common.js", "/lineup-explorer/lineup-common.css"]
+      });
+    }).catch(noop);
   }
 
   // Suggest a time (Going/Interested) or Report a change (any member); a
@@ -2688,8 +3040,13 @@
   function loadMember() {
     window.LineupMember.ready(function (m) {
       if (!m || !m.isMember) return;
+      if (member && member.offline && (!m.raverId || !m.festival)) return; // still offline: keep the snapshot
       member = m;
-      if (!m.raverId || !m.festival) { refresh(); return; }
+      if (!m.raverId || !m.festival) {
+        if (navigator.onLine === false && hydrateSnap(m.userId)) return;
+        refresh();
+        return;
+      }
       var keys = {};
       acts.forEach(function (a) { splitKeys(a.name).forEach(function (k) { keys[k] = true; }); });
       window.LineupMember.client(function (sb) {
@@ -2702,8 +3059,12 @@
           sb.from("raver_favorite_artists").select("artist_id").eq("raver_id", rid),
           sb.rpc("get_lineup_crew_pulse", { p_festival_id: fid }),
           sb.rpc("get_lineup_crew_votes", { p_festival_id: fid }),
-          sb.from("raver_clash_choices").select("choices").eq("raver_id", rid).eq("festival_id", fid)
+          sb.from("raver_clash_choices").select("choices").eq("raver_id", rid).eq("festival_id", fid),
+          sb.from("set_reminder_optins").select("festival_id").eq("festival_id", fid)
         ]).then(function (out) {
+          // Lost signal mid-load: the saved schedule beats an empty one.
+          if (out[1] && out[1].error && hydrateSnap(m.userId)) return;
+          remind = !!((out[8] && out[8].data) || []).length;
           var cc = out[7] && out[7].data && out[7].data[0];
           if (cc && cc.choices && typeof cc.choices === "object") clash = cc.choices;
           var cv = out[6] && out[6].data;
@@ -2716,6 +3077,7 @@
           rsvp = (out[2].data || []).length ? "going" : (out[3].data || []).length ? "interested" : null;
           memberLoaded = true;
           refresh();
+          keepOffline();
           if (voteIntent && votes && (votes.crews || []).length) {
             var vi = voteIntent;
             voteIntent = null;
@@ -2727,7 +3089,7 @@
           } else if (!asked()) {
             setTimeout(function () { openSheet(null); }, 900);
           }
-        }, function () { refresh(); });
+        }, function () { if (!hydrateSnap(m.userId)) refresh(); });
       });
     });
   }
@@ -2747,7 +3109,14 @@
       loadWantCounts();
       loadSetTimes();
       clash = readClashLocal();
-      try { if (new URLSearchParams(location.search).get("view") === "schedule") view = "schedule"; } catch (e) {}
+      try {
+        var qv = new URLSearchParams(location.search).get("view");
+        if (qv === "schedule" || qv === "now") { view = qv; autoNowDone = true; }
+      } catch (e) {}
+      try { if (window.sessionStorage.getItem("rf_now_off_" + slug)) autoNowDone = true; } catch (e) {}
+      // No signal (festival grounds): the member's last saved schedule, if
+      // this browser still holds their session. supabase-js can't load.
+      if (navigator.onLine === false) hydrateSnap(sessionUid());
       loadMember();
       // ?vote=1&crew=<id>: the app's "Crew vote on a lineup" lands here and the
       // start sheet opens once member data loads. Stripped from the URL.
@@ -2767,7 +3136,7 @@
     ok: function (a) {
       if (view === "all") return true;
       if (view === "shared") return isShared(a);
-      if (view === "schedule") return isPicked(a);
+      if (view === "schedule" || view === "now") return isPicked(a);
       if (view === "picks") return isPicked(a);
       if (view === "crew") return actCrew(a).length > 0;
       return isFav(a);

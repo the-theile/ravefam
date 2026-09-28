@@ -940,3 +940,211 @@ test.describe('Lineup Explorer — Hulaween official set times (page data)', () 
     expect(errors).toEqual([]);
   });
 });
+
+test.describe('Lineup Explorer 4b — On deck, set reminders, offline', () => {
+  test.beforeEach(async ({ page }) => { await blockExternal(page); });
+
+  // Eastern: Fri 9:30 PM = 02:30Z Nov 7; Sat 11 PM = 04:00Z Nov 8.
+  const SETS = { ok: true, tz: 'America/New_York', date: '2026-11-06', days: 3, sets: [
+    { artist_id: 5, name: 'Afrojack', start_at: '2026-11-07T02:30:00Z', end_at: '2026-11-07T03:45:00Z', stage: 'kineticFIELD' },
+    { artist_id: 9, name: 'Alesso', start_at: '2026-11-07T03:00:00Z', end_at: '2026-11-07T04:00:00Z', stage: 'cosmicMEADOW' },
+    { artist_id: 1, name: 'Kaskade', start_at: '2026-11-08T04:00:00Z', end_at: '2026-11-08T05:30:00Z', stage: 'circuitGROUNDS' },
+  ] };
+  const going = (extra = {}) => memberData({
+    artists: [
+      { id: 5, name: 'Afrojack', name_lower: 'afrojack' },
+      { id: 9, name: 'Alesso', name_lower: 'alesso' },
+      { id: 1, name: 'Kaskade', name_lower: 'kaskade' },
+    ],
+    raver_festivals: [{ raver_id: 'r1', festival_id: 'f1' }],
+    raver_artist_plans: [5, 9, 1].map(id => ({ raver_id: 'r1', artist_id: id, festival_id: 'f1' })),
+    raver_clash_choices: [],
+    __rpc: { get_lineup_set_times: SETS, set_set_reminders: { ok: true, on: true, n: 2 } },
+    ...extra,
+  });
+  const now = page => page.locator('.lp-now');
+  const rpcCalls = (page, fn) => page.evaluate(f => (window.__store.__rpcCalls || []).filter(c => c.fn === f).map(c => c.args), fn);
+
+  // Push without a real push service: permission granted, a fake subscription.
+  async function fakePush(page) {
+    await page.addInitScript(() => {
+      window.Notification.requestPermission = async () => 'granted';
+      const sub = { toJSON: () => ({ endpoint: 'https://push.example/ep1', keys: { p256dh: 'p256', auth: 'au' } }) };
+      const reg = { active: null, pushManager: { getSubscription: async () => null, subscribe: async () => sub } };
+      Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: { register: async () => reg, ready: Promise.resolve(reg) } });
+    });
+  }
+
+  test('during a set, members with picks open on On deck: now playing, up next, back to the lineup', async ({ page }) => {
+    const errors = collectPageErrors(page);
+    await page.clock.setFixedTime(new Date('2026-11-07T03:10:00Z')); // Fri 10:10 PM
+    await installSupabaseStub(page, { session: makeSession(), data: going({
+      raver_clash_choices: [{ raver_id: 'r1', festival_id: 'f1', choices: { 'Afrojack|Alesso': 'Afrojack' } }],
+    }) });
+    await page.goto(PAGE);
+    await expect(now(page)).toBeVisible();
+    await expect(page.locator('.lp-f[data-v="now"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#deck')).toBeHidden();
+    // Alesso is skipped for Afrojack, so only Afrojack is live.
+    const live = now(page).locator('.lp-now-card.is-live');
+    await expect(live).toHaveCount(1);
+    await expect(live.locator('.lp-now-name')).toHaveText('Afrojack');
+    await expect(live.locator('.lp-now-sub')).toHaveText('kineticFIELD · until 10:45 PM');
+    await expect(live.locator('.lp-now-prog')).toHaveAttribute('aria-valuenow', '53'); // 40 of 75 min
+    await expect(now(page).locator('.lp-now-card:not(.is-live) .lp-now-label')).toHaveText('Up next · Sat 11 PM');
+    await expect(now(page).locator('.lp-now-card:not(.is-live) .lp-now-name')).toHaveText('Kaskade');
+    await expect(now(page).locator('.lp-remind-btn')).toHaveText('🔔 Remind me 15 min before each set');
+    await expect.poll(() => page.evaluate(() => (window.__store.__rpcCalls || [])
+      .filter(c => c.fn === 'log_analytics_event' && c.args.p_event_name === 'now_next_opened').map(c => c.args.p_properties)))
+      .toEqual([{ slug: SLUG, auto: true }]);
+    // The schedule is kept on this phone for offline use.
+    const snap = await page.evaluate(s => JSON.parse(localStorage.getItem('rf_lp_offline'))[s], SLUG);
+    expect(snap).toMatchObject({ uid: TEST_UID, raverId: 'r1', rsvp: 'going', clash: { 'Afrojack|Alesso': 'Afrojack' } });
+    expect(snap.plans.sort()).toEqual(['1', '5', '9']);
+
+    await now(page).locator('.lp-now-back').click();
+    await expect(now(page)).toBeHidden();
+    await expect(page.locator('#deck')).toBeVisible();
+    // Stays on the full lineup for the rest of the visit.
+    await page.reload();
+    await expect(page.locator('.lp-bar')).toHaveAttribute('data-mode', 'member');
+    await expect(page.locator('.lp-f[data-v="now"]')).toBeVisible();
+    await expect(page.locator('#deck')).toBeVisible();
+    await expect(now(page)).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('visitors get the On deck button during festival hours but land on the lineup', async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-11-07T02:20:00Z')); // Fri 9:20 PM
+    await page.addInitScript(s => {
+      if (sessionStorage.getItem('seeded')) return;
+      sessionStorage.setItem('seeded', '1');
+      localStorage.setItem('rf_picks', JSON.stringify({ [s]: { n: ['Afrojack', 'Alesso', 'Kaskade'] } }));
+    }, SLUG);
+    await installSupabaseStub(page, { session: null, data: going() });
+    await page.goto(PAGE);
+    await expect(page.locator('.lp-f[data-v="now"]')).toBeVisible();
+    await expect(page.locator('#deck')).toBeVisible();
+    await page.locator('.lp-f[data-v="now"]').click();
+    await expect(now(page).locator('.lp-now-gap')).toHaveText('Nothing on your schedule right now.');
+    await expect(now(page).locator('.lp-now-label')).toHaveText(['Up next · in 10 min']);
+    await expect(now(page).locator('.lp-now-name')).toHaveText(['Afrojack']);
+    await expect(now(page).locator('.lp-now-later')).toHaveText('Later: Alesso 10 PM · Kaskade Sat 11 PM');
+    await expect(now(page).locator('.lp-remind .lp-sched-note')).toHaveText('Log in to get a push 15 minutes before each set.');
+  });
+
+  test('outside festival hours there is no On deck', async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-10-01T18:00:00Z'));
+    await installSupabaseStub(page, { session: makeSession(), data: going() });
+    await page.goto(PAGE);
+    await expect(page.locator('.lp-bar')).toHaveAttribute('data-mode', 'member');
+    await expect(page.locator('.lp-f[data-v="now"]')).toBeHidden();
+    await expect(page.locator('#deck')).toBeVisible();
+  });
+
+  test('turning on set reminders saves this phone for push and syncs My schedule, clash choices included', async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-10-01T18:00:00Z'));
+    await fakePush(page);
+    await installSupabaseStub(page, { session: makeSession(), data: going() });
+    await page.goto(PAGE + '?view=schedule');
+    await expect(page.locator('.lp-bar')).toHaveAttribute('data-mode', 'member');
+    const btn = page.locator('.lp-sched .lp-remind-btn');
+    await expect(btn).toHaveText('🔔 Remind me 15 min before each set');
+    await btn.click();
+    await expect(page.locator('.lp-sched .lp-remind-btn')).toHaveText('🔔 Set reminders on');
+    await expect(page.locator('.lp-sched .lp-remind-btn')).toHaveAttribute('aria-pressed', 'true');
+    const subs = await page.evaluate(() => window.__store.push_subscriptions);
+    expect(subs).toHaveLength(1);
+    expect(subs[0]).toMatchObject({ user_id: TEST_UID, endpoint: 'https://push.example/ep1', p256dh: 'p256', auth: 'au' });
+    expect(await rpcCalls(page, 'set_set_reminders')).toEqual([{ p_festival_id: 'f1', p_on: true, p_sets: [
+      { name: 'Afrojack', stage: 'kineticFIELD', start_at: '2026-11-07T02:30:00.000Z', kind: 'pick' },
+      { name: 'Alesso', stage: 'cosmicMEADOW', start_at: '2026-11-07T03:00:00.000Z', kind: 'pick' },
+      { name: 'Kaskade', stage: 'circuitGROUNDS', start_at: '2026-11-08T04:00:00.000Z', kind: 'pick' },
+    ] }]);
+    await expect.poll(() => page.evaluate(() => (window.__store.__rpcCalls || [])
+      .filter(c => c.fn === 'log_analytics_event').map(c => c.args.p_event_name))).toContain('reminder_enabled');
+
+    // Keeping only Afrojack drops Alesso's reminder.
+    await page.locator('.lp-clash .lp-crew-chip', { hasText: 'Only Afrojack' }).click();
+    await expect.poll(async () => (await rpcCalls(page, 'set_set_reminders')).length).toBe(2);
+    const resync = (await rpcCalls(page, 'set_set_reminders'))[1];
+    expect(resync.p_sets.map(s => s.name)).toEqual(['Afrojack', 'Kaskade']);
+
+    await page.locator('.lp-sched .lp-remind-btn').click();
+    await expect(page.locator('.lp-sched .lp-remind-btn')).toHaveText('🔔 Remind me 15 min before each set');
+    expect((await rpcCalls(page, 'set_set_reminders'))[2]).toEqual({ p_festival_id: 'f1', p_on: false, p_sets: [] });
+  });
+
+  test('reminders already on re-sync once when the page opens', async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-10-01T18:00:00Z'));
+    await installSupabaseStub(page, { session: makeSession(), data: going({
+      set_reminder_optins: [{ user_id: TEST_UID, festival_id: 'f1' }],
+    }) });
+    await page.goto(PAGE + '?view=schedule');
+    await expect(page.locator('.lp-sched .lp-remind-btn')).toHaveText('🔔 Set reminders on');
+    await expect.poll(async () => (await rpcCalls(page, 'set_set_reminders')).length).toBe(1);
+    expect((await rpcCalls(page, 'set_set_reminders'))[0].p_sets).toHaveLength(3);
+  });
+
+  test('with no signal, the saved schedule loads for the same login only', async ({ page }) => {
+    const errors = collectPageErrors(page);
+    await page.clock.setFixedTime(new Date('2026-11-07T03:10:00Z'));
+    const snap = {
+      uid: TEST_UID, at: '2026-11-06T20:00:00Z', raverId: 'r1',
+      festival: { id: 'f1', slug: SLUG, name: 'EDC Orlando 2026', date: '2026-11-06' },
+      rsvp: 'going', plans: ['5', '1'], favs: [], ids: { afrojack: 5, alesso: 9, kaskade: 1 }, votes: null, clash: {},
+      sets: { tz: 'America/New_York', date: '2026-11-06', days: 3, any: true, byKey: Object.fromEntries(SETS.sets.map(x => [x.name.toLowerCase(), x])) },
+      remind: true,
+    };
+    await page.addInitScript(([s, sn, uid]) => {
+      Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false });
+      localStorage.setItem('rf_lp_offline', JSON.stringify({ [s]: sn }));
+      localStorage.setItem('sb-tvpgopciioqbqmjjjigh-auth-token', JSON.stringify({ user: { id: uid } }));
+    }, [SLUG, snap, TEST_UID]);
+    // No stub: the Supabase CDN is unreachable (blockExternal).
+    await page.goto(PAGE);
+    await expect(page.locator('.lp-bar')).toHaveAttribute('data-mode', 'member');
+    await expect(now(page)).toBeVisible();
+    await expect(now(page).locator('.lp-now-gap').first()).toHaveText('📴 No signal. Showing your saved schedule.');
+    await expect(now(page).locator('.lp-now-card.is-live .lp-now-name')).toHaveText('Afrojack');
+    await expect(now(page).locator('.lp-remind-btn')).toBeDisabled();
+    await page.locator('.lp-now-back').click();
+    await expect(page.locator('.act-wrap.picked')).toHaveCount(2);
+    expect(errors).toEqual([]);
+  });
+
+  test('a saved schedule from another login stays hidden', async ({ page }) => {
+    await page.addInitScript(s => {
+      Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false });
+      localStorage.setItem('rf_lp_offline', JSON.stringify({ [s]: { uid: 'someone-else', raverId: 'r9', festival: { id: 'f1' }, plans: ['5'], at: 'x' } }));
+      localStorage.setItem('sb-tvpgopciioqbqmjjjigh-auth-token', JSON.stringify({ user: { id: 'me-now' } }));
+    }, SLUG);
+    await page.goto(PAGE);
+    await expect(page.locator('.lp-bar')).toHaveAttribute('data-mode', 'visitor');
+    await expect(page.locator('.act-wrap.picked')).toHaveCount(0);
+  });
+});
+
+test.describe('Lineup Explorer 4b — offline page (real service worker)', () => {
+  test('a member visit keeps the page and its script, so it reloads without signal', async ({ page, context }) => {
+    await blockExternal(page);
+    await installSupabaseStub(page, { session: makeSession(), data: memberData() });
+    await page.goto(PAGE);
+    await expect(page.locator('.lp-bar')).toHaveAttribute('data-mode', 'member');
+    // keepOffline() registers /sw.js and asks it to cache this page + assets.
+    await expect.poll(() => page.evaluate(async p => {
+      const keys = await caches.keys();
+      for (const k of keys) {
+        const c = await caches.open(k);
+        if (await c.match(p) && await c.match('/lineup-explorer/lineup-common.js')) return true;
+      }
+      return false;
+    }, PAGE), { timeout: 15000 }).toBe(true);
+
+    await context.setOffline(true);
+    await page.reload();
+    await expect(page.locator('.lp-bar')).toBeVisible();
+    await expect(page.locator('.act-wrap').first()).toBeVisible();
+    await context.setOffline(false);
+  });
+});
