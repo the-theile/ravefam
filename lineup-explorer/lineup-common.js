@@ -1536,6 +1536,7 @@
     renderCrewPanel();
     renderSchedule();
     renderNow();
+    renderCheckoff();
     renderVotes();
     renderMostWanted();
     renderShareBanner();
@@ -2930,6 +2931,141 @@
     }).catch(noop);
   }
 
+  // ----- post-fest check-off (Phase 4c) -----
+  // From the morning after the last day (06:00 festival time) for 60 days,
+  // members who were Going and have 📋 picks get "Who'd you catch? 📼": Saw
+  // them / Missed per pick. Saw writes raver_artist_sightings (the table the
+  // app's ✅/❌ uses), Missed clears it; once every pick is answered (or Done)
+  // a raver_postfest_checkoffs row closes the prompt here and in the app.
+  // Unanswered picks stay as picks. send-lineup-alerts links here with
+  // ?view=checkoff the same morning.
+  var checkEl = null, checkedOff = false, checkFocus = false, checkBusy = false;
+  var seenIds = {};         // artists.id -> true: sightings at this festival
+  var answered = {};        // act name -> "saw" | "missed" (this visit)
+  var DAY = 24 * HOUR;
+
+  function festEndedAt() {
+    var date = (sets && sets.date) || (member && member.festival && member.festival.date);
+    if (!date) return null;
+    var days = Math.max(1, (sets && sets.days) || 1);
+    var p = String(date).split("-").map(Number);
+    var after = new Date(Date.UTC(p[0], p[1] - 1, p[2] + days)).toISOString().slice(0, 10);
+    var iso = zonedToIso(after + "T06:00", pageTz() || "America/New_York");
+    return iso ? +new Date(iso) : null;
+  }
+
+  function checkActs() {
+    var seen = {};
+    return pickedActs().filter(function (a) {
+      if (seen[a.name] || !actIds(a)) return false;
+      return (seen[a.name] = true);
+    });
+  }
+
+  function checkState(a) {
+    if (answered[a.name]) return answered[a.name];
+    return actIds(a).every(function (id) { return seenIds[id]; }) ? "saw" : null;
+  }
+
+  function checkoffDue() {
+    if (!isMemberMode() || member.offline || checkedOff || rsvp !== "going") return false;
+    var at = festEndedAt();
+    var t = Date.now();
+    return !!at && t >= at && t < at + 60 * DAY && checkActs().length > 0;
+  }
+
+  function renderCheckoff() {
+    var on = checkoffDue();
+    if (!on) { if (checkEl) checkEl.hidden = true; return; }
+    if (!checkEl) {
+      checkEl = document.createElement("section");
+      checkEl.className = "lp-check";
+      checkEl.setAttribute("aria-labelledby", "lpCheckTitle");
+      var anchor = document.getElementById("deck");
+      if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(checkEl, anchor);
+      else barEl.parentNode.insertBefore(checkEl, barEl.nextSibling);
+    }
+    checkEl.hidden = false;
+    checkEl.innerHTML = "";
+    var h = el("h2", null, "Who'd you catch? 📼");
+    h.id = "lpCheckTitle";
+    checkEl.appendChild(h);
+    checkEl.appendChild(el("p", "lp-sched-note", "Tick off the sets you saw at " + (member.festival.name || "this rave") + ". Your seen count on RaveFAM updates as you go."));
+    var list = el("ul", "lp-check-list");
+    checkActs().forEach(function (a) {
+      var st = checkState(a);
+      var li = el("li", "lp-check-row");
+      li.appendChild(el("span", "lp-check-name", a.name));
+      var opts = el("div", "lp-check-opts");
+      opts.setAttribute("role", "group");
+      opts.setAttribute("aria-label", a.name);
+      [{ v: "saw", t: "✅ Saw them" }, { v: "missed", t: "❌ Missed" }].forEach(function (o) {
+        var b = el("button", "lp-crew-chip lp-check-" + o.v, o.t);
+        b.type = "button";
+        b.setAttribute("aria-pressed", String(st === o.v));
+        b.addEventListener("click", function () { markCheck(a, o.v); });
+        opts.appendChild(b);
+      });
+      li.appendChild(opts);
+      list.appendChild(li);
+    });
+    checkEl.appendChild(list);
+    var done = el("button", "lp-check-done", "Done");
+    done.type = "button";
+    done.addEventListener("click", function () { finishCheckoff(); });
+    checkEl.appendChild(done);
+    if (checkFocus) {
+      checkFocus = false;
+      setTimeout(function () { if (checkEl.scrollIntoView) checkEl.scrollIntoView({ block: "start" }); }, 0);
+    }
+  }
+
+  function markCheck(a, v) {
+    if (checkBusy) return;
+    var ids = actIds(a);
+    checkBusy = true;
+    window.LineupMember.client(function (sb) {
+      var q;
+      if (v === "saw") {
+        var rows = ids.filter(function (id) { return !seenIds[id]; }).map(function (id) {
+          return { raver_id: member.raverId, artist_id: id, festival_id: member.festival.id };
+        });
+        q = rows.length ? sb.from("raver_artist_sightings").insert(rows) : Promise.resolve({});
+      } else {
+        q = sb.from("raver_artist_sightings").delete().eq("raver_id", member.raverId).eq("festival_id", member.festival.id).in("artist_id", ids);
+      }
+      q.then(function (res) {
+        checkBusy = false;
+        if (res && res.error) { toast("⚠️ Couldn't save that. Try again."); return; }
+        ids.forEach(function (id) { if (v === "saw") seenIds[id] = true; else delete seenIds[id]; });
+        answered[a.name] = v;
+        if (checkActs().every(function (x) { return checkState(x); })) finishCheckoff();
+        else renderCheckoff();
+      }, function () { checkBusy = false; toast("⚠️ Couldn't save that. Try again."); });
+    });
+  }
+
+  function finishCheckoff() {
+    if (checkedOff) return;
+    var saw = 0, missed = 0;
+    checkActs().forEach(function (a) {
+      var st = checkState(a);
+      if (st === "saw") saw++;
+      else if (st === "missed") missed++;
+    });
+    window.LineupMember.client(function (sb) {
+      sb.from("raver_postfest_checkoffs").insert({
+        raver_id: member.raverId, festival_id: member.festival.id, saw: saw, missed: missed
+      }).then(function (res) {
+        if (res && res.error && res.error.code !== "23505") { toast("⚠️ Couldn't save that. Try again."); return; }
+        checkedOff = true;
+        logEvent("postfest_checkoff", { slug: slug, saw: saw, missed: missed, source: "explorer" });
+        toast(saw ? "📼 Logged. " + saw + (saw === 1 ? " set" : " sets") + " caught." : "📼 Logged. Next time.");
+        refresh();
+      }, function () { toast("⚠️ Couldn't save that. Try again."); });
+    });
+  }
+
   // Suggest a time (Going/Interested) or Report a change (any member); a
   // moderator approves it before it shows for everyone.
   function festDays() {
@@ -3060,11 +3196,15 @@
           sb.rpc("get_lineup_crew_pulse", { p_festival_id: fid }),
           sb.rpc("get_lineup_crew_votes", { p_festival_id: fid }),
           sb.from("raver_clash_choices").select("choices").eq("raver_id", rid).eq("festival_id", fid),
-          sb.from("set_reminder_optins").select("festival_id").eq("festival_id", fid)
+          sb.from("set_reminder_optins").select("festival_id").eq("festival_id", fid),
+          sb.from("raver_postfest_checkoffs").select("festival_id").eq("raver_id", rid).eq("festival_id", fid),
+          sb.from("raver_artist_sightings").select("artist_id").eq("raver_id", rid).eq("festival_id", fid)
         ]).then(function (out) {
           // Lost signal mid-load: the saved schedule beats an empty one.
           if (out[1] && out[1].error && hydrateSnap(m.userId)) return;
           remind = !!((out[8] && out[8].data) || []).length;
+          checkedOff = !!((out[9] && out[9].data) || []).length;
+          ((out[10] && out[10].data) || []).forEach(function (r) { seenIds[r.artist_id] = true; });
           var cc = out[7] && out[7].data && out[7].data[0];
           if (cc && cc.choices && typeof cc.choices === "object") clash = cc.choices;
           var cv = out[6] && out[6].data;
@@ -3112,6 +3252,7 @@
       try {
         var qv = new URLSearchParams(location.search).get("view");
         if (qv === "schedule" || qv === "now") { view = qv; autoNowDone = true; }
+        if (qv === "checkoff") { checkFocus = true; autoNowDone = true; }
       } catch (e) {}
       try { if (window.sessionStorage.getItem("rf_now_off_" + slug)) autoNowDone = true; } catch (e) {}
       // No signal (festival grounds): the member's last saved schedule, if
