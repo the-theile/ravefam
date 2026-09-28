@@ -1735,6 +1735,18 @@
     color: var(--muted);
   }
   .lineup-plan-btn.planned { color: var(--neon-yellow); background: color-mix(in srgb, var(--neon-yellow) 18%, transparent); }
+  /* "Who'd you catch? 📼" — post-fest check-off on a past rave (postfestCardHTML) */
+  .postfest-card { margin: 0 0 10px; padding: 10px 12px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--neon-yellow) 45%, transparent); background: color-mix(in srgb, var(--neon-yellow) 6%, transparent); }
+  .postfest-title { font-weight: 800; font-size: 0.88rem; color: var(--neon-yellow); }
+  .postfest-hint { font-size: 0.72rem; color: var(--muted); margin: 2px 0 6px; line-height: 1.4; }
+  .postfest-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; padding: 6px 0; border-top: 1px solid rgba(255,255,255,0.06); }
+  .postfest-row:first-of-type { border-top: 0; }
+  .postfest-name { flex: 1 1 120px; min-width: 0; font-size: 0.82rem; font-weight: 700; overflow-wrap: anywhere; }
+  .postfest-opts { display: flex; gap: 6px; }
+  .postfest-btn { min-height: 34px; padding: 4px 12px; border-radius: 999px; cursor: pointer; font-family: inherit; font-size: 0.72rem; font-weight: 700; color: var(--muted); background: transparent; border: 1px solid rgba(255,255,255,0.14); }
+  .postfest-btn.on.saw { color: var(--text); border-color: var(--neon-green); background: color-mix(in srgb, var(--neon-green) 18%, transparent); }
+  .postfest-btn.on.missed { color: var(--text); border-color: var(--neon-pink); background: color-mix(in srgb, var(--neon-pink) 18%, transparent); }
+  .postfest-done { margin-top: 8px; padding: 6px 14px; font-size: 0.72rem; }
   .lineup-fav-btn {
     display: inline-flex; align-items: center; justify-content: center;
     width: 26px; height: 26px; margin-left: 8px; border-radius: 50%; border: none;
@@ -9009,6 +9021,27 @@
       </div>
       <div class="poll-setting-row">
         <div>
+          <div class="poll-setting-label">♡ Favorite added to a lineup</div>
+          <div class="poll-setting-hint">When an artist you ♡ joins a Lineup Explorer rave. Push on this device if it's on, otherwise email</div>
+        </div>
+        <button class="poll-anon-toggle" id="alert-toggle-artist_added" onclick="toggleLineupAlert('artist_added', this)"></button>
+      </div>
+      <div class="poll-setting-row">
+        <div>
+          <div class="poll-setting-label">🕘 Set times posted</div>
+          <div class="poll-setting-hint">For raves you're Going or Interested in</div>
+        </div>
+        <button class="poll-anon-toggle" id="alert-toggle-set_times" onclick="toggleLineupAlert('set_times', this)"></button>
+      </div>
+      <div class="poll-setting-row">
+        <div>
+          <div class="poll-setting-label">📼 Post-fest check-off</div>
+          <div class="poll-setting-hint">The morning after: who'd you catch?</div>
+        </div>
+        <button class="poll-anon-toggle" id="alert-toggle-postfest" onclick="toggleLineupAlert('postfest', this)"></button>
+      </div>
+      <div class="poll-setting-row">
+        <div>
           <div class="poll-setting-label">Tips &amp; hints</div>
           <div class="poll-setting-hint">Show coachmark tips as you discover new features</div>
         </div>
@@ -9719,7 +9752,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.75.0';
+  const APP_VERSION = '1.76.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -12524,6 +12557,7 @@
     dbLoadArtistAppearances().catch(reportBackgroundFailure('dbLoadArtistAppearances'));
     dbLoadArtistSightings().catch(reportBackgroundFailure('dbLoadArtistSightings'));
     dbLoadArtistPlans().catch(reportBackgroundFailure('dbLoadArtistPlans'));
+    dbLoadPostfestCheckoffs().catch(reportBackgroundFailure('dbLoadPostfestCheckoffs'));
     dbLoadVenues().catch(reportBackgroundFailure('dbLoadVenues'));
     // "Our Photos" only feeds the profile detail modal (opened on demand,
     // never on first paint) — likewise non-blocking.
@@ -27578,6 +27612,15 @@
     if (data) raverArtistSightings = data;
   }
 
+  // "Who'd you catch? 📼" answered, per raver + rave (Lineup Explorer 4c).
+  let raverPostfestCheckoffs = [];
+
+  async function dbLoadPostfestCheckoffs() {
+    const { data } = await sbSelectAll(() => sb.from('raver_postfest_checkoffs').select('raver_id,festival_id')
+      .order('raver_id').order('festival_id'));
+    if (data) raverPostfestCheckoffs = data;
+  }
+
   // Personal "artists I plan to see" checklist — pre-event sibling of
   // raverArtistSightings, since sightings can only be marked once a rave is
   // in the past (raver_artist_sightings RLS requires festivals.date < today).
@@ -27783,10 +27826,76 @@
         ? `<div class="fest-empty" style="font-size:0.72rem;margin-top:6px;">📋 Tap an artist to mark who you're planning to see</div>`
         : (!canEdit && rows.length === 0 ? `<div class="fest-empty" style="font-size:0.72rem;margin-top:6px;">RSVP to this rave to tag its lineup</div>` : ''));
 
-    box.innerHTML = `<div class="fav-chip-row" id="lineup-chip-wrap">${chipsOrEmpty}</div>${addHtml}${sightingHint}`;
+    box.innerHTML = `${postfestCardHTML(festId)}<div class="fav-chip-row" id="lineup-chip-wrap">${chipsOrEmpty}</div>${addHtml}${sightingHint}`;
     const countEl = document.getElementById('rf-lineup-count');
     if (countEl) countEl.textContent = rows.length;
     refreshRaveReadyChecklist(festId);
+  }
+
+  // ===== Post-fest check-off ("Who'd you catch? 📼") =====
+  // From the day after a rave's last day (for 60 days), someone who was Going
+  // with 📋 picks is asked Saw them / Missed per pick — the same
+  // raver_artist_sightings rows the ✅/❌ chips toggle. Answering every pick
+  // (or Done) writes raver_postfest_checkoffs, which also closes the prompt on
+  // the Lineup Explorer page. Unanswered picks stay as picks.
+  const postfestAnswered = {}; // festId -> { artistId: 'saw' | 'missed' } (this visit)
+
+  function postfestPending(festId) {
+    const f = getFestival(festId);
+    const you = squad.find(r => r.isYou);
+    const d = f && festDate(f);
+    if (!d || !you || !canEditFestLineup(festId)) return null;
+    const endDay = new Date(d); endDay.setDate(endDay.getDate() + Math.max(1, Number(f.days) || 1));
+    const closes = new Date(endDay); closes.setDate(closes.getDate() + 60);
+    if (TODAY < endDay || TODAY >= closes) return null;
+    if (raverPostfestCheckoffs.some(c => String(c.raver_id) === String(you.id) && String(c.festival_id) === String(festId))) return null;
+    const picks = [...myLineupPlanIds(festId)].filter(id => findArtistById(id));
+    return picks.length ? { you, picks } : null;
+  }
+
+  function postfestState(festId, artistId) {
+    const a = postfestAnswered[festId] && postfestAnswered[festId][artistId];
+    if (a) return a;
+    return myLineupSightingIds(festId).has(String(artistId)) ? 'saw' : null;
+  }
+
+  function postfestCardHTML(festId) {
+    const p = postfestPending(festId);
+    if (!p) return '';
+    const rows = p.picks.map(id => {
+      const st = postfestState(festId, id);
+      const btn = (v, label) => `<button type="button" class="postfest-btn ${v}${st === v ? ' on' : ''}" aria-pressed="${st === v}" onclick="postfestMark('${escJsAttr(festId)}','${escJsAttr(id)}','${escJsAttr(v)}')">${label}</button>`;
+      return `<div class="postfest-row"><span class="postfest-name">${escHtml(findArtistById(id).name)}</span><span class="postfest-opts">${btn('saw', '✅ Saw them')}${btn('missed', '❌ Missed')}</span></div>`;
+    }).join('');
+    return `<div class="postfest-card">
+      <div class="postfest-title">Who'd you catch? 📼</div>
+      <div class="postfest-hint">Tick off your 📋 picks. Your seen count updates as you go.</div>
+      ${rows}
+      <button type="button" class="btn btn-ghost postfest-done" onclick="postfestFinish('${escJsAttr(festId)}')">Done</button>
+    </div>`;
+  }
+
+  async function postfestMark(festId, artistId, v) {
+    const seen = myLineupSightingIds(festId).has(String(artistId));
+    if ((v === 'saw') !== seen) await dbToggleArtistSighting(festId, artistId);
+    if ((v === 'saw') !== myLineupSightingIds(festId).has(String(artistId))) return; // the toggle failed and toasted
+    (postfestAnswered[festId] = postfestAnswered[festId] || {})[artistId] = v;
+    const p = postfestPending(festId);
+    if (p && p.picks.every(id => postfestState(festId, id))) await postfestFinish(festId);
+    else renderFestivalLineupSection(festId);
+  }
+
+  async function postfestFinish(festId) {
+    const p = postfestPending(festId);
+    if (!p) return;
+    let saw = 0, missed = 0;
+    p.picks.forEach(id => { const st = postfestState(festId, id); if (st === 'saw') saw++; else if (st === 'missed') missed++; });
+    const { error } = await sb.from('raver_postfest_checkoffs').insert({ raver_id: p.you.id, festival_id: festId, saw, missed });
+    if (error && error.code !== '23505') { console.error('raver_postfest_checkoffs insert error', error); showToast('⚠️ Could not save — try again'); return; }
+    raverPostfestCheckoffs.push({ raver_id: p.you.id, festival_id: festId });
+    logAnalyticsEvent('postfest_checkoff', { raver_id: p.you.id, festival_id: festId, saw, missed, source: 'app' });
+    showToast(saw ? `📼 Logged. ${saw} ${saw === 1 ? 'set' : 'sets'} caught.` : '📼 Logged. Next time.');
+    renderFestivalLineupSection(festId);
   }
 
   function lineupArtistSearchInput(festId, q) {
@@ -30168,7 +30277,8 @@
   function openRaveFocus(festId) {
     const f = getFestival(festId);
     if (!f) return;
-    if (String(_raveFocusTabFestId) !== String(festId)) { _raveFocusTab = 'plan'; _raveFocusTabFestId = festId; }
+    // A rave waiting on "Who'd you catch? 📼" opens on its Lineup tab.
+    if (String(_raveFocusTabFestId) !== String(festId)) { _raveFocusTab = postfestPending(festId) ? 'lineup' : 'plan'; _raveFocusTabFestId = festId; }
     activeFestId = festId;
     editingFestivalId = festId;
     document.getElementById('rave-focus-modal').innerHTML = raveFocusModalHTML(f);
@@ -31560,6 +31670,7 @@
     mentionToggle.classList.remove('on');
     document.getElementById('tips-settings-toggle').classList.toggle('on', _tipsEnabled);
     renderShareLinkSettings();
+    renderLineupAlertSettings();
     document.getElementById('privacy-settings-overlay').classList.add('open');
     if ('serviceWorker' in navigator && 'PushManager' in window) {
       try {
@@ -31617,6 +31728,31 @@
     if (error || !data?.ok) { btn.disabled = false; showToast('⚠️ Could not turn that link off — try again'); return; }
     showToast("🔗 Link turned off. Old links won't open your picks.");
     renderShareLinkSettings();
+  }
+
+  // Lineup alerts (send-lineup-alerts): one row per type in alert_preferences,
+  // no row = on. Delivery picks push or email on the server.
+  const LINEUP_ALERT_TYPES = ['artist_added', 'set_times', 'postfest'];
+
+  async function renderLineupAlertSettings() {
+    LINEUP_ALERT_TYPES.forEach(t => document.getElementById('alert-toggle-' + t)?.classList.add('on'));
+    if (!currentUser) return;
+    const { data, error } = await sb.from('alert_preferences').select('type, enabled').eq('user_id', currentUser.id);
+    if (error) { console.warn('alert_preferences load failed', error); return; }
+    (data || []).forEach(r => document.getElementById('alert-toggle-' + r.type)?.classList.toggle('on', !!r.enabled));
+  }
+
+  async function toggleLineupAlert(type, btn) {
+    if (!currentUser || !LINEUP_ALERT_TYPES.includes(type)) return;
+    const enabling = !btn.classList.contains('on');
+    btn.disabled = true;
+    const { error } = await sb.from('alert_preferences').upsert(
+      { user_id: currentUser.id, type, enabled: enabling, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id,type' });
+    btn.disabled = false;
+    if (error) { console.warn('alert_preferences save failed', error); showToast('⚠️ Could not save that — try again'); return; }
+    btn.classList.toggle('on', enabling);
+    showToast(enabling ? '🔔 Alert on' : '🔕 Alert off');
   }
 
   function closePrivacySettingsModal() {

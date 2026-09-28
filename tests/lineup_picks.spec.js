@@ -1148,3 +1148,82 @@ test.describe('Lineup Explorer 4b — offline page (real service worker)', () =>
     await context.setOffline(false);
   });
 });
+
+test.describe("Lineup Explorer 4c — Who'd you catch? 📼", () => {
+  test.beforeEach(async ({ page }) => { await blockExternal(page); });
+
+  // EDC Orlando: Nov 6–8, Eastern; the check-off opens Nov 9, 06:00 ET (11:00Z).
+  const SETS = { ok: true, tz: 'America/New_York', date: '2026-11-06', days: 3, sets: [] };
+  const done = (extra = {}) => memberData({
+    artists: [
+      { id: 5, name: 'Afrojack', name_lower: 'afrojack' },
+      { id: 9, name: 'Alesso', name_lower: 'alesso' },
+      { id: 1, name: 'Kaskade', name_lower: 'kaskade' },
+    ],
+    raver_festivals: [{ raver_id: 'r1', festival_id: 'f1' }],
+    raver_artist_plans: [5, 9, 1].map(id => ({ raver_id: 'r1', artist_id: id, festival_id: 'f1' })),
+    raver_artist_sightings: [{ raver_id: 'r1', artist_id: 1, festival_id: 'f1' }], // marked in the app already
+    raver_postfest_checkoffs: [],
+    __rpc: { get_lineup_set_times: SETS },
+    ...extra,
+  });
+  const panel = page => page.locator('.lp-check');
+
+  test('the morning after, Saw them / Missed each pick; answering them all closes it', async ({ page }) => {
+    const errors = collectPageErrors(page);
+    await page.clock.setFixedTime(new Date('2026-11-09T15:00:00Z'));
+    await installSupabaseStub(page, { session: makeSession(), data: done() });
+    await page.goto(PAGE + '?view=checkoff');
+    await expect(panel(page)).toBeVisible();
+    await expect(panel(page).locator('h2')).toHaveText("Who'd you catch? 📼");
+    await expect(panel(page).locator('.lp-check-name')).toHaveText(['Afrojack', 'Alesso', 'Kaskade']);
+    // Already ticked in the app.
+    await expect(panel(page).locator('.lp-check-row', { hasText: 'Kaskade' }).locator('.lp-check-saw')).toHaveAttribute('aria-pressed', 'true');
+
+    await panel(page).locator('.lp-check-row', { hasText: 'Afrojack' }).locator('.lp-check-saw').click();
+    await expect(panel(page).locator('.lp-check-row', { hasText: 'Afrojack' }).locator('.lp-check-saw')).toHaveAttribute('aria-pressed', 'true');
+    await panel(page).locator('.lp-check-row', { hasText: 'Alesso' }).locator('.lp-check-missed').click();
+    await expect(panel(page)).toBeHidden();
+
+    const store = await page.evaluate(() => ({ s: window.__store.raver_artist_sightings, c: window.__store.raver_postfest_checkoffs }));
+    expect(store.s.map(r => r.artist_id).sort()).toEqual([1, 5]);
+    expect(store.c).toEqual([expect.objectContaining({ raver_id: 'r1', festival_id: 'f1', saw: 2, missed: 1 })]);
+    await expect.poll(() => page.evaluate(() => (window.__store.__rpcCalls || [])
+      .filter(c => c.fn === 'log_analytics_event' && c.args.p_event_name === 'postfest_checkoff').map(c => c.args.p_properties)))
+      .toEqual([{ slug: SLUG, saw: 2, missed: 1, source: 'explorer' }]);
+    expect(errors).toEqual([]);
+  });
+
+  test('Missed clears a sighting made in the app, and Done closes it early', async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-11-09T15:00:00Z'));
+    await installSupabaseStub(page, { session: makeSession(), data: done() });
+    await page.goto(PAGE);
+    await panel(page).locator('.lp-check-row', { hasText: 'Kaskade' }).locator('.lp-check-missed').click();
+    await expect(panel(page).locator('.lp-check-row', { hasText: 'Kaskade' }).locator('.lp-check-missed')).toHaveAttribute('aria-pressed', 'true');
+    expect(await page.evaluate(() => window.__store.raver_artist_sightings)).toEqual([]);
+    await panel(page).locator('.lp-check-done').click();
+    await expect(panel(page)).toBeHidden();
+    expect(await page.evaluate(() => window.__store.raver_postfest_checkoffs)).toEqual([expect.objectContaining({ saw: 0, missed: 1 })]);
+  });
+
+  test('not before the morning after, not once answered, and only for people who were Going', async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-11-08T23:00:00Z')); // last night
+    await installSupabaseStub(page, { session: makeSession(), data: done() });
+    await page.goto(PAGE);
+    await expect(page.locator('.lp-bar')).toHaveAttribute('data-mode', 'member');
+    await expect(panel(page)).toHaveCount(0);
+
+    await page.clock.setFixedTime(new Date('2026-11-09T15:00:00Z'));
+    await installSupabaseStub(page, { session: makeSession(), data: done({ raver_postfest_checkoffs: [{ raver_id: 'r1', festival_id: 'f1' }] }) });
+    await page.reload();
+    await expect(page.locator('.lp-bar')).toHaveAttribute('data-mode', 'member');
+    await expect(panel(page)).toHaveCount(0);
+
+    await installSupabaseStub(page, { session: makeSession(), data: done({
+      raver_festivals: [], raver_festival_interest: [{ raver_id: 'r1', festival_id: 'f1' }],
+    }) });
+    await page.reload();
+    await expect(page.locator('.lp-bar')).toHaveAttribute('data-rsvp', 'interested');
+    await expect(panel(page)).toHaveCount(0);
+  });
+});
