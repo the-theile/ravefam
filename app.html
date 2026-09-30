@@ -13017,7 +13017,7 @@
   function setupListHTML() {
     return `<div class="setup-list">${SETUP_ITEMS.map(it => {
       const done = setupItemDone(it.key);
-      return `<button type="button" class="setup-item${done ? ' done' : ''}"${done ? ' disabled' : ` onclick="setupGo('${it.key}')"`}>
+      return `<button type="button" class="setup-item${done ? ' done' : ''}"${done ? ' disabled' : ` onclick="setupGo('${escJsAttr(it.key)}')"`}>
         <span class="setup-item-check">${done ? '✓' : ''}</span><span>${escHtml(it.label)}</span>
         ${!done && it.where ? `<span class="setup-item-where">${escHtml(it.where)}</span>` : ''}
       </button>`;
@@ -21033,7 +21033,7 @@
             <span class="archive-link-label">${escHtml(t.name)}</span><span class="archive-link-meta">Your crew’s template · ${(t.tasks || []).length} tasks</span>
           </button>`).join('')}
         ${Object.entries(GAME_PLAN_TEMPLATES).map(([key, t]) => `
-          <button type="button" class="archive-link-card" style="text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;" onclick="applyGamePlanTemplate('${cid}','${key}')">
+          <button type="button" class="archive-link-card" style="text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;" onclick="applyGamePlanTemplate('${cid}','${escJsAttr(key)}')">
             <span class="archive-link-label">${escHtml(t.name)}</span><span class="archive-link-meta">${escHtml(t.sub)}</span>
           </button>`).join('')}
         <button type="button" class="btn btn-ghost" onclick="document.getElementById('game-plan-task-input')?.focus()">Start blank</button>
@@ -21183,7 +21183,7 @@
 
     return `
       <div class="form-group">
-        <div class="section-banner"><span class="banner-inner">✅ Checklist <span class="banner-subtitle">· get it done before you go</span></span></div>
+        <div class="section-banner"><span class="banner-inner">✅ Checklist <span class="banner-subtitle">· get it done before you go</span>${tasks.length && !tipHTML && _guidance && _guidance.help_level !== 'pro' ? gkInfoButton('game-plan') : ''}</span></div>
         ${isLead ? (gamePlanIsPast() ? saveCrewTemplateCardHTML(crewId) : gamePlanCheckHTML(crewId)) : ''}
         ${tipHTML}
         ${progressHTML}
@@ -32848,15 +32848,15 @@
       <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">${ctx.tips.map(t => `<div class="gk-body" style="margin:0;font-size:0.84rem;">· ${escHtml(t)}</div>`).join('')}</div>
       ${replay ? `<button type="button" class="btn btn-ghost" style="width:100%;margin-top:10px;" onclick="${replay}">↺ Replay this screen’s intro</button>` : ''}
       ${saved.length ? `<div class="gk-eyebrow" style="--gk-color:var(--neon-yellow);margin:18px 0 8px;">SAVED FOR LATER</div>
-        ${saved.map(x => `<div style="display:flex;align-items:center;gap:10px;min-height:38px;"><span class="gk-saved-badge" style="position:static;">!</span><span style="flex-grow:1;font-size:0.86rem;">${escHtml(x.name)}</span><button type="button" class="btn btn-ghost" style="padding:6px 14px;font-size:0.74rem;" onclick="guideReplay('${x.kind}','${x.key}')">Resume</button></div>`).join('')}` : ''}
+        ${saved.map(x => `<div style="display:flex;align-items:center;gap:10px;min-height:38px;"><span class="gk-saved-badge" style="position:static;">!</span><span style="flex-grow:1;font-size:0.86rem;">${escHtml(x.name)}</span><button type="button" class="btn btn-ghost" style="padding:6px 14px;font-size:0.74rem;" onclick="guideReplay('${escJsAttr(x.kind)}','${escJsAttr(x.key)}')">Resume</button></div>`).join('')}` : ''}
       ${!weekOne && setupDoneCount() < SETUP_ITEMS.length ? `<div class="gk-eyebrow" style="--gk-color:${GK_COLORS.ravers};margin:18px 0 0;">FINISH SETTING UP · ${setupDoneCount()} OF ${SETUP_ITEMS.length}</div>${setupListHTML()}` : ''}
       <div class="gk-eyebrow" style="--gk-color:${GK_COLORS.raves};margin:18px 0 8px;">YOUR RAVE WORLD · ${found} OF 5 FOUND</div>
       ${Object.keys(REALM_NAMES).map(k => worldRow(REALM_NAMES[k], realmState(k), GK_COLORS[k],
-        realmFound(k) && REALM_INTROS[k] ? `<button type="button" class="btn btn-ghost" style="padding:6px 14px;font-size:0.74rem;" onclick="guideReplay('realm','${k}')">Replay</button>` : '', false)
+        realmFound(k) && REALM_INTROS[k] ? `<button type="button" class="btn btn-ghost" style="padding:6px 14px;font-size:0.74rem;" onclick="guideReplay('realm','${escJsAttr(k)}')">Replay</button>` : '', false)
         + (k === 'crews' ? ['huddle', 'raveplan'].map(z => worldRow(ZONE_LABELS[z], zoneState(z), ZONE_COLORS[z], '', true)).join('') : '')).join('')}
       <div class="gk-eyebrow" style="--gk-color:var(--neon-pink);margin:18px 0 8px;">HOW MUCH HELP?</div>
       <div role="radiogroup" aria-label="How much help" style="display:flex;flex-direction:column;gap:6px;">
-        ${HELP_LEVELS.map(l => `<button type="button" role="radio" aria-checked="${_guidance.help_level === l.key}" class="setup-item" style="flex-direction:column;align-items:flex-start;gap:2px;${_guidance.help_level === l.key ? 'border-color:var(--neon-pink);' : ''}" onclick="setHelpLevel('${l.key}')">
+        ${HELP_LEVELS.map(l => `<button type="button" role="radio" aria-checked="${_guidance.help_level === l.key}" class="setup-item" style="flex-direction:column;align-items:flex-start;gap:2px;${_guidance.help_level === l.key ? 'border-color:var(--neon-pink);' : ''}" onclick="setHelpLevel('${escJsAttr(l.key)}')">
           <span style="font-weight:700;">${_guidance.help_level === l.key ? '● ' : '○ '}${escHtml(l.label)}</span><span style="font-size:0.74rem;color:var(--muted);">${escHtml(l.sub)}</span></button>`).join('')}
       </div>
       <button type="button" class="btn btn-ghost" style="width:100%;margin-top:12px;" onclick="resetGuidanceTips()">Reset all tips</button>`;
@@ -33344,6 +33344,7 @@
       </div>`;
     overlay.appendChild(sheet);
     document.body.appendChild(overlay);
+    syncOverlayInert();  // kit overlays are created on the fly, so focus containment isn't watching them
     _gkSheet = { overlay, onGo, onLater, isIntro };
     requestAnimationFrame(() => { overlay.classList.add('show'); sheet.classList.add('show'); });
     sheet.querySelector('.gk-btn.primary')?.focus();
@@ -33354,6 +33355,8 @@
     _gkSheet = null;
     overlay.classList.remove('show');
     overlay.querySelector('.gk-sheet')?.classList.remove('show');
+    overlay.style.pointerEvents = 'none';  // closed from now on, even mid-fade
+    syncOverlayInert();
     setTimeout(() => overlay.remove(), 300);
   }
   function gkSheetGo() {
@@ -33403,6 +33406,7 @@
       ${gkPlurLine(plur)}${extraHTML}
       <button type="button" class="gk-btn primary" onclick="gkMomentDone()">${escHtml(cta)}</button>`;
     document.body.appendChild(el);
+    syncOverlayInert();
     _gkMomentDone = onCta || null;
     el.querySelector('.gk-btn')?.focus();
     return '';
@@ -33410,6 +33414,7 @@
   let _gkMomentDone = null;
   function gkMomentDone() {
     document.getElementById('gk-moment-screen')?.remove();
+    syncOverlayInert();
     const fn = _gkMomentDone;
     _gkMomentDone = null;
     fn?.();
@@ -33437,8 +33442,8 @@
       <div class="gk-tip-title">${escHtml(title)}</div>
       <div class="gk-body" style="margin-top:3px;font-size:0.8rem">${escHtml(body)}</div>
       <div class="gk-tip-actions">
-        <button type="button" onclick="gkTipAction('${key}','short')">Shorter</button>
-        <button type="button" class="done" onclick="gkTipAction('${key}','icon')">Got it</button>
+        <button type="button" onclick="gkTipAction('${escJsAttr(key)}','short')">Shorter</button>
+        <button type="button" class="done" onclick="gkTipAction('${escJsAttr(key)}','icon')">Got it</button>
       </div></div>`;
   }
   function gkTipAction(key, stage) {
@@ -33456,7 +33461,7 @@
   }
   // The ⓘ a faded tip leaves behind; opens the hub on this screen's help.
   function gkInfoButton(category) {
-    return `<button type="button" class="gk-info" aria-label="How this works" onclick="openAppGuide({category:'${category}'})">i</button>`;
+    return `<button type="button" class="gk-info" aria-label="How this works" onclick="openAppGuide({category:'${escJsAttr(category)}'})">i</button>`;
   }
 
   // 05 — timeline nudge, rendered inside a rave card. ctaAttr is an inline

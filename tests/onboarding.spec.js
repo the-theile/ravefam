@@ -3,6 +3,9 @@ const { installSupabaseStub, makeSession, seedData } = require('./helpers');
 
 const EMPTY = { festivals: [], ravers: [], crews: [], crew_members: [], raver_festivals: [], raver_festival_interest: [] };
 
+// 2.0 signup is name + handle, then the help choice. Genres moved out to the
+// Raves tab's "Find your sound" sheet and the crew step to the Crews empty
+// state, so there is no step 1 any more.
 test.describe('onboarding', () => {
   test('a brand-new user (not onboarded, no profile) sees the onboarding wizard', async ({ page }) => {
     await installSupabaseStub(page, {
@@ -12,7 +15,7 @@ test.describe('onboarding', () => {
     await page.goto('/app.html');
     await page.locator('#main-app').waitFor({ state: 'visible' });
     await expect(page.locator('#onboarding-screen')).toHaveClass(/show/, { timeout: 4000 });
-    await expect(page.locator('#ob-step1')).toBeVisible();
+    await expect(page.locator('#ob-step2')).toBeVisible();
   });
 
   test('an onboarded user with a profile does NOT see the wizard', async ({ page }) => {
@@ -23,29 +26,34 @@ test.describe('onboarding', () => {
     await expect(page.locator('#onboarding-screen')).not.toHaveClass(/show/);
   });
 
-  test('step 1 shows a low-pressure skip link and reassurance copy', async ({ page }) => {
+  test('signup starts on name + handle, with no genre step', async ({ page }) => {
     await installSupabaseStub(page, {
       session: makeSession({ user_metadata: { onboarded: false } }),
       data: EMPTY,
     });
     await page.goto('/app.html');
     await page.locator('#main-app').waitFor({ state: 'visible' });
-    await expect(page.locator('#ob-step1')).toBeVisible({ timeout: 4000 });
-    await expect(page.locator('.ob-genre-reassurance')).toContainText('nothing here is permanent');
-    await expect(page.locator('.ob-skip-link')).toBeVisible();
+    await expect(page.locator('#ob-step2')).toBeVisible({ timeout: 4000 });
+    await expect(page.locator('#ob-name-input')).toBeVisible();
+    await expect(page.locator('#ob-step1')).toHaveCount(0);
+    await expect(page.locator('#onboarding-screen .ob-genre-chip')).toHaveCount(0);
   });
 
-  test('skipping step 1 advances to the identity step without a genre picked', async ({ page }) => {
+  test('the last step is the help choice, and choosing closes the wizard and sets the help level', async ({ page }) => {
     await installSupabaseStub(page, {
       session: makeSession({ user_metadata: { onboarded: false } }),
       data: EMPTY,
     });
     await page.goto('/app.html');
     await page.locator('#main-app').waitFor({ state: 'visible' });
-    await expect(page.locator('#ob-step1')).toBeVisible({ timeout: 4000 });
-    await page.click('.ob-skip-link');
-    await expect(page.locator('#ob-step2')).toBeVisible();
-    await expect(page.locator('#ob-step1')).toBeHidden();
+    await expect(page.locator('#ob-step2')).toBeVisible({ timeout: 4000 });
+    await page.evaluate(() => obGoToStep(3));
+    await expect(page.locator('#ob-step3-title')).toHaveText('How much help do you want?');
+    await page.click('#ob-step3 >> text=I’ll figure it out');
+    await expect(page.locator('#onboarding-screen')).not.toHaveClass(/show/);
+    expect(await page.evaluate(() => _guidance.help_level)).toBe('hints');
+    // Signup's own help choice means the 2.0 "what's new" welcome is never shown.
+    expect(await page.evaluate(() => !!_guidance.quests.welcome_2_0)).toBe(true);
   });
 
   // New phone-only account (no email, just created, no profile) whose verified
@@ -59,7 +67,7 @@ test.describe('onboarding', () => {
     await installSupabaseStub(page, { session: newPhoneUser(), data: { ...EMPTY, phone_profile_match: true } });
     await page.goto('/app.html');
     await page.locator('#main-app').waitFor({ state: 'visible' });
-    await expect(page.locator('#ob-step1')).toBeVisible({ timeout: 4000 });
+    await expect(page.locator('#ob-step2')).toBeVisible({ timeout: 4000 });
     await expect(page.locator('#ob-existing-match')).toBeVisible();
     await expect(page.locator('#ob-have-account')).toBeHidden();
 
@@ -71,7 +79,7 @@ test.describe('onboarding', () => {
     await installSupabaseStub(page, { session: newPhoneUser(), data: EMPTY });
     await page.goto('/app.html');
     await page.locator('#main-app').waitFor({ state: 'visible' });
-    await expect(page.locator('#ob-step1')).toBeVisible({ timeout: 4000 });
+    await expect(page.locator('#ob-step2')).toBeVisible({ timeout: 4000 });
     await page.waitForTimeout(300);
     await expect(page.locator('#ob-existing-match')).toBeHidden();
     // The quieter "Already on RaveFAM with your email?" link is still there.
