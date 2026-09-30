@@ -12518,12 +12518,13 @@
   // existing claimed raver in place (see obStep2Next), so it's safe post-claim.
   function runFirstTimeSetup({ allowWelcome = false } = {}) {
     const me = squad.find(r => r.isYou);
-    // A raver record with both genres and a handle is proof onboarding already
-    // happened, independent of the "onboarded" auth flag below — that flag is
-    // set by a best-effort call at the end of onboarding (see completeOnboarding)
-    // and can fail to persist, which would otherwise re-trigger the full wizard
-    // for someone who already has a complete profile.
-    const profileComplete = !!(me && me.genres?.length && me.handle);
+    // A raver record with a handle is proof onboarding already happened,
+    // independent of the "onboarded" auth flag below — that flag is set by a
+    // best-effort call at the end of onboarding (see completeOnboarding) and can
+    // fail to persist, which would otherwise re-trigger the wizard. (Genres
+    // moved out of the 2.0 wizard to Raves' "Find your sound", so they're no
+    // longer part of the check.)
+    const profileComplete = !!(me && me.handle);
     if (!profileComplete && !currentUser?.user_metadata?.onboarded) {
       setTimeout(showOnboarding, 400);
       return true; // onboarding launching — bootApp defers any pending rave link
@@ -12532,10 +12533,29 @@
     } else if (me && readPendingLink()) {
       // Just came back via "I already have an account" — offer the link first.
       setTimeout(resumePendingLink, 600);
+    } else if (allowWelcome && me && me.handle && _guidance && !_guidance.quests.welcome_2_0) {
+      setTimeout(show2Welcome, 600);
     } else if (allowWelcome && me && me.handle) {
       setTimeout(showWelcomePopup, 600);
     }
     return false;
+  }
+
+  // Once per existing raver, the first boot on 2.0 (takes the welcome-back
+  // popup's slot that time). Fresh start: every tab is there to rediscover
+  // with the small rewards; the help choice sets help_level straight away,
+  // so a veteran can skip the lot in one tap. New ravers never see it —
+  // signup's own help choice marks it done.
+  function show2Welcome() {
+    if (!_guidance || _guidance.quests.welcome_2_0) return;
+    saveGuidance({ quests: { ..._guidance.quests, welcome_2_0: true } });
+    showMoment({
+      size: 'medium', color: GK_COLORS.crews, eyebrow: 'WHAT’S NEW IN 2.0',
+      title: 'Fresh help that fades as you go',
+      body: 'Every tab is a place to discover again — find all 5 for a little PLUR, and tips shrink as you learn. Your crews, raves and points are all still here.',
+      cta: 'Show me around', onCta: () => saveGuidance({ help_level: 'guide' }),
+      secondary: 'I’m a pro', onSecondary: () => saveGuidance({ help_level: 'pro' })
+    });
   }
 
   // Background loads are deliberately non-blocking, but `.catch(() => {})` also
@@ -33154,7 +33174,7 @@
     const overlay = document.createElement('div');
     overlay.id = 'gk-sheet-overlay';
     overlay.className = 'gk-sheet-overlay';
-    overlay.setAttribute('onclick', 'if(event.target===this)gkSheetLater()');
+    overlay.setAttribute('onclick', 'if(event.target===this)gkSheetDismiss()');
     const sheet = document.createElement('div');
     sheet.className = 'gk-sheet';
     sheet.setAttribute('role', 'dialog');
@@ -33190,6 +33210,12 @@
     closeZoneSheet();
     if (s?.isIntro && _guidance?.skips) saveGuidance({ skips: 0 });
     s?.onGo?.();
+  }
+  // Backdrop tap / Escape: an intro counts as Later (it comes back as a
+  // yellow !); anything else just closes, so a dismiss never picks the
+  // secondary button's action for the user.
+  function gkSheetDismiss() {
+    if (_gkSheet?.isIntro) gkSheetLater(); else closeZoneSheet();
   }
   function gkSheetLater() {
     const s = _gkSheet;
@@ -33620,7 +33646,7 @@
   // the wizard to the Crews tab's teaching empty state (or, for an invite,
   // straight onto the crew page).
   function obChooseHelp(level) {
-    saveGuidance({ help_level: level });
+    saveGuidance({ help_level: level, quests: { ..._guidance.quests, welcome_2_0: true } });
     completeOnboarding();
     if (_obJoinedCrewId && getCrew(_obJoinedCrewId)) openDetail(_obJoinedCrewId);
     else switchTab('crews');
