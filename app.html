@@ -23967,10 +23967,31 @@
     if (!root) return;
     root.innerHTML = vendorVillageShellHTML();
     loadVendorVillageData();
+    renderVillageRespectCard();
+  }
+
+  // ── 2.0 Village guidance ──
+  // A Respect card until you reach Trusted Raver, a light "saved" line and
+  // a medium "first review" moment the first time each happens, and the
+  // Venues first-visit sheet.
+  async function renderVillageRespectCard() {
+    const el = document.getElementById('vv-respect-card');
+    const me = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
+    if (!el || !me) return;
+    const [totals, tiers] = await Promise.all([loadPlurTotals(me.id), loadPlurTiers()]);
+    const total = totals?.respect_points || 0;
+    const next = (tiers || []).filter(t => t.track === 'respect' && t.threshold > total).sort((a, b) => a.threshold - b.threshold)[0];
+    if (!next || next.tier_number > 2) { el.innerHTML = ''; return; }
+    el.innerHTML = `<div class="archive-link-card" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;border-color:rgba(255,230,0,0.45);">
+      <span class="archive-link-label">🙏 Respect — stepping up for the community</span>
+      <span class="archive-link-meta">Reviews +15, live spots +5 · ${next.threshold - total} to ${escHtml(next.name)}</span>
+      <div class="game-plan-progress-track"><div class="game-plan-progress-fill" style="width:${Math.round(total / next.threshold * 100)}%;"></div></div>
+    </div>`;
   }
 
   function vendorVillageShellHTML() {
     return `
+      <div id="vv-respect-card"></div>
       <div class="stats-subtabs vv-subtabs">
         <button class="stats-subtab${vendorVillageTab === 'browse' ? ' active' : ''}" onclick="switchVendorTab('browse', this)">🏪 Browse</button>
         <button class="stats-subtab${vendorVillageTab === 'saved' ? ' active' : ''}" onclick="switchVendorTab('saved', this)">💾 Saved</button>
@@ -24223,6 +24244,10 @@
 
   async function handleToggleSaveVendor(vendorId) {
     await dbToggleSaveVendor(vendorId);
+    if (savedVendorIds.has(vendorId) && _guidance && !_guidance.quests.first_vendor_save) {
+      saveGuidance({ quests: { ..._guidance.quests, first_vendor_save: true } });
+      showToast('💾 Saved. It’s waiting in Saved whenever you need it.');
+    }
     if (vendorVillageTab === 'browse') renderVendorBrowsePanel();
     else if (vendorVillageTab === 'saved') renderVendorSavedPanel();
     const detailBtn = document.getElementById('vv-detail-save-btn');
@@ -24674,9 +24699,26 @@
     }
     const ok = await dbUpsertVendorReview(vendorId, { rating: _vendorDetailDraftRating, body, photoUrl, attributeTags });
     if (!ok) { if (btn) { btn.disabled = false; btn.textContent = originalLabel; } return; }
-    showToast('⭐ Review saved!');
+    if (!existingReview && _guidance && !_guidance.quests.first_vendor_review) showFirstReviewMoment(vendorId);
+    else showToast('⭐ Review saved!');
     openVendorDetail(vendorId);
     if (vendorVillageTab === 'browse') renderVendorBrowsePanel();
+  }
+
+  function showFirstReviewMoment(vendorId) {
+    saveGuidance({ quests: { ..._guidance.quests, first_vendor_review: true } });
+    const name = vendors.find(v => v.id === vendorId)?.name || 'this vendor';
+    showMoment({
+      size: 'medium', color: GK_COLORS.village, eyebrow: 'FIRST REVIEW', title: 'That’s PLUR in action',
+      body: `Every raver checking out ${name} sees what you said.`, extraHTML: '<div id="review-plur"></div>', cta: 'Nice'
+    });
+    // vendor_review_written is paid server-side; show it once it has landed.
+    setTimeout(async () => {
+      const { data } = await sb.from('point_events').select('amount').eq('event_type', 'vendor_review_written').eq('source_id', vendorId).limit(1);
+      const el = document.getElementById('review-plur');
+      if (el && data?.length) el.innerHTML = gkPlurLine([{ track: 'respect', amount: data[0].amount, why: 'first review' }]);
+      renderVillageRespectCard();
+    }, 1200);
   }
 
   function vendorReviewRowHTML(review, vendorId) {
@@ -24972,8 +25014,19 @@
     const venueRoot = document.getElementById('venue-village-root');
     if (vendorRoot) vendorRoot.style.display = section === 'vendors' ? '' : 'none';
     if (venueRoot) venueRoot.style.display = section === 'venues' ? '' : 'none';
-    if (section === 'venues') renderVenueVillage();
+    if (section === 'venues') { renderVenueVillage(); maybeVenuesIntro(); }
     else renderVendorVillage();
+  }
+
+  function maybeVenuesIntro() {
+    if (!_guidance || _guidance.zones.venues === 'opened') return;
+    setZoneState('venues', 'opened');
+    if (_guidance.help_level !== 'guide') return;
+    openZoneSheet({
+      color: '#5B6EFF', title: 'Venues',
+      body: 'Clubs and venues rated by ravers — sound, vibe, getting home. Every rave links to its venue here.',
+      tryIt: 'Rate a venue you know well.', onLater: () => setZoneState('venues', 'saved')
+    });
   }
 
   let venueVillageTab = 'browse';
