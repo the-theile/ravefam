@@ -8693,12 +8693,16 @@
       <div class="stats-subtabs">
         <button class="stats-subtab active" onclick="switchStatTab('my', this)">My Stats</button>
         <button class="stats-subtab" onclick="switchStatTab('crew', this)">Crew Stats</button>
+        <button class="stats-subtab" id="stats-plur-tab" style="position:relative;" onclick="switchStatTab('plur', this)">PLUR &amp; Badges</button>
       </div>
       <div id="stats-my-panel">
         <div id="stats-content"><!-- rendered by JS --></div>
       </div>
       <div id="stats-crew-panel" style="display:none;">
         <div id="stats-crew-content"><!-- rendered by JS --></div>
+      </div>
+      <div id="stats-plur-panel" style="display:none;">
+        <div id="stats-plur-content"><!-- rendered by JS --></div>
       </div>
     </div>
 
@@ -33239,7 +33243,8 @@
   const REALM_INTROS = {
     raves: { title: 'Find your sound', open: () => openFindYourSound() },
     ravers: { title: 'Your raver card', open: () => openRaverCardSetup() },
-    stats: { title: 'Rave Life', body: 'Your rave life in numbers — nights logged, artists caught, and all your PLUR and badges.', tryIt: 'Open PLUR & Badges to see what you’ve earned so far.', cta: 'Let’s go' },
+    stats: { title: 'Rave Life', body: 'Your rave life in numbers — nights logged, artists caught, and all your PLUR and badges.', tryIt: 'Open PLUR & Badges to see what you’ve earned so far.', cta: 'See my PLUR',
+      onGo: () => { const t = document.getElementById('stats-plur-tab'); if (t) switchStatTab('plur', t); } },
     village: { title: 'Vendor Village', body: 'Makers and vendors the fam swears by — kandi, glow, gear, food. Your crew’s picks come first.', tryIt: 'Check the vendors your crew vouches for.', cta: 'Let’s go' }
   };
   const _realmClaims = {};  // realm → in-flight claim promise, so a double tap can't double-claim
@@ -34452,7 +34457,87 @@
     el.classList.add('active');
     document.getElementById('stats-my-panel').style.display = tab === 'my' ? '' : 'none';
     document.getElementById('stats-crew-panel').style.display = tab === 'crew' ? '' : 'none';
+    document.getElementById('stats-plur-panel').style.display = tab === 'plur' ? '' : 'none';
     if (tab === 'crew') renderCrewStats();
+    if (tab === 'plur') { renderStatsPlur(); if (_guidance && _guidance.zones.plur_tab !== 'opened') setZoneState('plur_tab', 'opened'); }
+    renderPlurTabTwinkle();
+  }
+
+  // ── 2.0 PLUR & Badges tab ──
+  // Stats is PLUR's home: each track with progress to its next tier, the
+  // earn log (points first), ways to earn next (leaning on your emptiest
+  // tracks), and badges — rave milestones plus the Explorer group from the
+  // 2.0 guidance (Crew Founder, Trailblazer, Cartographer, Crew Captain,
+  // Settled In). All point amounts come from the server.
+  function renderPlurTabTwinkle() {
+    const tab = document.getElementById('stats-plur-tab');
+    if (!tab) return;
+    tab.querySelector('.gk-twinkle')?.remove();
+    if (_guidance && _guidance.zones.plur_tab !== 'opened') tab.insertAdjacentHTML('beforeend', `<span class="gk-twinkle" style="--gk-color:${GK_COLORS.stats}" aria-hidden="true"></span>`);
+  }
+
+  function statsBadgeGroups(me) {
+    const raves = myAchievedFests().length;
+    const found = Object.values(_guidance?.realms || {}).filter(v => v === 'found' || v === 'saved').length;
+    const q = _guidance?.quests || {};
+    const tile = (name, earned, how) => ({ name, earned, how });
+    return [
+      { title: 'YOUR RAVES', color: '#39FF14', items: [1, 5, 10, 25, 50, 100].map(n => tile(n === 1 ? 'First Rave' : `${n} Raves`, raves >= n, n === 1 ? 'Log your first rave with a check-off.' : `Log ${n} raves.`)) },
+      { title: 'EXPLORER', color: GK_COLORS.stats, items: [
+        tile('Crew Founder', crews.some(c => c.isLead), 'Name your own crew.'),
+        tile('Trailblazer', found >= 3, `Find 3 of the 5 on Rave World · ${Math.min(found, 3)} of 3`),
+        tile('Cartographer', found >= 5, `Find all 5 on Rave World · ${found} of 5`),
+        tile('Crew Captain', !!q.badge_crew_captain, 'Stamp every Lead quest on your crew ticket.'),
+        tile('Settled In', !!q.badge_settled_in, 'Stamp every Get settled quest on your crew ticket.')
+      ] }
+    ];
+  }
+
+  async function renderStatsPlur() {
+    const el = document.getElementById('stats-plur-content');
+    const me = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
+    if (!el || !me) return;
+    el.innerHTML = '<div class="fest-empty" style="padding:12px 0;">Loading…</div>';
+    const [totals, tiers, eventTypes, recent] = await Promise.all([
+      loadPlurTotals(me.id), loadPlurTiers(), loadPlurEventTypes(),
+      sb.from('point_events').select('event_type, track, amount, created_at').eq('raver_id', me.id).order('created_at', { ascending: false }).limit(12)
+    ]);
+    const log = recent?.data || [];
+    const descByType = Object.fromEntries((eventTypes || []).map(e => [e.event_type, e.description]));
+    const trackRows = ['peace', 'love', 'unity', 'respect'].map(t => {
+      const total = totals?.[`${t}_points`] || 0;
+      const next = (tiers || []).filter(x => x.track === t && x.threshold > total).sort((a, b) => a.threshold - b.threshold)[0];
+      const current = (tiers || []).filter(x => x.track === t && x.threshold <= total).sort((a, b) => b.threshold - a.threshold)[0];
+      const pct = next ? Math.round(total / next.threshold * 100) : 100;
+      return `<div class="archive-link-card" style="display:flex;flex-direction:column;gap:6px;">
+        <div style="display:flex;justify-content:space-between;"><span class="archive-link-label">${PLUR_TRACK_META[t].emoji} ${GK_TRACKS[t]} · ${escHtml(current?.name || 'Newcomer')}</span><span class="archive-link-meta">${total}${next ? ` / ${next.threshold}` : ''}</span></div>
+        <div class="game-plan-progress-track"><div class="game-plan-progress-fill" style="width:${pct}%;"></div></div>
+        <div class="archive-link-meta">${next ? `${next.threshold - total} to ${escHtml(next.name)}` : 'Top tier reached'}</div>
+      </div>`;
+    }).join('');
+    const logRows = log.length ? log.map(e => `<div class="plur-ledger-row"><div class="plur-ledger-row-text"><strong style="color:var(--neon-yellow);">+${e.amount} ${GK_TRACKS[e.track] || ''}</strong> · ${escHtml(descByType[e.event_type] || e.event_type)}<div class="plur-ledger-row-ts">${relativeTime(new Date(e.created_at).getTime())}</div></div></div>`).join('')
+      : '<div class="fest-empty">No points yet — go make some memories 🎪</div>';
+    // Ways to earn next: event types you haven't earned recently, emptiest tracks first.
+    const earned = new Set(log.map(e => e.event_type));
+    const byTotal = t => totals?.[`${t}_points`] || 0;
+    const next = (eventTypes || []).filter(e => !earned.has(e.event_type))
+      .sort((a, b) => byTotal(a.track) - byTotal(b.track) || b.points - a.points).slice(0, 4)
+      .map(e => `<div class="plur-ledger-row"><div class="plur-ledger-row-text"><strong style="color:var(--neon-yellow);">+${e.points} ${GK_TRACKS[e.track]}</strong> · ${escHtml(e.description)}</div></div>`).join('');
+    const badges = statsBadgeGroups(me).map(g => `
+      <div class="gk-eyebrow" style="--gk-color:${g.color};margin:16px 0 8px;">${g.title}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;">${g.items.map(b => `
+        <div class="archive-link-card" title="${escHtml(b.how)}" style="text-align:center;opacity:${b.earned ? 1 : 0.55};${b.earned ? `border-color:${g.color};box-shadow:0 0 12px ${g.color}55;` : 'border-style:dashed;'}">
+          <div style="font-size:1.4rem;">${b.earned ? '🏅' : '🔒'}</div>
+          <div class="archive-link-label" style="font-size:0.78rem;">${escHtml(b.name)}</div>
+          ${b.earned ? '' : `<div class="archive-link-meta" style="font-size:0.66rem;">${escHtml(b.how)}</div>`}
+        </div>`).join('')}</div>`).join('');
+    el.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:8px;">${trackRows}</div>
+      <div class="gk-eyebrow" style="--gk-color:var(--neon-yellow);margin:18px 0 6px;">EARN LOG</div>
+      <div class="plur-ledger-list" style="display:flex;">${logRows}</div>
+      ${next ? `<div class="gk-eyebrow" style="--gk-color:var(--neon-yellow);margin:18px 0 6px;">WAYS TO EARN NEXT</div><div class="plur-ledger-list" style="display:flex;">${next}</div>` : ''}
+      ${badges}
+      <button type="button" class="btn btn-ghost" style="width:100%;margin-top:16px;" onclick="openPlurInfo('${escJsAttr(me.id)}')">✨ How PLUR works</button>`;
   }
 
   function selectCrewForStats(id) {
@@ -34658,6 +34743,7 @@
 
   function loadStatsPage() {
     maybeShowNPSPrompt();
+    renderPlurTabTwinkle();
     const you = squad.find(r => r.isYou);
     if (!you) {
       document.getElementById('stats-content').innerHTML = `
