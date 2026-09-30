@@ -4620,6 +4620,7 @@
     display: flex; align-items: center; justify-content: center;
     transition: transform 0.25s, background 0.2s;
   }
+  .huddle-beacon-fab-inline.gk-pulse { animation: huddleBeaconPulse 1.8s ease-in-out infinite; box-shadow: 0 0 0 2px rgba(255,230,0,0.45); }
   .huddle-beacon-fab-inline:hover { transform: scale(1.09); background: rgba(255,230,0,0.2); }
 
   /* ── Crew-detail tile preview (launches the full-screen chat) ── */
@@ -18545,10 +18546,89 @@
     if (!target && _huddleActiveRoomId) target = huddleRooms.find(r => r.id === _huddleActiveRoomId);
     if (!target) target = huddleRooms.find(r => r.room_key === 'main') || huddleRooms[0];
     await switchHuddleRoom(target.id);
-    queueCoachmark('beacon', {
-      targetEl: document.querySelector('.huddle-beacon-fab-inline'),
-      title: '📡 Beacon your crew',
-      body: "Send an urgent ping that cuts through the chat when it actually matters — lost at the fest, meetup change, whatever."
+    huddleGuidanceOnOpen(crewId);
+  }
+
+  // ── 2.0 Huddle guidance ──
+  // The Huddle's intro (room-aware TRY), the Beacon intro with a practice
+  // Beacon that only renders locally (never sendBeacon), one-time hints, and
+  // the first-visit sheet for a rave's own room. Opening the Huddle is the
+  // user's own tap, so the intro is never budgeted.
+  let _huddlePracticeBeacon = false;
+
+  function huddleGuidanceOnOpen(crewId) {
+    if (!_guidance || _guidance.zones.huddle === 'opened') return;
+    setZoneState('huddle', 'opened');
+    if (_guidance.help_level !== 'guide') return;
+    const crew = getCrew(crewId);
+    const others = crew ? crewSquad(crew).filter(p => !p.isYou && p.claimedBy) : [];
+    const tryIt = !crew?.isLead ? 'Say hi so the fam knows you made it in.'
+      : others.length ? `Welcome ${displayName(others[0]).split(' ')[0]} in — they claimed their spot.`
+      : 'Your crew shows up here once they claim their spots.';
+    openZoneSheet({
+      color: ZONE_COLORS.huddle, title: 'Huddle',
+      body: 'The crew group chat — one main room, plus a room for every rave the fam hits together.',
+      tryIt, onGo: () => document.getElementById('huddle-text-input')?.focus(),
+      onLater: () => setZoneState('huddle', 'saved')
+    });
+  }
+
+  function onHuddleBeaconTap() {
+    if (!_guidance || _guidance.zones.beacon === 'opened') { toggleHuddleBeaconForm(); return; }
+    setZoneState('beacon', 'opened');
+    document.querySelector('.huddle-beacon-fab-inline')?.classList.remove('gk-pulse');
+    openZoneSheet({
+      color: GK_COLORS.beacon, title: 'Beacon',
+      body: 'For when it really matters — lost in the crowd, meetup moved, someone needs help. Pings the whole crew and pins for 2 hours.',
+      tryIt: 'Send a practice Beacon. Only you see it — nobody gets pinged.',
+      cta: 'Send a practice Beacon', later: 'Got it', isIntro: false,
+      onGo: () => { _huddlePracticeBeacon = true; renderHuddleUI(); }
+    });
+  }
+
+  function huddlePracticeBeaconHTML() {
+    return `
+      <div class="huddle-beacon-banner" style="border-color:var(--muted);">
+        <span class="huddle-beacon-icon">📣</span>
+        <div class="huddle-beacon-body">
+          <div class="huddle-beacon-from" style="color:var(--muted);">PRACTICE BEACON · ONLY YOU SEE THIS</div>
+          <div class="huddle-beacon-text">Meet at the totem by the main stage</div>
+          <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;">A real one pings the crew and pins for 2h.</div>
+        </div>
+        <button type="button" class="btn btn-ghost" style="padding:6px 12px;font-size:0.74rem;" onclick="clearPracticeBeacon()">Clear</button>
+      </div>`;
+  }
+  function clearPracticeBeacon() {
+    _huddlePracticeBeacon = false;
+    renderHuddleUI();
+    showToast('Practice cleared · tap 📡 anytime');
+  }
+
+  function showHuddleHint(key, text) {
+    const slot = document.getElementById('hd-hint-slot');
+    const html = slot ? oneTimeHintHTML(key, text, ZONE_COLORS.huddle) : '';
+    if (!html) return;
+    slot.innerHTML = `<div style="padding:4px 12px;">${html}</div>`;
+    setTimeout(() => { if (slot.innerHTML.includes(text)) slot.innerHTML = ''; }, 7000);
+  }
+
+  // Per room switch: the reply hint in a room with crewmates' messages, or
+  // the first-visit sheet for a rave's own room.
+  function huddleRoomGuidance(roomId) {
+    const room = huddleRooms.find(r => r.id === roomId);
+    if (!_guidance || room?.kind !== 'festival') {
+      if (_guidance && huddleMessages.some(m => m.sender_id !== currentUser?.id)) {
+        showHuddleHint('huddle_reply', 'Tap ⋯ on any message to reply.');
+      }
+      return;
+    }
+    if (_guidance.zones.rave_room === 'opened') return;
+    setZoneState('rave_room', 'opened');
+    if (_guidance.help_level !== 'guide') return;
+    openZoneSheet({
+      color: GK_COLORS.beacon, eyebrow: 'NEW ROOM', title: `${huddleRoomLabel(room)} has its own room`,
+      body: 'Everything for this rave lives here so it doesn’t get buried. Main Huddle stays for the rest.',
+      tryIt: 'Say what time you’re heading out.', cta: 'Got it', later: '', isIntro: false
     });
   }
 
@@ -18651,6 +18731,7 @@
     subscribeHuddleRealtime(roomId);
     trackHuddlePresence(roomId);
     markHuddleRoomRead(roomId, _huddleActiveCrewId);
+    huddleRoomGuidance(roomId);
   }
 
   // Pages backwards from the oldest loaded message, holding the viewport
@@ -18803,10 +18884,11 @@
             <button type="button" class="btn btn-primary" onclick="submitHuddleLinkShare()">🔗 Share Link</button>
           </div>
         </div>
+        <div id="hd-hint-slot"></div>
         <div id="hd-replybar-slot"></div>
         <form class="hd-composer" onsubmit="event.preventDefault(); submitHuddleTextMessage();">
           <div class="hd-composer-left">
-            <button type="button" class="hd-plus" title="More" onclick="toggleHuddleQuickMenu()">＋</button>
+            <button type="button" class="hd-plus" title="More" onclick="toggleHuddleQuickMenu(); showHuddleHint('huddle_plus', 'Photos, voice notes, meetup pins and links all live behind +.')">＋</button>
             <div id="hd-quick-menu" class="hd-quick-menu" style="display:none;">
               <button type="button" class="hd-quick-row" onclick="toggleHuddleQuickMenu(); document.getElementById('huddle-photo-input').click()">📸 Photo</button>
               <button type="button" class="hd-quick-row" onclick="toggleHuddleQuickMenu(); startHuddleVoiceRecording()">🎤 Voice note</button>
@@ -18891,7 +18973,7 @@
       </div>
       <div class="hd-presence">${huddlePresenceAvatarsHTML()}</div>
       <button type="button" class="hd-search-btn" title="Search the Huddle" aria-label="Search messages" onclick="openHuddleSearch()">🔍</button>
-      <button type="button" class="huddle-beacon-fab-inline" title="Send an urgent Beacon to your crew" onclick="toggleHuddleBeaconForm()">📡</button>`;
+      <button type="button" class="huddle-beacon-fab-inline${_guidance && _guidance.zones.beacon !== 'opened' ? ' gk-pulse' : ''}" title="Send an urgent Beacon to your crew" onclick="onHuddleBeaconTap()">📡</button>`;
     _rebindCoachmarkTarget('.huddle-beacon-fab-inline');
     if (menuWasOpen) {
       const menu = document.getElementById('huddle-room-menu');
@@ -18912,6 +18994,7 @@
   }
 
   function huddleBeaconBannerHTML() {
+    if (_huddlePracticeBeacon) return huddlePracticeBeaconHTML();
     if (!_huddleActiveBeacon) return '';
     const b = _huddleActiveBeacon;
     return `
@@ -19681,6 +19764,8 @@
     else if (!huddleMessages.some(m => m.id === data.id)) huddleMessages.push(data);
     renderHuddleUI();
     if (fields.mentions && fields.mentions.length) notifyHuddleMentions(data, fields.mentions);
+    markCrewQuest('hi', _huddleActiveCrewId);
+    showHuddleHint('huddle_first_message', 'You’re in the chat — tell the fam what you’re most hyped for.');
   }
 
   // In-app notification for each mentioned crewmate. Web Push is handled
@@ -19773,6 +19858,7 @@
 
   // ── Composer input: autogrow + @ autocomplete + typing broadcast ──
   function handleHuddleComposerInput(el) {
+    if (el.value.endsWith('@')) showHuddleHint('huddle_mention', '@ pings just that person — handy when it’s busy.');
     autoGrowHuddleTextarea(el);
     broadcastHuddleTyping();
     updateHuddleMentionMenu(el);
