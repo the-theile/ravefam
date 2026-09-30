@@ -3288,7 +3288,7 @@
   .gk-tip-title { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.9rem; color: var(--text); }
   .gk-tip-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
   .gk-tip-actions button { height: 30px; padding: 0 12px; border-radius: 100px; font-size: 0.76rem; cursor: pointer; border: 0; background: none; color: var(--muted); }
-  .gk-tip-actions button.done { background: var(--text); color: var(--bg); font-family: 'Outfit', sans-serif; font-weight: 800; }
+  .gk-tip-actions button.done { background: var(--text); color: var(--surface2); font-family: 'Outfit', sans-serif; font-weight: 800; }
   .gk-tip-line { font-size: 0.78rem; color: var(--muted); margin-bottom: 8px; }
   .gk-info { display: inline-flex; width: 18px; height: 18px; border-radius: 50%; border: 1px solid currentColor; font-size: 0.66rem; align-items: center; justify-content: center; color: var(--muted); cursor: pointer; margin-left: 6px; vertical-align: middle; background: none; padding: 0; }
 
@@ -20526,6 +20526,7 @@
     if ('themeText' in fields) patch.theme_text = fields.themeText;
     if ('meetupAt' in fields) patch.meetup_at = fields.meetupAt;
     if ('meetupLocation' in fields) patch.meetup_location = fields.meetupLocation;
+    if ('templateKey' in fields) patch.template_key = fields.templateKey;
     const { data, error } = await sb.from('game_plans').update(patch).eq('id', gamePlanId).select().single();
     if (error) { showToast('⚠️ Could not save — try again'); return null; }
     const idx = gamePlans.findIndex(gp => gp.id === gamePlanId);
@@ -20600,10 +20601,13 @@
   }
 
   // -- Checklist --
-  async function dbAddGamePlanTask(gamePlanId, crewId, text, assigneeRaverId) {
+  // fromTemplate items skip the per-item PLUR reward server-side (the
+  // template itself pays once — see game_plans.template_key).
+  async function dbAddGamePlanTask(gamePlanId, crewId, text, assigneeRaverId, { fromTemplate = false, phase = null } = {}) {
     const { data, error } = await sb.from('game_plan_items').insert({
       game_plan_id: gamePlanId, crew_id: crewId, kind: 'task', added_by: currentUser.id,
-      text: text.trim(), assignee_raver_id: assigneeRaverId || null, is_done: false
+      text: text.trim(), assignee_raver_id: assigneeRaverId || null, is_done: false,
+      ...(fromTemplate ? { from_template: true } : {}), ...(phase ? { phase } : {})
     }).select().single();
     if (error) { showToast('⚠️ Could not add task — try again'); return null; }
     gamePlanItems.push(data);
@@ -20939,6 +20943,75 @@
 
   const GAME_PLAN_TASK_STARTER_PACK = ['Water', 'Sunscreen', 'Glowsticks', 'Earplugs', 'Portable charger', 'ID / wristband', 'Snacks'];
 
+  // ── 2.0: templates + the Lead's plan check ──
+  // A new plan starts from a template (tasks pre-filled by phase) instead of
+  // an empty list. Applying one sets game_plans.template_key, which pays
+  // +5 Love once per plan server-side; its items are from_template so they
+  // don't also pay per item.
+  const GAME_PLAN_TEMPLATES = {
+    camping: { name: 'Camping weekend', sub: 'Multi-day, tents, lots of gear', tasks: [
+      ['Tents + tarps', 'before_we_leave'], ['Water packs', 'before_we_leave'], ['Cooler + ice', 'before_we_leave'], ['Camp chairs', 'before_we_leave'],
+      ['Charge power banks', 'night_before'], ['Download the lineup offline', 'night_before'], ['Pack the first-aid kit', 'night_before'],
+      ['Pick a meetup spot', 'at_the_rave'], ['Set a check-in time', 'at_the_rave']] },
+    club: { name: 'Club night', sub: 'One night, travel light', tasks: [
+      ['Book the ride home', 'before_we_leave'], ['Tickets on everyone’s phone', 'before_we_leave'],
+      ['Charge power banks', 'night_before'], ['Earplugs', 'night_before'],
+      ['Pick a meetup spot', 'at_the_rave'], ['Coat check plan', 'at_the_rave']] },
+    day: { name: 'Day festival', sub: 'Sun, stages, long day', tasks: [
+      ['Sunscreen', 'before_we_leave'], ['Water packs', 'before_we_leave'], ['Hats + shades', 'before_we_leave'],
+      ['Charge power banks', 'night_before'], ['Download the lineup offline', 'night_before'],
+      ['Pick a meetup spot', 'at_the_rave'], ['Set a check-in time', 'at_the_rave']] }
+  };
+
+  function gamePlanTemplatePickerHTML(crewId) {
+    const cid = escJsAttr(crewId);
+    return `<div class="archive-empty" style="text-align:left;">
+      <div class="gk-eyebrow" style="--gk-color:var(--banner-color,#D6284B)">START FROM A TEMPLATE</div>
+      <div class="gk-body" style="margin-top:4px;">Pre-fills tasks by phase. Edit anything.</div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px;">
+        ${Object.entries(GAME_PLAN_TEMPLATES).map(([key, t]) => `
+          <button type="button" class="archive-link-card" style="text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;" onclick="applyGamePlanTemplate('${cid}','${key}')">
+            <span class="archive-link-label">${escHtml(t.name)}</span><span class="archive-link-meta">${escHtml(t.sub)}</span>
+          </button>`).join('')}
+        <button type="button" class="btn btn-ghost" onclick="document.getElementById('game-plan-task-input')?.focus()">Start blank</button>
+      </div>
+    </div>`;
+  }
+
+  async function applyGamePlanTemplate(crewId, key) {
+    const t = GAME_PLAN_TEMPLATES[key];
+    const gp = gamePlans.find(g => String(g.crew_id) === String(crewId) && String(g.festival_id) === String(_gamePlanActiveFestivalId));
+    if (!t || !gp) return;
+    const firstTemplate = !gp.template_key;
+    await dbUpdateGamePlanHeader(gp.id, { templateKey: key });
+    await Promise.all(t.tasks.map(([text, phase]) => dbAddGamePlanTask(gp.id, crewId, text, null, { fromTemplate: true, phase })));
+    rerenderGamePlanChecklist(crewId);
+    postGamePlanActivity(crewId, _gamePlanActiveFestivalId, `📋 The Rave Plan is up (${t.name}) — claim what you'll handle`);
+    showToast(firstTemplate ? '+5 Love · plan ready, crew pinged to claim tasks' : 'Plan ready · crew pinged to claim tasks');
+  }
+
+  // Lead-only: unclaimed tasks and open seats in one card, one nudge.
+  function gamePlanCheckHTML(crewId) {
+    const openTasks = gamePlanItems.filter(it => it.kind === 'task' && !it.is_done && !it.assignee_raver_id).length;
+    const riders = gamePlanItems.filter(it => it.kind === 'carpool_rider');
+    const openSeats = gamePlanItems.filter(it => it.kind === 'carpool_driver')
+      .reduce((n, d) => n + Math.max(0, (d.seats || 0) - riders.filter(r => r.driver_item_id === d.id).length), 0);
+    if (!openTasks && !openSeats) return '';
+    const parts = [openTasks ? `${openTasks} task${openTasks === 1 ? '' : 's'} unclaimed` : '', openSeats ? `${openSeats} seat${openSeats === 1 ? '' : 's'} open` : ''].filter(Boolean);
+    return `<div class="archive-link-card" style="border:1.5px solid var(--banner-color,#D6284B);display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+      <span style="flex-grow:1;display:flex;flex-direction:column;">
+        <span class="gk-eyebrow" style="--gk-color:var(--banner-color,#D6284B)">PLAN CHECK · YOU’RE THE LEAD</span>
+        <span class="archive-link-label">${parts.join(' · ')}</span>
+      </span>
+      <button type="button" class="btn btn-primary" style="padding:8px 12px;font-size:0.76rem;" onclick="nudgeCrewPlanCheck('${escJsAttr(crewId)}', '${escJsAttr(parts.join(' and '))}')">Nudge the crew</button>
+    </div>`;
+  }
+  function nudgeCrewPlanCheck(crewId, summary) {
+    const fest = festivals.find(f => String(f.id) === String(_gamePlanActiveFestivalId));
+    postGamePlanActivity(crewId, _gamePlanActiveFestivalId, `📋 Plan check for ${fest?.name || 'the rave'}: ${summary}`);
+    showToast(`Nudge sent: ${summary}`);
+  }
+
   function buildGamePlanChecklistHTML(crewId) {
     const crew = getCrew(crewId);
     const uid = currentUser?.id;
@@ -20981,8 +21054,12 @@
     }).join('');
 
     const emptyState = tasks.length === 0
-      ? `<div class="archive-empty es-block"><div class="es-icon">✅</div><div class="es-headline">No tasks yet</div><div class="es-sub">Add what needs to get done before this rave — tickets, packing, ride share, whatever.</div></div>`
+      ? (uid ? gamePlanTemplatePickerHTML(crewId) : `<div class="archive-empty es-block"><div class="es-icon">✅</div><div class="es-headline">No tasks yet</div><div class="es-sub">Add what needs to get done before this rave — tickets, packing, ride share, whatever.</div></div>`)
       : '';
+    const isLead = !!crew?.isLead;
+    const tipHTML = tasks.length ? fadingTipHTML(isLead ? 'raveplan_tasks_lead' : 'raveplan_tasks', isLead
+      ? { title: 'Let the crew claim tasks', body: 'Open tasks get an “I got this” button. Nudge the crew when things sit unclaimed.', realm: 'crews' }
+      : { title: 'Claim what you’ll handle', body: 'Tap “I got this” on any open task. The crew sees it’s covered.', realm: 'crews' }) : '';
 
     const progressHTML = tasks.length ? `
       <div class="game-plan-progress-wrap">
@@ -20993,6 +21070,8 @@
     return `
       <div class="form-group">
         <div class="section-banner"><span class="banner-inner">✅ Checklist <span class="banner-subtitle">· get it done before you go</span></span></div>
+        ${isLead ? gamePlanCheckHTML(crewId) : ''}
+        ${tipHTML}
         ${progressHTML}
         ${uid ? `
         <div class="archive-add-area">
@@ -21002,7 +21081,7 @@
               onkeydown="if(event.key==='Enter'){event.preventDefault();addGamePlanTask('${escJsAttr(crewId)}');}">
             <button class="btn btn-primary archive-drop-btn" onclick="addGamePlanTask('${escJsAttr(crewId)}')">Add</button>
           </div>
-          <button class="btn btn-ghost" onclick="addGamePlanStarterPack('${escJsAttr(crewId)}')">✨ Add essentials (water, sunscreen, glowsticks…)</button>
+          ${tasks.length ? `<button class="btn btn-ghost" onclick="addGamePlanStarterPack('${escJsAttr(crewId)}')">✨ Add essentials (water, sunscreen, glowsticks…)</button>` : ''}
         </div>` : ''}
         <div class="archive-links-list">
           ${emptyState}
@@ -21047,6 +21126,7 @@
     const myRaver = squad.find(r => r.isYou);
     if (!myRaver) return;
     const data = await dbClaimGamePlanTask(itemId, myRaver.id);
+    if (data) markCrewQuest('task', _gamePlanActiveCrewId);
     rerenderGamePlanChecklist(_gamePlanActiveCrewId);
     if (data) postGamePlanActivity(_gamePlanActiveCrewId, _gamePlanActiveFestivalId, `🙋 ${displayName(myRaver).split(' ')[0]} claimed "${data.text}"`);
   }
@@ -21155,7 +21235,7 @@
     return `
       <div class="form-group">
         <div class="section-banner"><span class="banner-inner">🎭 Roles <span class="banner-subtitle">· who's doing what</span></span></div>
-        <div style="font-size:0.72rem;color:var(--muted);margin:-8px 0 14px;">🙋 Tap an open slot to claim it — tap your own claim again to back out</div>
+        <div style="font-size:0.72rem;color:var(--muted);margin:-8px 0 14px;">🙋 Tap an open slot to claim it — tap your own claim again to back out · 🚗 Driver / DD and 🩹 First Aid earn +15 Respect</div>
         ${buildGamePlanCastCardHTML(crewId)}
         <p class="section-desc">One person can hold multiple roles, and a role can be shared by more than one person.</p>
         ${uid ? `
