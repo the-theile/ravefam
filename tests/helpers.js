@@ -12,6 +12,27 @@ const SUPABASE_URL = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
 
 const TEST_UID = 'test-user-id';
 
+/**
+ * A raver who has already been through the 2.0 guidance: every tab found,
+ * every intro and one-time hint seen, the 2.0 welcome done, past week one.
+ * The default for makeSession so specs about other features aren't
+ * interrupted by first-visit sheets. Pass `user_metadata: { guidance: null }`
+ * for a fresh 2.0 raver (see guidance.spec.js).
+ */
+const SETTLED_GUIDANCE = {
+  v: 2, first_seen: Date.parse('2024-01-01T00:00:00Z'), help_level: 'guide',
+  realms: { crews: 'found', raves: 'found', ravers: 'found', stats: 'found', village: 'found' },
+  zones: Object.fromEntries(['huddle', 'raveplan', 'pins', 'dreamboard', 'poll', 'jams', 'archive', 'history',
+    'beacon', 'rave_room', 'venues', 'plur_tab'].map(k => [k, 'opened'])),
+  realm_tips_off: {},
+  tips: { raveplan_tasks: { v: 9, s: 'icon' }, raveplan_tasks_lead: { v: 9, s: 'icon' } },
+  hints: Object.fromEntries(['huddle_plus', 'huddle_mention', 'huddle_first_message', 'huddle_reply',
+    'how_we_met', 'dashed_cards'].map(k => [k, true])),
+  setup_items: {},
+  quests: { welcome_2_0: true, first_rsvp: true, first_vendor_save: true, first_vendor_review: true },
+  skips: 0, fewer_tips_offered: true, rave_mode: null, found_during_rave: []
+};
+
 /** Build a fake authenticated session (onboarded → no wizard). */
 function makeSession(over = {}) {
   return {
@@ -19,7 +40,7 @@ function makeSession(over = {}) {
     user: {
       id: TEST_UID,
       email: over.email || 'tester@ravefam.test',
-      user_metadata: { onboarded: true, ...(over.user_metadata || {}) },
+      user_metadata: { onboarded: true, guidance: SETTLED_GUIDANCE, ...(over.user_metadata || {}) },
       ...over.user,
     },
   };
@@ -548,5 +569,5 @@ function collectPageErrors(page) {
 
 module.exports = {
   installSupabaseStub, collectPageErrors, bootAuthedApp,
-  makeSession, seedData, SUPABASE_URL, TEST_UID,
+  makeSession, seedData, SUPABASE_URL, TEST_UID, SETTLED_GUIDANCE,
 };

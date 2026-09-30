@@ -51,7 +51,8 @@ test('saves picks per upcoming rave, starting the one they came from as Interest
   await expect(sheet.locator('.ph-fav')).toContainText('Favorite artists');
 
   await sheet.locator('#ph-save').click();
-  await expect(sheet.locator('#picks-handoff-title')).toHaveText('Who are you rolling with to EDC Orlando 2099? 🎟️');
+  // Already in a crew → "Your sets are in" with Share with the crew (2.0).
+  await expect(sheet.locator('#picks-handoff-title')).toHaveText('3 sets picked for EDC Orlando 2099 📋');
 
   const s = await page.evaluate(() => window.__store);
   expect(s.raver_festival_interest.some(r => r.raver_id === 'r-you' && r.festival_id === 'f3')).toBe(true);
@@ -66,6 +67,21 @@ test('saves picks per upcoming rave, starting the one they came from as Interest
   expect(left['old-rave-2001']).toBeDefined();
   expect(await page.evaluate(() => localStorage.getItem('pendingPicksHandoff'))).toBeNull();
 
+  await expect(sheet.getByRole('link', { name: /Back to the lineup/ })).toHaveAttribute('href', '/lineup-explorer/edc-orlando-2099.html');
+  await sheet.getByRole('button', { name: 'Share with the crew' }).click();
+  await expect(page.locator('#picks-handoff-overlay')).not.toHaveClass(/open/);
+  expect(errors).toEqual([]);
+});
+
+test('a raver with no crew yet is asked who they are rolling with instead', async ({ page }) => {
+  await seedPicks(page, PICKS);
+  const d = data();
+  d.crews = []; d.crew_members = [];
+  const errors = await bootAuthedApp(page, { data: d });
+  const sheet = page.locator('#picks-handoff-overlay.open');
+  await expect(sheet).toBeVisible();
+  await sheet.locator('#ph-save').click();
+  await expect(sheet.locator('#picks-handoff-title')).toHaveText('Who are you rolling with to EDC Orlando 2099? 🎟️');
   await sheet.getByRole('button', { name: 'Solo for now' }).click();
   await expect(sheet.locator('#picks-handoff-title')).toHaveText("You're locked in ✨");
   await expect(sheet.getByRole('link', { name: /Back to the lineup/ })).toHaveAttribute('href', '/lineup-explorer/edc-orlando-2099.html');
