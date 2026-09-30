@@ -11344,7 +11344,46 @@
     if (failed) showToast('⚠️ Some picks didn\'t save — they\'re still on this device');
     h.saved = saved;
     h.crewFest = savedFests.find(it => it.slug === h.fromSlug) || savedFests[0];
-    renderPicksHandoffCrew();
+    // 2.0: already in a crew → "Your sets are in" + share; otherwise the crew prompt.
+    if (crews.some(c => c.status !== 'secret')) renderPicksHandoffSetsIn(); else renderPicksHandoffCrew();
+  }
+
+  function renderPicksHandoffSetsIn() {
+    const h = _picksHandoff;
+    const festId = h.crewFest.festId;
+    document.getElementById('picks-handoff-content').innerHTML = `
+      <div style="text-align:center;padding:4px 0 16px;">
+        <div class="gk-eyebrow" style="--gk-color:${GK_COLORS.raves}">YOUR SETS ARE IN</div>
+        <div class="modal-title" id="picks-handoff-title" style="margin:4px 0;">${h.saved} ${h.saved === 1 ? 'set' : 'sets'} picked for ${escHtml(h.crewFest.name)} 📋</div>
+        <p style="font-size:0.8rem;color:var(--muted);">Show the fam where you’ll be so nobody’s lost at the stage split.</p>
+        <div id="ph-plur"></div>
+      </div>
+      <div class="ph-stack">
+        <button class="btn btn-primary" onclick="sharePicksWithCrew('${escJsAttr(festId)}', ${h.saved})">Share with the crew</button>
+        ${h.back ? `<a class="btn btn-ghost" style="text-align:center;text-decoration:none;" href="${escHtml(h.back)}">🎧 Back to the lineup</a>` : ''}
+        <button class="btn btn-ghost" style="color:var(--muted);" onclick="closePicksHandoff()">Later</button>
+      </div>`;
+    // sets_synced (+10 Love) is paid by a trigger on the picks insert; show it once it has landed.
+    setTimeout(async () => {
+      const { data } = await sb.from('point_events').select('amount').eq('event_type', 'sets_synced').eq('source_id', festId).limit(1);
+      const el = document.getElementById('ph-plur');
+      if (el && data?.length) el.innerHTML = gkPlurLine([{ track: 'love', amount: data[0].amount, why: 'sets synced' }]);
+    }, 1200);
+  }
+
+  // Posts to every crew with a crewmate going to this rave, or your first
+  // non-Secret crew when nobody's going yet.
+  function sharePicksWithCrew(festId, count) {
+    const fest = getFestival(festId);
+    const me = squad.find(r => r.isYou);
+    const mine = crewmatesGoing(festId);
+    const targets = mine.filter(m => m.going.length).map(m => m.crew);
+    if (!targets.length && mine.length) targets.push(mine[0].crew);
+    if (!targets.length) { closePicksHandoff(); return; }
+    const who = displayName(me || {}).split(' ')[0] || 'Someone';
+    targets.forEach(c => postCrewActivity(c.id, `📋 ${who} picked ${count} ${count === 1 ? 'set' : 'sets'} for ${fest?.name || 'the rave'} — open the rave to see where they’ll be`));
+    closePicksHandoff();
+    showToast(`Shared with ${targets.map(c => c.name).join(' & ')}`);
   }
 
   function renderPicksHandoffCrew() {
@@ -28311,8 +28350,65 @@
     if (error && error.code !== '23505') { console.error('raver_postfest_checkoffs insert error', error); showToast('⚠️ Could not save — try again'); return; }
     raverPostfestCheckoffs.push({ raver_id: p.you.id, festival_id: festId });
     logAnalyticsEvent('postfest_checkoff', { raver_id: p.you.id, festival_id: festId, saw, missed, source: 'app' });
-    showToast(saw ? `📼 Logged. ${saw} ${saw === 1 ? 'set' : 'sets'} caught.` : '📼 Logged. Next time.');
     renderFestivalLineupSection(festId);
+    showMorningAfter(festId, saw);
+  }
+
+  // ── 2.0 morning after ──
+  // Milestone raves (1, 5, 10, 25, 50, 100 — the badges) get the full-screen
+  // moment: you + crew in one, the PLUR that has actually landed (the nightly
+  // sweep pays "raved together", so it may still be on the way), progress to
+  // the next tier, and anything found during Rave mode. Other raves get a
+  // light line.
+  const RAVE_MILESTONES = [1, 5, 10, 25, 50, 100];
+  const MORNING_AFTER_WHY = { festival_shared: 'raved together', festival_solo: 'raved solo', crew_bridge_rave: 'two crews, one rave', rave_milestone: 'rave milestone', crew_milestone_festivals: 'crew milestone', realm_discovered: 'found last night' };
+
+  async function showMorningAfter(festId, saw) {
+    const f = getFestival(festId);
+    const you = squad.find(r => r.isYou);
+    if (!f || !you) return;
+    const n = (you.festIds || []).map(getFestival).filter(x => x && festDate(x) && festDate(x) < TODAY).length;
+    const found = takeRaveModeDiscoveries();
+    const since = festDate(f).toISOString();
+    const { data } = await sb.from('point_events').select('event_type, track, amount, metadata, source_id')
+      .gte('created_at', since).in('event_type', Object.keys(MORNING_AFTER_WHY));
+    const perRave = ['festival_shared', 'festival_solo', 'crew_bridge_rave'];
+    const events = (data || []).filter(e =>
+      (e.event_type !== 'realm_discovered' || found.includes(e.metadata?.realm))
+      && (!perRave.includes(e.event_type) || String(e.source_id) === String(festId)));
+    const plur = events.map(e => ({ track: e.track, amount: e.amount, why: MORNING_AFTER_WHY[e.event_type] }));
+    const attendanceLanded = events.some(e => e.event_type.startsWith('festival_'));
+    const caught = saw ? `${saw} ${saw === 1 ? 'artist' : 'artists'} caught.` : 'Logged.';
+    if (!RAVE_MILESTONES.includes(n)) {
+      showToast(`📼 Rave #${n} logged · ${caught}${plur.length ? ` · +${plur.reduce((t, a) => t + a.amount, 0)} PLUR` : ''}`);
+      return;
+    }
+    const withCrew = crewmatesGoing(festId).find(m => m.going.length);
+    const firstTogether = withCrew && n === 1;
+    const badge = (label, color) => `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;"><div style="width:72px;height:72px;border-radius:50%;border:3px solid ${color};box-shadow:0 0 28px ${color};display:flex;align-items:center;justify-content:center;font-size:1.8rem;">🎟️</div><span style="font-family:'JetBrains Mono',monospace;font-size:0.62rem;color:var(--muted);max-width:90px;text-align:center;">${label}</span></div>`;
+    const visual = `<div style="display:flex;gap:18px;justify-content:center;">${badge(n === 1 ? 'FIRST RAVE (YOU)' : `${n} RAVES (YOU)`, '#39FF14')}${firstTogether ? badge('FIRST RAVE TOGETHER', '#FF2D78') : ''}</div>`;
+    const tierLine = await nextTierLineHTML(you.id, plur);
+    showMoment({
+      size: 'big', color: '#39FF14', eyebrow: `RAVE #${n} LOGGED`,
+      title: firstTogether ? `Your first one — and ${withCrew.crew.name}’s too` : (n === 1 ? 'Your first one' : `${n} raves deep`),
+      body: `${caught} Your radar just got ${n === 1 ? 'its first pin' : 'another pin'}.`,
+      visualHTML: visual, plur,
+      extraHTML: `${found.length ? `<div class="gk-body">You found the ${found.map(r => REALM_NAMES[r]).join(' & ')} last night.</div>` : ''}${attendanceLanded ? '' : '<div class="gk-body" style="font-size:0.78rem;">More PLUR on the way once tonight’s rave is tallied.</div>'}${tierLine}`,
+      cta: 'See my Rave Life', onCta: () => { switchTab('stats'); loadStatsPage(); }
+    });
+  }
+
+  // "Love 50 / 100 · 50 to Love Bug" for the track tonight's PLUR moved most.
+  async function nextTierLineHTML(raverId, plur) {
+    if (!plur.length) return '';
+    const byTrack = {};
+    plur.forEach(a => { byTrack[a.track] = (byTrack[a.track] || 0) + a.amount; });
+    const track = Object.keys(byTrack).sort((a, b) => byTrack[b] - byTrack[a])[0];
+    const [totals, tiers] = await Promise.all([loadPlurTotals(raverId), loadPlurTiers()]);
+    const total = totals?.[`${track}_points`] || 0;
+    const next = (tiers || []).filter(t => t.track === track && t.threshold > total).sort((a, b) => a.threshold - b.threshold)[0];
+    if (!next) return '';
+    return `<div style="margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:0.72rem;color:var(--muted);">${GK_TRACKS[track]} ${total} / ${next.threshold} · ${next.threshold - total} to ${escHtml(next.name)}</div>`;
   }
 
   function lineupArtistSearchInput(festId, q) {
