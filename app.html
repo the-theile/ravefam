@@ -9639,7 +9639,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.0.0';
+  const APP_VERSION = '2.1.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -10151,6 +10151,37 @@
     return pendingClaim ? `${base}?claim=${encodeURIComponent(pendingClaim)}`
          : pendingJoin  ? `${base}?join=${encodeURIComponent(pendingJoin)}`
          : base;
+  }
+
+  // ===== NATIVE APP (Capacitor iOS shell) =====
+  // The iOS app loads this page from myravefam.com. When a Universal Link
+  // (magic link, crew invite, claim, /rave/…) opens the app, iOS hands the URL
+  // to the native side, so we navigate the webview to it here. The launch URL
+  // is remembered per session so Supabase's URL cleanup can't cause a reload loop.
+  const IS_NATIVE_APP = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+
+  function openNativeAppUrl(url) {
+    try {
+      const target = new URL(url);
+      if (target.host !== window.location.host) return;
+      if (target.href === window.location.href) return;
+      window.location.href = target.href;
+    } catch (e) {
+      console.error('native app: bad app URL', url, e);
+    }
+  }
+
+  if (IS_NATIVE_APP && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+    const NativeApp = window.Capacitor.Plugins.App;
+    NativeApp.addListener('appUrlOpen', (event) => openNativeAppUrl(event.url));
+    NativeApp.getLaunchUrl().then((launch) => {
+      if (!launch || !launch.url) return;
+      let handled = null;
+      try { handled = sessionStorage.getItem('nativeLaunchUrl'); } catch (e) {}
+      if (handled === launch.url) return;
+      try { sessionStorage.setItem('nativeLaunchUrl', launch.url); } catch (e) {}
+      openNativeAppUrl(launch.url);
+    }).catch((e) => console.error('native app: getLaunchUrl failed', e));
   }
 
   // ===== CAPTCHA (Cloudflare Turnstile) =====
