@@ -11432,9 +11432,11 @@
   async function processPendingCrewJoin() {
     const token = sessionStorage.getItem('pendingCrewJoin');
     if (!token || !currentUser) return;
-    sessionStorage.removeItem('pendingCrewJoin');
     const { data, error } = await sb.rpc('get_crew_by_invite_token', { p_token: token });
-    if (error || !data) { showToast('⚠️ Could not load crew invite.'); return; }
+    // Keep the token through a network blip so the next launch retries it;
+    // every answer the server does give is final, so clear it after that.
+    if (error || !data) { showToast('⚠️ Could not load crew invite — we\'ll try again next time you open the app.'); return; }
+    sessionStorage.removeItem('pendingCrewJoin');
     if (data.error === 'invalid_token')    { showToast('⚠️ This invite link is no longer valid.'); return; }
     if (data.error === 'not_recruiting')   { showToast(`⚠️ ${data.crew_name || 'This crew'} isn't currently recruiting.`); return; }
     showCrewJoinModal(token, data);
@@ -11693,7 +11695,18 @@
   function handleRawScan(rawValue) {
     if (_scanHandled) return;
     let token = null;
-    try { token = new URL(rawValue).searchParams.get('claim'); } catch { token = rawValue.trim(); }
+    let url = null;
+    try { url = new URL(rawValue); token = url.searchParams.get('claim'); } catch { token = rawValue.trim(); }
+    // A crew-wide ?join= link turned into a QR: hand it to the same flow the
+    // link itself would take instead of scanning on silently forever.
+    const joinToken = !token && url?.searchParams.get('join');
+    if (joinToken) {
+      _scanHandled = true;
+      sessionStorage.setItem('pendingCrewJoin', joinToken);
+      closeScanner();
+      if (currentUser) processPendingCrewJoin(); else showAuthScreen();
+      return;
+    }
     if (!token) { _scannerAnimFrame = requestAnimationFrame(tickScan); return; }
 
     _scanHandled = true;

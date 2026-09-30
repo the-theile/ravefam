@@ -243,3 +243,32 @@ test.describe('first-time setup after an invite at boot', () => {
     await expect.poll(() => page.evaluate(() => window.__leaderMsgs.join('|'))).toContain('Nova');
   });
 });
+
+test.describe('crew links: scanning and retry', () => {
+  test('scanning a ?join= crew-link QR while signed out raises the crew invite', async ({ page }) => {
+    const data = seedData(); // c1 recruiting, invite_token 'inv-c1'
+    await openSignedOut(page, '/app.html', data);
+    await page.evaluate(() => { openScanner(); _scanHandled = false; handleRawScan(location.origin + '/app?join=inv-c1'); });
+
+    await expect(page.locator('#scanner-overlay')).not.toHaveClass(/open/);
+    await expect(page.locator('#claim-intercept')).toHaveClass(/open/);
+    await expect(page.locator('#intercept-title')).toContainText('Bass Syndicate');
+  });
+
+  test('scanning a ?join= crew-link QR while signed in opens the join modal', async ({ page }) => {
+    const data = { ...seedData(), __rpc: { get_crew_by_invite_token: CREW } };
+    await bootAuthedApp(page, { data });
+    await page.evaluate(() => { openScanner(); _scanHandled = false; handleRawScan(location.origin + '/app?join=inv-c1'); });
+    await expect(page.locator('#crew-join-overlay')).toHaveClass(/open/);
+  });
+
+  test('a network error loading a crew link keeps it for the next launch', async ({ page }) => {
+    await bootAuthedApp(page);
+    await page.evaluate(() => {
+      sessionStorage.setItem('pendingCrewJoin', 'inv-c1');
+      sb.rpc = () => Promise.resolve({ data: null, error: { message: 'Failed to fetch' } });
+      return processPendingCrewJoin();
+    });
+    expect(await page.evaluate(() => sessionStorage.getItem('pendingCrewJoin'))).toBe('inv-c1');
+  });
+});
