@@ -9756,7 +9756,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '1.77.3';
+  const APP_VERSION = '1.77.4';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -10409,10 +10409,14 @@
     showCodeScreen(email);
   }
 
+  // The cooldown only starts once the send resolves (up to CAPTCHA_WAIT_MS),
+  // so repeat taps in that window each sent a code and tripped the rate limit.
+  let _otpResendInFlight = false;
   async function doResendCode() {
-    if (!_otpEmail) return;
+    if (!_otpEmail || _otpResendInFlight) return;
     clearAuthMessages();
-    const { error } = await sendLoginCode(_otpEmail);
+    _otpResendInFlight = true;
+    const { error } = await sendLoginCode(_otpEmail).finally(() => { _otpResendInFlight = false; });
     if (error) { authError(otpErrorMessage(error)); return; }
     authSuccess('New code sent! Check your inbox (and spam, just in case).');
     startResendCooldown();
@@ -11027,8 +11031,8 @@
       sb.rpc('get_claim_preview', { p_token: pendingToken }).then(({ data }) => {
         if (data && !data.error) {
           showPreAuthIntercept(data, pendingToken);
-        } else if (data?.error === 'invalid_token') {
-          sessionStorage.removeItem('pendingClaim');
+        } else if (data?.error === 'invalid_token' || data?.error === 'already_claimed') {
+          showClaimLinkDead(data.error);
         }
       }).catch(() => {});
     } else if (pendingJoin) {
@@ -11068,6 +11072,21 @@
     if (avatarEl) { avatarEl.textContent = '🎪'; }
   }
 
+  // Same idea for a ?claim= token that can never be claimed. Both storage
+  // copies go — the localStorage backup otherwise re-seeds pendingClaim on
+  // every visit (checkClaimParam) and re-raises "You've been invited!".
+  function showClaimLinkDead(reason) {
+    sessionStorage.removeItem('pendingClaim');
+    localStorage.removeItem('pendingClaimToken');
+    showJoinNotRecruiting(null, true);
+    if (reason === 'already_claimed') {
+      document.getElementById('intercept-title').textContent = "This spot's already been claimed 🔒";
+      document.getElementById('intercept-sub').textContent =
+        'Ask your crew leader to send you a fresh invite. You can still create an account and look around.';
+    }
+    document.getElementById('claim-intercept').classList.add('open');
+  }
+
   // ===== AUTH STATE LISTENER =====
   // Fires on INITIAL_SESSION, SIGNED_IN, TOKEN_REFRESHED, SIGNED_OUT, etc.
   // Login is passwordless, so a stray PASSWORD_RECOVERY from an old reset email
@@ -11089,8 +11108,12 @@
   });
 
   // Keyboard: submit on Enter in auth forms
+  // Only from a field inside the auth card: an overlay on top (the claim-code
+  // boxes, the intercept) used to fall through to doLogin() and text/email a
+  // code to a prefilled address. Buttons and links handle their own Enter.
   document.addEventListener('keydown', e => {
-    if (e.key !== 'Enter') return;
+    if (e.key !== 'Enter' || e.isComposing) return;
+    if (e.target.tagName !== 'INPUT' || !e.target.closest('.auth-card')) return;
     const loginVisible  = document.getElementById('auth-login-form').style.display  !== 'none';
     const authOpen = !document.getElementById('auth-screen').classList.contains('hidden');
     if (!authOpen) return;
@@ -11530,6 +11553,7 @@
     if (errEl) errEl.textContent = '';
     const btn = document.getElementById('code-submit-btn');
     if (btn) btn.disabled = true;
+    runDeferredFirstTimeSetup();
   }
 
   function showScannerView(viewId) {
@@ -11776,7 +11800,8 @@
       sessionStorage.setItem('pendingClaim', token);
       const { data: preview } = await sb.rpc('get_claim_preview', { p_token: token });
       closeScanner();
-      showPreAuthIntercept(preview, token);
+      if (preview?.error === 'invalid_token' || preview?.error === 'already_claimed') showClaimLinkDead(preview.error);
+      else showPreAuthIntercept(preview, token);
       return;
     }
 
@@ -12014,6 +12039,8 @@
     if (!form) return;
     const open = form.classList.toggle('open');
     btn.textContent = open ? '✕ Cancel edit' : '✏️ Edit before claiming';
+    // Cancel means cancel — commitClaim() only applies values that differ.
+    if (!open) form.querySelectorAll('input').forEach(i => { i.value = i.defaultValue; });
   }
 
   function backToScan() {
@@ -12049,12 +12076,20 @@
     if (!token || !currentUser) return;
     if (!navigator.onLine) { showToast('📡 No connection — try again when you\'re back online'); return; }
     const btn = document.getElementById('confirm-claim-btn');
+    const btnLabel = btn?.textContent;
     if (btn) { btn.disabled = true; btn.textContent = 'Joining…'; }
 
-    // Apply any edits the user made in the review form before committing
-    const editName   = document.getElementById('claim-edit-name')?.value.trim();
-    const editHandle = document.getElementById('claim-edit-handle')?.value.trim();
-    const editMet    = document.getElementById('claim-edit-met')?.value.trim();
+    // Apply any edits the user made in the review form before committing —
+    // only fields that actually changed (defaultValue is the leader's prefill;
+    // "Cancel edit" resets to it, see toggleClaimEditForm).
+    const edited = id => {
+      const el = document.getElementById(id);
+      const v = el?.value.trim();
+      return v && v !== el.defaultValue.trim() ? v : '';
+    };
+    const editName   = edited('claim-edit-name');
+    const editHandle = edited('claim-edit-handle');
+    const editMet    = edited('claim-edit-met');
 
     const existingRaver = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
     const params = { p_token: token };
@@ -12071,7 +12106,7 @@
 
     const { data: result, error } = await sb.rpc('claim_and_merge_raver', params);
     if (error || result?.error) {
-      if (btn) { btn.disabled = false; btn.textContent = '🎉 Claim My Spot'; }
+      if (btn) { btn.disabled = false; btn.textContent = btnLabel; }
       let errType;
       if (result?.error === 'invalid_or_used_token' || result?.error === 'already_claimed') {
         errType = 'claimed';
@@ -12105,6 +12140,11 @@
       }
     }
 
+    // Null the token first, or closeScanner() reads this as declining the
+    // preview and toasts "No worries…" over the success screen. Deferred
+    // first-time setup waits for closeSuccessScreen(), after the reload.
+    _pendingClaimToken = null;
+    _firstTimeSetupDeferred = false;
     closeScanner();
     await loadAllData();
     renderSquad(); renderCrews(); renderEvents();
@@ -12282,7 +12322,7 @@
     if (crewName && titleEl) {
       titleEl.textContent = `You're invited to join ${crewName}! 🎪`;
       if (subEl) subEl.textContent =
-        `${raverName ? raverName + ' is your spot. ' : ''}Create an account or log in to claim it.`;
+        `${raverName ? raverName + "'s spot is saved for you. " : ''}Create an account or log in to claim it.`;
       if (pillEl) {
         pillEl.style.cssText = `visibility:visible;background:${crewColor}20;border:1px solid ${crewColor}44;color:${crewColor};`;
         if (dotEl) dotEl.style.background = crewColor;
@@ -12316,8 +12356,9 @@
     document.getElementById('claim-intercept').classList.remove('open');
     if (tab) {
       window._pendingAuthTab = tab;
-      // Trigger auth screen re-render to correct tab (it's already showing)
-      showAuthTab(tab);
+      // Trigger auth screen re-render to correct tab (it's already showing);
+      // a tap on Create Account / Log in goes straight to the field.
+      showAuthTab(tab, true);
     }
   }
 
@@ -12457,6 +12498,14 @@
     refreshHuddleDrawerIfOpen();
   }
 
+  // bootApp() holds first-time setup back while a claim preview / crew-join
+  // modal is up. Every way out of those runs it (runDeferredFirstTimeSetup),
+  // or a brand-new raver who joined by link never saw onboarding.
+  let _firstTimeSetupDeferred = false;
+  function runDeferredFirstTimeSetup() {
+    return _firstTimeSetupDeferred ? runFirstTimeSetup() : false;
+  }
+
   async function bootApp() {
     try {
       await loadAllData();
@@ -12497,6 +12546,8 @@
         processPendingRave();
         if (!pendingRave && !processPendingInvite()) processPendingPicks();
       }
+    } else {
+      _firstTimeSetupDeferred = true;
     }
   }
 
@@ -12506,6 +12557,7 @@
   // boot and again right after a QR claim succeeds. showOnboarding() updates an
   // existing claimed raver in place (see obStep2Next), so it's safe post-claim.
   function runFirstTimeSetup({ allowWelcome = false } = {}) {
+    _firstTimeSetupDeferred = false;
     const me = squad.find(r => r.isYou);
     // A raver record with both genres and a handle is proof onboarding already
     // happened, independent of the "onboarded" auth flag below — that flag is
@@ -26382,9 +26434,12 @@
     if (!you) setTimeout(() => document.getElementById('crew-join-name')?.focus(), 50);
   }
 
-  function closeCrewJoinModal() {
+  // runSetup=false only from a successful join, which runs setup itself once
+  // the new crew data has loaded.
+  function closeCrewJoinModal(runSetup = true) {
     document.getElementById('crew-join-overlay').classList.remove('open');
     _pendingCrewJoinToken = null;
+    if (runSetup) runDeferredFirstTimeSetup();
   }
 
   async function confirmJoinCrew() {
@@ -26413,20 +26468,29 @@
     if (data.error === 'invalid_token')   { showToast('⚠️ This invite link has expired.'); closeCrewJoinModal(); return; }
     if (data.error === 'name_required')   { showToast('⚠️ Enter your name to join.'); if (btn) { btn.disabled = false; btn.textContent = '🎉 Claim My Spot'; } return; }
     const crewName = data.crew_name || 'the crew';
-    closeCrewJoinModal();
+    const joinerName = you?.name || name;
+    closeCrewJoinModal(false);
     showToast(`🎉 You're in ${crewName}! Welcome to the tribe.`);
     const _joinCrewLink = nlCrew({ id: data.crew_id, name: crewName });
     addNotification(`🎉 You joined ${crewName}! Welcome to the tribe — the bassline drops harder with you here.`, [_joinCrewLink]);
-    if (data.leader_id) dbAddNotification(data.leader_id, data.crew_id, `🔗 Someone just joined ${crewName} via your invite link! The tribe is growing.`,
+    if (data.leader_id && data.leader_id !== currentUser?.id) dbAddNotification(data.leader_id, data.crew_id,
+      `🔗 ${joinerName || 'Someone'} just joined ${crewName} via your invite link! The tribe is growing.`,
       null, nlData([_joinCrewLink]));
     await loadAllData();
     renderSquad(); renderCrews(); renderEvents();
-    if (data.crew_id) {
-      const joinedCrew = getCrew(data.crew_id);
-      if (joinedCrew) openDetail(data.crew_id);
+    // Link opened at boot: onboarding (if due) greets them as already in the
+    // crew — same hand-off a QR claim uses — and opens it from step 3.
+    if (_firstTimeSetupDeferred) {
+      if (runFirstTimeSetup()) {
+        _pendingPostClaimCrewId = data.crew_id || null;
+        _pendingPostClaimCrewName = crewName;
+        return;
+      }
+    } else {
+      const meAfterJoin = squad.find(r => r.isYou);
+      if (meAfterJoin && !meAfterJoin.handle) setTimeout(showHandlePicker, 400);
     }
-    const meAfterJoin = squad.find(r => r.isYou);
-    if (meAfterJoin && !meAfterJoin.handle) setTimeout(showHandlePicker, 400);
+    if (data.crew_id && getCrew(data.crew_id)) openDetail(data.crew_id);
   }
 
   // Map each crew color to a vibrant 2-stop gradient
