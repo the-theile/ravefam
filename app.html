@@ -12910,6 +12910,7 @@
     { key: 'alerts', label: 'Turn on set-time alerts', where: 'in Raves' }
   ];
   let _setupHasAlerts = null;  // set_reminder_optins exists for this user; fetched once per session
+  let _reminderOptinFestIds = new Set();  // festivals this user turned 🔔 Remind me on for (Lineup Explorer)
 
   function setupItemDone(key) {
     const me = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
@@ -12934,8 +12935,9 @@
     if (!pill) return;
     if (_setupHasAlerts === null && currentUser) {
       _setupHasAlerts = false;
-      const { count } = await sb.from('set_reminder_optins').select('festival_id', { count: 'exact', head: true });
-      _setupHasAlerts = (count || 0) > 0;
+      const { data } = await sb.from('set_reminder_optins').select('festival_id');
+      _reminderOptinFestIds = new Set((data || []).map(r => String(r.festival_id)));
+      _setupHasAlerts = _reminderOptinFestIds.size > 0;
     }
     pill.style.display = setupPillVisible() ? '' : 'none';
     const n = document.getElementById('setup-pill-n');
@@ -17013,6 +17015,7 @@
     } else if (opts && opts.tab === 'gameplan') {
       // Rave Plan lives as a tile under Overview now, not its own tab —
       // open it the same way any other collapsed tile gets opened.
+      if (opts.festivalId) _gamePlanActiveFestivalId = opts.festivalId;  // openGamePlanTab prefers it when it's a live plan
       const ravePlanTile = document.querySelector('.crew-feature-tile[data-feature="raveplan"]');
       if (ravePlanTile) toggleCrewFeatureTile('raveplan', ravePlanTile);
     }
@@ -30045,6 +30048,161 @@
   // Active festival being edited (UUID-safe global, same pattern as activeDetailId)
   let activeFestId = null;
 
+  // ── 2.0 Raves guidance ──
+  // Find your sound (genres moved here from the signup wizard), the first
+  // RSVP moment with the Rave Plan as its next step (or, going solo, a one-
+  // tap "who's in?" poll), and the timeline nudge inside each rave card you're
+  // going to: lineup out → fest week → rave day (the Rave mode ask) → the
+  // morning after. Nudges are part of the card, never pop-ups.
+  let _fysGenres = new Set();
+  function openFindYourSound() {
+    const me = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
+    _fysGenres = new Set(me?.genres || []);
+    const chips = OB_GENRE_PICKS.map(g => {
+      const col = GENRE_FAMILY_COLORS[g] || '#00F5FF';
+      const on = _fysGenres.has(g);
+      return `<button type="button" class="ob-genre-chip${on ? ' ob-selected' : ''}" data-genre="${escHtml(g)}" data-col="${col}" aria-pressed="${on}" onclick="toggleFysGenre(this)"${on ? ` style="color:${col};border-color:${col};background:${hexToRgba(col, 0.14)};"` : ''}>${escHtml(g)}</button>`;
+    }).join('');
+    openZoneSheet({
+      color: GK_COLORS.raves, eyebrow: 'FIRST VISIT · SETUP', title: 'Find your sound',
+      body: 'Pick what moves you and we’ll line up raves that match your vibe.',
+      visualHTML: `<div class="ob-genre-grid" style="margin:12px 0 0;justify-content:flex-start;">${chips}</div>`,
+      cta: 'Lock in my sound',
+      onGo: () => saveFysGenres(),
+      onLater: () => { _guidance.realms.raves = 'saved'; saveGuidance(); renderRealmTwinkles(); }
+    });
+  }
+  function toggleFysGenre(el) {
+    const g = el.dataset.genre, col = el.dataset.col;
+    const on = !_fysGenres.has(g);
+    if (on) _fysGenres.add(g); else _fysGenres.delete(g);
+    el.classList.toggle('ob-selected', on);
+    el.setAttribute('aria-pressed', String(on));
+    el.style.color = on ? col : ''; el.style.borderColor = on ? col : ''; el.style.background = on ? hexToRgba(col, 0.14) : '';
+  }
+  async function saveFysGenres() {
+    _guidance.realms.raves = 'found';
+    saveGuidance();
+    renderRealmTwinkles();
+    const me = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
+    if (!me || !_fysGenres.size) return;
+    const genres = Array.from(_fysGenres);
+    const { error } = await sb.from('ravers').update({ genres, updated_at: new Date().toISOString() }).eq('id', me.id);
+    if (error) { showToast('⚠️ Could not save your sound — try again'); return; }
+    me.genres = genres;
+    renderSetupPill();
+    showToast(`🎶 Sound locked in · setup ${setupDoneCount()}/${SETUP_ITEMS.length}`);
+  }
+
+  // Your crews (not Secret) and who in them is going to this rave.
+  function crewmatesGoing(festId) {
+    const me = squad.find(r => r.isYou);
+    const goingIds = new Set(festivalGoers(festId).filter(p => !p.isYou).map(p => String(p.id)));
+    return crews.filter(c => c.status !== 'secret' && me && (c.squadIds || []).some(id => String(id) === String(me.id)))
+      .map(c => ({ crew: c, going: crewSquad(c).filter(p => goingIds.has(String(p.id))) }));
+  }
+
+  function maybeFirstRsvpMoment(fest) {
+    if (!_guidance || _guidance.quests.first_rsvp) return;
+    saveGuidance({ quests: { ..._guidance.quests, first_rsvp: true } });
+    const mine = crewmatesGoing(fest.id);
+    const withCrew = mine.find(m => m.going.length);
+    if (withCrew) {
+      const names = withCrew.going.slice(0, 2).map(p => displayName(p).split(' ')[0]).join(' & ');
+      showMoment({
+        size: 'medium', color: GK_COLORS.raves, eyebrow: 'FIRST RSVP', title: 'You’re going!',
+        body: `${names} can see it. ${withCrew.crew.name}’s Rave Plan for ${fest.name} is open — who’s bringing what, who’s driving, where everyone’s crashing.`,
+        extraHTML: '<div id="rsvp-plur"></div>',
+        cta: 'See the Rave Plan', onCta: () => openDetail(withCrew.crew.id, { tab: 'gameplan', festivalId: fest.id }),
+        secondary: 'Later'
+      });
+    } else if (mine.length) {
+      const crew = mine[0].crew;
+      showMoment({
+        size: 'medium', color: GK_COLORS.raves, eyebrow: 'FIRST RSVP', title: 'You’re going!',
+        body: `Nobody from ${crew.name} is going yet. Rally the crew — the Rave Plan opens the second someone says yes.`,
+        extraHTML: '<div id="rsvp-plur"></div>',
+        cta: 'Ask the crew who’s in', onCta: () => askCrewWhosIn(crew.id, fest.id),
+        secondary: 'Later'
+      });
+    } else {
+      showMoment({ size: 'medium', color: GK_COLORS.raves, eyebrow: 'FIRST RSVP', title: 'You’re going!',
+        body: 'It’s on your Raves now. Start a crew and plan it together.', extraHTML: '<div id="rsvp-plur"></div>', cta: 'Nice' });
+    }
+    // Early RSVPs pay +10 Peace server-side; show it only once it has landed.
+    setTimeout(async () => {
+      const { data } = await sb.from('point_events').select('amount').eq('event_type', 'festival_early_rsvp')
+        .eq('source_id', fest.id).limit(1);
+      const el = document.getElementById('rsvp-plur');
+      if (el && data?.length) el.innerHTML = gkPlurLine([{ track: 'peace', amount: data[0].amount, why: 'early RSVP' }]);
+    }, 1500);
+  }
+
+  async function askCrewWhosIn(crewId, festId) {
+    const fest = getFestival(festId);
+    const d = fest && festDate(fest);
+    const poll = await dbCreatePoll(crewId, {
+      question: `Who’s in for ${fest?.name || 'this rave'}?`, pollType: 'yes_no', options: null,
+      isAnonymous: false, expiresAt: d ? d.toISOString() : null
+    });
+    if (!poll) return;
+    postCrewActivity(crewId, `🗳️ ${displayName(squad.find(r => r.isYou) || {}).split(' ')[0] || 'Someone'} asked: who’s in for ${fest?.name || 'this rave'}? Vote in the crew Poll`);
+    showToast('Poll sent · waiting on the crew');
+  }
+
+  function raveModeOn(festId) {
+    const f = getFestival(festId);
+    const d = f && festDate(f);
+    if (!d) return;
+    const last = new Date(d); last.setDate(last.getDate() + Math.max(1, Number(f.days) || 1) - 1);
+    startRaveMode(festId, `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`);
+    showToast('🎪 Rave mode on — tips are quiet till the morning after');
+    renderEvents();
+  }
+  function raveModeOff() {
+    endRaveMode();
+    showToast('Rave mode off');
+    renderEvents();
+  }
+
+  function raveNudgeHTML(f) {
+    if (!_guidance) return '';
+    const d = festDate(f);
+    if (!d) return '';
+    const id = escJsAttr(f.id);
+    const stop = 'event.stopPropagation(); ';
+    const days = Math.max(1, Number(f.days) || 1);
+    const end = new Date(d); end.setDate(end.getDate() + days);
+    const daysOut = Math.round((d - TODAY) / 86400000);
+    const lineupUrl = getLineupExplorerUrl(f);
+    const village = `Vendors at ${f.name} → see the Village`;
+    if (TODAY >= d && TODAY < end) {
+      return gkRaveModeOn()
+        ? timelineNudgeHTML({ color: '#FF2D78', eyebrow: 'RAVE MODE ON', title: 'Tips are quiet', body: 'On deck and your schedule up front until the morning after. Beacons still get through.', cta: 'Turn off', ctaAttr: `${stop}raveModeOff()` })
+        : timelineNudgeHTML({ color: '#FF2D78', eyebrow: 'IT’S RAVE DAY', title: 'Switch on Rave mode?', body: 'On deck and your schedule up front, tips go quiet. Lost your fam? Hit 📡 in the Huddle to Beacon them.', cta: 'Turn on Rave mode', ctaAttr: `${stop}raveModeOn('${id}')` });
+    }
+    if (TODAY >= end) {
+      if (!postfestPending(f.id)) return '';
+      const found = (_guidance.found_during_rave || []).map(r => REALM_NAMES[r]).filter(Boolean);
+      return timelineNudgeHTML({ color: '#39FF14', eyebrow: 'HOW WAS IT?', title: 'Check off who you caught', body: '20 seconds. Logs the night in Stats and drops a pin on your Raves Radar.', cta: 'Start check-off', ctaAttr: `${stop}openRaveFocus('${id}')`,
+        also: found.length ? `You found the ${found.join(' & ')} last night · +10 Unity` : 'Any vendors worth a shout-out? Review them in the Village →' });
+    }
+    if (daysOut <= 7) {
+      if (lineupUrl && !_reminderOptinFestIds.has(String(f.id))) {
+        return timelineNudgeHTML({ color: '#FFE600', eyebrow: 'FEST WEEK', title: 'Turn on set reminders', body: 'A push 15 minutes before each set you’ve picked. The lineup keeps working offline once you’ve opened it.', cta: '🔔 Remind me', ctaAttr: `${stop}window.open('${escJsAttr(lineupUrl)}', '_blank')`, also: village });
+      }
+      const withCrew = crewmatesGoing(f.id).find(m => m.going.length);
+      if (withCrew) {
+        return timelineNudgeHTML({ color: '#FFE600', eyebrow: 'FEST WEEK', title: withCrew.crew.isLead ? 'Plan check before you go' : 'Get ready with the crew', body: withCrew.crew.isLead ? 'See what’s unclaimed and who still needs a ride — one nudge covers it.' : 'Grab a task and a seat in the Rave Plan so nothing’s left to the last minute.', cta: 'Open the Rave Plan', ctaAttr: `${stop}openDetail('${escJsAttr(withCrew.crew.id)}', { tab: 'gameplan', festivalId: '${id}' })`, also: village });
+      }
+      return '';
+    }
+    if (lineupUrl && !myLineupPlanIds(f.id).size) {
+      return timelineNudgeHTML({ color: '#00F5FF', eyebrow: 'LINEUP IS OUT', title: 'Pick the sets you can’t miss', body: 'Add yours so everyone knows where to find you.', cta: 'Open Lineup Explorer', ctaAttr: `${stop}window.open('${escJsAttr(lineupUrl)}', '_blank')` });
+    }
+    return '';
+  }
+
   // ===== Raves: card view vs. compact list view =====
   const RAVE_VIEW_KEY = 'rf_rave_view';
   function getRaveView() {
@@ -30273,6 +30431,7 @@
           ${crewSection}
           ${vibeSection}
           ${actionBarHTML(f.id, youGoing, youInterested, isUpcoming)}
+          ${youGoing ? raveNudgeHTML(f) : ''}
           <div class="marquee-bulb-row bottom">${isUpcoming ? BULB_ROW_HTML : BULB_ROW_HTML_PAST}</div>
         </div>`;
     };
@@ -31175,6 +31334,7 @@
         const activityMsg = isPast ? `🎟️ ${who} sent it at ${fest.name}!` : `🎪 ${who} is going to ${fest.name}!`;
         crews.filter(c => c.status !== 'secret' && (c.squadIds || []).some(id => String(id) === String(you.id)))
           .forEach(c => postCrewActivity(c.id, activityMsg));
+        if (!isPast) maybeFirstRsvpMoment(fest);
       }
     }
     renderEvents();
@@ -32863,7 +33023,7 @@
   // Tour intros. Area steps can replace an entry (e.g. a setup sheet) by
   // assigning REALM_INTROS[realm] = { ..., open: fn } before first visit.
   const REALM_INTROS = {
-    raves: { title: 'Find your sound', body: 'Pick what moves you and we’ll line up raves that match your vibe.', tryIt: 'Tap ＋ Going on a rave your crew is hitting.', cta: 'Let’s go' },
+    raves: { title: 'Find your sound', open: () => openFindYourSound() },
     ravers: { title: 'Your raver card', body: 'Ravers is your people — and your card is how they spot you in the crowd.', tryIt: 'Add a photo so your crew spots you in the Huddle.', cta: 'Let’s go' },
     stats: { title: 'Rave Life', body: 'Your rave life in numbers — nights logged, artists caught, and all your PLUR and badges.', tryIt: 'Open PLUR & Badges to see what you’ve earned so far.', cta: 'Let’s go' },
     village: { title: 'Vendor Village', body: 'Makers and vendors the fam swears by — kandi, glow, gear, food. Your crew’s picks come first.', tryIt: 'Check the vendors your crew vouches for.', cta: 'Let’s go' }
