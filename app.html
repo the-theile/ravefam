@@ -3158,62 +3158,6 @@
   .micro-feedback-actions .btn { flex: 1; padding: 9px 14px; font-size: 0.78rem; }
   .micro-feedback-thanks { text-align: center; font-size: 0.86rem; font-weight: 600; padding: 4px 0; }
 
-  /* Coachmark — first-encounter feature tip, one shown at a time via queue */
-  .coachmark {
-    position: fixed;
-    z-index: 1200;
-    max-width: min(300px, calc(100vw - 32px));
-    background: var(--surface2);
-    border: 1px solid rgba(255,255,255,0.14);
-    border-radius: 14px;
-    padding: 14px 16px;
-    box-shadow: 0 8px 28px rgba(0,0,0,0.45);
-    opacity: 0;
-    transform: translateY(6px);
-    transition: opacity 0.2s ease, transform 0.2s ease;
-    pointer-events: none;
-  }
-  .coachmark.show { opacity: 1; transform: translateY(0); }
-  .coachmark::after {
-    content: '';
-    position: absolute;
-    width: 12px; height: 12px;
-    background: var(--surface2);
-    border: 1px solid rgba(255,255,255,0.14);
-    border-right: none; border-bottom: none;
-  }
-  .coachmark.placement-below::after { top: -7px; left: var(--arrow-left, 24px); transform: rotate(45deg); }
-  .coachmark.placement-above::after { bottom: -7px; left: var(--arrow-left, 24px); transform: rotate(225deg); }
-  .coachmark-title {
-    font-family: 'Outfit', sans-serif;
-    font-weight: 700;
-    font-size: 0.9rem;
-    color: var(--text);
-    margin-bottom: 4px;
-  }
-  .coachmark-body {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 0.82rem;
-    line-height: 1.45;
-    color: var(--muted);
-    margin-bottom: 10px;
-  }
-  .coachmark-dismiss {
-    font-family: 'Outfit', sans-serif;
-    font-weight: 700;
-    font-size: 0.78rem;
-    letter-spacing: 0.3px;
-    padding: 7px 16px;
-    border-radius: 100px;
-    border: none;
-    cursor: pointer;
-    background: var(--neon-pink);
-    color: #fff;
-    transition: transform 0.15s ease;
-    pointer-events: auto;
-  }
-  .coachmark-dismiss:hover { transform: translateY(-1px); }
-
   /* ===== Guidance kit (2.0) — the seven parts every place is built from.
      Colours come from --gk-color (set per place: the tab colour) and the
      usual --surface2/--text/--muted, so inside the Rave Plan's paper
@@ -9071,7 +9015,7 @@
       <div class="poll-setting-row">
         <div>
           <div class="poll-setting-label">Tips &amp; hints</div>
-          <div class="poll-setting-hint">Show coachmark tips as you discover new features</div>
+          <div class="poll-setting-hint">Intros and tips as you find new stuff — more options in ❔ Guide &amp; Help</div>
         </div>
         <button class="poll-anon-toggle" id="tips-settings-toggle" onclick="toggleTipsEnabled(this)"></button>
       </div>
@@ -9080,7 +9024,7 @@
           <div class="poll-setting-label">Reset tips</div>
           <div class="poll-setting-hint">See all tips again, including ones already dismissed</div>
         </div>
-        <button type="button" class="btn btn-ghost" id="reset-tips-btn" style="padding:6px 14px;font-size:0.72rem;" onclick="resetTips()">Reset</button>
+        <button type="button" class="btn btn-ghost" id="reset-tips-btn" style="padding:6px 14px;font-size:0.72rem;" onclick="resetGuidanceTips()">Reset</button>
       </div>
     </div>
     <div class="poll-modal-settings" style="margin-top:12px;" id="login-methods-rows"><!-- filled by renderLoginMethods() --></div>
@@ -9146,13 +9090,14 @@
      given category by contextual "?" links via openAppGuide({category})). -->
 <div class="modal-overlay" id="app-guide-overlay" onclick="if(event.target===this)closeAppGuide()">
   <div class="modal" style="max-width:460px;text-align:left;max-height:80vh;overflow-y:auto;">
-    <div class="modal-title">🎪 How RaveFam Works</div>
+    <div class="modal-title">🎪 Guide &amp; Help</div>
     <div class="help-center-tabs">
-      <button type="button" class="help-center-tab active" id="guide-tab-btn-overview" onclick="switchGuideTab('overview')">Overview</button>
+      <button type="button" class="help-center-tab active" id="guide-tab-btn-overview" onclick="switchGuideTab('overview')">Guide</button>
       <button type="button" class="help-center-tab" id="guide-tab-btn-faq" onclick="switchGuideTab('faq')">🔍 Help Center</button>
     </div>
     <div id="guide-tab-overview">
-      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:16px;line-height:1.5;">A quick tour of the core features — come back here anytime from the 📖 Guide button.</p>
+      <div id="guide-hub-root"></div>
+      <div class="gk-eyebrow" style="--gk-color:var(--muted);margin:18px 0 10px;">THE BASICS</div>
       <div class="onboard-features">
         <div class="onboard-feat"><span class="onboard-feat-icon">🎪</span><span><strong>Crews</strong> — your fam's home base. Lead your own or join one someone shares with you.</span></div>
         <div class="onboard-feat"><span class="onboard-feat-icon">🤫</span><span><strong>Start solo, in Secret</strong> — a new crew begins private. Add ravers you already know as unclaimed profiles from "Add Member" — no account needed for them yet — to track your whole fam before anyone's even signed up. Nothing is sent or notified while you're Secret.</span></div>
@@ -9400,11 +9345,6 @@
 <!-- Micro-feedback card — floating, no backdrop, shown once per milestone per user -->
 <div class="micro-feedback-card" id="micro-feedback-card"></div>
 
-<div class="coachmark" id="coachmark">
-  <div class="coachmark-title" id="coachmark-title"></div>
-  <div class="coachmark-body" id="coachmark-body"></div>
-  <button type="button" class="coachmark-dismiss" onclick="dismissCoachmark()">Got it</button>
-</div>
 
 <!-- Ko-fi progress modal -->
 <div id="sptProgressModal" class="spt-modal">
@@ -9821,9 +9761,7 @@
   }
 
   let currentUser = null;  // holds the logged-in Supabase user object
-  let _seenTips = {};  // local mirror of user_metadata.seen_tips — coachmarks already shown
   let _feedbackPromptsShown = {};  // local mirror of user_metadata.feedback_prompts_shown — micro-feedback asks already shown
-  let _tipsEnabled = true;  // local mirror of user_metadata.tips_enabled — master on/off for coachmarks
   // local mirror of user_metadata.guidance — 2.0 guidance state (places found,
   // zone intros, help level, setup, quests, Rave mode). Flags and counts only,
   // so user_metadata stays small. See GUIDANCE KIT / REALMS.
@@ -10970,8 +10908,6 @@
   function showApp(user) {
     currentUser = user;
     try { localStorage.setItem('rf_has_logged_in', '1'); } catch (e) { /* per-device nicety only */ }
-    _seenTips = { ...(user?.user_metadata?.seen_tips || {}) };
-    _tipsEnabled = user?.user_metadata?.tips_enabled !== false;
     _feedbackPromptsShown = { ...(user?.user_metadata?.feedback_prompts_shown || {}) };
     const savedGuidance = user?.user_metadata?.guidance;
     _guidance = savedGuidance?.v === 2
@@ -15499,12 +15435,6 @@
     document.getElementById('page-' + page).classList.add('active');
     if (el) el.classList.add('active');
     else document.querySelector(`.nav-tab[onclick*="'${page}'"]`)?.classList.add('active');
-    // Must run after the page swap above, not before -- it checks whether the
-    // showing coachmark's target is still visible, and the target (e.g. the
-    // Huddle beacon button) only actually becomes hidden once its page loses
-    // .active. Checking beforehand sees the old, still-visible page and
-    // wrongly leaves the bubble showing after we've already navigated away.
-    _recheckCoachmarkTarget();
     onPlaceEntered(page);  // 2.0 discovery: banner + intro the first time (see REALMS)
   }
 
@@ -17075,10 +17005,6 @@
     document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
     document.querySelector('.nav-tab[onclick*="crews"]')?.classList.add('active');
     activeDetailId = null;
-    // closeHuddleScreen -> teardownHuddleLive -> _recheckCoachmarkTarget must
-    // see the page swap above already applied -- otherwise it still finds the
-    // old page (and the coachmark's target) visible and leaves the bubble
-    // showing after we've already navigated away from it.
     if (_huddleScreenOpen) closeHuddleScreen(); else teardownHuddleLive();
   }
   function closeDetailOutside(e) {
@@ -18878,10 +18804,8 @@
   }
 
   function closeHuddleScreen() {
-    // Removed synchronously rather than faded out: teardownHuddleLive below
-    // re-checks whether the beacon coachmark's target is still visible, and a
-    // still-laid-out (merely transparent) screen would read as visible and
-    // strand the bubble over a screen the user has already left.
+    // Removed synchronously rather than faded out, so nothing below reads a
+    // merely transparent Huddle screen as still visible.
     document.getElementById('huddle-screen')?.remove();
     _huddleScreenOpen = false;
     document.body.style.overflow = '';
@@ -19026,7 +18950,6 @@
       <div class="hd-presence">${huddlePresenceAvatarsHTML()}</div>
       <button type="button" class="hd-search-btn" title="Search the Huddle" aria-label="Search messages" onclick="openHuddleSearch()">🔍</button>
       <button type="button" class="huddle-beacon-fab-inline${_guidance && _guidance.zones.beacon !== 'opened' ? ' gk-pulse' : ''}" title="Send an urgent Beacon to your crew" onclick="onHuddleBeaconTap()">📡</button>`;
-    _rebindCoachmarkTarget('.huddle-beacon-fab-inline');
     if (menuWasOpen) {
       const menu = document.getElementById('huddle-room-menu');
       if (menu) menu.style.display = '';
@@ -20535,7 +20458,6 @@
     _huddlePresenceState = {};
     _huddleTypingUsers = {};
     _huddleTypingSentAt = 0;
-    _recheckCoachmarkTarget();
   }
 
   // ===== GAME PLAN =====
@@ -32458,7 +32380,7 @@
     const mentionToggle = document.getElementById('mention-push-settings-toggle');
     pushToggle.classList.remove('on');
     mentionToggle.classList.remove('on');
-    document.getElementById('tips-settings-toggle').classList.toggle('on', _tipsEnabled);
+    document.getElementById('tips-settings-toggle').classList.toggle('on', _guidance?.help_level !== 'pro');
     renderShareLinkSettings();
     renderLineupAlertSettings();
     document.getElementById('privacy-settings-overlay').classList.add('open');
@@ -32693,13 +32615,125 @@
   function openAppGuide(opts) {
     const widget = document.getElementById('guide-support-widget');
     if (widget) widget.style.display = 'none';
+    // Read where the user is before the overlay opens, for contextual help.
+    const context = guideContextKey();
     document.getElementById('app-guide-overlay').classList.add('open');
+    switchGuideTab('overview');
+    renderGuideHub(context);
     if (opts && opts.category) {
       switchGuideTab('faq');
       const input = document.getElementById('help-search-input');
       if (input) input.value = '';
       renderHelpFAQ('', opts.category);
     }
+  }
+
+  // ── 2.0 Guide & Help hub ──
+  // Contextual help for the screen you came from (with Replay), intros you
+  // saved for later (Resume), Finish setting up after week one, the Rave
+  // World list, how much help you want, and Reset all tips. Everything here
+  // is asked-for, so none of it counts against the interruption budget.
+  const GUIDE_CONTEXT = {
+    crews: { where: 'CREWS', realm: 'crews', tips: ['Twinkling tiles are ones you haven’t opened yet.', 'The stamps on the ticket are your quests — stamp them all for a badge.', 'A yellow ! is an intro you saved for later.'] },
+    events: { where: 'RAVES', realm: 'raves', tips: ['Tap ＋ Going to RSVP — your crew sees it right away.', 'A rave you’re going to shows the next thing to do on its card.', '🔭 Lineups picks sync back here.'] },
+    huddle: { where: 'HUDDLE', zone: 'huddle', tips: ['📡 sends a Beacon — pings everyone and pins for 2 hours.', 'Tap ⋯ on any message to reply; @ pings one person.', 'Each rave you’re going to together gets its own room.'] },
+    stats: { where: 'STATS', realm: 'stats', tips: ['PLUR & Badges shows every point and what it was for.', 'Locked badges say what’s left to earn them.', 'Raves you check off fill your Rave Life.'] },
+    members: { where: 'RAVERS', realm: 'ravers', tips: ['Your card is how crewmates spot you.', '👁 See as your crew shows exactly what they see.', 'Dashed cards are spots a Lead saved.'] },
+    checklist: { where: 'VILLAGE', realm: 'village', tips: ['Your crew’s picks come first in Browse.', 'Reviews earn +15 Respect, live spots +5.'] },
+    'crew-detail': { where: 'CREW PAGE', tips: ['Twinkling tiles are ones you haven’t opened yet.', 'The stamps on the ticket are your quests — stamp them all for a badge.', 'A yellow ! is an intro you saved for later.'] }
+  };
+  const HELP_LEVELS = [
+    { key: 'guide', label: 'Show me around', sub: 'Intros when you find something new, plus tips that shrink as you learn.' },
+    { key: 'hints', label: 'Hints', sub: 'No intros — just one-line hints and the small ⓘ icons.' },
+    { key: 'pro', label: 'I’m a pro', sub: 'No intros or tips — you’ll still get the celebrations. Help is always one tap away on ❔.' }
+  ];
+  const ZONE_LABELS = { huddle: 'Huddle', raveplan: 'Rave Plan', pins: 'Pins', dreamboard: 'Dream Board', poll: 'Poll', jams: 'Jams', archive: 'Archive', history: 'History', venues: 'Venues' };
+
+  function guideContextKey() {
+    if (typeof _huddleScreenOpen !== 'undefined' && _huddleScreenOpen) return 'huddle';
+    const page = document.querySelector('.page.active')?.id?.replace('page-', '');
+    return GUIDE_CONTEXT[page] ? page : 'crews';
+  }
+
+  function renderGuideHub(context) {
+    const root = document.getElementById('guide-hub-root');
+    if (!root || !_guidance) return;
+    const ctx = GUIDE_CONTEXT[context] || GUIDE_CONTEXT.crews;
+    const replay = ctx.realm && REALM_INTROS[ctx.realm] ? `guideReplay('realm','${ctx.realm}')` : (ctx.zone ? `guideReplay('zone','${ctx.zone}')` : '');
+    const saved = [
+      ...Object.entries(_guidance.realms).filter(([, v]) => v === 'saved').map(([k]) => ({ kind: 'realm', key: k, name: REALM_NAMES[k] })),
+      ...Object.entries(_guidance.zones).filter(([, v]) => v === 'saved').map(([k]) => ({ kind: 'zone', key: k, name: ZONE_LABELS[k] || k }))
+    ];
+    const weekOne = Date.now() - (_guidance.first_seen || 0) < 7 * 24 * 60 * 60 * 1000;
+    const found = Object.keys(REALM_NAMES).filter(realmFound).length;
+    const worldRow = (name, state, color, action, indent) => `<div style="display:flex;align-items:center;gap:10px;min-height:38px;padding-left:${indent ? 18 : 0}px;">
+      <span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;${state ? `background:${color};box-shadow:0 0 8px ${color};` : `border:1.5px dashed ${color};`}"></span>
+      <span style="flex-grow:1;font-size:0.86rem;">${escHtml(name)} <span style="color:var(--muted);font-size:0.74rem;">· ${escHtml(state || 'Not found yet — tap the glowing tab')}</span></span>
+      ${action}</div>`;
+    const realmState = k => ({ found: 'Explored', saved: 'Intro saved for later' })[_guidance.realms[k]] || '';
+    const zoneState = k => ({ opened: 'Explored', saved: 'Intro saved for later' })[_guidance.zones[k]] || 'Not opened yet';
+    root.innerHTML = `
+      <div class="gk-eyebrow" style="--gk-color:${GK_COLORS.stats};">YOU’RE ON · ${ctx.where}</div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">${ctx.tips.map(t => `<div class="gk-body" style="margin:0;font-size:0.84rem;">· ${escHtml(t)}</div>`).join('')}</div>
+      ${replay ? `<button type="button" class="btn btn-ghost" style="width:100%;margin-top:10px;" onclick="${replay}">↺ Replay this screen’s intro</button>` : ''}
+      ${saved.length ? `<div class="gk-eyebrow" style="--gk-color:var(--neon-yellow);margin:18px 0 8px;">SAVED FOR LATER</div>
+        ${saved.map(x => `<div style="display:flex;align-items:center;gap:10px;min-height:38px;"><span class="gk-saved-badge" style="position:static;">!</span><span style="flex-grow:1;font-size:0.86rem;">${escHtml(x.name)}</span><button type="button" class="btn btn-ghost" style="padding:6px 14px;font-size:0.74rem;" onclick="guideReplay('${x.kind}','${x.key}')">Resume</button></div>`).join('')}` : ''}
+      ${!weekOne && setupDoneCount() < SETUP_ITEMS.length ? `<div class="gk-eyebrow" style="--gk-color:${GK_COLORS.ravers};margin:18px 0 0;">FINISH SETTING UP · ${setupDoneCount()} OF ${SETUP_ITEMS.length}</div>${setupListHTML()}` : ''}
+      <div class="gk-eyebrow" style="--gk-color:${GK_COLORS.raves};margin:18px 0 8px;">YOUR RAVE WORLD · ${found} OF 5 FOUND</div>
+      ${Object.keys(REALM_NAMES).map(k => worldRow(REALM_NAMES[k], realmState(k), GK_COLORS[k],
+        realmFound(k) && REALM_INTROS[k] ? `<button type="button" class="btn btn-ghost" style="padding:6px 14px;font-size:0.74rem;" onclick="guideReplay('realm','${k}')">Replay</button>` : '', false)
+        + (k === 'crews' ? ['huddle', 'raveplan'].map(z => worldRow(ZONE_LABELS[z], zoneState(z), ZONE_COLORS[z], '', true)).join('') : '')).join('')}
+      <div class="gk-eyebrow" style="--gk-color:var(--neon-pink);margin:18px 0 8px;">HOW MUCH HELP?</div>
+      <div role="radiogroup" aria-label="How much help" style="display:flex;flex-direction:column;gap:6px;">
+        ${HELP_LEVELS.map(l => `<button type="button" role="radio" aria-checked="${_guidance.help_level === l.key}" class="setup-item" style="flex-direction:column;align-items:flex-start;gap:2px;${_guidance.help_level === l.key ? 'border-color:var(--neon-pink);' : ''}" onclick="setHelpLevel('${l.key}')">
+          <span style="font-weight:700;">${_guidance.help_level === l.key ? '● ' : '○ '}${escHtml(l.label)}</span><span style="font-size:0.74rem;color:var(--muted);">${escHtml(l.sub)}</span></button>`).join('')}
+      </div>
+      <button type="button" class="btn btn-ghost" style="width:100%;margin-top:12px;" onclick="resetGuidanceTips()">Reset all tips</button>`;
+  }
+
+  function guideReplay(kind, key) {
+    closeAppGuide();
+    if (kind === 'realm') {
+      const page = Object.keys(PAGE_TO_REALM).find(p => PAGE_TO_REALM[p] === key);
+      if (page) switchTab(page);
+      openRealmIntro(key);
+    } else if (key === 'huddle') {
+      _guidance.zones.huddle = null;
+      if (activeDetailId) openHuddle(activeDetailId); else showToast('Open a crew to see its Huddle');
+    } else if (key === 'venues') {
+      _guidance.zones.venues = null;
+      switchTab('checklist'); renderVillage();
+      const tab = document.querySelector('#village-section-tabs .stats-subtab:nth-child(2)');
+      if (tab) switchVillageSection('venues', tab);
+    } else {
+      _guidance.zones[key] = null;
+      const tile = document.querySelector(`.crew-feature-tile[data-feature="${key}"]`);
+      if (tile) toggleCrewFeatureTile(key, tile); else showToast('Open a crew to find it');
+    }
+  }
+
+  function setHelpLevel(level) {
+    saveGuidance({ help_level: level });
+    renderGuideHub(guideContextKey());
+    showToast(level === 'pro' ? 'Tips off — ❔ is here when you need it' : level === 'hints' ? 'Hints only' : 'We’ll show you around');
+  }
+
+  // Settings' "Tips & hints" switch: on = Show me around, off = I'm a pro.
+  function toggleTipsEnabled(btn) {
+    const on = !btn.classList.contains('on');
+    btn.classList.toggle('on', on);
+    saveGuidance({ help_level: on ? 'guide' : 'pro' });
+    showToast(on ? 'Tips turned on' : 'Tips turned off');
+  }
+
+  // Intros, tips and one-time hints come back; places stay found.
+  function resetGuidanceTips() {
+    if (!_guidance) return;
+    saveGuidance({ tips: {}, hints: {}, zones: {}, realm_tips_off: {}, skips: 0, fewer_tips_offered: false });
+    renderRealmTwinkles();
+    refreshZoneBadges();
+    if (document.getElementById('app-guide-overlay')?.classList.contains('open')) renderGuideHub(guideContextKey());
+    showToast('✅ All tips back on');
   }
 
   function closeAppGuide() {
@@ -32799,8 +32833,8 @@
     { id: 'security-report', category: 'account', q: 'I found a security vulnerability. Who do I tell?',
       a: 'Email <a href="mailto:bump@myravefam.com" style="color:var(--neon-cyan);">bump@myravefam.com</a> immediately with subject "Security Issue" — we take these seriously and respond fast.' },
     { id: 'tips-toggle', category: 'tips', q: 'How do I turn tips on/off or see them again?',
-      a: 'Open Settings → Privacy &amp; Notifications. Toggle "Tips &amp; hints" off to stop coachmarks from appearing, or tap Reset to see every tip again, including ones you\'ve already dismissed.',
-      keywords: ['coachmark', 'reset tips'] }
+      a: 'Tap ❔ for Guide &amp; Help and pick how much help you want: Show me around (intros + tips), Hints (one-line tips only) or I\'m a pro (no intros or tips). Reset all tips brings every intro and tip back. The "Tips &amp; hints" switch in Settings → Privacy &amp; Notifications does the same on/off.',
+      keywords: ['coachmark', 'reset tips', 'help level', 'hints', 'pro', 'intro'] }
   ];
 
   function switchGuideTab(tab) {
@@ -33418,164 +33452,6 @@
     const found = _guidance?.found_during_rave || [];
     if (found.length) saveGuidance({ found_during_rave: [] });
     return found;
-  }
-
-  // ===== COACHMARKS =====
-  // Lightweight "first time you hit this feature" tips — distinct from the
-  // signup-time onboarding wizard, the reopenable App Guide, and the
-  // post-onboarding guidance checklist. Most of the old per-feature tips
-  // were retired in favor of either the guidance checklist (see
-  // renderGuidanceChecklist) or a permanent inline caption next to the
-  // feature itself — a popup you can only ever see once is a bad fit for
-  // anything worth explaining more than once. `beacon` is the one
-  // survivor: it needs to interrupt at a specific moment (first time the
-  // Huddle is open) and has no natural inline home. Each tip fires once
-  // ever per user (tracked in user_metadata.seen_tips, mirrored locally in
-  // _seenTips since currentUser is never refetched after an updateUser()
-  // call), one bubble visible at a time via a queue, same fire-and-forget
-  // persistence pattern as `onboarded`/`guidance_dismissed`.
-  let _coachmarkQueue = [];
-  let _coachmarkShowing = false;
-  let _coachmarkTipKey = null;
-  let _coachmarkTargetEl = null;
-  let _coachmarkResizeHandler = null;
-  const _coachmarkQueuedOrShown = new Set(); // this-session guard against duplicate enqueues before dismissal
-
-  function queueCoachmark(tipKey, { targetEl, title, body }) {
-    if (!_tipsEnabled || !targetEl || _seenTips[tipKey] || _coachmarkQueuedOrShown.has(tipKey)) return;
-    _coachmarkQueuedOrShown.add(tipKey);
-    _coachmarkQueue.push({ tipKey, targetEl, title, body });
-    if (!_coachmarkShowing) _showNextCoachmark();
-  }
-
-  function _showNextCoachmark() {
-    const next = _coachmarkQueue.shift();
-    if (!next) { _coachmarkShowing = false; return; }
-    if (_seenTips[next.tipKey] || !next.targetEl.isConnected || next.targetEl.offsetParent === null) {
-      _showNextCoachmark();
-      return;
-    }
-    _coachmarkShowing = true;
-    _coachmarkTipKey = next.tipKey;
-    _coachmarkTargetEl = next.targetEl;
-    const el = document.getElementById('coachmark');
-    document.getElementById('coachmark-title').textContent = next.title;
-    document.getElementById('coachmark-body').textContent = next.body;
-    next.targetEl.scrollIntoView({ behavior: 'auto', block: 'center' });
-    _positionCoachmark(next.targetEl);
-    el.classList.add('show');
-    _coachmarkResizeHandler = () => _positionCoachmark(_coachmarkTargetEl);
-    window.addEventListener('resize', _coachmarkResizeHandler);
-    window.addEventListener('orientationchange', _coachmarkResizeHandler);
-    // capture:true so scrolling inside any nested scroll container (page
-    // panels, modals) re-tracks the anchor too, not just window scroll.
-    window.addEventListener('scroll', _coachmarkResizeHandler, true);
-  }
-
-  function _positionCoachmark(targetEl) {
-    const el = document.getElementById('coachmark');
-    if (!el || !targetEl) return;
-    const margin = 8;
-    el.classList.remove('placement-above', 'placement-below');
-    el.style.left = '0px'; el.style.top = '0px';
-    const targetRect = targetEl.getBoundingClientRect();
-    const elRect = el.getBoundingClientRect();
-    let placement = 'below';
-    let top = targetRect.bottom + 12;
-    if (top + elRect.height > window.innerHeight - margin) {
-      placement = 'above';
-      top = targetRect.top - elRect.height - 12;
-    }
-    const left = Math.min(Math.max(targetRect.left, margin), window.innerWidth - elRect.width - margin);
-    top = Math.min(Math.max(top, margin), window.innerHeight - elRect.height - margin);
-    // Arrow tip must track the target's actual center, not the bubble's own
-    // left edge — otherwise clamping the bubble to stay on-screen leaves the
-    // arrow pointing at empty space instead of the target.
-    const arrowMargin = 16;
-    const targetCenter = targetRect.left + targetRect.width / 2;
-    const arrowLeft = Math.min(Math.max(targetCenter - left - 6, arrowMargin), elRect.width - arrowMargin - 12);
-    el.style.setProperty('--arrow-left', `${arrowLeft}px`);
-    el.classList.add('placement-' + placement);
-    el.style.left = `${left}px`;
-    el.style.top = `${top}px`;
-  }
-
-  // Safety net for the bug where switching tabs/pages left a showing
-  // coachmark floating over stale coordinates (its target was hidden via
-  // display:none, not removed, so the queue's own isConnected/offsetParent
-  // check — which only runs when a *new* tip is about to show — never
-  // caught it). Call this from any navigation that can hide the current
-  // tip's target. Unlike dismissCoachmark(), this does NOT mark the tip as
-  // seen — the user didn't get a real look at it, so it's free to fire
-  // again next time they reach the same feature.
-  function _recheckCoachmarkTarget() {
-    if (!_coachmarkShowing || !_coachmarkTargetEl) return;
-    if (_coachmarkTargetEl.isConnected && _coachmarkTargetEl.offsetParent !== null) return;
-    const el = document.getElementById('coachmark');
-    if (el) el.classList.remove('show');
-    if (_coachmarkResizeHandler) {
-      window.removeEventListener('resize', _coachmarkResizeHandler);
-      window.removeEventListener('orientationchange', _coachmarkResizeHandler);
-      window.removeEventListener('scroll', _coachmarkResizeHandler, true);
-      _coachmarkResizeHandler = null;
-    }
-    // Not marked seen, so also drop the session dedupe guard — the user
-    // can hit the same feature again later this session and get another
-    // shot at the tip instead of it silently never showing again.
-    _coachmarkQueuedOrShown.delete(_coachmarkTipKey);
-    _coachmarkTipKey = null;
-    _coachmarkTargetEl = null;
-    _coachmarkShowing = false;
-    _showNextCoachmark();
-  }
-
-  // Some panels (Huddle) replace their whole subtree on every re-render —
-  // new messages, presence sync, room switch — which detaches whatever
-  // element a currently-showing coachmark was anchored to. Without this,
-  // the tooltip keeps tracking the old (now disconnected) node, whose
-  // getBoundingClientRect() collapses to all-zero, so _positionCoachmark
-  // clamps it into the top-left corner instead of hiding or following the
-  // feature it's meant to point at. Call after any such re-render with the
-  // selector that would match the tip's target inside the fresh markup.
-  function _rebindCoachmarkTarget(selector) {
-    if (!_coachmarkShowing || !_coachmarkTargetEl || _coachmarkTargetEl.isConnected) return;
-    const fresh = document.querySelector(selector);
-    if (!fresh) return;
-    _coachmarkTargetEl = fresh;
-    _positionCoachmark(fresh);
-  }
-
-  function dismissCoachmark() {
-    const el = document.getElementById('coachmark');
-    if (el) el.classList.remove('show');
-    if (_coachmarkResizeHandler) {
-      window.removeEventListener('resize', _coachmarkResizeHandler);
-      window.removeEventListener('orientationchange', _coachmarkResizeHandler);
-      window.removeEventListener('scroll', _coachmarkResizeHandler, true);
-      _coachmarkResizeHandler = null;
-    }
-    if (_coachmarkTipKey) {
-      _seenTips[_coachmarkTipKey] = true;
-      if (currentUser) sb.auth.updateUser({ data: { seen_tips: _seenTips } }).catch(() => {});
-    }
-    _coachmarkTipKey = null;
-    _coachmarkTargetEl = null;
-    setTimeout(_showNextCoachmark, 150);
-  }
-
-  function toggleTipsEnabled(btn) {
-    const on = !btn.classList.contains('on');
-    btn.classList.toggle('on', on);
-    _tipsEnabled = on;
-    if (currentUser) sb.auth.updateUser({ data: { tips_enabled: on } }).catch(() => {});
-    showToast(on ? 'Tips turned on' : 'Tips turned off');
-  }
-
-  function resetTips() {
-    _seenTips = {};
-    _coachmarkQueuedOrShown.clear();
-    if (currentUser) sb.auth.updateUser({ data: { seen_tips: {} } }).catch(() => {});
-    showToast('✅ Tips reset — they\'ll pop up again as you go');
   }
 
   // ===== HANDLE PICKER =====
@@ -34663,7 +34539,7 @@
   // each of the four activation milestones (crew created, first invite sent,
   // first claim, first event added). "Already asked?" is tracked per-user in
   // user_metadata.feedback_prompts_shown (_feedbackPromptsShown mirror),
-  // same pattern as _seenTips/dismissCoachmark — set the moment the card is
+  // same fire-and-forget user_metadata pattern as saveGuidance — set the moment the card is
   // shown, not on submit, so a skip/dismiss never re-asks. Responses land in
   // micro_feedback_responses via the submit_micro_feedback RPC — see
   // ANALYTICS.md.
