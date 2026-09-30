@@ -1,4 +1,4 @@
-# RaveFam test harness
+# RaveFAM test harness
 
 Offline Playwright smoke tests for the single-file app (`app.html`). The Supabase
 CDN script and client are **stubbed** (see `tests/helpers.js`), so tests run with

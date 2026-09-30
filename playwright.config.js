@@ -1,4 +1,4 @@
-// Playwright smoke-test harness for the RaveFam single-page app.
+// Playwright smoke-test harness for the RaveFAM single-page app.
 //
 // The app (app.html) is a static file that talks to Supabase. To keep tests
 // hermetic and runnable with no network/backend, the tests stub the Supabase
