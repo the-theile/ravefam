@@ -3249,6 +3249,11 @@
   .crew-quests-done { display: flex; align-items: center; gap: 10px; }
   .crew-quests-done button { height: 32px; padding: 0 14px; border-radius: 100px; border: 0; background: #1B1720; color: #F4F1E8; font-family: 'Outfit', sans-serif; font-weight: 800; cursor: pointer; }
 
+  /* See as your crew: read-only preview of your own profile */
+  .see-as-crew-banner { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px; justify-content: space-between; padding: 10px 14px; margin-bottom: 12px; border-radius: 12px; background: rgba(57,255,20,0.1); border: 1px solid rgba(57,255,20,0.45); font-size: 0.82rem; color: var(--text); }
+  .see-as-crew-banner .btn { padding: 6px 14px; font-size: 0.78rem; }
+  .see-as-crew button:not(.see-as-crew-banner button), .see-as-crew input, .see-as-crew select, .see-as-crew textarea, .see-as-crew a { pointer-events: none; }
+
   /* 01 Unlock banner — drops from the top, holds, slides away */
   .gk-banner {
     position: fixed; top: calc(env(safe-area-inset-top, 0px) + 10px); left: 50%; z-index: 1300;
@@ -8627,6 +8632,7 @@
         <span class="raver-search-icon">🔍</span>
         <input class="raver-search" id="raver-search" aria-label="Search ravers" type="text" placeholder="Search ravers…" oninput="renderSquad()" autocomplete="off">
       </div>
+      <div id="members-hint-slot"></div>
       <div class="members-grid" id="members-grid">
         <!-- rendered by JS -->
       </div>
@@ -27292,8 +27298,18 @@
     return `<div class="member-photos"><div class="our-photos-col"><div class="our-photos-slots">${slots.join('')}</div></div></div>`;
   }
 
+  // Once, the first time an unclaimed (dashed) card is on screen.
+  function renderMembersHint() {
+    const slot = document.getElementById('members-hint-slot');
+    if (!slot || slot.innerHTML || !document.getElementById('page-members')?.classList.contains('active')) return;
+    if (!squad.some(x => !x.isYou && !raverIsClaimed(x))) return;
+    const html = oneTimeHintHTML('dashed_cards', 'Dashed cards are spots a Lead saved — they light up when that raver claims them.', GK_COLORS.ravers);
+    if (html) slot.innerHTML = `<div style="margin-bottom:12px;">${html}</div>`;
+  }
+
   function renderSquad() {
     try {
+    renderMembersHint();
     const grid = document.getElementById('members-grid');
     grid.innerHTML = '';
     const query = (document.getElementById('raver-search')?.value || '').toLowerCase().trim();
@@ -27372,6 +27388,43 @@
     add.innerHTML = `<div style="font-size:1.5rem">+</div><div style="font-family:'Outfit',sans-serif;font-weight:700;font-size:0.82rem;">Add Raver</div>`;
     grid.appendChild(add);
     } catch(err) { console.error('[renderSquad]', err); const el = document.getElementById('members-grid'); if (el) el.innerHTML = sectionErrorHTML('members'); }
+  }
+
+  // ── 2.0 Ravers guidance ──
+  // The Ravers first visit is "Your raver card": what's on it (0–4), a photo
+  // as the main ask, and a look at exactly what crewmates see.
+  let _seeAsCrew = false;
+  function toggleSeeAsCrew(raverId) {
+    _seeAsCrew = !_seeAsCrew;
+    if (_seeAsCrew && _guidance) saveGuidance({ setup_items: { ..._guidance.setup_items, privacy_checked: true } });
+    openProfile(raverId);
+  }
+
+  function raverCardItems(me) {
+    return [
+      { label: 'Photo', done: !!me?.avatarUrl },
+      { label: 'Your sound', done: !!me?.genres?.length },
+      { label: 'Vibe tags', done: !!(me?.vibeTags?.length || me?.customVibeTags?.length) },
+      { label: 'Checked what crewmates see', done: !!_guidance?.setup_items?.privacy_checked }
+    ];
+  }
+
+  function openRaverCardSetup() {
+    const me = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
+    const items = raverCardItems(me);
+    const n = items.filter(i => i.done).length;
+    openZoneSheet({
+      color: GK_COLORS.ravers, eyebrow: `FIRST VISIT · SETUP · ${n} OF ${items.length}`, title: 'Your raver card',
+      body: 'Ravers is your people — and your card is how they spot you in the crowd.',
+      visualHTML: `<div class="setup-list">${items.map(i => `<div class="setup-item${i.done ? ' done' : ''}"><span class="setup-item-check">${i.done ? '✓' : ''}</span><span>${escHtml(i.label)}</span></div>`).join('')}</div>
+        ${me ? `<button type="button" class="btn btn-ghost" style="width:100%;margin-top:10px;" onclick="closeZoneSheet(); switchTab('members'); _seeAsCrew = false; toggleSeeAsCrew('${escJsAttr(me.id)}')">👁 See as your crew</button>` : ''}`,
+      cta: me?.avatarUrl ? 'Edit my card' : 'Add a photo',
+      onGo: () => {
+        _guidance.realms.ravers = 'found'; saveGuidance(); renderRealmTwinkles();
+        if (me) openProfileEditor(me.id);
+      },
+      onLater: () => { _guidance.realms.ravers = 'saved'; saveGuidance(); renderRealmTwinkles(); }
+    });
   }
 
   // ===== Dedicated profile page =====
@@ -27479,8 +27532,12 @@
   }
 
   function openProfile(id, editMode = false, origin = null) {
-    const r = getRaver(id);
-    if (!r) return;
+    const raw = getRaver(id);
+    if (!raw) return;
+    // 2.0 "See as your crew": your own profile rendered as a crewmate sees it —
+    // isYou off, so raverPerms applies your real privacy switches. Read-only.
+    const seeAsCrew = _seeAsCrew && raw.isYou && !editMode;
+    const r = seeAsCrew ? { ...raw, isYou: false } : raw;
     if (origin !== null) profileOrigin = origin;
     if (_raverHistoryLoadedFor !== String(id)) {
       raverHistoryRows = [];
@@ -27803,6 +27860,7 @@
           ${ currentUser && (r.isYou || (perms.isLeaderOfRaver && !perms.isClaimed)) ? `<button class="btn btn-primary" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="enterProfileEditMode(this.dataset.raverId)">✏️ Edit Profile</button>` : ''}
           ${ !perms.isClaimed && perms.isLeaderOfRaver && r.qrToken ? `<button class="btn btn-ghost" style="padding:11px;" data-raver-id="${r.id}" onclick="showQRModal(this.dataset.raverId)" title="Share invite QR">📲</button>` : ''}
           ${r.isYou ? `<button class="btn btn-ghost" style="padding:11px;" data-raver-id="${r.id}" onclick="openPrivacySettingsModal(this.dataset.raverId)" title="Privacy & Permissions">🔒</button>` : ''}
+          ${r.isYou ? `<button class="btn btn-ghost" style="padding:11px;" data-raver-id="${r.id}" onclick="toggleSeeAsCrew(this.dataset.raverId)" title="See as your crew">👁</button>` : ''}
           ${perms.canDisconnect ? `<button class="btn btn-ghost btn-disconnect" data-raver-id="${r.id}" onclick="showDisconnectConfirm(this.dataset.raverId)" title="Disconnect account">🔗</button>` : ''}
           ${!r.isYou && currentUser ? `<button class="btn btn-ghost" style="padding:11px;" data-raver-id="${r.id}" onclick="showReportModal('raver', this.dataset.raverId)" title="Report">🚩</button>` : ''}
           ${perms.canDelete ? `<button class="btn btn-ghost" style="padding:11px;color:var(--neon-pink);border-color:rgba(255,45,120,0.3);" data-raver-id="${r.id}" onclick="deleteUnclaimedProfile(this.dataset.raverId)">🗑️</button>` : ''}
@@ -27882,6 +27940,7 @@
         ${!r.isYou ? `
         <div class="profile-section" style="${sg(0)}">
           <h3>🤝 How We Met</h3>
+          ${seeAsCrew ? '' : oneTimeHintHTML('how_we_met', `Only you and ${displayName(r).split(' ')[0]} see your story. Writing one earns +10 Love.`, GK_COLORS.ravers)}
           <div id="how-we-met-section">
             ${howWeMetSectionHTML(r.id, metStoriesCache[String(r.id)] || null, r)}
           </div>
@@ -27954,6 +28013,10 @@
         </div>
       `;
       if (r.isYou || perms.editFests) renderInlineFestPicker(r.id);
+      profilePage.classList.toggle('see-as-crew', seeAsCrew);
+      if (seeAsCrew) {
+        profilePage.insertAdjacentHTML('afterbegin', `<div class="see-as-crew-banner"><span>👁 Viewing as your crew — this is what they see.</span><button type="button" class="btn btn-ghost" onclick="toggleSeeAsCrew('${escJsAttr(raw.id)}')">Done</button></div>`);
+      }
       // Keep an open "See all" sheet in sync (e.g. after ✕ removes a rave); close it if the profile changed
       if (_profileListSheet) {
         if (_profileListSheet.raverId === String(r.id)) renderProfileListSheet();
@@ -33175,7 +33238,7 @@
   // assigning REALM_INTROS[realm] = { ..., open: fn } before first visit.
   const REALM_INTROS = {
     raves: { title: 'Find your sound', open: () => openFindYourSound() },
-    ravers: { title: 'Your raver card', body: 'Ravers is your people — and your card is how they spot you in the crowd.', tryIt: 'Add a photo so your crew spots you in the Huddle.', cta: 'Let’s go' },
+    ravers: { title: 'Your raver card', open: () => openRaverCardSetup() },
     stats: { title: 'Rave Life', body: 'Your rave life in numbers — nights logged, artists caught, and all your PLUR and badges.', tryIt: 'Open PLUR & Badges to see what you’ve earned so far.', cta: 'Let’s go' },
     village: { title: 'Vendor Village', body: 'Makers and vendors the fam swears by — kandi, glow, gear, food. Your crew’s picks come first.', tryIt: 'Check the vendors your crew vouches for.', cta: 'Let’s go' }
   };
@@ -33228,6 +33291,8 @@
     const realm = PAGE_TO_REALM[page];
     gkEnterScreen(realm || page);
     renderSetupPill();
+    _seeAsCrew = false;
+    if (page === 'members') renderMembersHint();
     if (!realm || !_guidance || realmFound(realm)) return;
     _guidance.realms[realm] = 'found';
     saveGuidance();
