@@ -39,7 +39,7 @@ const TEMPLATES: Record<string, { subject: string; render: (ctx: { firstName: st
   welcome: {
     subject: "You're in the fam 🖤",
     render: ({ firstName }) => `
-      <h1 style="font-size:1.4rem;">Hey ${firstName}, welcome to the tribe 🖤</h1>
+      <h1 style="font-size:1.4rem;">Hey ${firstName}, welcome to the fam 🖤</h1>
       <p>RaveFAM is where your crew lives between raves — track the shows you're hitting, see who's already going, and hang on to the memories after.</p>
       <p>Here's where to start:</p>
       ${feature("🎪", "Crews", "start one or join with an invite link", "crew-header.png", "A crew page showing the next rave up and who from the crew is going")}
