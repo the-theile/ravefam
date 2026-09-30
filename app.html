@@ -20790,7 +20790,7 @@
     const targetFestId = (_gamePlanActiveFestivalId && ordered.some(r => String(r.festival.id) === String(_gamePlanActiveFestivalId)))
       ? _gamePlanActiveFestivalId : ordered[0].festival.id;
     panel.innerHTML = `<div class="es-block"><div class="es-icon">🗺️</div><div class="es-headline">Loading Rave Plan…</div></div>`;
-    await loadGamePlanForFestival(crewId, targetFestId);
+    await Promise.all([loadGamePlanForFestival(crewId, targetFestId), loadCrewPlanTemplates(crewId)]);
     panel.innerHTML = buildGamePlanTabHTML(crew);
     await ensureHuddleRoomForFestival(crewId, targetFestId);
   }
@@ -20972,6 +20972,10 @@
       <div class="gk-eyebrow" style="--gk-color:var(--banner-color,#D6284B)">START FROM A TEMPLATE</div>
       <div class="gk-body" style="margin-top:4px;">Pre-fills tasks by phase. Edit anything.</div>
       <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px;">
+        ${_crewPlanTemplates.map(t => `
+          <button type="button" class="archive-link-card" style="text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;" onclick="applyGamePlanTemplate('${cid}','crew:${escJsAttr(t.id)}')">
+            <span class="archive-link-label">${escHtml(t.name)}</span><span class="archive-link-meta">Your crew’s template · ${(t.tasks || []).length} tasks</span>
+          </button>`).join('')}
         ${Object.entries(GAME_PLAN_TEMPLATES).map(([key, t]) => `
           <button type="button" class="archive-link-card" style="text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;" onclick="applyGamePlanTemplate('${cid}','${key}')">
             <span class="archive-link-label">${escHtml(t.name)}</span><span class="archive-link-meta">${escHtml(t.sub)}</span>
@@ -20982,7 +20986,7 @@
   }
 
   async function applyGamePlanTemplate(crewId, key) {
-    const t = GAME_PLAN_TEMPLATES[key];
+    const t = crewPlanTemplateByKey(key) || GAME_PLAN_TEMPLATES[key];
     const gp = gamePlans.find(g => String(g.crew_id) === String(crewId) && String(g.festival_id) === String(_gamePlanActiveFestivalId));
     if (!t || !gp) return;
     const firstTemplate = !gp.template_key;
@@ -20991,6 +20995,57 @@
     rerenderGamePlanChecklist(crewId);
     postGamePlanActivity(crewId, _gamePlanActiveFestivalId, `📋 The Rave Plan is up (${t.name}) — claim what you'll handle`);
     showToast(firstTemplate ? '+5 Love · plan ready, crew pinged to claim tasks' : 'Plan ready · crew pinged to claim tasks');
+  }
+
+  // ── Crew templates (crew_plan_templates) ──
+  // A Lead can keep a finished plan's tasks as "Save as crew template";
+  // they show first in the picker next time. Applied like a built-in one,
+  // with template_key 'crew:<id>'.
+  let _crewPlanTemplates = [];
+  async function loadCrewPlanTemplates(crewId) {
+    const { data, error } = await sb.from('crew_plan_templates')
+      .select('id, name, tasks').eq('crew_id', crewId).order('created_at', { ascending: false });
+    _crewPlanTemplates = error ? [] : (data || []);
+  }
+  function crewPlanTemplateByKey(key) {
+    if (!String(key).startsWith('crew:')) return null;
+    const t = _crewPlanTemplates.find(x => `crew:${x.id}` === key);
+    return t ? { name: t.name, tasks: (t.tasks || []).map(it => [it.text, it.phase || null]) } : null;
+  }
+  function gamePlanIsPast() {
+    const f = getFestival(_gamePlanActiveFestivalId);
+    const d = f && festDate(f);
+    if (!d) return false;
+    const end = new Date(d); end.setDate(end.getDate() + Math.max(1, Number(f.days) || 1));
+    return TODAY >= end;
+  }
+  function saveCrewTemplateCardHTML(crewId) {
+    const gp = gamePlans.find(g => String(g.crew_id) === String(crewId) && String(g.festival_id) === String(_gamePlanActiveFestivalId));
+    const tasks = gamePlanItems.filter(it => it.kind === 'task');
+    if (!gp || !tasks.length || _guidance?.quests?.[`tplsaved:${gp.id}`]) return '';
+    const done = tasks.filter(t => t.is_done).length;
+    const crew = getCrew(crewId);
+    return `<div class="archive-link-card" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">
+      <span class="gk-eyebrow" style="--gk-color:var(--banner-color,#D6284B)">AFTER THE RAVE</span>
+      <span class="archive-link-label">${done} of ${tasks.length} tasks done. Your fam showed up.</span>
+      <span class="archive-link-meta">Save as a crew template? Keeps these tasks for next time.</span>
+      <div class="archive-add-row">
+        <input class="form-input" id="crew-template-name" aria-label="Template name" maxlength="60" value="${escHtml(`${crew?.name || 'Crew'} plan`)}">
+        <button class="btn btn-primary archive-drop-btn" onclick="saveCrewPlanTemplate('${escJsAttr(crewId)}','${escJsAttr(gp.id)}')">Save</button>
+      </div>
+    </div>`;
+  }
+  async function saveCrewPlanTemplate(crewId, gamePlanId) {
+    const name = (document.getElementById('crew-template-name')?.value || '').trim();
+    if (!name) { showToast('⚠️ Give the template a name'); return; }
+    const tasks = gamePlanItems.filter(it => it.kind === 'task').slice(0, 60)
+      .map(t => ({ text: t.text || '', phase: t.phase || null })).filter(t => t.text);
+    const { data, error } = await sb.from('crew_plan_templates').insert({ crew_id: crewId, name, tasks }).select('id, name, tasks').single();
+    if (error) { showToast('⚠️ Could not save the template — try again'); return; }
+    _crewPlanTemplates.unshift(data);
+    saveGuidance({ quests: { ..._guidance.quests, [`tplsaved:${gamePlanId}`]: true } });
+    rerenderGamePlanChecklist(crewId);
+    showToast(`📋 Saved · “${name}” is in your crew’s templates`);
   }
 
   // Lead-only: unclaimed tasks and open seats in one card, one nudge.
@@ -21073,7 +21128,7 @@
     return `
       <div class="form-group">
         <div class="section-banner"><span class="banner-inner">✅ Checklist <span class="banner-subtitle">· get it done before you go</span></span></div>
-        ${isLead ? gamePlanCheckHTML(crewId) : ''}
+        ${isLead ? (gamePlanIsPast() ? saveCrewTemplateCardHTML(crewId) : gamePlanCheckHTML(crewId)) : ''}
         ${tipHTML}
         ${progressHTML}
         ${uid ? `
