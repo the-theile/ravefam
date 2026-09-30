@@ -28,7 +28,7 @@ test.describe('notification inline links', () => {
   test('tapping a crew link closes the drawer and opens that crew', async ({ page }) => {
     await bootAuthedApp(page);
     await page.evaluate(() =>
-      addNotification('🎉 You joined Bass Syndicate! Welcome to the tribe.', [nlCrew(getCrew('c1'))]));
+      addNotification('🎉 You joined Bass Syndicate! Welcome to the fam.', [nlCrew(getCrew('c1'))]));
     await page.evaluate(() => openNotifDrawer());
 
     await page.locator('#notif-list .notif-link').click();
