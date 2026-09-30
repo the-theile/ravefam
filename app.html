@@ -3237,6 +3237,18 @@
   .setup-item.done .setup-item-check { border-color: var(--neon-green); background: var(--neon-green); color: #050509; }
   .setup-item-where { margin-left: auto; font-size: 0.72rem; color: var(--muted); }
 
+  /* Crew page: tile twinkle anchor + Lead quests / Get settled stamps */
+  .crew-feature-tile { position: relative; }
+  .crew-quests { margin: -6px 0 16px; padding: 10px 12px; border-radius: 14px; background: linear-gradient(160deg, #F4F1E8, #EDEAE2); color: #1B1720; }
+  .crew-quests-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .crew-quests-label { font-size: 0.64rem; letter-spacing: 3px; font-weight: 800; color: #D6284B; }
+  .crew-quests-count { font-size: 0.7rem; color: rgba(27,23,32,0.55); }
+  .crew-quests-stamps { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .crew-quest-stamp { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 100px; border: 1.5px dashed rgba(27,23,32,0.35); background: transparent; color: #1B1720; font-size: 0.74rem; font-weight: 700; cursor: pointer; }
+  .crew-quest-stamp.done { border-style: solid; border-color: #D6284B; background: rgba(214,40,75,0.1); cursor: default; }
+  .crew-quests-done { display: flex; align-items: center; gap: 10px; }
+  .crew-quests-done button { height: 32px; padding: 0 14px; border-radius: 100px; border: 0; background: #1B1720; color: #F4F1E8; font-family: 'Outfit', sans-serif; font-weight: 800; cursor: pointer; }
+
   /* 01 Unlock banner — drops from the top, holds, slides away */
   .gk-banner {
     position: fixed; top: calc(env(safe-area-inset-top, 0px) + 10px); left: 50%; z-index: 1300;
@@ -16980,6 +16992,7 @@
     document.getElementById('page-crew-detail').classList.add('active');
     window.scrollTo(0, 0);
     renderDetail(id);
+    if (!(opts && opts.tab)) maybeShowCrewWelcome(id);
     loadCrewFeatureReadMap(id).then(() => refreshCrewFeatureGlow(id)).catch(console.warn);
     await dbLoadDreamPins(id);
     rerenderDreamBoard(id);
@@ -18129,6 +18142,7 @@
     const overviewPanelHTML = `
       ${crew.description ? `<div style="font-size:0.85rem;color:var(--muted);margin:-4px 0 14px;line-height:1.5;">${escHtml(crew.description)}</div>` : ''}
       ${crewNextFestBlock(crew)}
+      ${crewQuestRowHTML(crew)}
       <button class="btn btn-ghost" style="width:100%;padding:10px;font-size:0.85rem;margin-bottom:16px;" onclick="openCrewShareCard('${escJsAttr(crew.id)}')">📲 Share Crew Card</button>
       ${buildCrewFeatureTilesHTML(crew, isSecret, hasGamePlan)}
       <div style="margin-top:24px;">
@@ -18237,6 +18251,7 @@
       panel.style.display = '';
       btnEl.classList.add('active');
       panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      maybeOpenZoneIntro(feature);
       if (feature === 'huddle') {
         rerenderHuddleTilePreview(activeDetailId);
       } else if (feature === 'raveplan') {
@@ -22433,6 +22448,7 @@
     await dbVotePoll(pollId, String(voteValue));
     rerenderPolls(crewId);
     checkAndAwardBadges(crewId);
+    markCrewQuest('vote', crewId);
   }
 
   function deletePoll(pollId, crewId) {
@@ -25333,6 +25349,151 @@
     return `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${CREW_FEATURE_GLYPHS[key]}</svg>`;
   }
 
+  // ── 2.0 crew page guidance: zone intros, quests, welcome ──
+  // Tiles you haven't opened twinkle; the first tap opens the tile's intro
+  // (asked-for, so never budgeted); Later leaves a yellow !. Zone state is
+  // per person, not per crew — once you know the Dream Board, you know it.
+  // Huddle's intro lives in the Huddle itself; Rave Plan's was already
+  // explained at your first RSVP, so its tile just stops twinkling.
+  const ZONE_COLORS = { huddle: '#00F5FF', pins: '#FF2D78', dreamboard: '#BF00FF', poll: '#00F5FF', jams: '#39FF14', archive: '#FFE600', history: '#5B6EFF', raveplan: '#D6284B' };
+  const ZONE_INTROS = {
+    pins: { title: 'Pins', body: 'Crew wins live here. Level-ups and badges get pinned so the fam can hype them up.', tryMember: 'Earn your first badge and you’ll be the first one up.', tryLead: 'Your crew’s first win lands here — nothing to do yet.' },
+    dreamboard: { title: 'Dream Board', body: 'Throw every wild idea up here — sets, camp spots, outfit themes. The best ones become the plan.', tryMember: 'Pin one idea. Silly ones count.', tryLead: 'Pin the first idea so the board isn’t empty.' },
+    poll: { title: 'Poll', body: 'Can’t agree? Let the crew decide. Majority rules, zero drama.', tryMember: 'There’s an open poll — cast your vote.', tryLead: 'Start the first one: camping or hotel?' },
+    jams: { title: 'Jams', body: 'Pre-game playlists. Share what you’re hyped on before the drop hits.', tryMember: 'Drop a playlist link from your music app.', tryLead: 'Drop a pre-game playlist for the crew.' },
+    archive: { title: 'Archive', body: 'Links to albums, videos and recaps, sorted by rave. Your crew’s memory bank.', tryMember: 'After the weekend, drop the shared photo album here.', tryLead: 'After the weekend, drop the shared photo album here.' },
+    history: { title: 'History', body: 'Who did what, when. Fills in as the crew makes moves.', tryMember: 'Nothing to do — scroll back anytime.', tryLead: 'Nothing to do — scroll back anytime.' }
+  };
+
+  function zoneBadgeHTML(key) {
+    if (!_guidance) return '';
+    const state = _guidance.zones[key];
+    if (state === 'saved') return '<span class="gk-saved-badge" aria-hidden="true">!</span>';
+    if (!state && (ZONE_INTROS[key] || key === 'huddle' || key === 'raveplan')) {
+      return `<span class="gk-twinkle" style="--gk-color:${ZONE_COLORS[key]}" aria-hidden="true"></span>`;
+    }
+    return '';
+  }
+  function refreshZoneBadges() {
+    document.querySelectorAll('.crew-feature-tile[data-feature]').forEach(tile => {
+      tile.querySelector('.gk-twinkle, .gk-saved-badge')?.remove();
+      tile.insertAdjacentHTML('beforeend', zoneBadgeHTML(tile.dataset.feature));
+    });
+  }
+  function setZoneState(key, state) {
+    if (!_guidance) return;
+    _guidance.zones[key] = state;
+    saveGuidance();
+    refreshZoneBadges();
+  }
+
+  function maybeOpenZoneIntro(feature) {
+    if (!_guidance || _guidance.zones[feature] === 'opened') return;
+    const intro = ZONE_INTROS[feature];
+    // No intro of its own, or the raver chose fewer tips: the tap is the discovery.
+    if (!intro || _guidance.help_level !== 'guide') {
+      if (intro || feature === 'raveplan') setZoneState(feature, 'opened');
+      return;
+    }
+    const crew = getCrew(activeDetailId);
+    openZoneSheet({
+      color: ZONE_COLORS[feature],
+      eyebrow: _guidance.zones[feature] === 'saved' ? 'SAVED FOR LATER' : 'FIRST VISIT',
+      title: intro.title, body: intro.body,
+      tryIt: crew?.isLead ? intro.tryLead : intro.tryMember,
+      onGo: () => setZoneState(feature, 'opened'),
+      onLater: () => setZoneState(feature, 'saved')
+    });
+  }
+
+  // Lead quests (you run the crew) / Get settled (you joined it): four
+  // stamps on the ticket. Stamps are worked out from crew data where it
+  // exists; the rest are flags other steps set with markCrewQuest(). All
+  // stamped → a light moment and the Crew Captain / Settled In badge, then
+  // the row retires for that crew.
+  function crewQuestDefs(crew) {
+    const id = crew.id;
+    const q = _guidance?.quests || {};
+    const hasGamePlan = deriveCrewFestivalPlans(crew).live.length > 0;
+    if (crew.isLead) {
+      const people = crewSquad(crew);
+      return { label: 'LEAD QUESTS', title: 'Lead quests', badge: 'Crew Captain', items: [
+        { key: 'add', label: 'Add your people', done: people.length >= 2, go: `switchCrewDetailTab('roster', document.querySelector('#page-crew-detail .stats-subtab:nth-child(2)'))` },
+        { key: 'doors', label: 'Open the doors', done: crew.status !== 'secret', go: `switchCrewDetailTab('roster', document.querySelector('#page-crew-detail .stats-subtab:nth-child(2)'))` },
+        { key: 'claim', label: 'Get a spot claimed', done: people.some(p => !p.isYou && p.claimedBy), go: `openCrewShareCard('${escJsAttr(id)}')` },
+        { key: 'plan', label: 'Get a crewmate going', done: hasGamePlan, go: `switchTab('events')` }
+      ] };
+    }
+    return { label: 'GET SETTLED', title: 'Get settled', badge: 'Settled In', items: [
+      { key: 'claim', label: 'Claim your spot', done: true, go: '' },
+      { key: 'hi', label: 'Say hi', done: !!q[`hi:${id}`], go: `openHuddle('${escJsAttr(id)}')` },
+      { key: 'vote', label: 'Vote in a poll', done: !!q[`vote:${id}`], go: `toggleCrewFeatureTile('poll', document.querySelector('.crew-feature-tile[data-feature=&quot;poll&quot;]'))` },
+      { key: 'task', label: 'Claim a task', done: !!q[`task:${id}`], go: hasGamePlan ? `toggleCrewFeatureTile('raveplan', document.querySelector('.crew-feature-tile[data-feature=&quot;raveplan&quot;]'))` : `switchTab('events')` }
+    ] };
+  }
+
+  function crewQuestRowHTML(crew) {
+    if (!_guidance || !crew || _guidance.quests[`done:${crew.id}`]) return '';
+    const me = squad.find(r => r.isYou);
+    const isMember = crew.isLead || (me && crew.squadIds.some(sid => String(sid) === String(me.id)));
+    if (!isMember) return '';
+    const d = crewQuestDefs(crew);
+    const n = d.items.filter(it => it.done).length;
+    if (n === d.items.length) {
+      return `<div class="crew-quests" id="crew-quest-row"><div class="crew-quests-done">
+        <span style="flex-grow:1;display:flex;flex-direction:column"><span class="crew-quests-label">ALL STAMPED</span>
+        <span style="font-family:'Outfit',sans-serif;font-weight:800;font-size:0.95rem">${d.title} complete · ${d.badge} badge</span></span>
+        <button type="button" onclick="retireCrewQuests('${escJsAttr(crew.id)}')">Nice</button></div></div>`;
+    }
+    return `<div class="crew-quests" id="crew-quest-row">
+      <div class="crew-quests-head"><span class="crew-quests-label">${d.label}</span><span class="crew-quests-count">${n} of ${d.items.length} · all = ${d.badge} badge</span></div>
+      <div class="crew-quests-stamps">${d.items.map(it => `<button type="button" class="crew-quest-stamp${it.done ? ' done' : ''}"${it.done || !it.go ? ' disabled' : ` onclick="${it.go}"`}>${it.done ? '✓ ' : ''}${escHtml(it.label)}</button>`).join('')}</div>
+    </div>`;
+  }
+
+  function rerenderCrewQuestRow(crewId) {
+    if (String(activeDetailId) !== String(crewId)) return;
+    const el = document.getElementById('crew-quest-row');
+    const html = crewQuestRowHTML(getCrew(crewId));
+    if (el) el.outerHTML = html || '';
+  }
+
+  function markCrewQuest(kind, crewId) {
+    if (!_guidance || !crewId || _guidance.quests[`${kind}:${crewId}`]) return;
+    _guidance.quests[`${kind}:${crewId}`] = true;
+    saveGuidance();
+    rerenderCrewQuestRow(crewId);
+  }
+
+  function retireCrewQuests(crewId) {
+    const crew = getCrew(crewId);
+    if (!_guidance || !crew) return;
+    _guidance.quests[`done:${crewId}`] = true;
+    _guidance.quests[crew.isLead ? 'badge_crew_captain' : 'badge_settled_in'] = true;
+    saveGuidance();
+    rerenderCrewQuestRow(crewId);
+    showToast('🏅 Badge added to your Stats');
+  }
+
+  // First time you open a crew you joined (not one you lead): one sheet that
+  // explains the page and points at the Huddle.
+  function maybeShowCrewWelcome(crewId) {
+    const crew = getCrew(crewId);
+    const me = squad.find(r => r.isYou);
+    if (!_guidance || !crew || crew.isLead || _guidance.quests[`welcome:${crewId}`]) return;
+    if (!me || !crew.squadIds.some(sid => String(sid) === String(me.id))) return;
+    _guidance.quests[`welcome:${crewId}`] = true;
+    saveGuidance();
+    if (!gkCanInterrupt({ kind: 'intro' })) return;
+    gkSpend();
+    openZoneSheet({
+      color: GK_COLORS.crews, eyebrow: 'YOUR CREW', title: `Welcome to ${crew.name}`,
+      body: 'Welcome home, fam. The ticket up top is your next rave; the tiles are everything you get up to together.',
+      tryIt: 'Pop into the Huddle and say hi so the crew knows you made it.',
+      cta: 'Open the Huddle', onGo: () => openHuddle(crewId)
+    });
+  }
+
   // Tile grid for the Overview tab that hides the 6 crew feature sections
   // (Pins, Dream Board, Poll, Jams, Archive, History) behind tappable tiles
   // instead of stacking all of them full-length on the page. Each panel is
@@ -25355,6 +25516,7 @@
       <button type="button" class="crew-feature-tile${t.key === 'huddle' ? ' active' : ''}" data-feature="${t.key}" onclick="toggleCrewFeatureTile('${escJsAttr(t.key)}', this)">
         <div class="crew-feature-tile-icon" style="--ac:var(${t.ac})">${crewFeatureIconSVG(t.key)}</div>
         <div class="crew-feature-tile-label">${t.label}</div>
+        ${zoneBadgeHTML(t.key)}
       </button>`).join('');
     return `
       <div class="crew-feature-tile-grid">${tileGrid}</div>
