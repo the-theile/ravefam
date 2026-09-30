@@ -62,6 +62,29 @@ test.describe('guidance · places', () => {
     await expect(page.locator('#guide-hub-root')).toContainText('Stats');
   });
 
+  test('tapping a tab with the yellow ! reopens its saved intro, once per session', async ({ page }) => {
+    await bootAuthedApp(page, { sessionOver: FRESH });
+    await closeSheets(page);
+    await page.evaluate(() => switchTab('stats'));
+    await page.locator('.gk-sheet .gk-btn.ghost').last().click();
+    await expect(page.locator('.nav-tab.c-stats .gk-saved-badge')).toHaveCount(1);
+    await page.evaluate(() => switchTab('crews'));
+    // A programmatic switch doesn't reopen it; the raver's own tap does.
+    await page.evaluate(() => switchTab('stats'));
+    await page.waitForTimeout(350);
+    await expect(page.locator('.gk-sheet')).toHaveCount(0);
+    await page.click('.nav-tab.c-crews');
+    await page.click('.nav-tab.c-stats');
+    await expect(page.locator('.gk-sheet .gk-title').last()).toHaveText('Rave Life');
+    await page.locator('.gk-sheet .gk-btn.ghost').last().click();
+    await page.waitForTimeout(350);
+    await page.click('.nav-tab.c-crews');
+    await page.click('.nav-tab.c-stats');
+    await page.waitForTimeout(350);
+    await expect(page.locator('.gk-sheet')).toHaveCount(0);
+    await expect(page.locator('.nav-tab.c-stats .gk-saved-badge')).toHaveCount(1);
+  });
+
   test('a settled raver gets no banners or intros', async ({ page }) => {
     await bootAuthedApp(page);
     await page.evaluate(() => switchTab('stats'));

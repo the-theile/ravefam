@@ -9639,7 +9639,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.0.0';
+  const APP_VERSION = '2.0.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -15520,7 +15520,7 @@
     document.getElementById('page-' + page).classList.add('active');
     if (el) el.classList.add('active');
     else document.querySelector(`.nav-tab[onclick*="'${page}'"]`)?.classList.add('active');
-    onPlaceEntered(page);  // 2.0 discovery: banner + intro the first time (see REALMS)
+    onPlaceEntered(page, !!el);  // 2.0 discovery: banner + intro the first time (see REALMS)
   }
 
   // Modal
@@ -33561,12 +33561,24 @@
     renderSetupPill();
   }
 
-  function onPlaceEntered(page) {
+  const _realmReoffered = {};  // realm → true once its saved intro was reopened this session
+
+  // tapped: the raver tapped the tab itself (not a programmatic switch).
+  function onPlaceEntered(page, tapped = false) {
     const realm = PAGE_TO_REALM[page];
     gkEnterScreen(realm || page);
     renderSetupPill();
     _seeAsCrew = false;
     if (page === 'members') renderMembersHint();
+    // Tapping a tab that shows the yellow ! opens what was saved for it —
+    // the ! is the ask, so it isn't budgeted. Once per session, so a second
+    // Later doesn't turn every tab switch into a pop-up; the hub's Resume
+    // still works after that.
+    if (tapped && realm && _guidance?.realms?.[realm] === 'saved' && !_realmReoffered[realm] && !gkRaveModeOn()) {
+      _realmReoffered[realm] = true;
+      openRealmIntro(realm);
+      return;
+    }
     if (!realm || !_guidance || realmFound(realm)) return;
     _guidance.realms[realm] = 'found';
     saveGuidance();
