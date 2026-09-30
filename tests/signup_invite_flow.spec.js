@@ -198,6 +198,12 @@ test.describe('first-time setup after an invite at boot', () => {
     await page.fill('#crew-join-name', 'Nova');
     await page.evaluate(() => confirmJoinCrew());
 
+    // Same "IN THE FAM" celebration a QR claim gets…
+    await expect(page.locator('#claim-success-screen')).toHaveClass(/open/);
+    await expect(page.locator('#success-content')).toContainText('Bass Syndicate');
+    await expect(page.locator('#success-content .btn-claim')).toHaveText('Jump into Bass Syndicate →');
+    // …and onboarding follows once it closes.
+    await page.locator('#success-content .btn-claim').click();
     await expect(page.locator('#onboarding-screen')).toHaveClass(/show/, { timeout: 4000 });
   });
 
@@ -220,6 +226,16 @@ test.describe('first-time setup after an invite at boot', () => {
     await page.evaluate(() => closeScanner());
 
     await expect(page.locator('#onboarding-screen')).toHaveClass(/show/, { timeout: 4000 });
+  });
+
+  test('an onboarded member joining by link lands on the crew after the celebration', async ({ page }) => {
+    const data = { ...seedData(), __rpc: { get_crew_by_invite_token: CREW, join_crew_via_invite: { crew_id: 'c1', crew_name: 'Bass Syndicate' } } };
+    await bootAuthedApp(page, { data });
+    await page.evaluate(() => { showCrewJoinModal('inv-new', { name: 'Bass Syndicate', member_count: 3 }); return confirmJoinCrew(); });
+    await expect(page.locator('#claim-success-screen')).toHaveClass(/open/);
+    await page.evaluate(() => closeSuccessScreen());
+    await expect(page.locator('#onboarding-screen')).not.toHaveClass(/show/);
+    expect(await page.evaluate(() => activeDetailId)).toBe('c1');
   });
 
   test('the crew leader is told who joined via the link', async ({ page }) => {
@@ -271,4 +287,51 @@ test.describe('crew links: scanning and retry', () => {
     });
     expect(await page.evaluate(() => sessionStorage.getItem('pendingCrewJoin'))).toBe('inv-c1');
   });
+});
+
+test.describe('invite code entry', () => {
+  test('look-alike letters map to hex digits and junk is dropped', async ({ page }) => {
+    await openSignedOut(page, '/app.html', seedData());
+    await page.evaluate(() => { openScanner(); switchScannerTab('code'); });
+    const first = page.locator('.otp-box').first();
+    await first.focus();
+    await page.keyboard.type('o');
+    await expect(first).toHaveValue('0');
+    const second = page.locator('.otp-box').nth(1);
+    await second.focus();
+    await page.keyboard.type('x');
+    await expect(second).toHaveValue('');
+  });
+
+  test('pasting a full code fills every box', async ({ page }) => {
+    await openSignedOut(page, '/app.html', seedData());
+    await page.evaluate(() => { openScanner(); switchScannerTab('code'); });
+    await page.evaluate(() => {
+      const box = document.querySelector('.otp-box');
+      const dt = new DataTransfer(); dt.setData('text', ' ab-12-c0 ');
+      box.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    });
+    const vals = await page.$$eval('.otp-box', bs => bs.map(b => b.value).join(''));
+    expect(vals).toBe('AB12C0');
+    await expect(page.locator('#code-submit-btn')).toBeEnabled();
+  });
+
+  test('a miss explains the code format', async ({ page }) => {
+    await openSignedOut(page, '/app.html', seedData());
+    await page.evaluate(() => { openScanner(); switchScannerTab('code');
+      document.querySelectorAll('.otp-box').forEach(b => { b.value = 'A'; });
+      return submitInviteCode(); });
+    await expect(page.locator('#code-error')).toContainText('0–9 and A–F');
+  });
+});
+
+test('a rate-limited code lookup says so instead of "network error"', async ({ page }) => {
+  await openSignedOut(page, '/app.html', seedData());
+  await page.evaluate(() => {
+    sb.rpc = () => Promise.resolve({ data: null, error: { message: 'rate_limited', code: 'P0001' } });
+    openScanner(); switchScannerTab('code');
+    document.querySelectorAll('.otp-box').forEach(b => { b.value = 'A'; });
+    return submitInviteCode();
+  });
+  await expect(page.locator('#code-error')).toContainText('Too many tries');
 });
