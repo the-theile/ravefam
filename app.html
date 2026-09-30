@@ -9639,7 +9639,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.0.0';
+  const APP_VERSION = '2.0.2';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -13039,7 +13039,23 @@
     if (key === 'identity' || key === 'photo') { switchTab('members'); if (me) openProfileEditor(me.id); }
     else if (key === 'crew') switchTab('crews');
     else if (key === 'sound') { switchTab('events'); openRealmIntro('raves'); }
-    else if (key === 'alerts') switchTab('events');
+    else if (key === 'alerts') { switchTab('events'); openSetupAlerts(me); }
+  }
+
+  // Set-time alerts are the 🔔 Remind me toggle in each rave's Lineup
+  // Explorer, not a setting in the app — so point at the next rave you're
+  // going to that has one.
+  function openSetupAlerts(me) {
+    const next = (me?.festIds || []).map(id => getFestival(id)).filter(f => f && getLineupExplorerUrl(f) && festDate(f) >= TODAY)
+      .sort((a, b) => festDate(a) - festDate(b))[0];
+    openZoneSheet({
+      color: '#FFE600', eyebrow: 'SETUP · ALERTS', title: 'Turn on set-time alerts',
+      body: next
+        ? `Alerts live in each rave’s lineup. Open ${next.name}’s lineup and tap 🔔 Remind me — we’ll send a push 15 minutes before every set you’ve picked. The button shows up once set times are posted.`
+        : 'Alerts live in each rave’s lineup. Once a rave you’re going to has its lineup in RaveFAM, open it and tap 🔔 Remind me — we’ll send a push 15 minutes before every set you’ve picked.',
+      cta: next ? `Open ${next.name} lineup` : 'Got it', later: '', isIntro: false,
+      onGo: next ? () => window.open(getLineupExplorerUrl(next), '_blank') : null
+    });
   }
 
   // Kept under its old name: the welcome-back popup still calls it on close.
@@ -15520,7 +15536,7 @@
     document.getElementById('page-' + page).classList.add('active');
     if (el) el.classList.add('active');
     else document.querySelector(`.nav-tab[onclick*="'${page}'"]`)?.classList.add('active');
-    onPlaceEntered(page);  // 2.0 discovery: banner + intro the first time (see REALMS)
+    onPlaceEntered(page, !!el);  // 2.0 discovery: banner + intro the first time (see REALMS)
   }
 
   // Modal
@@ -33561,12 +33577,24 @@
     renderSetupPill();
   }
 
-  function onPlaceEntered(page) {
+  const _realmReoffered = {};  // realm → true once its saved intro was reopened this session
+
+  // tapped: the raver tapped the tab itself (not a programmatic switch).
+  function onPlaceEntered(page, tapped = false) {
     const realm = PAGE_TO_REALM[page];
     gkEnterScreen(realm || page);
     renderSetupPill();
     _seeAsCrew = false;
     if (page === 'members') renderMembersHint();
+    // Tapping a tab that shows the yellow ! opens what was saved for it —
+    // the ! is the ask, so it isn't budgeted. Once per session, so a second
+    // Later doesn't turn every tab switch into a pop-up; the hub's Resume
+    // still works after that.
+    if (tapped && realm && _guidance?.realms?.[realm] === 'saved' && !_realmReoffered[realm] && !gkRaveModeOn()) {
+      _realmReoffered[realm] = true;
+      openRealmIntro(realm);
+      return;
+    }
     if (!realm || !_guidance || realmFound(realm)) return;
     _guidance.realms[realm] = 'found';
     saveGuidance();
