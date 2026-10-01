@@ -102,7 +102,12 @@ Deno.serve(async (req) => {
   const { data: crew } = await sb.from("crews").select("name").eq("id", message.crew_id).maybeSingle();
   const crewName = crew?.name ?? "your crew";
 
-  let { data: senderRaver } = await sb.from("ravers").select("name").eq("claimed_by", message.sender_id).maybeSingle();
+  // A claim that merged a stub leaves a second, merged row with the same
+  // claimed_by; maybeSingle() returns nothing when two rows match, which is
+  // how "Bump" turned into "Someone". Skip merged/deleted rows, prefer is_you.
+  let { data: senderRaver } = await sb.from("ravers").select("name")
+    .eq("claimed_by", message.sender_id).is("merged_into", null).is("deleted_at", null)
+    .order("is_you", { ascending: false }).limit(1).maybeSingle();
   if (!senderRaver) {
     ({ data: senderRaver } = await sb.from("ravers").select("name").eq("created_by", message.sender_id).eq("is_you", true).maybeSingle());
   }
