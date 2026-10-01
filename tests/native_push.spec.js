@@ -18,6 +18,7 @@ async function installCapacitorStub(page, { permission = 'prompt', grantOnReques
       Plugins: {
         App: { addListener, getLaunchUrl: async () => undefined },
         Share: { share: async (opts) => rec('share', opts) },
+        Badge: { set: async ({ count }) => rec('badge', count), clear: async () => rec('badge', 0) },
         PushNotifications: {
           addListener,
           checkPermissions: async () => { rec('checkPermissions'); return { receive: native.permission }; },
@@ -136,5 +137,27 @@ test.describe('iOS app · native push', () => {
     await bootAuthedApp(page, { data, sessionOver: SESSION_OVER });
     await page.evaluate(() => window.__native.fire('pushNotificationActionPerformed', { notification: { data: { crewId: 'c1', roomId: 'room-main' } } }));
     await expect(page.locator('#huddle-screen')).toHaveClass(/open/);
+  });
+
+  test('the app icon badge follows unread Huddle messages, skips blocked senders, and clears when read', async ({ page }) => {
+    await installCapacitorStub(page, { permission: 'granted' });
+    const data = seedWithPrefs();
+    const ago = (m) => new Date(Date.now() - m * 60000).toISOString();
+    data.huddle_rooms = [{ id: 'room-main', crew_id: 'c1', room_key: 'main', kind: 'main', name: 'Main Huddle', festival_id: null, created_by: TEST_UID, created_at: '2024-01-01T00:00:00Z' }];
+    data.huddle_messages = [
+      { id: 'm1', room_id: 'room-main', crew_id: 'c1', sender_id: 'kai-uid', kind: 'text', body: 'one', reactions: {}, created_at: ago(10), deleted_at: null, mentions: [] },
+      { id: 'm2', room_id: 'room-main', crew_id: 'c1', sender_id: 'kai-uid', kind: 'text', body: 'two', reactions: {}, created_at: ago(5), deleted_at: null, mentions: [] },
+      { id: 'm3', room_id: 'room-main', crew_id: 'c1', sender_id: 'blocked-uid', kind: 'text', body: 'nope', reactions: {}, created_at: ago(4), deleted_at: null, mentions: [] },
+    ];
+    data.huddle_room_reads = [{ room_id: 'room-main', user_id: TEST_UID, last_read_at: ago(60) }];
+    data.user_blocks = [{ blocker_id: TEST_UID, blocked_id: 'blocked-uid', created_at: ago(120) }];
+    await bootAuthedApp(page, { data, sessionOver: SESSION_OVER });
+
+    // Two from Kai; the blocked sender's message doesn't count.
+    await expect.poll(async () => (await calls(page, 'badge')).map(c => c.arg).pop()).toBe(2);
+
+    await page.evaluate(async () => { await openHuddle('c1'); });
+    await expect(page.locator('#huddle-screen')).toHaveClass(/open/);
+    await expect.poll(async () => (await calls(page, 'badge')).map(c => c.arg).pop()).toBe(0);
   });
 });

@@ -65,11 +65,20 @@ export interface ApnsMessage {
   threadId?: string;     // groups notifications in Notification Center
   collapseId?: string;   // replaces an earlier notification with the same id
   ttlSeconds?: number;   // drop if undeliverable for this long
+  // Set the app icon badge to the recipient's unread Huddle count
+  // (huddle_unread_count; the same number as the in-app badge). Leave unset to
+  // keep whatever badge the icon already shows.
+  huddleBadge?: boolean;
+  badge?: number;
 }
 
 async function sendOne(token: string, m: ApnsMessage): Promise<{ ok: boolean; gone: boolean; reason?: string }> {
   const payload: Record<string, unknown> = {
-    aps: { alert: { title: m.title, body: m.body }, sound: "default", ...(m.threadId ? { "thread-id": m.threadId } : {}) },
+    aps: {
+      alert: { title: m.title, body: m.body }, sound: "default",
+      ...(m.threadId ? { "thread-id": m.threadId } : {}),
+      ...(typeof m.badge === "number" ? { badge: m.badge } : {}),
+    },
   };
   for (const [k, v] of Object.entries(m.data ?? {})) if (v != null) payload[k] = v;
   const headers: Record<string, string> = {
@@ -95,6 +104,10 @@ async function sendOne(token: string, m: ApnsMessage): Promise<{ ok: boolean; go
 export async function sendToUserDevices(sb: any, userId: string, m: ApnsMessage): Promise<{ sent: number; failed: number; devices: number }> {
   if (apnsConfigError()) return { sent: 0, failed: 0, devices: 0 };
   const { data: rows } = await sb.from("device_push_tokens").select("token").eq("user_id", userId);
+  if (rows?.length && m.huddleBadge) {
+    const { data: unread, error } = await sb.rpc("huddle_unread_count", { p_user: userId });
+    if (!error && typeof unread === "number") m = { ...m, badge: unread };
+  }
   let sent = 0, failed = 0;
   for (const { token } of rows ?? []) {
     try {
