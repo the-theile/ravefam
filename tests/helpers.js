@@ -184,6 +184,7 @@ async function installSupabaseStub(page, opts = {}) {
         const UNIQUE_INSERT_KEYS = {
           crew_achievements: ['crew_id', 'badge_id'],
           raver_achievements: ['raver_id', 'crew_id', 'badge_id'],
+          user_blocks: ['blocker_id', 'blocked_id'],
         };
 
         // PostgREST ilike patterns: '%' is any run, '_' is one character, and
