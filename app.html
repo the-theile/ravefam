@@ -9648,7 +9648,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.1.1';
+  const APP_VERSION = '2.2.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -13097,9 +13097,9 @@
     { key: 'crew', label: 'Start or join a crew', where: 'in Crews' },
     { key: 'sound', label: 'Pick your sound', where: 'in Raves' },
     { key: 'photo', label: 'Add a photo', where: 'in Ravers' },
-    { key: 'alerts', label: 'Turn on set-time alerts', where: 'in Raves' }
+    { key: 'rave', label: 'Mark a rave Going or Interested', where: 'in Raves' }
   ];
-  let _setupHasAlerts = null;  // set_reminder_optins exists for this user; fetched once per session
+  let _reminderOptinsLoaded = false;  // set_reminder_optins fetched once per session (for the fest-week nudge)
   let _reminderOptinFestIds = new Set();  // festivals this user turned 🔔 Remind me on for (Lineup Explorer)
 
   function setupItemDone(key) {
@@ -13108,7 +13108,7 @@
     if (key === 'crew') return crews.length > 0;
     if (key === 'sound') return !!me?.genres?.length;
     if (key === 'photo') return !!me?.avatarUrl;
-    if (key === 'alerts') return !!_setupHasAlerts || !!_guidance?.setup_items?.alerts;
+    if (key === 'rave') return !!(me?.festIds?.length || me?.interestedFestIds?.length);
     return false;
   }
   function setupDoneCount() {
@@ -13123,11 +13123,10 @@
   async function renderSetupPill() {
     const pill = document.getElementById('setup-pill');
     if (!pill) return;
-    if (_setupHasAlerts === null && currentUser) {
-      _setupHasAlerts = false;
+    if (!_reminderOptinsLoaded && currentUser) {
+      _reminderOptinsLoaded = true;
       const { data } = await sb.from('set_reminder_optins').select('festival_id');
       _reminderOptinFestIds = new Set((data || []).map(r => String(r.festival_id)));
-      _setupHasAlerts = _reminderOptinFestIds.size > 0;
     }
     pill.style.display = setupPillVisible() ? '' : 'none';
     const n = document.getElementById('setup-pill-n');
@@ -13159,23 +13158,7 @@
     if (key === 'identity' || key === 'photo') { switchTab('members'); if (me) openProfileEditor(me.id); }
     else if (key === 'crew') switchTab('crews');
     else if (key === 'sound') { switchTab('events'); openRealmIntro('raves'); }
-    else if (key === 'alerts') { switchTab('events'); openSetupAlerts(me); }
-  }
-
-  // Set-time alerts are the 🔔 Remind me toggle in each rave's Lineup
-  // Explorer, not a setting in the app — so point at the next rave you're
-  // going to that has one.
-  function openSetupAlerts(me) {
-    const next = (me?.festIds || []).map(id => getFestival(id)).filter(f => f && getLineupExplorerUrl(f) && festDate(f) >= TODAY)
-      .sort((a, b) => festDate(a) - festDate(b))[0];
-    openZoneSheet({
-      color: '#FFE600', eyebrow: 'SETUP · ALERTS', title: 'Turn on set-time alerts',
-      body: next
-        ? `Alerts live in each rave’s lineup. Open ${next.name}’s lineup and tap 🔔 Remind me — we’ll send a push 15 minutes before every set you’ve picked. The button shows up once set times are posted.`
-        : 'Alerts live in each rave’s lineup. Once a rave you’re going to has its lineup in RaveFAM, open it and tap 🔔 Remind me — we’ll send a push 15 minutes before every set you’ve picked.',
-      cta: next ? `Open ${next.name} lineup` : 'Got it', later: '', isIntro: false,
-      onGo: next ? () => window.open(getLineupExplorerUrl(next), '_blank') : null
-    });
+    else if (key === 'rave') { switchTab('events'); showToast('Tap Going or 👀 Interested on any rave'); }
   }
 
   // Kept under its old name: the welcome-back popup still calls it on close.
@@ -31840,6 +31823,7 @@
         if (!isPast) maybeFirstRsvpMoment(fest);
       }
     }
+    renderSetupPill();
     renderEvents();
     renderSquad();
     renderCrews();
@@ -31938,6 +31922,7 @@
       you.interestedFestIds.push(fest ? fest.id : festId);
       showToast(`👀 Watching ${fest?.name || 'that rave'}`);
     }
+    renderSetupPill();
     renderEvents();
     renderSquad();
     renderCrews();
