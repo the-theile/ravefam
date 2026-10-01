@@ -64,6 +64,12 @@ async function logOutcome(userId: string, messageId: string, status: "sent" | "s
   );
 }
 
+// Users who blocked the sender never get a push from them (user_blocks).
+async function blockersOf(sb: any, senderId: string): Promise<Set<string>> {
+  const { data } = await sb.from("user_blocks").select("blocker_id").eq("blocked_id", senderId);
+  return new Set((data ?? []).map((row: any) => row.blocker_id as string));
+}
+
 Deno.serve(async (req) => {
   const { message_id: messageId } = await req.json();
   if (!messageId) {
@@ -117,8 +123,10 @@ Deno.serve(async (req) => {
       .filter((uid: string | null): uid is string => !!uid)
   );
 
-  const recipientUids = Array.from(new Set(message.mentions as string[]))
+  let recipientUids = Array.from(new Set(message.mentions as string[]))
     .filter((uid) => uid !== message.sender_id && crewUids.has(uid));
+  const blockers = await blockersOf(sb, message.sender_id);
+  recipientUids = recipientUids.filter((uid) => !blockers.has(uid));
 
   const rawBody = message.kind === "text" ? (message.body ?? "") : `sent a ${message.kind}`;
   const body = rawBody.length > MAX_BODY ? `${rawBody.slice(0, MAX_BODY - 1)}…` : rawBody;
