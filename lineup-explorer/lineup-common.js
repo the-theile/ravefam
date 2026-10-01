@@ -2779,9 +2779,57 @@
     return out;
   }
 
+  // iOS app (Capacitor): push goes through Apple, not web push. Same flow as
+  // app.html's ensureNativePush: ask iOS, register, store the device token with
+  // register_device_push_token so send-set-reminders can reach this phone.
+  var NativePush = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()
+    && window.Capacitor.Plugins && window.Capacitor.Plugins.PushNotifications;
+  if (NativePush) {
+    // Tapping a notification while a lineup page is open: Huddle pushes go to
+    // the app (cold-start params), lineup pushes carry their own path.
+    NativePush.addListener("pushNotificationActionPerformed", function (ev) {
+      var d = (ev && ev.notification && ev.notification.data) || {};
+      if (d.crewId) {
+        var q = new URLSearchParams({ crew: d.crewId });
+        if (d.roomId) q.set("room", d.roomId);
+        if (d.messageId) q.set("msg", d.messageId);
+        location.href = "/app.html?" + q.toString();
+      } else if (d.url) {
+        location.href = d.url;
+      }
+    });
+  }
+
+  function ensureNativePush(cb) {
+    NativePush.checkPermissions().then(function (p) {
+      return p.receive === "prompt" || p.receive === "prompt-with-rationale" ? NativePush.requestPermissions() : p;
+    }).then(function (p) {
+      if (p.receive !== "granted") {
+        toast("🔕 Notifications are off for RaveFAM. Turn them on in iOS Settings → RaveFAM → Notifications.");
+        cb(false);
+        return;
+      }
+      var done = false;
+      var finish = function (ok) { if (!done) { done = true; cb(ok); } };
+      NativePush.addListener("registration", function (t) {
+        window.LineupMember.client(function (sb) {
+          sb.rpc("register_device_push_token", { p_token: t.value, p_platform: "ios" }).then(function (res) {
+            var ok = !!(res && res.data && res.data.ok);
+            if (!ok) toast("⚠️ Couldn't save this phone for push. Try again.");
+            finish(ok);
+          }, function () { finish(false); });
+        });
+      });
+      NativePush.addListener("registrationError", function () { toast("⚠️ Couldn't turn on push here."); finish(false); });
+      setTimeout(function () { finish(false); }, 15000);
+      NativePush.register();
+    }).catch(function () { toast("⚠️ Couldn't turn on push here."); cb(false); });
+  }
+
   // Same push_subscriptions row the app's Beacon / mention toggles use; one
   // browser subscription serves every channel.
   function ensurePush(cb) {
+    if (NativePush) { ensureNativePush(cb); return; }
     if (!("serviceWorker" in navigator) || !("PushManager" in window) || !window.Notification) {
       toast("Push notifications aren't supported on this browser.");
       cb(false);

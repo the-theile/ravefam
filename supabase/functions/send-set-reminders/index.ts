@@ -14,6 +14,7 @@
 // send-mention-push (see its header).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import webpush from "npm:web-push@3.6.7";
+import { sendToUserDevices } from "../_shared/apns.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -112,11 +113,6 @@ Deno.serve(async () => {
   for (const r of reminders) {
     try {
       const subs = subsByUser.get(r.user_id) ?? [];
-      if (!subs.length) {
-        await setStatus(r.id, "skipped", "no_subscription");
-        skipped++;
-        continue;
-      }
       const mins = Math.max(1, Math.round((new Date(r.start_at).getTime() - Date.now()) / 60000));
       const payload = JSON.stringify({
         title: `🎧 On deck: ${r.name} in ${mins} min`,
@@ -125,8 +121,16 @@ Deno.serve(async () => {
         url: r.slug ? `/lineup-explorer/${r.slug}?view=now` : "/lineup-explorer/",
         tag: `set-${r.id}`,
       });
+      // iOS app devices (APNs) alongside web-push subscriptions.
+      const { title, body, url } = JSON.parse(payload);
+      const native = await sendToUserDevices(sb, r.user_id, { title, body, data: { url }, collapseId: `set-${r.id}`, ttlSeconds: 900 });
+      if (!subs.length && !native.devices) {
+        await setStatus(r.id, "skipped", "no_subscription");
+        skipped++;
+        continue;
+      }
 
-      let userSent = false, userFailed = false;
+      let userSent = native.sent > 0, userFailed = native.failed > 0;
       for (const sub of subs) {
         try {
           await webpush.sendNotification(
