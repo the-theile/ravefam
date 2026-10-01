@@ -149,6 +149,7 @@ Deno.serve(async (req) => {
     body,
     data: { crewId: message.crew_id, roomId: message.room_id, messageId: message.id },
     threadId: `crew-${message.crew_id}`,
+    huddleBadge: true,
   };
 
   let sent = 0, skipped = 0, failed = 0;

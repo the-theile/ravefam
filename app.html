@@ -9660,7 +9660,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.3.0';
+  const APP_VERSION = '2.4.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -10462,6 +10462,18 @@
     } catch (e) { console.warn('native push: init failed', e); }
   }
 
+  // App icon badge = unread Huddle messages, kept in step with the in-app badge
+  // (updateNotifBadge) so it clears as you read. Pushes set it while the app is
+  // closed (huddle_unread_count). @capawesome/capacitor-badge; push permission
+  // already covers badges.
+  let _nativeBadgeCount = null;
+  function syncNativeAppBadge(count) {
+    const Badge = IS_NATIVE_APP && window.Capacitor.Plugins && window.Capacitor.Plugins.Badge;
+    if (!Badge || count === _nativeBadgeCount) return;
+    _nativeBadgeCount = count;
+    (count > 0 ? Badge.set({ count }) : Badge.clear()).catch(e => console.warn('native badge update failed', e));
+  }
+
   // Signing out stops pushes to this phone for that account.
   async function forgetNativePushToken() {
     if (!_nativePushToken || !currentUser) return;
@@ -11080,6 +11092,7 @@
     localStorage.removeItem('pendingPicksHandoff');
     localStorage.removeItem('pendingInviteRaver');
     await forgetNativePushToken();
+    syncNativeAppBadge(0);
     await sb.auth.signOut();
     // onAuthStateChange will fire SIGNED_OUT and flip back to auth screen
   }
@@ -12816,7 +12829,7 @@
 
   function handleHuddleMessageRealtimeInsert(payload) {
     const row = payload && payload.new;
-    if (!row || !currentUser || row.sender_id === currentUser.id) return;
+    if (!row || !currentUser || row.sender_id === currentUser.id || isBlockedUser(row.sender_id)) return;
     if (isHuddleRoomActivelyOpen(row.room_id)) {
       markHuddleRoomRead(row.room_id, row.crew_id);
       return;
@@ -17144,7 +17157,7 @@
         if (!c.lastMessageAt) c.lastMessageAt = row.created_at;
         if (row.kind === 'beacon' && row.expires_at && row.expires_at > nowIso) c.hasBeacon = true;
         roomCrewMap[row.room_id] = row.crew_id;
-        if (row.sender_id === currentUser.id) return;
+        if (row.sender_id === currentUser.id || isBlockedUser(row.sender_id)) return;
         const lastRead = readMap[row.room_id];
         if (!lastRead || new Date(row.created_at) > new Date(lastRead)) {
           roomUnread[row.room_id] = (roomUnread[row.room_id] || 0) + 1;
@@ -34422,6 +34435,8 @@
     const badge = document.getElementById('notif-badge');
     if (!badge) return;
     const huddleTotal = totalHuddleUnreadCount();
+    // iOS app icon badge mirrors this count once it's known (null = not loaded).
+    if (_huddleUnreadCache !== null || !crews.length) syncNativeAppBadge(huddleTotal);
     if (huddleTotal > 0) {
       badge.textContent = huddleTotal > 99 ? '99+' : String(huddleTotal);
       badge.classList.add('has-unread', 'has-count');
