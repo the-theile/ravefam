@@ -14,6 +14,7 @@
 // esm.sh's browser/deno transpile.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import webpush from "npm:web-push@3.6.7";
+import { sendToUserDevices, type ApnsMessage } from "../_shared/apns.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -138,6 +139,12 @@ Deno.serve(async (req) => {
     roomId: message.room_id,
     messageId: message.id,
   });
+  const apnsMessage: ApnsMessage = {
+    title: `💬 ${senderFirstName} mentioned you in ${crewName}`,
+    body,
+    data: { crewId: message.crew_id, roomId: message.room_id, messageId: message.id },
+    threadId: `crew-${message.crew_id}`,
+  };
 
   let sent = 0, skipped = 0, failed = 0;
 
@@ -160,14 +167,16 @@ Deno.serve(async (req) => {
         .select("endpoint, p256dh, auth")
         .eq("user_id", userId);
 
-      if (!subs || subs.length === 0) {
+      // iOS app devices (APNs) alongside web-push subscriptions.
+      const native = await sendToUserDevices(sb, userId, apnsMessage);
+      if ((!subs || subs.length === 0) && !native.devices) {
         await logOutcome(userId, messageId, "skipped", "no_subscription");
         skipped++;
         continue;
       }
 
-      let userSent = false, userFailed = false;
-      for (const sub of subs) {
+      let userSent = native.sent > 0, userFailed = native.failed > 0;
+      for (const sub of subs ?? []) {
         try {
           await webpush.sendNotification(
             { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },

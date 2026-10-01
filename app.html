@@ -45,6 +45,9 @@
 <script>
   // Flag Android early so CSS can drop GPU-heavy effects (see ANDROID COMPOSITOR FIX)
   if (/Android/i.test(navigator.userAgent)) document.documentElement.classList.add('is-android');
+  // Flag the Capacitor iOS shell early so CSS can swap web-only bits (Ko-fi, BETA)
+  // for native ones before first paint. The native bridge is injected at document start.
+  if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) document.documentElement.classList.add('is-native-app');
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script defer src="qrcode.min.js"></script>
@@ -129,6 +132,10 @@
      the status bar / Dynamic Island; the safe-area insets keep the top chrome
      and side content clear of it. They are 0 in a normal browser tab. */
   body { padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
+  /* App Store builds can't link to outside donations (guideline 3.1.1) or show
+     a BETA label (2.2): .web-only hides in the iOS app, .native-only shows only there. */
+  .is-native-app .web-only { display: none !important; }
+  :root:not(.is-native-app) .native-only { display: none !important; }
   header {
     display: flex;
     align-items: center;
@@ -8313,7 +8320,7 @@
     </div>
 
     <!-- Beta banner -->
-    <div class="landing-beta" style="background:rgba(255,45,120,0.12);border:1px solid rgba(255,45,120,0.3);border-radius:14px;padding:12px 24px;margin:0 0 28px;text-align:center;font-size:0.9rem;color:var(--neon-pink);display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;">
+    <div class="landing-beta web-only" style="background:rgba(255,45,120,0.12);border:1px solid rgba(255,45,120,0.3);border-radius:14px;padding:12px 24px;margin:0 0 28px;text-align:center;font-size:0.9rem;color:var(--neon-pink);display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;">
       <span class="beta-badge">BETA</span>
       🚧 Sound system still warming up!
     </div>
@@ -8574,7 +8581,11 @@
         <!-- rendered by JS -->
       </div>
       <div style="text-align:center;padding:28px 0 4px;">
-        <a href="https://ko-fi.com/ravefam" target="_blank" rel="noopener"
+        <button type="button" class="native-only" onclick="shareRaveFam()"
+           style="font-family:'Outfit',sans-serif;font-size:0.72rem;color:var(--muted);background:none;border:none;cursor:pointer;opacity:0.8;">
+          📣 Share RaveFAM
+        </button>
+        <a class="web-only" href="https://ko-fi.com/ravefam" target="_blank" rel="noopener"
            style="font-family:'Outfit',sans-serif;font-size:0.72rem;color:var(--muted);
                   text-decoration:none;opacity:0.6;transition:opacity 0.2s;"
            onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.6'">
@@ -8974,7 +8985,7 @@
       <div class="poll-setting-row">
         <div>
           <div class="poll-setting-label">Beacon push notifications</div>
-          <div class="poll-setting-hint">Requires browser notification permission</div>
+          <div class="poll-setting-hint"><span class="web-only">Requires browser notification permission</span><span class="native-only">When your crew drops a Beacon</span></div>
         </div>
         <button class="poll-anon-toggle" id="push-settings-toggle" onclick="toggleBeaconPush(this)"></button>
       </div>
@@ -9110,8 +9121,9 @@
     </div>
     <div style="margin-top:18px;border-top:1px solid rgba(255,255,255,0.08);padding-top:16px;">
       <a href="https://t.me/RaveFAM_bot" target="_blank" rel="noopener" style="cursor:pointer;user-select:none;width:100%;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:rgba(0,245,255,0.08);border:1px solid rgba(0,245,255,0.25);border-radius:100px;padding:10px 18px;font-family:'Outfit',sans-serif;font-weight:700;font-size:0.78rem;color:var(--neon-cyan);letter-spacing:1px;text-transform:uppercase;text-decoration:none;margin-bottom:10px;">📸 Report a bug on Telegram</a>
-      <button type="button" onclick="toggleGuideSupportWidget()" style="cursor:pointer;user-select:none;width:100%;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:rgba(255,230,0,0.08);border:1px solid rgba(255,230,0,0.25);border-radius:100px;padding:10px 18px;font-family:'Outfit',sans-serif;font-weight:700;font-size:0.78rem;color:var(--neon-yellow);letter-spacing:1px;text-transform:uppercase;">☕ Support the build</button>
-      <div id="guide-support-widget" style="display:none;margin-top:16px;text-align:left;">
+      <button type="button" class="native-only" onclick="shareRaveFam()" style="cursor:pointer;user-select:none;width:100%;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:rgba(255,230,0,0.08);border:1px solid rgba(255,230,0,0.25);border-radius:100px;padding:10px 18px;font-family:'Outfit',sans-serif;font-weight:700;font-size:0.78rem;color:var(--neon-yellow);letter-spacing:1px;text-transform:uppercase;">📣 Share RaveFAM</button>
+      <button type="button" class="web-only" onclick="toggleGuideSupportWidget()" style="cursor:pointer;user-select:none;width:100%;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:rgba(255,230,0,0.08);border:1px solid rgba(255,230,0,0.25);border-radius:100px;padding:10px 18px;font-family:'Outfit',sans-serif;font-weight:700;font-size:0.78rem;color:var(--neon-yellow);letter-spacing:1px;text-transform:uppercase;">☕ Support the build</button>
+      <div id="guide-support-widget" class="web-only" style="display:none;margin-top:16px;text-align:left;">
         <div style="font-family:'Fraunces',sans-serif;font-weight:800;font-size:1.1rem;color:#fff;margin-bottom:6px;text-align:center;">Keep the party going ☕</div>
         <div style="font-size:0.82rem;color:var(--muted);margin-bottom:14px;line-height:1.6;text-align:center;">RaveFAM is free, passion-built, and fuelled by the community. If it's added to your rave life, this is how you keep the lights on.</div>
         <div class="spt-support-bar">
@@ -9707,6 +9719,10 @@
   // events (and return_within_7_days) are deduped server-side, so it's safe
   // to call this unconditionally on every qualifying action.
   function logAnalyticsEvent(eventName, { crew_id = null, raver_id = null, ...properties } = {}) {
+    // First crew / RSVP / claim is when the iOS app offers notifications.
+    if (eventName === 'crew_created' || eventName === 'first_rsvp_updated' || eventName === 'first_claim') {
+      setTimeout(() => maybeOfferNativePush().catch(() => {}), 1500);
+    }
     sb.rpc('log_analytics_event', {
       p_event_name: eventName, p_crew_id: crew_id, p_raver_id: raver_id,
       p_visitor_id: getVisitorId(), p_properties: properties
@@ -10279,6 +10295,22 @@
   // is remembered per session so Supabase's URL cleanup can't cause a reload loop.
   const IS_NATIVE_APP = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 
+  // Share the app itself (stands in for the Ko-fi links inside the iOS app).
+  // Native share sheet via @capacitor/share, falling back to Web Share / copy.
+  async function shareRaveFam() {
+    const text = 'RaveFAM: the private home base for your rave crew.';
+    const url = 'https://myravefam.com';
+    const NativeShare = IS_NATIVE_APP && window.Capacitor.Plugins && window.Capacitor.Plugins.Share;
+    try {
+      if (NativeShare) { await NativeShare.share({ title: 'RaveFAM', text, url }); return; }
+      if (navigator.share) { await navigator.share({ title: 'RaveFAM', text, url }); return; }
+      await navigator.clipboard.writeText(`${text} ${url}`);
+      showToast('🔗 Link copied');
+    } catch (e) {
+      // Dismissing the share sheet rejects; nothing to report.
+    }
+  }
+
   function openNativeAppUrl(url) {
     try {
       const target = new URL(url);
@@ -10301,6 +10333,139 @@
       try { sessionStorage.setItem('nativeLaunchUrl', launch.url); } catch (e) {}
       openNativeAppUrl(launch.url);
     }).catch((e) => console.error('native app: getLaunchUrl failed', e));
+  }
+
+  // ===== NATIVE PUSH (iOS app) =====
+  // In the iOS app, push goes through Apple (APNs), not the browser's web push:
+  // @capacitor/push-notifications hands us a device token, register_device_push_token
+  // stores it, and the push edge functions send to it (supabase/functions/_shared/apns.ts).
+  // ensurePushSubscription() routes here in the app, so the Beacon / mention
+  // toggles keep working unchanged. Permission is asked after a first crew or
+  // RSVP (maybeOfferNativePush), with every notification type switched on.
+  const NATIVE_PUSH_OFFERED_KEY = 'rf_native_push_offered';
+  let _nativePushToken = null;
+  let _nativePushWaiter = null;
+
+  function nativePushPlugin() {
+    return (IS_NATIVE_APP && window.Capacitor.Plugins && window.Capacitor.Plugins.PushNotifications) || null;
+  }
+
+  async function saveNativePushToken() {
+    if (!currentUser || !_nativePushToken) return;
+    const { data, error } = await sb.rpc('register_device_push_token', { p_token: _nativePushToken, p_platform: 'ios' });
+    if (error || !data?.ok) console.error('native push: token save failed', error || data);
+  }
+
+  // Tapped notification: Huddle pushes carry crewId/roomId/messageId, lineup
+  // pushes carry a site path in url.
+  function openFromNativePush(data) {
+    if (!data) return;
+    if (data.crewId) { openHuddleDeepLink({ crewId: data.crewId, roomId: data.roomId, messageId: data.messageId }); return; }
+    if (data.url) openNativeAppUrl(new URL(data.url, window.location.origin).href);
+  }
+
+  if (nativePushPlugin()) {
+    const NativePush = nativePushPlugin();
+    NativePush.addListener('registration', ({ value }) => {
+      _nativePushToken = value;
+      saveNativePushToken();
+      if (_nativePushWaiter) { _nativePushWaiter.resolve(value); _nativePushWaiter = null; }
+    });
+    NativePush.addListener('registrationError', (err) => {
+      console.error('native push: registration failed', err);
+      if (_nativePushWaiter) { _nativePushWaiter.reject(new Error('registration_failed')); _nativePushWaiter = null; }
+    });
+    NativePush.addListener('pushNotificationActionPerformed', ({ notification }) => {
+      // A cold start can deliver this before login finishes; wait for it.
+      const go = () => openFromNativePush(notification && notification.data);
+      if (currentUser) go();
+      else { const t = setInterval(() => { if (currentUser) { clearInterval(t); go(); } }, 500); setTimeout(() => clearInterval(t), 30000); }
+    });
+  }
+
+  function registerNativePush() {
+    const NativePush = nativePushPlugin();
+    return new Promise((resolve, reject) => {
+      _nativePushWaiter = { resolve, reject };
+      setTimeout(() => { if (_nativePushWaiter) { _nativePushWaiter = null; reject(new Error('registration_timeout')); } }, 15000);
+      NativePush.register().catch(reject);
+    });
+  }
+
+  // Asks iOS for permission if it hasn't been asked yet, then registers this
+  // phone. Throws 'permission_denied' (with a toast) like the web path does.
+  async function ensureNativePush() {
+    const NativePush = nativePushPlugin();
+    let { receive } = await NativePush.checkPermissions();
+    if (receive === 'prompt' || receive === 'prompt-with-rationale') ({ receive } = await NativePush.requestPermissions());
+    if (receive !== 'granted') {
+      showToast('🔕 Notifications are off for RaveFAM. Turn them on in iOS Settings → RaveFAM → Notifications.');
+      throw new Error('permission_denied');
+    }
+    try {
+      await registerNativePush();
+    } catch (err) {
+      showToast("⚠️ Couldn't set up notifications on this phone. Try again.");
+      throw err;
+    }
+  }
+
+  // Every notification type on: Beacons and mentions are opt-in flags; lineup
+  // alerts are on unless a row turns them off. Set reminders stay per rave
+  // (🔔 Remind me in its lineup) because they follow your picked sets.
+  async function enableAllNativePushTypes() {
+    if (!currentUser) return;
+    await Promise.all([
+      sb.from('email_preferences').update({ beacon_push_opt_in: true, mention_push_opt_in: true }).eq('user_id', currentUser.id),
+      sb.from('alert_preferences').upsert(
+        LINEUP_ALERT_TYPES.map(type => ({ user_id: currentUser.id, type, enabled: true, updated_at: new Date().toISOString() })),
+        { onConflict: 'user_id,type' }),
+    ]);
+  }
+
+  // Offered once, after the first crew or RSVP, when there's something to be
+  // notified about. Declining here leaves iOS's own prompt unused, so the
+  // Settings toggles can still ask later.
+  async function maybeOfferNativePush() {
+    const NativePush = nativePushPlugin();
+    if (!NativePush || !currentUser) return;
+    try { if (localStorage.getItem(NATIVE_PUSH_OFFERED_KEY)) return; } catch (e) { return; }
+    const you = squad.find(r => r.isYou);
+    if (!crews.length && !(you && you.festIds && you.festIds.length)) return;
+    const { receive } = await NativePush.checkPermissions();
+    if (receive !== 'prompt' && receive !== 'prompt-with-rationale') return;
+    if (document.getElementById('confirm-overlay')?.classList.contains('open')) return;
+    try { localStorage.setItem(NATIVE_PUSH_OFFERED_KEY, '1'); } catch (e) {}
+    showConfirm(
+      '🔔 Stay in the loop',
+      'Get a ping when your crew drops a Beacon, someone @mentions you in the Huddle, a set you picked is about to start, or an artist you ♡ joins a lineup. You can change this anytime in Settings.',
+      'Turn on notifications',
+      async () => {
+        try {
+          await ensureNativePush();
+          await enableAllNativePushTypes();
+          showToast('🔔 Notifications on');
+        } catch (e) { /* ensureNativePush already toasted why */ }
+      }
+    );
+  }
+
+  // After login: keep this phone's token current (Apple can rotate it) and
+  // make the one-time offer when it applies.
+  async function initNativePushAfterLogin() {
+    const NativePush = nativePushPlugin();
+    if (!NativePush || !currentUser) return;
+    try {
+      const { receive } = await NativePush.checkPermissions();
+      if (receive === 'granted') registerNativePush().catch(e => console.warn('native push: refresh failed', e));
+      else setTimeout(() => maybeOfferNativePush().catch(() => {}), 4000);
+    } catch (e) { console.warn('native push: init failed', e); }
+  }
+
+  // Signing out stops pushes to this phone for that account.
+  async function forgetNativePushToken() {
+    if (!_nativePushToken || !currentUser) return;
+    try { await sb.from('device_push_tokens').delete().eq('token', _nativePushToken.toLowerCase()); } catch (e) {}
   }
 
   // ===== CAPTCHA (Cloudflare Turnstile) =====
@@ -10914,6 +11079,7 @@
     localStorage.removeItem('pendingRaveSlug');
     localStorage.removeItem('pendingPicksHandoff');
     localStorage.removeItem('pendingInviteRaver');
+    await forgetNativePushToken();
     await sb.auth.signOut();
     // onAuthStateChange will fire SIGNED_OUT and flip back to auth screen
   }
@@ -12698,6 +12864,7 @@
     // Load persisted notifications from DB
     dbLoadNotifications();
     setupRealtimeSync();
+    initNativePushAfterLogin();
     // A push notification opened us cold — go to the room it was about before
     // anything else claims the screen.
     const deepLink = _pendingHuddleDeepLink;
@@ -32726,7 +32893,18 @@
     renderBlockedRaversSettings();
     renderLineupAlertSettings();
     document.getElementById('privacy-settings-overlay').classList.add('open');
-    if ('serviceWorker' in navigator && 'PushManager' in window) {
+    if (nativePushPlugin()) {
+      // iOS app: on = notifications allowed for RaveFAM + that type's opt-in flag.
+      try {
+        const { receive } = await nativePushPlugin().checkPermissions();
+        if (receive === 'granted' && currentUser) {
+          const { data: prefs } = await sb.from('email_preferences')
+            .select('beacon_push_opt_in, mention_push_opt_in').eq('user_id', currentUser.id).maybeSingle();
+          pushToggle.classList.toggle('on', !!prefs?.beacon_push_opt_in);
+          mentionToggle.classList.toggle('on', !!prefs?.mention_push_opt_in);
+        }
+      } catch (e) { console.warn('native push toggle state check failed', e); }
+    } else if ('serviceWorker' in navigator && 'PushManager' in window) {
       try {
         const reg = await navigator.serviceWorker.ready;
         const sub = await reg.pushManager.getSubscription();
@@ -32910,6 +33088,7 @@
   // the endpoint, so re-running it for a second channel is a no-op.
   async function ensurePushSubscription() {
     if (!currentUser) return;
+    if (nativePushPlugin()) return ensureNativePush();
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
       showToast("Push notifications aren't supported on this browser");
       throw new Error('unsupported');

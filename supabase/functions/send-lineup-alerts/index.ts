@@ -13,6 +13,7 @@
 // send-mention-push (see its header).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import webpush from "npm:web-push@3.6.7";
+import { sendToUserDevices } from "../_shared/apns.ts";
 import { wrapEmail as wrapEmailShared, button } from "../_shared/email-templates.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -167,7 +168,11 @@ Deno.serve(async () => {
 
       // Push first, when the member has a live subscription and VAPID works.
       const subs = subsByUser.get(uid) ?? [];
-      let pushed = false;
+      // iOS app devices (APNs) count as push, same as a web subscription.
+      const native = await sendToUserDevices(sb, uid, {
+        title: m.title, body: m.body, data: { url: m.path }, collapseId: `${type}-${group[0].festival_id}`, ttlSeconds: 86400,
+      });
+      let pushed = native.sent > 0;
       if (subs.length && !ensureVapid()) {
         const payload = JSON.stringify({ title: m.title, body: m.body, url: m.path, tag: `${type}-${group[0].festival_id}` });
         for (const sub of subs) {
@@ -184,7 +189,7 @@ Deno.serve(async () => {
       if (pushed) { await setStatus(ids, "sent", "push"); sent++; continue; }
 
       const em = emailByUser.get(uid);
-      if (!em) { await setStatus(ids, "skipped", null, subs.length ? "push_failed_no_email" : "no_channel"); skipped++; continue; }
+      if (!em) { await setStatus(ids, "skipped", null, subs.length || native.devices ? "push_failed_no_email" : "no_channel"); skipped++; continue; }
       await sendEmail(em.email, m, em.token);
       await setStatus(ids, "sent", "email");
       sent++;
