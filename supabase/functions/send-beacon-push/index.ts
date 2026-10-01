@@ -59,6 +59,12 @@ async function logOutcome(userId: string, messageId: string, status: "sent" | "s
   );
 }
 
+// Users who blocked the sender never get a push from them (user_blocks).
+async function blockersOf(sb: any, senderId: string): Promise<Set<string>> {
+  const { data } = await sb.from("user_blocks").select("blocker_id").eq("blocked_id", senderId);
+  return new Set((data ?? []).map((row: any) => row.blocker_id as string));
+}
+
 Deno.serve(async (req) => {
   const { message_id: messageId } = await req.json();
   if (!messageId) {
@@ -94,11 +100,13 @@ Deno.serve(async (req) => {
     .eq("crew_id", message.crew_id)
     .is("deleted_at", null);
 
-  const recipientUids = Array.from(new Set(
+  let recipientUids = Array.from(new Set(
     (memberRows ?? [])
       .map((row: any) => row.ravers?.claimed_by as string | null)
       .filter((uid: string | null): uid is string => !!uid && uid !== message.sender_id)
   ));
+  const blockers = await blockersOf(sb, message.sender_id);
+  recipientUids = recipientUids.filter((uid) => !blockers.has(uid));
 
   const payload = JSON.stringify({
     title: `📣 Beacon from ${crewName}`,
