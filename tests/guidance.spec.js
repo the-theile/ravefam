@@ -186,27 +186,31 @@ test.describe('guidance · help level and settings', () => {
   });
 });
 
-test.describe('guidance · setup alerts', () => {
-  test('the alerts item says where Remind me lives and opens the next rave’s lineup', async ({ page }) => {
-    await bootAuthedApp(page);
-    await page.evaluate(() => {
-      window.__opened = [];
-      window.open = (u) => { window.__opened.push(u); };
-      window.getLineupExplorerUrl = getLineupExplorerUrl = (f) => f.id === 'f1' ? 'https://example.test/tml' : null;
-      setupGo('alerts');
-    });
-    await expect(page.locator('.gk-sheet .gk-title').last()).toHaveText('Turn on set-time alerts');
-    await expect(page.locator('.gk-sheet').last()).toContainText('🔔 Remind me');
-    await expect(page.locator('.gk-sheet .gk-btn.primary').last()).toHaveText('Open Tomorrowland lineup');
-    await page.locator('.gk-sheet .gk-btn.primary').last().click();
-    expect(await page.evaluate(() => window.__opened)).toEqual(['https://example.test/tml']);
+test.describe('guidance · setup rave step', () => {
+  test('step 5 is done once you mark a rave Going or Interested, and the pill updates right away', async ({ page }) => {
+    const data = seedData();
+    data.raver_festivals = data.raver_festivals.filter(x => x.raver_id !== 'r-you');
+    data.raver_festival_interest = (data.raver_festival_interest || []).filter(x => x.raver_id !== 'r-you');
+    await bootAuthedApp(page, { sessionOver: FRESH, data });
+    await closeSheets(page);
+    expect(await page.evaluate(() => setupItemDone('rave'))).toBe(false);
+    const before = Number(await page.locator('#setup-pill-n').textContent());
+    await page.evaluate(() => toggleInterestedInFest('f2'));
+    expect(await page.evaluate(() => setupItemDone('rave'))).toBe(true);
+    await expect(page.locator('#setup-pill-n')).toHaveText(String(before + 1));
   });
 
-  test('with no lineup yet, it explains instead of dropping you on Raves', async ({ page }) => {
-    await bootAuthedApp(page);
-    await page.evaluate(() => { window.getLineupExplorerUrl = getLineupExplorerUrl = () => null; setupGo('alerts'); });
-    await expect(page.locator('.gk-sheet').last()).toContainText('Once a rave you’re going to has its lineup');
-    await expect(page.locator('.gk-sheet .gk-btn.primary').last()).toHaveText('Got it');
+  test('the setup sheet lists it and tapping it goes to Raves', async ({ page }) => {
+    const data = seedData();
+    data.raver_festivals = data.raver_festivals.filter(x => x.raver_id !== 'r-you');
+    data.raver_festival_interest = (data.raver_festival_interest || []).filter(x => x.raver_id !== 'r-you');
+    await bootAuthedApp(page, { sessionOver: FRESH, data });
+    await closeSheets(page);
+    await page.evaluate(() => openSetupSheet());
+    const item = page.locator('.setup-item', { hasText: 'Mark a rave Going or Interested' });
+    await expect(item).toBeVisible();
+    await item.click();
+    await expect(page.locator('#page-events')).toHaveClass(/active/);
   });
 });
 
