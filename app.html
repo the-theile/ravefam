@@ -9708,7 +9708,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.4.2';
+  const APP_VERSION = '2.5.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -16026,6 +16026,22 @@
     const year = d ? d.getFullYear() : null;
     const hit = LINEUP_EXPLORERS.find(e => e.match.test((f && f.name) || '') && e.year === year);
     return hit ? hit.url : null;
+  }
+  // In the iOS app a new window opens Safari, which has its own storage (no
+  // login, picks or crew), so explorer pages load in the app's own webview
+  // there instead; the explorer links back to /app. Web keeps the new tab.
+  function openLineupExplorer(url) {
+    if (IS_NATIVE_APP) location.href = url;
+    else window.open(url, '_blank');
+  }
+  if (IS_NATIVE_APP) {
+    // Capture phase: some explorer buttons stopPropagation() to keep row taps out.
+    document.addEventListener('click', (e) => {
+      const a = e.target.closest && e.target.closest('a[target="_blank"][href^="/lineup-explorer/"]');
+      if (!a) return;
+      e.preventDefault();
+      location.href = a.getAttribute('href');
+    }, true);
   }
 
   // ===== Festival date parsing & "next up" computation =====
@@ -30936,7 +30952,7 @@
     }
     if (daysOut <= 7) {
       if (lineupUrl && !_reminderOptinFestIds.has(String(f.id))) {
-        return timelineNudgeHTML({ color: '#FFE600', eyebrow: 'FEST WEEK', title: 'Turn on set reminders', body: 'A push 15 minutes before each set you’ve picked. The lineup keeps working offline once you’ve opened it.', cta: '🔔 Remind me', ctaAttr: `${stop}window.open('${escJsAttr(lineupUrl)}', '_blank')`, also: village });
+        return timelineNudgeHTML({ color: '#FFE600', eyebrow: 'FEST WEEK', title: 'Turn on set reminders', body: 'A push 15 minutes before each set you’ve picked. The lineup keeps working offline once you’ve opened it.', cta: '🔔 Remind me', ctaAttr: `${stop}openLineupExplorer('${escJsAttr(lineupUrl)}')`, also: village });
       }
       const withCrew = crewmatesGoing(f.id).find(m => m.going.length);
       if (withCrew) {
@@ -30945,7 +30961,7 @@
       return '';
     }
     if (lineupUrl && !myLineupPlanIds(f.id).size) {
-      return timelineNudgeHTML({ color: '#00F5FF', eyebrow: 'LINEUP IS OUT', title: 'Pick the sets you can’t miss', body: 'Add yours so everyone knows where to find you.', cta: 'Open Lineup Explorer', ctaAttr: `${stop}window.open('${escJsAttr(lineupUrl)}', '_blank')` });
+      return timelineNudgeHTML({ color: '#00F5FF', eyebrow: 'LINEUP IS OUT', title: 'Pick the sets you can’t miss', body: 'Add yours so everyone knows where to find you.', cta: 'Open Lineup Explorer', ctaAttr: `${stop}openLineupExplorer('${escJsAttr(lineupUrl)}')` });
     }
     return '';
   }
