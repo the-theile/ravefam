@@ -24,17 +24,19 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 }
 
-// Lineup Explorer pages load in this webview with no browser chrome, so give
-// them the native edge swipe-back to return to /app. Only there: the app
-// itself has no in-page history, and a stray swipe in /app would reload an
-// earlier page (e.g. a used invite link).
+// Lineup Explorer pages (and any other myravefam.com page, via allowNavigation
+// in capacitor.config.json) load in this webview with no browser chrome, so
+// give them the native edge swipe-back to return to /app. Off in /app itself:
+// it has no in-page history, and a stray swipe there would reload an earlier
+// page (e.g. a used invite link).
 class RaveBridgeViewController: CAPBridgeViewController {
     private var urlObservation: NSKeyValueObservation?
 
     override func capacitorDidLoad() {
         super.capacitorDidLoad()
         urlObservation = webView?.observe(\.url, options: [.initial, .new]) { webView, _ in
-            webView.allowsBackForwardNavigationGestures = webView.url?.path.hasPrefix("/lineup-explorer") ?? false
+            let path = webView.url?.path ?? "/app"
+            webView.allowsBackForwardNavigationGestures = !(path == "/app" || path.hasPrefix("/app.html") || path.hasPrefix("/app/"))
         }
     }
 }

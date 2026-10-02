@@ -3559,7 +3559,7 @@
 // ----- RaveFAM iOS app (Capacitor) -----
 // /app opens explorer pages in its own webview, with no Safari toolbar and no
 // swipe-back. So: pad below the status bar, add a ‹ back pill to the brandbar,
-// and point the RaveFAM home links (brand, breadcrumb) back into /app instead
+// and point the RaveFAM home links (brand, breadcrumb, Join) back into /app instead
 // of the marketing site.
 (function () {
   "use strict";
@@ -3599,7 +3599,7 @@
   }
 
   function init() {
-    document.querySelectorAll('.brandbar .brand, .breadcrumb a[href="https://myravefam.com/"]').forEach(function (a) {
+    document.querySelectorAll('a[href="https://myravefam.com/"]').forEach(function (a) {
       a.href = "/app";
       a.addEventListener("click", goApp);
     });
