@@ -26,3 +26,27 @@ Without them, web push keeps working and iOS pushes are skipped.
 
 ## Builds
 Run **Actions -> iOS TestFlight -> Run workflow** on `main`.
+
+## Releases
+Web changes reach the app on deploy; only native changes (Swift, `capacitor.config.json`,
+plugins, entitlements, Info.plist, icons) need an App Store submission. Those are batched:
+
+- Merge native changes to `main` as they're ready and push a TestFlight build to test on device.
+- Every 2–3 weeks, if the list below has anything, submit the latest tested TestFlight build
+  for review and move the list into **Released**. Skip the cycle if it's empty.
+- Crashes or a broken core flow (sign-in, push) ship right away (expedited review if needed).
+
+The App Store version is `APP_VERSION` at build time, so released versions skip numbers.
+
+### Next iOS release
+Each native PR adds a line here; **After release** holds web changes that wait on it.
+
+- Lineup Explorer and other myravefam.com pages stay in the app's webview (`server.allowNavigation`) (#387)
+- Edge swipe-back on pages outside `/app` (#386, #387)
+
+**After release**
+- Re-add `/lineup-explorer` and `/lineup-explorer/*` to `.well-known/apple-app-site-association`
+  (removed in #387: older builds bounce those links to Safari)
+
+### Released
+_Nothing tracked yet. The build in review predates this list._
