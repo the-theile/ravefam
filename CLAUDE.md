@@ -13,3 +13,10 @@ versioning (MAJOR.MINOR.PATCH):
 
 Keep the `version` field in `package.json` in sync with `APP_VERSION` —
 they should always match.
+
+## iOS releases
+
+Native iOS changes (Swift, `capacitor.config.json`, plugins, entitlements,
+Info.plist) ship in batched App Store releases. When a change touches them,
+add a line under "Next iOS release" in `native/README.md` (and under
+"After release" for any web change that must wait for that build).
