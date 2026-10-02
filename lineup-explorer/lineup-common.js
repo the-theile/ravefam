@@ -331,6 +331,8 @@
 
   function isStandalone() {
     if (window.navigator.standalone === true) return true;
+    // The RaveFAM iOS app (Capacitor) is already on the home screen.
+    if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) return true;
     try { return window.matchMedia("(display-mode: standalone)").matches; } catch (e) { return false; }
   }
 
@@ -3552,4 +3554,66 @@
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", startHub);
     else startHub();
   }
+})();
+
+// ----- RaveFAM iOS app (Capacitor) -----
+// /app opens explorer pages in its own webview, with no Safari toolbar and no
+// swipe-back. So: pad below the status bar, add a ‹ back pill to the brandbar,
+// and point the RaveFAM home links (brand, breadcrumb) back into /app instead
+// of the marketing site.
+(function () {
+  "use strict";
+  if (!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())) return;
+  document.documentElement.classList.add("lp-native");
+
+  // env(safe-area-inset-*) is only non-zero with viewport-fit=cover.
+  var vp = document.querySelector('meta[name="viewport"]');
+  if (vp && !/viewport-fit/.test(vp.content)) vp.content += ", viewport-fit=cover";
+
+  function refPath() {
+    try {
+      var r = new URL(document.referrer);
+      return r.origin === location.origin ? r.pathname : null;
+    } catch (e) { return null; }
+  }
+  function fromApp() { return /^\/app(\.html)?\/?$/.test(refPath() || ""); }
+  // history.back() returns to /app where the user left it; a fresh /app load
+  // is the fallback (opened from a push, Universal Link, etc.).
+  function goApp(e) {
+    if (e) e.preventDefault();
+    if (fromApp() && history.length > 1) history.back();
+    else location.href = "/app";
+  }
+
+  function init() {
+    document.querySelectorAll('.brandbar .brand, .breadcrumb a[href="https://myravefam.com/"]').forEach(function (a) {
+      a.href = "/app";
+      a.addEventListener("click", goApp);
+    });
+
+    var brand = document.querySelector(".brandbar .brand");
+    if (!brand || document.querySelector(".lp-native-back")) return;
+    // Came from another explorer page (e.g. lineup → artist): step back to it.
+    // Otherwise the pill is the way home to the app.
+    var inExplorer = !fromApp() && refPath() !== null && history.length > 1;
+    var back = document.createElement("a");
+    back.className = "lp-native-back";
+    back.href = inExplorer ? document.referrer : "/app";
+    back.textContent = inExplorer ? "‹ Back" : "‹ RaveFAM";
+    back.setAttribute("aria-label", inExplorer ? "Back" : "Back to RaveFAM");
+    back.addEventListener("click", function (e) {
+      if (!inExplorer) return goApp(e);
+      e.preventDefault();
+      history.back();
+    });
+    // Share the left slot with the brand rather than adding a third child to
+    // the space-between brandbar.
+    var left = document.createElement("span");
+    left.className = "lp-native-left";
+    brand.parentNode.insertBefore(left, brand);
+    left.appendChild(back);
+    left.appendChild(brand);
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
 })();
