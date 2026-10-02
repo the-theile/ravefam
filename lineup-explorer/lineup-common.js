@@ -3570,6 +3570,19 @@
   var vp = document.querySelector('meta[name="viewport"]');
   if (vp && !/viewport-fit/.test(vp.content)) vp.content += ", viewport-fit=cover";
 
+  // Universal Links (invites, magic links, /rave/…) arriving while an explorer
+  // page is showing: /app's appUrlOpen listener isn't loaded, so follow them
+  // here. Same-host only, as in app.html's openNativeAppUrl.
+  var NativeApp = window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+  if (NativeApp && NativeApp.addListener) {
+    NativeApp.addListener("appUrlOpen", function (ev) {
+      try {
+        var target = new URL(ev && ev.url);
+        if (target.host === location.host && target.href !== location.href) location.href = target.href;
+      } catch (e) { /* bad URL: stay put */ }
+    });
+  }
+
   function refPath() {
     try {
       var r = new URL(document.referrer);

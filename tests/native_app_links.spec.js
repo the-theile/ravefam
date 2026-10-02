@@ -102,6 +102,18 @@ test.describe('Lineup Explorer in the native app', () => {
     await expect(page).toHaveURL(/\/app$/);
   });
 
+  test('a Universal Link opened on an explorer page still lands', async ({ page }) => {
+    await installSupabaseStub(page, { session: null, data: seedData() });
+    await installCapacitorStub(page, null);
+    await page.goto(EXPLORER);
+    await expect(page.locator('.lp-native-back')).toHaveCount(1);
+    await page.evaluate(() => window.__fireAppUrlOpen('https://example.com/app?join=inv-c1'));
+    await page.waitForTimeout(300);
+    expect(page.url()).toContain(EXPLORER);
+    await page.evaluate(() => window.__fireAppUrlOpen(location.origin + '/app.html?join=inv-c1'));
+    await expect(page.locator('#claim-intercept')).toHaveClass(/open/);
+  });
+
   test('explorer page is unchanged on the web', async ({ page }) => {
     await installSupabaseStub(page, { session: null, data: seedData() });
     await page.goto(EXPLORER);
