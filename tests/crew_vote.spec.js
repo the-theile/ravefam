@@ -110,7 +110,7 @@ test('Settings lists live share links and can turn one off', async ({ page }) =>
   d.lineup_share_links = [{ token: 'th-0a1b2c3d4e', raver_id: 'r-you', festival_id: 'f1', created_at: '2026-09-01T00:00:00Z', revoked_at: null }];
   d.__rpc = { turn_off_share_link: { ok: true } };
   await bootAuthedApp(page, { data: d });
-  await page.evaluate(() => openPrivacySettingsModal('r-you'));
+  await page.evaluate(() => openPrivacySettingsModal('r-you', 'privacy'));
   const box = page.locator('#share-links-settings');
   await expect(box).toBeVisible();
   await expect(box.locator('.share-link-row')).toHaveCount(1);

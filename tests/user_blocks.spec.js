@@ -51,7 +51,7 @@ test.describe('blocking users', () => {
     const rows = await page.evaluate(() => window.__store.user_blocks);
     expect(rows).toEqual([expect.objectContaining({ blocker_id: 'test-user-id', blocked_id: 'kai-uid' })]);
 
-    await page.evaluate(() => { closeHuddleScreen(); openPrivacySettingsModal('r-you'); });
+    await page.evaluate(() => { closeHuddleScreen(); openPrivacySettingsModal('r-you', 'safety'); });
     const blocked = page.locator('#blocked-ravers-settings');
     await expect(blocked).toContainText('Kai M.');
     await blocked.getByRole('button', { name: 'Unblock' }).click();

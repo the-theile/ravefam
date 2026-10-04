@@ -2911,6 +2911,45 @@
     padding: 14px 20px; border-top: 1px solid rgba(255,255,255,0.08);
   }
 
+  /* Settings panel — hub of nav rows that drill into sub-pages
+     (showSettingsPage). Sub-pages reuse the poll-setting-row rows. */
+  .settings-sec {
+    font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.68rem;
+    letter-spacing: 1.4px; text-transform: uppercase; color: var(--neon-cyan);
+    margin: 22px 0 -4px;
+  }
+  .settings-page > .settings-sec:first-child { margin-top: 0; }
+  .settings-sec-danger { color: var(--neon-pink); }
+  .settings-note { font-size: 0.74rem; color: var(--muted); line-height: 1.5; margin: 4px 0 0; }
+  .settings-group {
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px; overflow: hidden; margin-top: 14px;
+  }
+  .settings-nav-row {
+    display: flex; align-items: center; gap: 12px; width: 100%;
+    padding: 12px 14px; background: none; border: none; text-align: left;
+    color: inherit; font: inherit; cursor: pointer;
+  }
+  .settings-nav-row + .settings-nav-row { border-top: 1px solid rgba(255,255,255,0.08); }
+  div.settings-nav-row { cursor: default; }
+  button.settings-nav-row:active { background: rgba(255,255,255,0.04); }
+  .settings-nav-ico {
+    width: 32px; height: 32px; border-radius: 10px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 1rem;
+  }
+  .settings-nav-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .settings-nav-chev { color: var(--muted); font-size: 1.1rem; flex-shrink: 0; }
+  .settings-profile-card {
+    display: flex; align-items: center; gap: 12px; width: 100%;
+    padding: 14px; text-align: left; cursor: pointer; color: inherit; font: inherit;
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px;
+  }
+  .settings-profile-avatar {
+    width: 46px; height: 46px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.95rem; color: #fff;
+  }
+
   /* Delete-rave bottom sheet */
   .bottom-sheet-overlay {
     position: fixed;
@@ -5661,7 +5700,7 @@
     border-radius: 10px; padding: 10px 14px; font-size: 0.8rem; line-height: 1.5; margin-bottom: 14px; text-align: left;
   }
   .login-methods-warn { margin: 8px 0 4px; }
-  .login-methods-head { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.72rem; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+  .login-methods-head { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.68rem; letter-spacing: 1.4px; text-transform: uppercase; color: var(--neon-cyan); margin-bottom: 4px; }
   .login-method-ok { font-size: 0.72rem; font-weight: 700; color: var(--neon-green); white-space: nowrap; }
   .link-method-sub { font-size: 0.82rem; color: var(--muted); line-height: 1.5; margin-bottom: 16px; }
   .link-error { color: var(--neon-pink); font-size: 0.8rem; margin: -4px 0 12px; display: none; }
@@ -9077,91 +9116,157 @@
 <div class="page-panel-overlay" id="privacy-settings-overlay" onclick="if(event.target===this)closePrivacySettingsModal()">
   <div class="page-panel" style="text-align:left;">
     <div class="page-panel-header">
-      <div class="modal-title">⚙️ Privacy &amp; Notifications</div>
+      <button type="button" class="page-panel-back" id="settings-back-btn" style="display:none;" onclick="showSettingsPage('hub')">‹ Settings</button>
+      <div class="modal-title" id="settings-title">⚙️ Settings</div>
       <button type="button" class="page-panel-back" aria-label="Close settings" onclick="closePrivacySettingsModal()">✕</button>
     </div>
-    <div class="page-panel-body">
-    <p style="font-size:0.8rem;color:var(--muted);margin-bottom:16px;line-height:1.5;">Control what your crew can do on your profile, what other ravers can see, and how you get notified.</p>
-    <div class="poll-modal-settings" id="privacy-settings-rows"><!-- filled by JS --></div>
-    <div class="poll-modal-settings" id="share-links-settings" style="margin-top:12px;display:none;"><!-- filled by renderShareLinkSettings --></div>
-    <div class="poll-modal-settings" id="blocked-ravers-settings" style="margin-top:12px;"><!-- filled by renderBlockedRaversSettings --></div>
-    <div class="poll-modal-settings" style="margin-top:12px;">
-      <div class="poll-setting-row">
-        <div>
-          <div class="poll-setting-label">Beacon push notifications</div>
-          <div class="poll-setting-hint"><span class="web-only">Requires browser notification permission</span><span class="native-only">When your crew drops a Beacon</span></div>
-        </div>
-        <button class="poll-anon-toggle" id="push-settings-toggle" onclick="toggleBeaconPush(this)"></button>
+    <div class="page-panel-body" id="settings-body">
+
+    <!-- Hub: short menu, each row opens a sub-page via showSettingsPage() -->
+    <div class="settings-page" data-page="hub">
+      <button type="button" class="settings-profile-card" id="settings-profile-card" onclick="settingsEditProfile()"><!-- filled by renderSettingsProfileCard --></button>
+      <div class="settings-group">
+        <button type="button" class="settings-nav-row" onclick="showSettingsPage('notif')">
+          <span class="settings-nav-ico" style="background:rgba(255,230,0,0.12);">🔔</span>
+          <span class="settings-nav-text"><span class="poll-setting-label">Notifications</span><span class="poll-setting-hint" id="settings-sum-notif"></span></span>
+          <span class="settings-nav-chev">›</span>
+        </button>
+        <button type="button" class="settings-nav-row" onclick="showSettingsPage('privacy')">
+          <span class="settings-nav-ico" style="background:rgba(0,245,255,0.12);">🔒</span>
+          <span class="settings-nav-text"><span class="poll-setting-label">Privacy</span><span class="poll-setting-hint" id="settings-sum-privacy"></span></span>
+          <span class="settings-nav-chev">›</span>
+        </button>
+        <button type="button" class="settings-nav-row" onclick="showSettingsPage('safety')">
+          <span class="settings-nav-ico" style="background:rgba(57,255,20,0.12);">🛡️</span>
+          <span class="settings-nav-text"><span class="poll-setting-label">Safety</span><span class="poll-setting-hint" id="settings-sum-safety"></span></span>
+          <span class="settings-nav-chev">›</span>
+        </button>
+        <button type="button" class="settings-nav-row" onclick="showSettingsPage('account')">
+          <span class="settings-nav-ico" style="background:rgba(191,0,255,0.14);">👤</span>
+          <span class="settings-nav-text"><span class="poll-setting-label">Account &amp; login</span><span class="poll-setting-hint" id="settings-sum-account"></span></span>
+          <span class="settings-nav-chev">›</span>
+        </button>
       </div>
-      <div class="poll-setting-row">
-        <div>
-          <div class="poll-setting-label">Mention push notifications</div>
-          <div class="poll-setting-hint">Ping my phone when a crewmate @s me in the Huddle</div>
+      <div class="settings-group">
+        <div class="settings-nav-row">
+          <span class="settings-nav-ico" style="background:rgba(255,45,120,0.12);">💡</span>
+          <span class="settings-nav-text"><span class="poll-setting-label">Tips &amp; hints</span><span class="poll-setting-hint">Intros and tips as you find new stuff</span></span>
+          <button class="poll-anon-toggle" id="tips-settings-toggle" onclick="toggleTipsEnabled(this)"></button>
         </div>
-        <button class="poll-anon-toggle" id="mention-push-settings-toggle" onclick="toggleMentionPush(this)"></button>
+        <button type="button" class="settings-nav-row" onclick="closePrivacySettingsModal();openAppGuide()">
+          <span class="settings-nav-ico" style="background:rgba(255,255,255,0.06);">❔</span>
+          <span class="settings-nav-text"><span class="poll-setting-label">Guide &amp; Help</span></span>
+          <span class="settings-nav-chev">›</span>
+        </button>
       </div>
-      <div class="poll-setting-row">
-        <div>
-          <div class="poll-setting-label">♡ Favorite added to a lineup</div>
-          <div class="poll-setting-hint">When an artist you ♡ joins a Lineup Explorer rave. Push on this device if it's on, otherwise email</div>
+      <!-- Kept on the hub (not under Account & login) while the iOS build is in
+           App Store review: privacy.html, terms.html and the help FAQ give the
+           path as Settings → Delete my account. See native/README.md "After release". -->
+      <div class="settings-sec settings-sec-danger" style="margin-top:22px;">Danger zone</div>
+      <div class="poll-modal-settings" style="margin-top:12px;">
+        <div class="poll-setting-row">
+          <div>
+            <div class="poll-setting-label">Delete my account</div>
+            <div class="poll-setting-hint">Permanently erase your profile, photos and account</div>
+          </div>
+          <button type="button" class="btn btn-ghost btn-danger" id="delete-account-btn" style="padding:6px 14px;font-size:0.72rem;" onclick="openDeleteAccountModal()">Delete</button>
         </div>
-        <button class="poll-anon-toggle" id="alert-toggle-artist_added" onclick="toggleLineupAlert('artist_added', this)"></button>
       </div>
-      <div class="poll-setting-row">
-        <div>
-          <div class="poll-setting-label">🕘 Set times posted</div>
-          <div class="poll-setting-hint">For raves you're Going or Interested in</div>
+      <!-- Dev console: only for Eruda-enabled users, revealed by 5 taps on the version label -->
+      <div id="eruda-toggle-row" style="display:none;border-top:1px solid var(--border);padding-top:14px;margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:0.82rem;color:var(--muted);">🛠️ Dev console</span>
+          <button id="eruda-toggle-btn" onclick="toggleErudaVisibility()" class="btn btn-ghost" style="font-size:0.78rem;padding:4px 12px;min-width:56px;">Show</button>
         </div>
-        <button class="poll-anon-toggle" id="alert-toggle-set_times" onclick="toggleLineupAlert('set_times', this)"></button>
       </div>
-      <div class="poll-setting-row">
-        <div>
-          <div class="poll-setting-label">📼 Post-fest check-off</div>
-          <div class="poll-setting-hint">The morning after: who'd you catch?</div>
+      <button type="button" id="app-version-label" style="display:block;width:100%;background:none;border:none;padding:0;font-family:inherit;text-align:center;font-size:0.7rem;color:var(--muted);opacity:0.6;margin-top:16px;user-select:none;cursor:default;" onclick="settingsVersionTap()"></button>
+    </div>
+
+    <div class="settings-page" data-page="notif" style="display:none;">
+      <div class="settings-sec">From your crew</div>
+      <div class="poll-modal-settings">
+        <div class="poll-setting-row">
+          <div>
+            <div class="poll-setting-label">Beacons</div>
+            <div class="poll-setting-hint"><span class="web-only">When your crew drops a Beacon. Needs browser notification permission</span><span class="native-only">When your crew drops a Beacon</span></div>
+          </div>
+          <button class="poll-anon-toggle" id="push-settings-toggle" onclick="toggleBeaconPush(this)"></button>
         </div>
-        <button class="poll-anon-toggle" id="alert-toggle-postfest" onclick="toggleLineupAlert('postfest', this)"></button>
+        <div class="poll-setting-row">
+          <div>
+            <div class="poll-setting-label">@ Mentions</div>
+            <div class="poll-setting-hint">When a crewmate @s you in the Huddle</div>
+          </div>
+          <button class="poll-anon-toggle" id="mention-push-settings-toggle" onclick="toggleMentionPush(this)"></button>
+        </div>
       </div>
-      <div class="poll-setting-row">
-        <div>
-          <div class="poll-setting-label">Tips &amp; hints</div>
-          <div class="poll-setting-hint">Intros and tips as you find new stuff — more options in ❔ Guide &amp; Help</div>
+      <div class="settings-sec">Lineups</div>
+      <div class="poll-modal-settings">
+        <div class="poll-setting-row">
+          <div>
+            <div class="poll-setting-label">♡ Favorite added to a lineup</div>
+            <div class="poll-setting-hint">When an artist you ♡ joins a Lineup Explorer rave</div>
+          </div>
+          <button class="poll-anon-toggle" id="alert-toggle-artist_added" onclick="toggleLineupAlert('artist_added', this)"></button>
         </div>
-        <button class="poll-anon-toggle" id="tips-settings-toggle" onclick="toggleTipsEnabled(this)"></button>
+        <div class="poll-setting-row">
+          <div>
+            <div class="poll-setting-label">🕘 Set times posted</div>
+            <div class="poll-setting-hint">For raves you're Going or Interested in</div>
+          </div>
+          <button class="poll-anon-toggle" id="alert-toggle-set_times" onclick="toggleLineupAlert('set_times', this)"></button>
+        </div>
+        <div class="poll-setting-row">
+          <div>
+            <div class="poll-setting-label">📼 Post-fest check-off</div>
+            <div class="poll-setting-hint">The morning after: who'd you catch?</div>
+          </div>
+          <button class="poll-anon-toggle" id="alert-toggle-postfest" onclick="toggleLineupAlert('postfest', this)"></button>
+        </div>
       </div>
-      <div class="poll-setting-row">
-        <div>
-          <div class="poll-setting-label">Reset tips</div>
-          <div class="poll-setting-hint">See all tips again, including ones already dismissed</div>
-        </div>
-        <button type="button" class="btn btn-ghost" id="reset-tips-btn" style="padding:6px 14px;font-size:0.72rem;" onclick="resetGuidanceTips()">Reset</button>
+      <p class="settings-note">Lineup alerts come as a push on this device when it's allowed, otherwise by email.</p>
+    </div>
+
+    <div class="settings-page" data-page="privacy" style="display:none;">
+      <div class="settings-sec">What crewmates see</div>
+      <div class="poll-modal-settings" id="privacy-see-rows"><!-- filled by JS --></div>
+      <div class="settings-sec">What crewmates can do</div>
+      <div class="poll-modal-settings" id="privacy-do-rows"><!-- filled by JS --></div>
+      <div id="share-links-wrap" style="display:none;">
+        <div class="settings-sec">Sharing</div>
+        <div class="poll-modal-settings" id="share-links-settings" style="display:none;"><!-- filled by renderShareLinkSettings --></div>
       </div>
     </div>
-    <div class="poll-modal-settings" style="margin-top:12px;">
-      <div class="poll-setting-row">
-        <div>
-          <div class="poll-setting-label">📜 PLUR Code</div>
-          <div class="poll-setting-hint">The community rules moderators use to keep the fam safe</div>
+
+    <div class="settings-page" data-page="safety" style="display:none;">
+      <div class="settings-sec">Blocking</div>
+      <div class="poll-modal-settings" id="blocked-ravers-settings"><!-- filled by renderBlockedRaversSettings --></div>
+      <div class="settings-sec">Community</div>
+      <div class="poll-modal-settings">
+        <div class="poll-setting-row">
+          <div>
+            <div class="poll-setting-label">📜 PLUR Code</div>
+            <div class="poll-setting-hint">The community rules moderators use to keep the fam safe</div>
+          </div>
+          <button type="button" class="btn btn-ghost" style="padding:6px 14px;font-size:0.72rem;" onclick="openPlurCode()">Read</button>
         </div>
-        <button type="button" class="btn btn-ghost" style="padding:6px 14px;font-size:0.72rem;" onclick="openPlurCode()">Read</button>
       </div>
     </div>
-    <div class="poll-modal-settings" style="margin-top:12px;" id="login-methods-rows"><!-- filled by renderLoginMethods() --></div>
-    <div class="poll-modal-settings" style="margin-top:12px;">
-      <div class="poll-setting-row">
-        <div>
-          <div class="poll-setting-label">Delete my account</div>
-          <div class="poll-setting-hint">Permanently erase your profile, photos and account</div>
+
+    <div class="settings-page" data-page="account" style="display:none;">
+      <div class="poll-modal-settings" id="login-methods-rows"><!-- filled by renderLoginMethods() --></div>
+      <div class="settings-sec">Tips</div>
+      <div class="poll-modal-settings">
+        <div class="poll-setting-row">
+          <div>
+            <div class="poll-setting-label">Reset tips</div>
+            <div class="poll-setting-hint">See all tips again, including ones already dismissed</div>
+          </div>
+          <button type="button" class="btn btn-ghost" id="reset-tips-btn" style="padding:6px 14px;font-size:0.72rem;" onclick="resetGuidanceTips()">Reset</button>
         </div>
-        <button type="button" class="btn btn-ghost btn-danger" id="delete-account-btn" style="padding:6px 14px;font-size:0.72rem;" onclick="openDeleteAccountModal()">Delete</button>
       </div>
     </div>
-    <div id="eruda-toggle-row" style="display:none;border-top:1px solid var(--border);padding-top:14px;margin-top:12px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;">
-        <span style="font-size:0.82rem;color:var(--muted);">🛠️ Dev console</span>
-        <button id="eruda-toggle-btn" onclick="toggleErudaVisibility()" class="btn btn-ghost" style="font-size:0.78rem;padding:4px 12px;min-width:56px;">Show</button>
-      </div>
-    </div>
-    <div id="app-version-label" style="text-align:center;font-size:0.7rem;color:var(--muted);opacity:0.6;margin-top:16px;"></div>
+
     </div>
     <div class="page-panel-footer">
       <button class="btn btn-primary" style="flex:1;" onclick="closePrivacySettingsModal()">Done</button>
@@ -9773,7 +9878,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.6.0';
+  const APP_VERSION = '2.7.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -11268,7 +11373,7 @@
     closePrivacySettingsModal();
     openLinkMethodModal(method, {
       prefill: method === 'phone' ? guessOwnPhone() : '',
-      onDone: () => { if (me) openPrivacySettingsModal(me.id); }
+      onDone: () => { if (me) openPrivacySettingsModal(me.id, 'account'); }
     });
   }
 
@@ -33556,42 +33661,43 @@
   // Settings modal — owner-only (mirrors the entry-point gating on r.isYou),
   // each toggle saves immediately on tap via savePrivacySettings(), matching
   // the immediate-save convention already used by togglePollAnon().
-  async function openPrivacySettingsModal(raverId) {
+  // Settings opens on the hub; `page` jumps straight to a sub-page
+  // (e.g. 'account' when returning from adding a login method).
+  async function openPrivacySettingsModal(raverId, page = 'hub') {
     const r = getRaver(raverId);
     if (!r || !r.isYou) return;
     const versionLabel = document.getElementById('app-version-label');
     if (versionLabel) versionLabel.textContent = `RaveFAM v${APP_VERSION}`;
+    renderSettingsProfileCard(r);
     renderLoginMethods();
-    const erudaRow = document.getElementById('eruda-toggle-row');
-    if (erudaRow && _erudaInited) {
-      const erudaEl = document.getElementById('eruda');
-      const isVisible = erudaEl && erudaEl.style.display !== 'none';
-      document.getElementById('eruda-toggle-btn').textContent = isVisible ? 'Hide' : 'Show';
-      erudaRow.style.display = '';
-    }
+    _settingsVersionTaps = 0;
+    document.getElementById('eruda-toggle-row').style.display = 'none';
     const rows = [
-      { key:'allowFestivalAdds',  label:'Rave adds',            hint:'Let crewmates add you to a rave lineup (on by default)' },
-      { key:'allowVibeTags',      label:'Vibe tag suggestions', hint:'Let crewmates suggest a vibe tag on your profile (on by default)' },
-      { key:'phoneVisible',       label:'Phone number',         hint:'Share your phone with crewmates (off by default)' },
-      { key:'privacyBaseVisible', label:'Base location',        hint:"Show where you're based on your profile (on by default)" },
-      { key:'privacyShowRsvps',   label:'Rave RSVPs',           hint:'Show your Going To / Been To on your profile (on by default)' },
+      { key:'phoneVisible',       group:'see', label:'Phone number',         hint:'Share your phone with crewmates' },
+      { key:'privacyBaseVisible', group:'see', label:'Base location',        hint:"Show where you're based on your profile" },
+      { key:'privacyShowRsvps',   group:'see', label:'Rave RSVPs',           hint:'Show your Going To / Been To on your profile' },
+      { key:'allowFestivalAdds',  group:'do',  label:'Rave adds',            hint:'Let crewmates add you to a rave lineup' },
+      { key:'allowVibeTags',      group:'do',  label:'Vibe tag suggestions', hint:'Let crewmates suggest a vibe tag on your profile' },
     ];
-    document.getElementById('privacy-settings-rows').innerHTML = rows.map(row => `
+    const rowHTML = row => `
       <div class="poll-setting-row">
         <div>
           <div class="poll-setting-label">${row.label}</div>
           <div class="poll-setting-hint">${row.hint}</div>
         </div>
         <button class="poll-anon-toggle${r[row.key] ? ' on' : ''}" data-key="${row.key}" onclick="togglePrivacySetting('${escJsAttr(r.id)}', this)"></button>
-      </div>`).join('');
+      </div>`;
+    document.getElementById('privacy-see-rows').innerHTML = rows.filter(x => x.group === 'see').map(rowHTML).join('');
+    document.getElementById('privacy-do-rows').innerHTML = rows.filter(x => x.group === 'do').map(rowHTML).join('');
     const pushToggle = document.getElementById('push-settings-toggle');
     const mentionToggle = document.getElementById('mention-push-settings-toggle');
     pushToggle.classList.remove('on');
     mentionToggle.classList.remove('on');
     document.getElementById('tips-settings-toggle').classList.toggle('on', _guidance?.help_level !== 'pro');
-    renderShareLinkSettings();
+    const loads = [renderShareLinkSettings(), renderLineupAlertSettings()];
     renderBlockedRaversSettings();
-    renderLineupAlertSettings();
+    showSettingsPage(page);
+    Promise.allSettled(loads).then(updateSettingsSummaries);
     document.getElementById('privacy-settings-overlay').classList.add('open');
     if (nativePushPlugin()) {
       // iOS app: on = notifications allowed for RaveFAM + that type's opt-in flag.
@@ -33618,6 +33724,62 @@
         }
       } catch (e) { console.warn('push toggle state check failed', e); }
     }
+    updateSettingsSummaries();
+  }
+
+  // Swap the visible sub-page; the header shows "‹ Settings" off the hub.
+  function showSettingsPage(page) {
+    document.querySelectorAll('#privacy-settings-overlay .settings-page').forEach(el => {
+      el.style.display = el.dataset.page === page ? '' : 'none';
+    });
+    const titles = { hub:'⚙️ Settings', notif:'🔔 Notifications', privacy:'🔒 Privacy', safety:'🛡️ Safety', account:'👤 Account & login' };
+    document.getElementById('settings-title').textContent = titles[page] || titles.hub;
+    document.getElementById('settings-back-btn').style.display = page === 'hub' ? 'none' : '';
+    document.getElementById('settings-body').scrollTop = 0;
+    if (page === 'hub') updateSettingsSummaries();
+  }
+
+  // One-line state under each hub row, read back from the sub-pages' toggles.
+  function updateSettingsSummaries() {
+    const overlay = document.getElementById('privacy-settings-overlay');
+    const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+    const onCount = sel => overlay.querySelectorAll(sel + ' .poll-anon-toggle.on').length;
+    const notifTotal = overlay.querySelectorAll('[data-page="notif"] .poll-anon-toggle').length;
+    set('settings-sum-notif', `${onCount('[data-page="notif"]')} of ${notifTotal} on`);
+    const phoneOn = !!overlay.querySelector('[data-key="phoneVisible"].on');
+    const links = overlay.querySelectorAll('.share-link-row').length;
+    set('settings-sum-privacy', `Phone ${phoneOn ? 'shared' : 'hidden'}` + (links ? ` · ${links} share link${links === 1 ? '' : 's'}` : ''));
+    const blocked = _blockedUids.size;
+    set('settings-sum-safety', `${blocked ? blocked + ' blocked' : 'No one blocked'} · PLUR Code`);
+    const u = currentUser;
+    const methods = [u?.email && 'Email', userPhoneDisplay(u) && 'Phone'].filter(Boolean);
+    set('settings-sum-account', (methods.length ? methods.join(' + ') + ' login' : 'Login methods') + ' · reset tips');
+  }
+
+  function renderSettingsProfileCard(r) {
+    document.getElementById('settings-profile-card').innerHTML = `
+      ${raverAvatarHTML(r.avatarUrl, r.gradient, r.name || '?', 'settings-profile-avatar', '')}
+      <span class="settings-nav-text">
+        <span class="poll-setting-label">${escHtml(r.name || 'You')}</span>
+        <span class="poll-setting-hint">Edit profile ›</span>
+      </span>`;
+  }
+
+  function settingsEditProfile() {
+    const me = squad.find(r => r.isYou);
+    closePrivacySettingsModal();
+    if (me) openProfileEditor(me.id);
+  }
+
+  // Dev console row stays hidden until the version label is tapped 5 times,
+  // and only for users maybeInitEruda() already let in.
+  let _settingsVersionTaps = 0;
+  function settingsVersionTap() {
+    if (!_erudaInited || ++_settingsVersionTaps < 5) return;
+    const erudaEl = document.getElementById('eruda');
+    const isVisible = erudaEl && erudaEl.style.display !== 'none';
+    document.getElementById('eruda-toggle-btn').textContent = isVisible ? 'Hide' : 'Show';
+    document.getElementById('eruda-toggle-row').style.display = '';
   }
 
   function togglePrivacySetting(raverId, btn) {
@@ -33635,8 +33797,10 @@
     if (!el || !currentUser) return;
     const { data, error } = await sb.from('lineup_share_links')
       .select('token, festival_id, created_at').is('revoked_at', null).order('created_at', { ascending: false });
-    if (error || !data || !data.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    const wrap = document.getElementById('share-links-wrap');
+    if (error || !data || !data.length) { el.style.display = 'none'; el.innerHTML = ''; if (wrap) wrap.style.display = 'none'; return; }
     el.style.display = '';
+    if (wrap) wrap.style.display = '';
     el.innerHTML = `
       <div class="poll-setting-label">Shared lineup links</div>
       <div class="poll-setting-hint share-links-hint">Anyone with one of these links sees your first name and your picks for that rave.</div>` +

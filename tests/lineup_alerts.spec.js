@@ -1,6 +1,6 @@
 // Lineup Explorer Phase 4c in the app: the "Who'd you catch? 📼" post-fest
 // check-off on a past rave (postfestCardHTML, "===== Post-fest check-off"
-// section) and the Lineup alerts toggles in Privacy & Notifications
+// section) and the Lineup alerts toggles in Settings › Notifications
 // (renderLineupAlertSettings / toggleLineupAlert).
 const { test, expect } = require('@playwright/test');
 const { bootAuthedApp, seedData, TEST_UID } = require('./helpers');
@@ -73,7 +73,7 @@ test.describe('Settings — Lineup alerts', () => {
     const d = seedData();
     d.alert_preferences = [{ user_id: TEST_UID, type: 'set_times', enabled: false }];
     await bootAuthedApp(page, { data: d });
-    await page.evaluate(() => openPrivacySettingsModal('r-you'));
+    await page.evaluate(() => openPrivacySettingsModal('r-you', 'notif'));
     await expect(page.locator('#alert-toggle-artist_added')).toHaveClass(/\bon\b/);
     await expect(page.locator('#alert-toggle-set_times')).not.toHaveClass(/\bon\b/);
     await expect(page.locator('#alert-toggle-postfest')).toHaveClass(/\bon\b/);

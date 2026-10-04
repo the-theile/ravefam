@@ -47,6 +47,9 @@ Each native PR adds a line here; **After release** holds web changes that wait o
 **After release**
 - Re-add `/lineup-explorer` and `/lineup-explorer/*` to `.well-known/apple-app-site-association`
   (removed in #387: older builds bounce those links to Safari)
+- Move "Delete my account" from the Settings hub into Settings → Account & login
+  (kept on the hub during review), and update the path in `privacy.html` (s8),
+  `terms.html`, `contact.html` and the in-app help FAQ (`delete-account`)
 
 ### Released
 _Nothing tracked yet. The build in review predates this list._
