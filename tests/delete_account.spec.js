@@ -32,7 +32,6 @@ test.describe('self-serve account deletion', () => {
     await bootAuthedApp(page);
     await page.evaluate(() => notifDrawerSettings());
     await expect(page.locator('#privacy-settings-overlay')).toHaveClass(/open/);
-    await page.locator('.settings-nav-row', { hasText: 'Account & login' }).click();
     await page.locator('#delete-account-btn').click();
     await expect(page.locator('#privacy-settings-overlay')).not.toHaveClass(/open/);
     await expect(page.locator('#delete-account-overlay')).toHaveClass(/open/);

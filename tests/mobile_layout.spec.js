@@ -210,11 +210,15 @@ test.describe('settings panel on a phone', () => {
     const done = overlay.locator('.page-panel-footer button', { hasText: 'Done' });
     await expect(done).toBeInViewport();
 
-    // The hub opens Account & login, whose last row (Delete my account) can be reached.
-    await overlay.locator('.settings-nav-row', { hasText: 'Account & login' }).click();
-    await expect(overlay.locator('#settings-title')).toHaveText('👤 Account & login');
+    // Delete my account sits on the hub itself (App Store review path:
+    // Settings → Delete my account), reachable without drilling in.
     await page.locator('#delete-account-btn').scrollIntoViewIfNeeded();
     await expect(page.locator('#delete-account-btn')).toBeInViewport();
+
+    // The hub opens Account & login.
+    await overlay.locator('.settings-nav-row', { hasText: 'Account & login' }).click();
+    await expect(overlay.locator('#settings-title')).toHaveText('👤 Account & login');
+    await expect(page.locator('#reset-tips-btn')).toBeInViewport();
     await expect(done).toBeInViewport();
 
     // ‹ Settings goes back to the hub.
