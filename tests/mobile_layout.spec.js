@@ -199,7 +199,7 @@ test.describe('mobile layout · signed-out entry points', () => {
 });
 
 test.describe('settings panel on a phone', () => {
-  test('long settings list scrolls and Done / close stay reachable', async ({ page }) => {
+  test('hub drills into a sub-page and back; Done / close stay reachable', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 664 });
     await bootAuthedApp(page);
     await page.evaluate(() => notifDrawerSettings());
@@ -210,11 +210,17 @@ test.describe('settings panel on a phone', () => {
     const done = overlay.locator('.page-panel-footer button', { hasText: 'Done' });
     await expect(done).toBeInViewport();
 
-    // The body scrolls, so the last row (Delete my account) can be reached.
-    const body = overlay.locator('.page-panel-body');
-    expect(await body.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
+    // The hub opens Account & login, whose last row (Delete my account) can be reached.
+    await overlay.locator('.settings-nav-row', { hasText: 'Account & login' }).click();
+    await expect(overlay.locator('#settings-title')).toHaveText('👤 Account & login');
     await page.locator('#delete-account-btn').scrollIntoViewIfNeeded();
     await expect(page.locator('#delete-account-btn')).toBeInViewport();
+    await expect(done).toBeInViewport();
+
+    // ‹ Settings goes back to the hub.
+    await overlay.locator('#settings-back-btn').click();
+    await expect(overlay.locator('#settings-title')).toHaveText('⚙️ Settings');
+    await expect(overlay.locator('#settings-back-btn')).toBeHidden();
 
     await overlay.locator('button[aria-label="Close settings"]').click();
     await expect(overlay).not.toHaveClass(/open/);

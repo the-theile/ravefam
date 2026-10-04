@@ -159,7 +159,7 @@ test.describe('guidance · help level and settings', () => {
 
   test('Reset tips brings intros back but keeps places found', async ({ page }) => {
     await bootAuthedApp(page);
-    await page.evaluate(() => openPrivacySettingsModal('r-you'));
+    await page.evaluate(() => openPrivacySettingsModal('r-you', 'account'));
     await page.click('#reset-tips-btn');
     await page.evaluate(() => closePrivacySettingsModal());
     const state = await page.evaluate(() => ({ zones: Object.keys(_guidance.zones).length, found: Object.keys(_guidance.realms).length }));

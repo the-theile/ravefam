@@ -120,7 +120,7 @@ test.describe('iOS app · native push', () => {
   test('Settings Beacon toggle uses native push instead of saying the browser is unsupported', async ({ page }) => {
     await installCapacitorStub(page, { permission: 'granted' });
     await bootAuthedApp(page, { data: seedWithPrefs(), sessionOver: SESSION_OVER });
-    await page.evaluate(() => openPrivacySettingsModal('r-you'));
+    await page.evaluate(() => openPrivacySettingsModal('r-you', 'notif'));
     const toggle = page.locator('#push-settings-toggle');
     await expect(toggle).not.toHaveClass(/(^|\s)on(\s|$)/);
     await toggle.click();
