@@ -421,6 +421,60 @@ async function installSupabaseStub(page, opts = {}) {
                 }, error: null,
               };
             }
+            // Moderation RPCs (20261011000000_mod_tools.sql) — simplified mirrors
+            // of the security-definer functions: mod-gated, close every open
+            // flag on the same target, sanctions live in store.user_sanctions.
+            const isMod = () => (store.moderators || []).some(m => String(m.user_id) === String(uid));
+            const nowIso = () => new Date().toISOString();
+            if (fn === 'mod_resolve_flag') {
+              if (!isMod()) return { data: { ok: false, error: 'FORBIDDEN' }, error: null };
+              const f = (store.flags || []).find(x => x.id === args.p_flag_id);
+              if (!f) return { data: { ok: false, error: 'NOT_FOUND' }, error: null };
+              let removed = false;
+              if (args.p_outcome === 'removed') {
+                const table = { festival: 'festivals', crew: 'crews', raver: 'ravers', jam: 'crew_jams', poll: 'crew_polls',
+                  dream_pin: 'dream_board_pins', archive_link: 'crew_archive_links', huddle_message: 'huddle_messages' }[f.target_type];
+                const row = table && (store[table] || []).find(r => String(r.id) === String(f.target_id));
+                if (!row) return { data: { ok: false, error: 'NOT_REMOVABLE' }, error: null };
+                if (table === 'ravers' && row.claimed_by) return { data: { ok: false, error: 'CLAIMED' }, error: null };
+                if (!row.deleted_at) { Object.assign(row, { deleted_at: nowIso(), deleted_by: uid, delete_reason: args.p_note || null }); removed = true; }
+              }
+              const status = args.p_outcome === 'no_violation' ? 'dismissed' : 'resolved';
+              const closed = (store.flags || []).filter(x => x.id === f.id
+                || (x.target_type === f.target_type && x.target_id === f.target_id && x.status === 'open'));
+              closed.forEach(x => Object.assign(x, { status, resolved_at: nowIso(), resolved_by: uid, resolution_note: args.p_note || null }));
+              return { data: { ok: true, removed, status, target_type: f.target_type, target_id: f.target_id, closed: closed.length }, error: null };
+            }
+            if (fn === 'mod_flag_context') return { data: {}, error: null };
+            if (fn === 'mod_issue_sanction') {
+              if (!isMod()) return { data: { ok: false, error: 'FORBIDDEN' }, error: null };
+              if (String(args.p_user) === String(uid)) return { data: { ok: false, error: 'SELF' }, error: null };
+              if (String(args.p_kind).startsWith('restrict_') && !args.p_hours) return { data: { ok: false, error: 'DURATION_REQUIRED' }, error: null };
+              const row = { id: 'sanction-' + Math.random().toString(36).slice(2), user_id: args.p_user, kind: args.p_kind,
+                rule_code: args.p_rule_code || null, note: args.p_note || null, flag_id: args.p_flag_id || null, issued_by: uid,
+                created_at: nowIso(), expires_at: args.p_hours ? new Date(Date.now() + args.p_hours * 3600e3).toISOString() : null,
+                acknowledged_at: null, revoked_at: null };
+              (store.user_sanctions = store.user_sanctions || []).push(row);
+              return { data: { ok: true, id: row.id, expires_at: row.expires_at }, error: null };
+            }
+            if (fn === 'mod_revoke_sanction') {
+              if (!isMod()) return { data: { ok: false, error: 'FORBIDDEN' }, error: null };
+              const row = (store.user_sanctions || []).find(x => x.id === args.p_id && !x.revoked_at);
+              if (!row) return { data: { ok: false, error: 'NOT_FOUND' }, error: null };
+              row.revoked_at = nowIso();
+              return { data: { ok: true, user_id: row.user_id, kind: row.kind }, error: null };
+            }
+            if (fn === 'my_sanctions') {
+              const now = Date.now();
+              const rows = (store.user_sanctions || []).filter(x => String(x.user_id) === String(uid) && !x.revoked_at
+                && (x.kind === 'warning' ? !x.acknowledged_at : (!x.expires_at || new Date(x.expires_at).getTime() > now)));
+              return { data: clone(rows), error: null };
+            }
+            if (fn === 'ack_sanction') {
+              const row = (store.user_sanctions || []).find(x => x.id === args.p_id && String(x.user_id) === String(uid) && !x.acknowledged_at);
+              if (row) row.acknowledged_at = nowIso();
+              return { data: !!row, error: null };
+            }
             // Seed data sets phone_profile_match: true to simulate a new phone
             // login whose verified number is on someone's existing profile.
             if (fn === 'my_phone_matches_other_profile') {
