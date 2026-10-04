@@ -17998,7 +17998,6 @@
     const ctx = modFlagContext[f.id] || {};
     const owner = ctx.owner || null;
     const reporter = ctx.reporter || null;
-    const fid = escJsAttr(f.id);
     const others = Math.max(0, (ctx.target_open_count || 1) - 1);
     const canActOnOwner = !!(owner && !owner.is_mod && String(owner.user_id) !== String(currentUser?.id));
 
@@ -18029,17 +18028,17 @@
         </div>
         ${modHistoryHTML(owner)}
         <div class="mod-actions">
-          ${!ctx.target_gone ? `<button class="btn btn-primary" onclick="openModRemoveSheet('${fid}')">🗑️ Remove & resolve</button>` : ''}
+          ${!ctx.target_gone ? `<button class="btn btn-primary" onclick="openModRemoveSheet('${escJsAttr(f.id)}')">🗑️ Remove & resolve</button>` : ''}
           <button class="btn btn-ghost" onclick="viewFlagTarget('${escJsAttr(f.target_type)}','${escJsAttr(String(f.target_id))}','${escJsAttr(String(f.metadata?.crew_id || ''))}','${escJsAttr(String(f.metadata?.vendor_id || ''))}','${escJsAttr(String(f.metadata?.venue_id || ''))}','${escJsAttr(String(f.metadata?.festival_id || ''))}')">👀 View</button>
         </div>
         ${canActOnOwner ? `<div class="mod-actions">
-          <button class="btn btn-ghost" onclick="openModSanctionSheet('${fid}','warning')">⚠️ Warn</button>
-          <button class="btn btn-ghost" onclick="openModSanctionSheet('${fid}','restrict')">⏸️ Restrict</button>
-          ${owner.banned ? '' : `<button class="btn btn-ghost btn-danger" onclick="openModSanctionSheet('${fid}','suspend')">⛔ Suspend</button>`}
+          <button class="btn btn-ghost" onclick="openModSanctionSheet('${escJsAttr(f.id)}','warning')">⚠️ Warn</button>
+          <button class="btn btn-ghost" onclick="openModSanctionSheet('${escJsAttr(f.id)}','restrict')">⏸️ Restrict</button>
+          ${owner.banned ? '' : `<button class="btn btn-ghost btn-danger" onclick="openModSanctionSheet('${escJsAttr(f.id)}','suspend')">⛔ Suspend</button>`}
         </div>` : ''}
         <div class="mod-actions mod-actions-close">
-          <button class="btn btn-ghost" onclick="handleResolveFlag('${fid}')">✅ Resolve</button>
-          <button class="btn btn-ghost" onclick="handleDismissFlag('${fid}')">👌 No violation</button>
+          <button class="btn btn-ghost" onclick="handleResolveFlag('${escJsAttr(f.id)}')">✅ Resolve</button>
+          <button class="btn btn-ghost" onclick="handleDismissFlag('${escJsAttr(f.id)}')">👌 No violation</button>
         </div>
       </div>`;
   }
@@ -18112,8 +18111,8 @@
   function modChipRowHTML(items, field, current, valueKey) {
     return `<div class="mod-chip-grid">${items.map(it => {
       const v = it[valueKey];
-      const val = typeof v === 'number' ? v : `'${v}'`;
-      return `<button type="button" class="status-opt ${String(current) === String(v) ? 'active' : ''}" onclick="onModDraftField('${field}', ${val})">${it.label}</button>`;
+      const val = typeof v === 'number' ? v : `'${escJsAttr(v)}'`;
+      return `<button type="button" class="status-opt ${String(current) === String(v) ? 'active' : ''}" onclick="onModDraftField('${escJsAttr(field)}', ${val})">${it.label}</button>`;
     }).join('')}</div>`;
   }
 
@@ -33381,7 +33380,7 @@
       <div class="modal-title">🚩 Report this?</div>
       <p class="mod-sheet-sub">What's going on? A moderator will review it — the person you report won't see who reported them.</p>
       <div class="mod-chip-grid">
-        ${REPORT_CATEGORIES.map(c => `<button type="button" class="status-opt ${d.category === c.id ? 'active' : ''}${c.id === 'safety' ? ' mod-chip-safety' : ''}" onclick="pickReportCategory('${c.id}')">${c.icon} ${c.label}</button>`).join('')}
+        ${REPORT_CATEGORIES.map(c => `<button type="button" class="status-opt ${d.category === c.id ? 'active' : ''}${c.id === 'safety' ? ' mod-chip-safety' : ''}" onclick="pickReportCategory('${escJsAttr(c.id)}')">${c.icon} ${c.label}</button>`).join('')}
       </div>
       ${d.category === 'safety' ? `<div class="mod-callout mod-callout-danger">🛟 If anyone is in immediate danger, contact local emergency services or on-site medical/security first. Moderators are alerted right away.</div>` : ''}
       <div class="form-group">
