@@ -3725,17 +3725,6 @@
     flex: 1;
   }
   .notif-drawer-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-  .notif-clear-btn {
-    background: none;
-    border: none;
-    color: var(--muted);
-    font-size: 0.75rem;
-    cursor: pointer;
-    font-family: 'Outfit', sans-serif;
-    padding: 4px 0;
-    transition: color 0.15s;
-  }
-  .notif-clear-btn:hover { color: var(--text); }
   .notif-close-btn {
     background: none;
     border: 1.5px solid rgba(255,255,255,0.1);
@@ -3778,10 +3767,6 @@
     color: var(--text);
     border-color: rgba(255,255,255,0.28);
     background: rgba(255,255,255,0.04);
-  }
-  .notif-footer-btn.edit-btn:hover {
-    color: var(--neon-pink);
-    border-color: rgba(255,45,120,0.4);
   }
   .notif-footer-btn.privacy-btn:hover {
     color: var(--neon-green);
@@ -3856,8 +3841,9 @@
     background: var(--neon-pink);
     border-radius: 0 2px 2px 0;
   }
-  /* Read — visually receded */
-  .notif-item.notif-read { opacity: 0.55; }
+  /* Read — text recedes; the row and its buttons stay full strength so
+     actions still look tappable and the text keeps its contrast. */
+  .notif-item.notif-read .notif-text { color: var(--muted); }
   .notif-dot {
     width: 8px; height: 8px;
     border-radius: 50%;
@@ -3898,7 +3884,166 @@
     flex-shrink: 0;
     margin-top: 3px;
   }
+  /* Grouped inbox: avatar | message + actions | time, dot, hide */
+  .notif-tabs {
+    display: flex; gap: 6px;
+    padding: 12px 16px 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    flex-shrink: 0;
+  }
+  .notif-tabs::-webkit-scrollbar { display: none; }
+  .notif-tab {
+    flex-shrink: 0;
+    background: var(--surface2);
+    border: none;
+    border-radius: 999px;
+    padding: 7px 12px;
+    color: var(--muted);
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.76rem;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s, color 0.15s;
+  }
+  .notif-tab:hover { color: var(--text); }
+  .notif-tab.active { background: var(--text); color: var(--bg); }
+  .notif-tab-count { margin-left: 5px; color: var(--neon-pink); font-weight: 800; }
+  .notif-group-label {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.66rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 14px 20px 6px;
+  }
+  .notif-group-label.needs-you { color: var(--neon-pink); }
+  .notif-item.notif-row {
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 12px;
+    padding: 11px 16px 11px 20px;
+    cursor: pointer;
+  }
+  .notif-item.notif-row:hover { background: rgba(255,255,255,0.03); }
+  .notif-item.notif-row.unread:hover { background: rgba(255,45,120,0.14); }
+  .notif-item.notif-pinned { background: rgba(255,45,120,0.06); }
+  .notif-item.notif-pinned::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0;
+    width: 3px; height: 100%;
+    background: var(--neon-pink);
+  }
+  .notif-row .notif-text { font-size: 0.84rem; line-height: 1.45; }
+  .notif-row .notif-actions-row { margin: 8px 0 0; gap: 6px; }
+  .notif-row .notif-action-btn { flex-basis: auto; margin: 0; }
+  .notif-row .notif-action-btn.notif-ghost-btn { margin-left: 0; }
+  .notif-av {
+    position: relative;
+    width: 38px; height: 38px;
+    flex-shrink: 0;
+  }
+  .notif-av-face {
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.78rem;
+    color: #fff;
+  }
+  .notif-av-icon {
+    background: color-mix(in srgb, var(--cat) 18%, transparent);
+    border: 1px solid color-mix(in srgb, var(--cat) 45%, transparent);
+    font-size: 1.05rem;
+  }
+  .notif-av-badge {
+    position: absolute;
+    right: -3px; bottom: -3px;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--cat);
+    border: 2px solid var(--surface);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.55rem;
+    line-height: 1;
+    color: var(--bg);
+  }
+  .notif-meta {
+    display: flex; flex-direction: column; align-items: flex-end;
+    gap: 7px;
+    min-width: 34px;
+  }
+  .notif-row .notif-time { margin-top: 2px; white-space: nowrap; }
+  .notif-row .notif-dot { margin-top: 0; box-shadow: 0 0 8px var(--neon-pink); }
+  .notif-hide-btn {
+    background: none; border: none;
+    color: var(--muted);
+    font-size: 1rem; line-height: 1;
+    width: 26px; height: 26px;
+    margin-right: -6px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .notif-hide-btn:hover, .notif-hide-btn:focus-visible { color: var(--text); background: rgba(255,255,255,0.06); outline: none; }
+  .notif-more { margin-top: 3px; font-size: 0.74rem; color: var(--muted); }
+  .notif-more-btn {
+    background: none; border: none; padding: 0;
+    color: var(--neon-cyan);
+    font: inherit; font-weight: 600;
+    cursor: pointer;
+  }
+  .notif-sub-row { padding-left: 40px; }
+  .notif-undo {
+    flex-shrink: 0;
+    margin: 0 16px 10px;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: var(--text);
+    color: var(--bg);
+    font-size: 0.8rem;
+    font-weight: 500;
+  }
+  .notif-undo[hidden] { display: none; }
+  .notif-undo button {
+    background: none; border: none;
+    color: var(--neon-pink);
+    font-family: 'Outfit', sans-serif;
+    font-weight: 800; font-size: 0.78rem;
+    cursor: pointer;
+    padding: 4px 2px;
+  }
+  .notif-mark-read-btn {
+    background: none;
+    border: 1.5px solid rgba(255,255,255,0.12);
+    border-radius: 999px;
+    padding: 6px 12px;
+    color: var(--muted);
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.74rem;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .notif-mark-read-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.28); }
+  .notif-mark-read-btn:disabled { opacity: 0.4; cursor: default; }
+  .notif-drawer-sub { display: block; font-family: 'DM Sans', sans-serif; font-weight: 400; font-size: 0.72rem; color: var(--muted); }
+  /* Huddle count on the bell sits under the pink notification count. */
+  .notif-badge.notif-huddle-badge {
+    top: auto; bottom: -5px; right: -7px;
+    background: var(--neon-cyan);
+    color: var(--bg);
+    height: 14px; min-width: 14px;
+    font-size: 0.56rem;
+  }
   .notif-huddle-item { cursor: pointer; }
+  .notif-huddle-item .notif-av-face { background: rgba(0,245,255,0.14); border: 1px solid rgba(0,245,255,0.4); font-size: 1rem; }
   .notif-huddle-title {
     font-weight: 700;
     color: var(--neon-cyan);
@@ -8614,6 +8759,7 @@
       <button class="notif-bell-btn" id="notif-bell" onclick="openNotifDrawer()" title="Notifications" aria-label="Notifications">
         🔔
         <span class="notif-badge" id="notif-badge"></span>
+        <span class="notif-badge notif-huddle-badge" id="notif-huddle-badge"></span>
       </button>
       <div class="admin-menu-wrap" id="admin-menu-wrap">
         <button class="notif-bell-btn" id="app-guide-btn" onclick="onAppGuideBtnClick()" title="How RaveFAM Works" aria-label="How RaveFAM Works">
@@ -9473,12 +9619,13 @@
 <div class="notif-drawer-overlay" id="notif-drawer-overlay" onclick="if(event.target===this)closeNotifDrawer()">
   <div class="notif-drawer">
     <div class="notif-drawer-head">
-      <span class="notif-drawer-title">🔔 Notifications</span>
+      <span class="notif-drawer-title">Notifications<span class="notif-drawer-sub" id="notif-drawer-sub"></span></span>
       <div class="notif-drawer-actions">
-        <button class="notif-clear-btn" onclick="clearAllNotifs()">Clear all</button>
+        <button class="notif-mark-read-btn" id="notif-mark-read-btn" onclick="markAllNotifsRead()">Mark all read</button>
         <button class="notif-close-btn" onclick="closeNotifDrawer()" aria-label="Close notifications">×</button>
       </div>
     </div>
+    <div class="notif-tabs" id="notif-tabs" role="tablist" aria-label="Filter notifications"></div>
     <div class="notif-list" id="notif-list">
       <div class="notif-empty es-block">
         <div class="es-icon">🔔</div>
@@ -9487,9 +9634,12 @@
         <button class="notif-empty-cta" onclick="closeNotifDrawer();switchTab('events')">Find a rave</button>
       </div>
     </div>
+    <div class="notif-undo" id="notif-undo" role="status" hidden>
+      <span>Notification hidden</span>
+      <button type="button" onclick="undoHideNotif()">Undo</button>
+    </div>
     <div class="notif-drawer-footer">
-      <button class="notif-footer-btn edit-btn" onclick="notifDrawerEditProfile()">✏️ Edit Profile</button>
-      <button class="notif-footer-btn privacy-btn" onclick="notifDrawerSettings()">⚙️ Settings</button>
+      <button class="notif-footer-btn privacy-btn" onclick="notifDrawerSettings()">⚙️ Notification settings</button>
     </div>
   </div>
 </div>
@@ -9878,7 +10028,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.7.0';
+  const APP_VERSION = '2.8.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -14814,12 +14964,6 @@
     const uid = currentUser?.id;
     if (!uid) return;
     await sb.from('notifications').update({ read: true }).eq('user_id', uid).eq('read', false);
-  }
-
-  async function dbClearNotifications() {
-    const uid = currentUser?.id;
-    if (!uid) return;
-    await sb.from('notifications').delete().eq('user_id', uid);
   }
 
   // Notify all currently claimed members of a crew (excluding the acting user)
@@ -32693,6 +32837,7 @@
     if (you.festIds) you.festIds = you.festIds.filter(fid => String(fid) !== String(festId));
     if (currentUser) dbRemoveRaverFestival(you.id, festId);
     if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Removed ✓'; }
+    notifResolveFromBtn(btnEl);
     renderEvents(); renderSquad(); renderCrews();
     const fest = getFestival(festId);
     showToast(`Took your RSVP off ${fest?.name || 'that rave'} — no stress, the dancefloor moves on.`);
@@ -32707,6 +32852,7 @@
     if (!you.festIds.some(fid => String(fid) === String(festId))) you.festIds.push(festId);
     if (currentUser) dbAddRaverFestival(you.id, festId);
     if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Added ✓'; }
+    notifResolveFromBtn(btnEl);
     renderEvents(); renderSquad(); renderCrews();
     const fest = getFestival(festId);
     showToast(`✅ You're back on the lineup for ${fest?.name || 'that rave'}!`);
@@ -32721,6 +32867,7 @@
       .upsert({ raver_id: raverId, festival_id: festId, blocked_by: currentUser.id }, { onConflict: 'raver_id,festival_id' });
     if (error) { console.error('festival_rsvp_blocks insert error', error); showToast('⚠️ Could not save that — try again'); return; }
     if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Blocked ✓'; }
+    notifResolveFromBtn(btnEl);
     showToast('🚫 No one can re-add you to this rave — unless you RSVP yourself.');
   }
 
@@ -32732,6 +32879,7 @@
       .upsert({ raver_id: raverId, crew_id: crewId, blocked_by: currentUser.id }, { onConflict: 'raver_id,crew_id' });
     if (error) { console.error('crew_membership_blocks insert error', error); showToast('⚠️ Could not save that — try again'); return; }
     if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Blocked ✓'; }
+    notifResolveFromBtn(btnEl);
     showToast('🚫 No one can re-add you to this crew — unless you join yourself.');
   }
 
@@ -32748,6 +32896,7 @@
       if (row) row.querySelectorAll('button').forEach(b => b.disabled = true);
       btnEl.textContent = keepPlaceholder ? 'Kept ✓' : 'Removed ✓';
     }
+    notifResolveFromBtn(btnEl);
     showToast(keepPlaceholder ? '✅ Their spot stays in the crew' : '🗑️ Removed from the crew');
   }
 
@@ -35284,35 +35433,53 @@
     _notifications.unshift(n);
     if (_notifications.length > 100) _notifications.splice(100);
     updateNotifBadge();
-    if (document.getElementById('notif-drawer-overlay').classList.contains('open')) {
-      n.read = true;
-      updateNotifBadge();
-      renderNotifList();
-    }
+    if (isNotifDrawerOpen()) renderNotifList();
     if (currentUser) {
       sb.from('notifications').insert({ user_id: currentUser.id, crew_id: null, message, data })
         .select('id').single()
-        .then(({ data: ins }) => { if (ins?.id) n.id = ins.id; })
+        .then(({ data: ins }) => {
+          if (!ins?.id) return;
+          n.id = ins.id;
+          // Read (or answered) before the row id came back — persist it now.
+          if (n.read) dbMarkNotifReadIds([ins.id]);
+          if (isNotifDrawerOpen()) renderNotifList();
+        })
         .catch(() => {});
     }
   }
 
+  function unreadNotifCount() { return loadNotifs().filter(n => !n.read).length; }
+
+  // Bell: pink = unread notifications (Needs-you rows included), cyan = unread
+  // Huddle messages. Each hides at zero.
   function updateNotifBadge() {
     const badge = document.getElementById('notif-badge');
     if (!badge) return;
     const huddleTotal = totalHuddleUnreadCount();
-    // iOS app icon badge mirrors this count once it's known (null = not loaded).
-    if (_huddleUnreadCache !== null || !crews.length) syncNativeAppBadge(huddleTotal);
-    if (huddleTotal > 0) {
-      badge.textContent = huddleTotal > 99 ? '99+' : String(huddleTotal);
-      badge.classList.add('has-unread', 'has-count');
-      return;
+    const unread = unreadNotifCount();
+    // iOS app icon badge mirrors the total once Huddle unread is known (null = not loaded).
+    if (_huddleUnreadCache !== null || !crews.length) syncNativeAppBadge(huddleTotal + unread);
+    setNotifCountBadge(badge, unread);
+    setNotifCountBadge(document.getElementById('notif-huddle-badge'), huddleTotal);
+    const bell = document.getElementById('notif-bell');
+    if (bell) {
+      const parts = ['Notifications'];
+      if (unread) parts.push(`${unread} unread`);
+      if (huddleTotal) parts.push(`${huddleTotal} unread Huddle message${huddleTotal === 1 ? '' : 's'}`);
+      bell.setAttribute('aria-label', parts.join(', '));
     }
-    badge.textContent = '';
-    badge.classList.remove('has-count');
-    const hasUnread = loadNotifs().some(n => !n.read);
-    badge.classList.toggle('has-unread', hasUnread);
   }
+
+  function setNotifCountBadge(el, count) {
+    if (!el) return;
+    el.textContent = count > 99 ? '99+' : count ? String(count) : '';
+    el.classList.toggle('has-unread', count > 0);
+    el.classList.toggle('has-count', count > 0);
+  }
+
+  // Acknowledges a Needs-you row without changing anything, so a lineup or
+  // crew add the recipient is happy with doesn't stay pinned forever.
+  const NOTIF_ALL_GOOD_BTN = { label: '\ud83d\udc4d All good', ghost: true, onclick: 'notifResolveFromBtn(this)' };
 
   // Buttons per notification type. Each returns an array of
   // {label, onclick, ghost} so renderNotifList can lay them out consistently
@@ -35322,23 +35489,27 @@
     if (n.type === 'festival_add' && d.festival_id && d.raver_id) {
       return [
         { label: 'Nah, take me off the lineup', onclick: `notifOptOutFestival('${escHtml(String(d.raver_id))}','${escHtml(String(d.festival_id))}',this)` },
-        { label: "\ud83d\udeab Don't add me to this again", ghost: true, onclick: `notifBlockFestival('${escHtml(String(d.raver_id))}','${escHtml(String(d.festival_id))}',this)` }
+        { label: "\ud83d\udeab Don't add me to this again", ghost: true, onclick: `notifBlockFestival('${escHtml(String(d.raver_id))}','${escHtml(String(d.festival_id))}',this)` },
+        NOTIF_ALL_GOOD_BTN
       ];
     }
     if (n.type === 'festival_remove' && d.festival_id && d.raver_id) {
       return [
         { label: 'Add me back on', onclick: `notifReAddSelfFestival('${escHtml(String(d.raver_id))}','${escHtml(String(d.festival_id))}',this)` },
-        { label: "\ud83d\udeab Don't add me to this again", ghost: true, onclick: `notifBlockFestival('${escHtml(String(d.raver_id))}','${escHtml(String(d.festival_id))}',this)` }
+        { label: "\ud83d\udeab Don't add me to this again", ghost: true, onclick: `notifBlockFestival('${escHtml(String(d.raver_id))}','${escHtml(String(d.festival_id))}',this)` },
+        NOTIF_ALL_GOOD_BTN
       ];
     }
     if (n.type === 'crew_add' && d.crew_id && d.raver_id) {
       return [
-        { label: "\ud83d\udeab Don't add me to this crew again", ghost: true, onclick: `notifBlockCrew('${escHtml(String(d.raver_id))}','${escHtml(String(d.crew_id))}',this)` }
+        { label: "\ud83d\udeab Don't add me to this crew again", ghost: true, onclick: `notifBlockCrew('${escHtml(String(d.raver_id))}','${escHtml(String(d.crew_id))}',this)` },
+        NOTIF_ALL_GOOD_BTN
       ];
     }
     if (n.type === 'crew_remove' && d.crew_id && d.raver_id) {
       return [
-        { label: "\ud83d\udeab Don't add me to this crew again", ghost: true, onclick: `notifBlockCrew('${escHtml(String(d.raver_id))}','${escHtml(String(d.crew_id))}',this)` }
+        { label: "\ud83d\udeab Don't add me to this crew again", ghost: true, onclick: `notifBlockCrew('${escHtml(String(d.raver_id))}','${escHtml(String(d.crew_id))}',this)` },
+        NOTIF_ALL_GOOD_BTN
       ];
     }
     if (n.type === 'crew_leave_request' && d.crew_id && d.raver_id) {
@@ -35513,51 +35684,346 @@
     const snippetHtml = e.senderName
       ? `<div class="notif-huddle-snippet">${escHtml(e.senderName)}: ${escHtml(e.snippet)}</div>` : '';
     return `
-      <div class="notif-item unread notif-huddle-item" role="button" tabindex="0"
+      <div class="notif-item notif-row unread notif-huddle-item" role="button" tabindex="0"
         data-crew-id="${escHtml(String(e.crewId))}" data-room-id="${escHtml(String(e.roomId))}"
         data-room-kind="${escHtml(e.roomKind)}"${festAttr}
         onclick="openHuddleFromNotif(this.dataset.crewId, this.dataset.roomId, this.dataset.roomKind, this.dataset.festId || null)">
-        <span class="notif-dot"></span>
-        <span class="notif-text">
-          <div class="notif-huddle-title">\ud83d\udd4a\ufe0f ${escHtml(e.crewName)} \u00b7 ${e.roomLabel}</div>
-          ${snippetHtml}
-        </span>
-        <span class="huddle-cta-count">${e.unread > 99 ? '99+' : e.unread}</span>
+        <div class="notif-av" aria-hidden="true"><div class="notif-av-face">🕊️</div></div>
+        <div class="notif-body">
+          <span class="notif-text">
+            <div class="notif-huddle-title">${escHtml(e.crewName)} · ${e.roomLabel}</div>
+            ${snippetHtml}
+          </span>
+        </div>
+        <div class="notif-meta"><span class="huddle-cta-count">${e.unread > 99 ? '99+' : e.unread}</span></div>
       </div>`;
   }
 
+  // ── Grouped inbox ─────────────────────────────────────────────────────────
+  // Category drives the filter tab, the icon colour and the avatar's corner badge.
+  const NOTIF_CATS = {
+    crew:    { label: 'Crew',     color: 'var(--neon-pink)',   icon: '👯', badge: '♥' },
+    rave:    { label: 'Raves',    color: 'var(--neon-cyan)',   icon: '🎪', badge: '♪' },
+    mention: { label: 'Mentions', color: 'var(--neon-cyan)',   icon: '💬', badge: '@' },
+    plur:    { label: 'PLUR',     color: 'var(--neon-yellow)', icon: '☮️', badge: '★' },
+    safety:  { label: 'Safety',   color: 'var(--neon-purple)', icon: '🛡️', badge: '!' },
+    vendor:  { label: 'Vendors',  color: 'var(--neon-green)',  icon: '🌮', badge: '✦' },
+  };
+  // Safety and vendor rows only show under All.
+  const NOTIF_TABS = ['all', 'crew', 'rave', 'mention', 'plur'];
+  // Rows that ask the recipient to decide something. They stay pinned under
+  // Needs you until one of their buttons is used (data.resolved).
+  const NOTIF_DECISION_TYPES = ['crew_leave_request', 'festival_add', 'festival_remove', 'crew_add', 'crew_remove'];
+  const NOTIF_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  // Most messages open with their own emoji; it becomes the avatar icon.
+  const NOTIF_LEAD_EMOJI = /^(\p{Extended_Pictographic}(?:️|\p{Emoji_Modifier}|‍\p{Extended_Pictographic})*)\s+/u;
+  let _notifTab = 'all';
+  const _notifExpanded = new Set();
+  let _notifHidden = null; // { items, timer } — hidden rows waiting out the undo window
+
+  function notifCategory(n) {
+    const t = n.type || '';
+    if (t === 'points_earned' || t === 'achievement_unlocked') return 'plur';
+    if (t.startsWith('mod_')) return 'safety';
+    if (t === 'vendor_spotted') return 'vendor';
+    const links = notifLinkTargets(n);
+    if (links.some(l => l.k === 'huddle')) return 'mention';
+    if (t.startsWith('festival_') || n.entityType === 'rave') return 'rave';
+    if (t.startsWith('crew_') || n.entityType === 'crew') return 'crew';
+    if (links.some(l => l.k === 'plur')) return 'plur';
+    if (links.some(l => l.k === 'rave')) return 'rave';
+    return 'crew';
+  }
+
+  function notifNeedsYou(n) {
+    return NOTIF_DECISION_TYPES.includes(n.type) && !n.data?.resolved && notifActionButtons(n).length > 0;
+  }
+
+  function splitNotifEmoji(message) {
+    const m = NOTIF_LEAD_EMOJI.exec(message || '');
+    return m ? { emoji: m[1], text: message.slice(m[0].length) } : { emoji: null, text: message || '' };
+  }
+
+  // The crewmate who triggered it, when they're someone in your squad.
+  function notifActor(n) {
+    const uid = n.data?.actor_id;
+    if (!uid || uid === currentUser?.id) return null;
+    return squad.find(r => r.claimedBy && r.claimedBy === uid) || null;
+  }
+
+  function notifAvatarHTML(n, cat, emoji) {
+    const meta = NOTIF_CATS[cat];
+    const actor = notifActor(n);
+    const face = actor && actor.name
+      ? raverAvatarHTML(actor.avatarUrl || null, actor.gradient, actor.name, 'notif-av-face', '')
+      : `<div class="notif-av-face notif-av-icon">${escHtml(emoji || meta.icon)}</div>`;
+    return `<div class="notif-av" style="--cat:${meta.color}" aria-hidden="true">${face}<span class="notif-av-badge">${meta.badge}</span></div>`;
+  }
+
+  function notifDayBucket(ts) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    if (ts >= today.getTime()) return 'today';
+    if (ts >= today.getTime() - 6 * 86400000) return 'week';
+    return 'earlier';
+  }
+
+  // "12m" / "3h" today, a weekday this week, then "Sep 24".
+  function notifTimeLabel(ts) {
+    const bucket = notifDayBucket(ts);
+    if (bucket === 'today') {
+      const m = Math.floor((Date.now() - ts) / 60000);
+      if (m < 1) return 'now';
+      return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h`;
+    }
+    const d = new Date(ts);
+    if (bucket === 'week') return d.toLocaleDateString(undefined, { weekday: 'short' });
+    const opts = { month: 'short', day: 'numeric' };
+    if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+    return d.toLocaleDateString(undefined, opts);
+  }
+
+  // Rows that read the same apart from who did it, on the same day, fold into
+  // one: "Maya and 4 others RSVP'd to Hulaween". The template is the message
+  // with the sender's name cut out (\u0001 marks the spot).
+  function notifCollapseKey(n, text) {
+    const actor = notifActor(n);
+    if (!actor || !actor.name) return null;
+    const name = [actor.name, actor.name.split(' ')[0]].find(x => x && text.includes(x));
+    if (!name) return null;
+    const tpl = text.replace(name, '\u0001');
+    return { key: `${new Date(n.timestamp).toDateString()}|${n.type || ''}|${tpl}`, tpl, name };
+  }
+
+  function buildNotifEntries(list) {
+    const entries = [];
+    const byKey = {};
+    list.forEach(n => {
+      const { emoji, text } = splitNotifEmoji(n.message);
+      const pinned = notifNeedsYou(n);
+      const c = pinned ? null : notifCollapseKey(n, text);
+      if (c && byKey[c.key]) { byKey[c.key].items.push({ n, name: c.name }); return; }
+      const e = { n, emoji, text, cat: notifCategory(n), pinned, collapse: c, items: [{ n, name: c ? c.name : null }] };
+      if (c) byKey[c.key] = e;
+      entries.push(e);
+    });
+    return entries;
+  }
+
+  function notifRowHTML(e, sub) {
+    const n = e.n;
+    const grouped = e.items.length > 1;
+    const ids = e.items.map(i => String(i.n.id));
+    const unread = e.items.some(i => !i.n.read);
+    let messageHtml, linked, moreHtml = '', subHtml = '';
+    if (grouped) {
+      const names = [...new Set(e.items.map(i => i.name))];
+      const others = names.length - 1;
+      const who = `<b>${escHtml(names[0])}</b>${others ? ` and ${others} other${others > 1 ? 's' : ''}` : ''}`;
+      ({ html: messageHtml, linked } = linkifyNotifMessage(e.collapse.tpl, notifLinkTargets(n)));
+      messageHtml = messageHtml.replace('\u0001', who);
+      const open = _notifExpanded.has(e.collapse.key);
+      moreHtml = `<div class="notif-more">${others ? `${escHtml(names.slice(1).join(', '))} · ` : ''}<button type="button" class="notif-more-btn" data-key="${escHtml(e.collapse.key)}" aria-expanded="${open}" onclick="toggleNotifGroup(event, this.dataset.key)">${open ? 'Hide' : 'Show all'}</button></div>`;
+      if (open) {
+        subHtml = e.items.map(i => {
+          const parts = splitNotifEmoji(i.n.message);
+          return notifRowHTML({ n: i.n, emoji: parts.emoji, text: parts.text, cat: e.cat, pinned: false, collapse: null, items: [{ n: i.n }] }, true);
+        }).join('');
+      }
+    } else {
+      ({ html: messageHtml, linked } = linkifyNotifMessage(e.text, notifLinkTargets(n)));
+    }
+    const buttons = grouped ? [] : notifActionButtons(n);
+    const actionsHtml = buttons.length
+      ? `<div class="notif-actions-row">${buttons.map(b => `<button class="notif-action-btn${b.ghost ? ' notif-ghost-btn' : ''}" onclick="${b.onclick}">${b.label}</button>`).join('')}</div>`
+      : '';
+    // Whole-row tap navigates only when nothing linked inline, so the two
+    // handlers never fight over the same click.
+    const navAttrs = !linked && n.entityType && n.entityId
+      ? ` data-nav-type="${escHtml(String(n.entityType))}" data-nav-id="${escHtml(String(n.entityId))}"` : '';
+    const hideBtn = e.pinned ? ''
+      : `<button type="button" class="notif-hide-btn" aria-label="Hide notification" onclick="event.stopPropagation(); hideNotifs(this.closest('.notif-item').dataset.notifIds)">×</button>`;
+    return `
+      <div class="notif-item notif-row ${unread ? 'unread' : 'notif-read'}${e.pinned ? ' notif-pinned' : ''}${sub ? ' notif-sub-row' : ''}"
+        role="button" tabindex="0" data-notif-ids="${escHtml(ids.join(','))}"${navAttrs} onclick="notifRowClick(event, this)">
+        ${notifAvatarHTML(n, e.cat, e.emoji)}
+        <div class="notif-body">
+          <span class="notif-text">${messageHtml}</span>
+          ${moreHtml}${actionsHtml}
+        </div>
+        <div class="notif-meta">
+          <span class="notif-time">${notifTimeLabel(n.timestamp)}</span>
+          ${unread ? '<span class="notif-dot"></span>' : ''}
+          ${hideBtn}
+        </div>
+      </div>${subHtml}`;
+  }
+
+  // Drawer header line, Mark all read state and the tab strip with per-tab unread.
+  function renderNotifChrome() {
+    const unread = unreadNotifCount();
+    const sub = document.getElementById('notif-drawer-sub');
+    if (sub) sub.textContent = unread ? `${unread} unread` : 'All caught up';
+    const btn = document.getElementById('notif-mark-read-btn');
+    if (btn) btn.disabled = !unread;
+    const tabs = document.getElementById('notif-tabs');
+    if (!tabs) return;
+    const counts = { all: 0, crew: 0, rave: 0, mention: 0, plur: 0 };
+    loadNotifs().forEach(n => {
+      if (n.read) return;
+      counts.all++;
+      const c = notifCategory(n);
+      if (c in counts) counts[c]++;
+    });
+    tabs.innerHTML = NOTIF_TABS.map(t => {
+      const on = t === _notifTab;
+      const label = t === 'all' ? 'All' : NOTIF_CATS[t].label;
+      const count = counts[t] ? `<span class="notif-tab-count">${counts[t] > 99 ? '99+' : counts[t]}</span>` : '';
+      return `<button type="button" role="tab" class="notif-tab${on ? ' active' : ''}" aria-selected="${on}" onclick="setNotifTab('${escJsAttr(t)}')">${label}${count}</button>`;
+    }).join('');
+  }
+
+  function setNotifTab(tab) {
+    if (!NOTIF_TABS.includes(tab)) return;
+    _notifTab = tab;
+    renderNotifList();
+    const el = document.getElementById('notif-list');
+    if (el) el.scrollTop = 0;
+  }
+
+  function toggleNotifGroup(ev, key) {
+    ev.stopPropagation();
+    if (_notifExpanded.has(key)) _notifExpanded.delete(key); else _notifExpanded.add(key);
+    renderNotifList();
+  }
+
   function renderNotifList() {
-    const list = loadNotifs();
-    const huddleEntries = _huddleDrawerEntries || [];
+    renderNotifChrome();
     const el = document.getElementById('notif-list');
     if (!el) return;
+    const tab = _notifTab;
+    const list = loadNotifs().filter(n => tab === 'all' || notifCategory(n) === tab);
+    const huddleEntries = (tab === 'all' || tab === 'mention') ? (_huddleDrawerEntries || []) : [];
     if (!list.length && !huddleEntries.length) {
-      el.innerHTML = `<div class="notif-empty es-block"><div class="es-icon">\ud83d\udd14</div><div class="es-headline">All quiet on the dancefloor</div><div class="es-sub">Crew moves, RSVPs, and drops will light this up when things get going.</div></div>`;
+      el.innerHTML = tab === 'all'
+        ? `<div class="notif-empty es-block"><div class="es-icon">🔔</div><div class="es-headline">All quiet on the dancefloor</div><div class="es-sub">Crew moves, RSVPs, and drops will light this up when things get going.</div><button class="notif-empty-cta" onclick="closeNotifDrawer();switchTab('events')">Find a rave</button></div>`
+        : `<div class="notif-empty es-block"><div class="es-icon">${NOTIF_CATS[tab].icon}</div><div class="es-headline">Nothing in ${NOTIF_CATS[tab].label} yet</div></div>`;
       return;
     }
-    const huddleHtml = huddleEntries.map(huddleDrawerEntryHTML).join('');
-    const restHtml = list.map(n => {
-      const buttons = notifActionButtons(n);
-      const actionsHtml = buttons.length
-        ? `<div class="notif-actions-row">${buttons.map(b => `<button class="notif-action-btn${b.ghost ? ' notif-ghost-btn' : ''}" onclick="${b.onclick}">${b.label}</button>`).join('')}</div>`
-        : '';
-      const { html: messageHtml, linked } = linkifyNotifMessage(n.message, notifLinkTargets(n));
-      // Whole-row tap is the fallback only when nothing linked inline, so the
-      // two handlers never fight over the same click.
-      const navigable = !linked && n.entityType && n.entityId;
-      const textAttrs = navigable
-        ? ` style="cursor:pointer;" onclick="notifNavigate('${escJsAttr(String(n.entityType))}','${escJsAttr(String(n.entityId))}')"`
-        : '';
-      return `
-      <div class="notif-item ${n.read ? 'notif-read' : 'unread'}">
-        <span class="notif-dot"></span>
-        <span class="notif-text"${textAttrs}>${messageHtml}</span>
-        <span class="notif-time">${relativeTime(n.timestamp)}</span>
-        ${actionsHtml}
-      </div>`;
-    }).join('');
-    el.innerHTML = huddleHtml + restHtml;
+    const entries = buildNotifEntries(list);
+    const label = (text, cls) => `<div class="notif-group-label${cls ? ' ' + cls : ''}">${text}</div>`;
+    const sections = [];
+    const pinned = entries.filter(e => e.pinned);
+    if (pinned.length) sections.push(label(`Needs you · ${pinned.length}`, 'needs-you') + pinned.map(e => notifRowHTML(e)).join(''));
+    if (huddleEntries.length) sections.push(label('Huddle') + huddleEntries.map(huddleDrawerEntryHTML).join(''));
+    const rest = entries.filter(e => !e.pinned);
+    [['today', 'Today'], ['week', 'This week'], ['earlier', 'Earlier']].forEach(([bucket, title]) => {
+      const rows = rest.filter(e => notifDayBucket(e.n.timestamp) === bucket);
+      if (rows.length) sections.push(label(title) + rows.map(e => notifRowHTML(e)).join(''));
+    });
+    el.innerHTML = sections.join('');
   }
+
+  // Tapping anywhere on a row marks it read — links and buttons included,
+  // since the click bubbles here after their own handler runs. The row is
+  // updated in place rather than re-rendered so a button's "Removed ✓"
+  // feedback stays put.
+  function notifRowClick(ev, rowEl) {
+    markNotifsRead((rowEl.dataset.notifIds || '').split(','));
+    rowEl.classList.replace('unread', 'notif-read');
+    rowEl.querySelector(':scope > .notif-meta > .notif-dot')?.remove();
+    if (ev.target.closest('button, .notif-link')) return;
+    const { navType, navId } = rowEl.dataset;
+    if (navType && navId) notifNavigate(navType, navId);
+  }
+
+  function markNotifsRead(ids) {
+    const want = new Set(ids.map(String));
+    const changed = loadNotifs().filter(n => want.has(String(n.id)) && !n.read);
+    if (!changed.length) return;
+    changed.forEach(n => { n.read = true; });
+    updateNotifBadge();
+    renderNotifChrome();
+    dbMarkNotifReadIds(changed.map(n => n.id));
+  }
+
+  function dbMarkNotifReadIds(ids) {
+    const dbIds = ids.map(String).filter(id => NOTIF_UUID_RE.test(id));
+    if (!currentUser || !dbIds.length) return;
+    sb.from('notifications').update({ read: true }).in('id', dbIds)
+      .then(({ error }) => { if (error) console.error('notification read error', error); });
+  }
+
+  // A Needs-you action succeeded: unpin the row (data.resolved) and persist it.
+  // The re-render waits a beat so the button's confirmation is readable.
+  function notifResolveFromBtn(btnEl) {
+    const row = btnEl && btnEl.closest('.notif-item[data-notif-ids]');
+    if (!row) return;
+    const ids = new Set(row.dataset.notifIds.split(','));
+    loadNotifs().filter(n => ids.has(String(n.id))).forEach(n => {
+      n.read = true;
+      n.data = { ...(n.data || {}), resolved: true };
+      if (currentUser && NOTIF_UUID_RE.test(String(n.id))) {
+        sb.from('notifications').update({ read: true, data: n.data }).eq('id', n.id)
+          .then(({ error }) => { if (error) console.error('notification resolve error', error); });
+      }
+    });
+    if (btnEl.textContent.includes('All good')) {
+      btnEl.closest('.notif-actions-row')?.querySelectorAll('button').forEach(b => { b.disabled = true; });
+      btnEl.textContent = '👍 Got it';
+    }
+    updateNotifBadge();
+    setTimeout(() => { if (isNotifDrawerOpen()) renderNotifList(); }, 1200);
+  }
+
+  function markAllNotifsRead() {
+    const unread = loadNotifs().filter(n => !n.read);
+    if (!unread.length) return;
+    unread.forEach(n => { n.read = true; });
+    updateNotifBadge();
+    renderNotifList();
+    if (currentUser) dbMarkNotifsRead();
+  }
+
+  // × hides a row (or a folded group) right away; the delete only reaches the
+  // DB once the 5s undo window passes, the drawer closes or the page goes away.
+  function hideNotifs(idsCsv) {
+    commitHiddenNotifs();
+    const ids = new Set(String(idsCsv || '').split(','));
+    const items = loadNotifs().filter(n => ids.has(String(n.id)));
+    if (!items.length) return;
+    _notifications = _notifications.filter(n => !ids.has(String(n.id)));
+    _notifHidden = { items, timer: setTimeout(commitHiddenNotifs, 5000) };
+    document.getElementById('notif-undo').hidden = false;
+    updateNotifBadge();
+    renderNotifList();
+  }
+
+  function undoHideNotif() {
+    if (!_notifHidden) return;
+    clearTimeout(_notifHidden.timer);
+    // A realtime reload during the undo window may have brought them back already.
+    const have = new Set(_notifications.map(n => String(n.id)));
+    _notifications = _notifications.concat(_notifHidden.items.filter(n => !have.has(String(n.id))))
+      .sort((a, b) => b.timestamp - a.timestamp);
+    _notifHidden = null;
+    document.getElementById('notif-undo').hidden = true;
+    updateNotifBadge();
+    renderNotifList();
+  }
+
+  function commitHiddenNotifs() {
+    if (!_notifHidden) return;
+    clearTimeout(_notifHidden.timer);
+    const dbIds = _notifHidden.items.map(n => String(n.id)).filter(id => NOTIF_UUID_RE.test(id));
+    _notifHidden = null;
+    const undo = document.getElementById('notif-undo');
+    if (undo) undo.hidden = true;
+    if (currentUser && dbIds.length) {
+      sb.from('notifications').delete().in('id', dbIds)
+        .then(({ error }) => { if (error) console.error('notification hide error', error); });
+    }
+  }
+  window.addEventListener('pagehide', commitHiddenNotifs);
 
   function relativeTime(ts) {
     const diff = Date.now() - ts;
@@ -35569,12 +36035,12 @@
     return `${Math.floor(h / 24)}d ago`;
   }
 
+  // Opening the drawer no longer marks anything read — a row stays new until
+  // it's tapped or Mark all read is used.
   function openNotifDrawer() {
-    _notifications = _notifications.map(n => ({ ...n, read: true }));
-    updateNotifBadge();
+    _notifTab = 'all';
     renderNotifList();
     document.getElementById('notif-drawer-overlay').classList.add('open');
-    if (currentUser) dbMarkNotifsRead();
     // Huddle unread is intentionally NOT cleared just by opening the drawer —
     // only actually visiting a room does that (see markHuddleRoomRead) — so
     // this only loads the preview rows, it doesn't touch read state.
@@ -35582,26 +36048,15 @@
   }
 
   function closeNotifDrawer() {
+    commitHiddenNotifs();
     document.getElementById('notif-drawer-overlay').classList.remove('open');
   }
 
-  function notifDrawerEditProfile() {
-    closeNotifDrawer();
-    const me = squad.find(r => r.isYou);
-    if (me) openProfileEditor(me.id);
-  }
-
+  // Footer link straight to the notification toggles in Settings.
   function notifDrawerSettings() {
     closeNotifDrawer();
     const me = squad.find(r => r.isYou);
-    if (me) openPrivacySettingsModal(me.id);
-  }
-
-  function clearAllNotifs() {
-    _notifications = [];
-    updateNotifBadge();
-    renderNotifList();
-    if (currentUser) dbClearNotifications();
+    if (me) openPrivacySettingsModal(me.id, 'notif');
   }
 
   // Initialise badge on load

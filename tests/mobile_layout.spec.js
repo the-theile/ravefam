@@ -202,7 +202,7 @@ test.describe('settings panel on a phone', () => {
   test('hub drills into a sub-page and back; Done / close stay reachable', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 664 });
     await bootAuthedApp(page);
-    await page.evaluate(() => notifDrawerSettings());
+    await page.evaluate(() => openPrivacySettingsModal(squad.find(r => r.isYou).id));
     const overlay = page.locator('#privacy-settings-overlay');
     await expect(overlay).toHaveClass(/open/);
 

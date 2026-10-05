@@ -24,7 +24,8 @@ test.describe('huddle unread indicators', () => {
     const cta = page.locator('.huddle-cta-btn[data-crew-id="c1"]');
     await expect(cta.locator('.huddle-cta-count')).toHaveText('1');
 
-    const bell = page.locator('#notif-badge');
+    // Huddle unread has its own cyan count on the bell.
+    const bell = page.locator('#notif-huddle-badge');
     await expect(bell).toHaveClass(/has-count/);
     await expect(bell).toHaveText('1');
   });
@@ -37,7 +38,7 @@ test.describe('huddle unread indicators', () => {
     await page.waitForTimeout(200);
 
     await expect(page.locator('.huddle-cta-btn[data-crew-id="c1"]')).toHaveCount(0);
-    await expect(page.locator('#notif-badge')).not.toHaveClass(/has-count/);
+    await expect(page.locator('#notif-huddle-badge')).not.toHaveClass(/has-count/);
   });
 
   test('opening the huddle marks it read: badges clear and a read watermark persists server-side', async ({ page }) => {
@@ -50,7 +51,7 @@ test.describe('huddle unread indicators', () => {
     await page.waitForTimeout(300);
 
     await expect(page.locator('.huddle-cta-btn[data-crew-id="c1"]')).toHaveCount(0);
-    await expect(page.locator('#notif-badge')).not.toHaveClass(/has-count/);
+    await expect(page.locator('#notif-huddle-badge')).not.toHaveClass(/has-count/);
 
     const read = await page.evaluate(() =>
       (window.__store.huddle_room_reads || []).find(r => r.room_id === 'room-main' && String(r.user_id) === 'test-user-id'));
@@ -91,7 +92,7 @@ test.describe('huddle unread entries in the notification drawer', () => {
 
     // Opening the drawer itself must not clear huddle unread — only actually
     // visiting the room does that.
-    await expect(page.locator('#notif-badge')).toHaveClass(/has-count/);
+    await expect(page.locator('#notif-huddle-badge')).toHaveClass(/has-count/);
   });
 
   test('clicking a Main-room drawer entry opens that huddle and clears the badge', async ({ page }) => {
