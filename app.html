@@ -5437,6 +5437,27 @@
   }
   .pmm-item:hover, .pmm-item:focus-visible { background: rgba(255,255,255,0.06); }
   .pmm-item.danger { color: var(--neon-pink); }
+  /* Edit mode — compact hero, tabs, sticky Save bar */
+  .profile-hero.edit-mode { align-items: flex-start; gap: 14px; padding: 18px 16px 14px; }
+  .profile-hero.edit-mode .profile-avatar-ring { width: 80px; height: 80px; }
+  .profile-hero.edit-mode .profile-avatar,
+  .profile-hero.edit-mode .profile-avatar-photo { width: 74px; height: 74px; font-size: 1.5rem; }
+  .profile-hero.edit-mode .avatar-col { gap: 4px; }
+  .profile-hero.edit-mode .avatar-photo-btn { font-size: 0.7rem; padding: 3px 6px; }
+  .profile-edit-label { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.62rem; letter-spacing: 1.5px; text-transform: uppercase; color: var(--neon-pink); margin-bottom: 6px; }
+  @media (max-width: 480px) {
+    .profile-hero.edit-mode { flex-direction: row; text-align: left; }
+  }
+  .profile-save-bar {
+    position: sticky; bottom: var(--psave-bottom, 0px); z-index: 50;
+    display: flex; gap: 10px; margin: 8px -16px 0; padding: 10px 16px;
+    background: rgba(10,10,18,0.96); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .profile-save-bar .btn { padding: 12px; }
+  .profile-save-bar .btn-ghost { flex: 1; }
+  .profile-save-bar .btn-primary { flex: 2; position: relative; }
+  .psb-dirty { position: absolute; top: 8px; right: 12px; width: 7px; height: 7px; border-radius: 50%; background: var(--neon-yellow); box-shadow: 0 0 8px var(--neon-yellow); }
   .profile-manage-bar {
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; padding: 10px 14px;
     border-radius: 14px; border: 1px dashed rgba(0,245,255,0.45); background: rgba(0,245,255,0.06); font-size: 0.8rem;
@@ -15836,6 +15857,21 @@
     r.festIds = (r.festIds || []).filter(id => String(id) !== String(festId));
     if (currentUser) dbRemoveRaverFestival(raverId, festId);
     renderSquad(); renderEvents(); renderCrews();
+    refreshProfileAfterRaveChange(raverId);
+  }
+
+  // Raves change through the Manage raves sheet while the profile may be in
+  // edit mode — then keep the edit form (and its unsaved fields) and just sync
+  // the editing set so Save doesn't write back a stale rave list.
+  function refreshProfileAfterRaveChange(raverId) {
+    const r = getRaver(raverId);
+    if (editingId && String(editingId) === String(raverId) && document.getElementById('pf-name')) {
+      editingFestIds = new Set(r?.festIds || []);
+      const sub = document.getElementById('pf-raves-sub');
+      if (sub && r) sub.textContent = `${raverUpcoming(r).length} going · saves straight away`;
+      if (_profileListSheet) renderProfileListSheet();
+      return;
+    }
     openProfile(raverId);
   }
 
@@ -28934,8 +28970,19 @@
     return (r.isYou || (perms.editFests && !perms.isClaimed)) ? 'raves' : 'vibe';
   }
 
+  let _profileEditTab = 'basics'; // Basics · Vibe · Notes while editing
+
+  function setProfileEditTab(tab) {
+    _profileEditTab = tab;
+    showProfileTabPane(tab);
+  }
+
   function setProfileTab(raverId, tab) {
     _profileTabs[String(raverId)] = tab;
+    showProfileTabPane(tab);
+  }
+
+  function showProfileTabPane(tab) {
     document.querySelectorAll('#page-profile .profile-tab').forEach(b => {
       const on = b.dataset.tab === tab;
       b.classList.toggle('active', on);
@@ -29219,23 +29266,40 @@
             : `<input class="profile-edit-hero-input handle-input" id="pf-handle" aria-label="Your tag" value="${(r.handle||'').replace(/"/g,'&quot;')}" placeholder="@handle">`)
         : '';
 
+      // Edit tabs — Basics · Vibe · Notes. Every pane stays in the DOM (only
+      // hidden) so saveProfile() still reads all pf-* fields.
+      const editRid = escJsAttr(r.id);
+      const viewTab = _profileTabs[String(r.id)] || profileDefaultTab(r);
+      const editTab = viewTab === 'vibe' ? 'vibe' : viewTab === 'us' ? 'notes' : 'basics';
+      _profileEditTab = editTab;
+      const editTabBar = `<div class="profile-tabs" role="tablist" aria-label="Edit sections">${[['basics', 'Basics'], ['vibe', 'Vibe'], ['notes', 'Notes']].map(([k, label]) => `
+          <button type="button" role="tab" class="profile-tab${k === editTab ? ' active' : ''}" data-tab="${k}" aria-selected="${k === editTab}" onclick="setProfileEditTab('${escJsAttr(k)}')">${label}</button>`).join('')}
+        </div>`;
+      const epane = (k) => `class="profile-tab-pane" data-tab="${k}" role="tabpanel"${k === editTab ? '' : ' hidden'}`;
+      const editFirst = escHtml(displayName(r).split(' ')[0]);
+      // Raves save straight away through the Manage raves sheet, not the Save button
+      const editRavesBtn = (isOwnProfile || raverPerms(r).editFests) ? `
+        <button type="button" class="profile-manage-btn" onclick="openProfileListSheet('manage','${editRid}')">
+          <span class="pmb-text"><b>🎟️ Manage raves${isOwnProfile ? '' : ` for ${editFirst}`}</b><span class="pmb-sub" id="pf-raves-sub">${raverUpcoming(r).length} going · saves straight away</span></span>
+          <span class="pmb-arrow">›</span>
+        </button>` : '';
+
       profilePage.innerHTML = `
         <button class="profile-back" data-raver-id="${r.id}" onclick="cancelProfileEdit(this.dataset.raverId)">← Cancel</button>
         <div class="profile-hero edit-mode">
           <div class="profile-hero-bar" style="background:${safeGradient(r.gradient)}"></div>
           ${avatarEl}
           <div class="profile-id">
+            <div class="profile-edit-label">✏️ Editing</div>
             <input class="profile-edit-hero-input" id="pf-name" aria-label="Name" value="${(r.name||'').replace(/"/g,'&quot;')}" placeholder="Name" maxlength="80">
             ${handleField}
             <input class="profile-edit-hero-input base-input" id="pf-base" aria-label="Home base" value="${(r.base||'').replace(/"/g,'&quot;')}" placeholder="📍 Home base" maxlength="60">
           </div>
         </div>
 
-        <div class="profile-actions" data-raver-id="${r.id}">
-          <button class="btn btn-ghost" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="cancelProfileEdit(this.dataset.raverId)">Cancel</button>
-          <button class="btn btn-primary" style="flex:2;padding:11px;" onclick="saveProfile()">Save Changes 🔥</button>
-        </div>
+        ${editTabBar}
 
+        <div ${epane('basics')}>
         <div class="profile-section">
           <h3>📱 Contact</h3>
           ${fieldRow('Instagram','pf-instagram', r.instagram, '@samraves', false, 30)}
@@ -29248,6 +29312,10 @@
             </div>` : `<p style="font-size:0.72rem;color:var(--muted);margin-top:6px;line-height:1.4;">Stored for crew reference — not linked to a registered account.</p>`}
         </div>
 
+        ${editRavesBtn}
+        </div>
+
+        <div ${epane('vibe')}>
         <div class="profile-section">
           <h3>⚡ Vibe Tags</h3>
           <div class="tag-summary-card">
@@ -29269,28 +29337,34 @@
           <div id="artist-picker"></div>
         </div>
 
-        <div class="profile-section">
-          <h3>🎟️ Festivals</h3>
-          <div id="fest-picker"></div>
         </div>
 
+        <div ${epane('notes')}>
         <div class="profile-section">
           <h3>📝 Notes</h3>
           ${fieldRow('','pf-notes', r.notes, isOwnProfile ? 'Anything about yourself…' : "What's their vibe?", true)}
         </div>
+        </div>
 
-
-        <div class="profile-actions" style="margin-top:8px;">
-          <button class="btn btn-ghost" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="cancelProfileEdit(this.dataset.raverId)">Cancel</button>
-          <button class="btn btn-primary" style="flex:2;padding:11px;" onclick="saveProfile()">Save Changes 🔥</button>
+        <div class="profile-save-bar">
+          <button type="button" class="btn btn-ghost" data-raver-id="${r.id}" onclick="cancelProfileEdit(this.dataset.raverId)">Cancel</button>
+          <button type="button" class="btn btn-primary" onclick="saveProfile()">${isOwnProfile ? 'Save Changes 🔥' : `Save ${editFirst}'s profile`}<span class="psb-dirty" title="Unsaved changes" hidden></span></button>
         </div>
       `;
-      renderFestPicker();
+      // Tabs stick under the app header; the Save bar sits just above the bottom nav on phones
+      const _nav = document.querySelector('nav');
+      profilePage.style.setProperty('--ptabs-top', `${document.querySelector('header')?.offsetHeight || 0}px`);
+      profilePage.style.setProperty('--psave-bottom', `${_nav && getComputedStyle(_nav).position === 'fixed' ? _nav.offsetHeight : 0}px`);
+      profilePage.oninput = (e) => {
+        if (String(e.target.id || '').startsWith('pf-')) profilePage.querySelector('.psb-dirty')?.removeAttribute('hidden');
+      };
+      initProfileTabSwipe();
       renderArtistPicker();
       renderTagSummary('vibe');
       renderTagSummary('genre');
     } else {
       profilePage.classList.remove('profile-edit-mode');
+      profilePage.oninput = null;
       const _STAGE_PAL = ['#FF2D78','#BF00FF','#00F5FF','#39FF14','#FFB800','#FF3355'];
       const sg = (i) => `--section-glow:${_STAGE_PAL[i % _STAGE_PAL.length]};`;
 
@@ -30764,6 +30838,8 @@
       if (currentUser) dbAddRaverFestival(raverId, fest.id);
       renderInlineFestPicker(raverId);
       renderSquad(); renderEvents(); renderCrews();
+      // Added from that raver's Manage raves sheet — show it on their profile too
+      if (document.querySelector(`#page-profile.active [data-raver-id="${CSS.escape(String(raverId))}"]`)) refreshProfileAfterRaveChange(raverId);
     }
   }
 
@@ -33851,7 +33927,7 @@
     r.festIds = [...(r.festIds || []), festId];
     if (currentUser) dbAddRaverFestival(raverId, festId);
     renderSquad(); renderEvents(); renderCrews();
-    openProfile(raverId);
+    refreshProfileAfterRaveChange(raverId);
   }
 
   // Shared "why are you doing this?" textarea, used by the custom delete-confirmation

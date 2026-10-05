@@ -119,3 +119,47 @@ test.describe('profile tabs · quick edits', () => {
     await expect(menu).toBeHidden();
   });
 });
+
+test.describe('profile edit tabs', () => {
+  test('edit opens on Basics from Raves, and on Vibe from the Vibe tab', async ({ page }) => {
+    await bootAuthedApp(page);
+    await page.evaluate(() => { openProfile('r-you'); enterProfileEditMode('r-you'); });
+    expect(await activeTab(page)).toBe('basics');
+    await expect(page.locator('#pf-instagram')).toBeVisible();
+    await expect(page.locator('#fest-picker')).toHaveCount(0);
+    await page.evaluate(() => { cancelProfileEdit('r-you'); setProfileTab('r-you', 'vibe'); enterProfileEditMode('r-you'); });
+    expect(await activeTab(page)).toBe('vibe');
+    await expect(page.locator('#vibe-edit-btn')).toBeVisible();
+  });
+
+  test('fields on hidden tabs still save, and the Save bar shows unsaved changes', async ({ page }) => {
+    await bootAuthedApp(page);
+    await page.evaluate(() => { openProfile('r-you'); enterProfileEditMode('r-you'); });
+    const dot = page.locator('.profile-save-bar .psb-dirty');
+    await expect(dot).toBeHidden();
+    await page.locator('#pf-instagram').fill('@newhandle');
+    await expect(dot).toBeVisible();
+    await page.locator('#page-profile .profile-tab[data-tab="notes"]').click();
+    await page.locator('#pf-notes').fill('Bring earplugs');
+    await page.locator('.profile-save-bar .btn-primary').click();
+    const r = await page.evaluate(() => { const x = getRaver('r-you'); return { ig: x.instagram, notes: x.notes }; });
+    expect(r).toEqual({ ig: '@newhandle', notes: 'Bring earplugs' });
+  });
+
+  test('changing raves mid-edit keeps the form and its unsaved fields', async ({ page }) => {
+    await bootAuthedApp(page);
+    await page.evaluate(() => { openProfile('r-sam'); enterProfileEditMode('r-sam'); });
+    await expect(page.locator('.profile-save-bar .btn-primary')).toContainText("Save Sam's profile");
+    await page.locator('#pf-base').fill('Miami, FL');
+    await page.locator('#page-profile .profile-manage-btn').click();
+    await page.locator('#profile-list-body .fest-quick-chip[data-fid="f2"]').click();
+    await page.waitForTimeout(150);
+    await expect(page.locator('#pf-base')).toHaveValue('Miami, FL');
+    expect(await page.evaluate(() => [...editingFestIds].map(String))).toContain('f2');
+    await page.evaluate(() => closeProfileListSheet());
+    await page.locator('.profile-save-bar .btn-primary').click();
+    const sam = await page.evaluate(() => { const x = getRaver('r-sam'); return { base: x.base, fests: x.festIds.map(String) }; });
+    expect(sam.base).toBe('Miami, FL');
+    expect(sam.fests).toContain('f2');
+  });
+});
