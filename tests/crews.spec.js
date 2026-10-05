@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { bootAuthedApp } = require('./helpers');
+const { bootAuthedApp, seedData, TEST_UID } = require('./helpers');
 
 async function refetch(page, expr) {
   return page.evaluate(async (src) => { await loadAllData(); return eval(src); }, expr);
@@ -8,7 +8,7 @@ async function refetch(page, expr) {
 test.describe('crews', () => {
   test('crew detail lists both members', async ({ page }) => {
     await bootAuthedApp(page);
-    await page.locator('#crew-grid .crew-card').first().click();
+    await page.locator('#crew-grid .crew-card .crew-row-open').first().click();
     // The detail roster shows first names only.
     const detail = page.locator('#page-crew-detail');
     await expect(detail).toContainText('Theile');
@@ -91,5 +91,114 @@ test.describe('crews', () => {
     await page.fill('#crew-search', '');
     await page.evaluate(() => renderCrews());
     await expect(page.locator('#crew-grid .crew-card')).toHaveCount(1);
+  });
+
+  // Two crews: c1 (Bass Syndicate, visible) and c2 (a secret crew).
+  function seedTwoCrews() {
+    const data = seedData();
+    data.crews.push({
+      id: 'c2', name: 'Night Shift', color: '#00F5FF',
+      gradient: 'linear-gradient(90deg,#00F5FF,#BF00FF)', status: 'secret',
+      leader_id: TEST_UID, totem_photo_url: null, totem_icon: null, invite_token: 'inv-c2',
+      created_at: '2024-02-01T00:00:00Z', deleted_at: null,
+    });
+    data.crew_members.push({ crew_id: 'c2', raver_id: 'r-you', added_at: '2024-02-01T00:00:00Z', added_by: TEST_UID, deleted_at: null });
+    return data;
+  }
+
+  test('crew list is an accordion: one row open, tapping toggles it', async ({ page }) => {
+    await bootAuthedApp(page, { data: seedTwoCrews() });
+    const cards = page.locator('#crew-grid .crew-card');
+    await expect(cards).toHaveCount(2);
+    await expect(page.locator('#crew-grid .crew-card.is-open')).toHaveCount(1);
+
+    const closed = page.locator('#crew-grid .crew-card:not(.is-open)');
+    const closedId = await closed.getAttribute('data-crew-id');
+    await closed.locator('.crew-row-toggle').click();
+    const nowOpen = page.locator(`#crew-grid .crew-card[data-crew-id="${closedId}"]`);
+    await expect(nowOpen).toHaveClass(/is-open/);
+    await expect(nowOpen.locator('.crew-row-toggle')).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('#crew-grid .crew-card.is-open')).toHaveCount(1);
+
+    // Tapping the open row collapses everything, and it stays collapsed across re-renders.
+    await nowOpen.locator('.crew-row-toggle').click();
+    await expect(page.locator('#crew-grid .crew-card.is-open')).toHaveCount(0);
+    await page.evaluate(() => renderCrews());
+    await expect(page.locator('#crew-grid .crew-card.is-open')).toHaveCount(0);
+  });
+
+  test('visibility eye only shows on the open row, crossed out for secret crews', async ({ page }) => {
+    await bootAuthedApp(page, { data: seedTwoCrews() });
+    await expect(page.locator('#crew-grid .crew-row-eye')).toHaveCount(1);
+    await expect(page.locator('#crew-grid .crew-row-toggle .crew-row-eye')).toHaveCount(0);
+
+    await page.locator('#crew-grid .crew-card[data-crew-id="c2"] .crew-row-toggle').click();
+    await expect(page.locator('#crew-grid .crew-card[data-crew-id="c2"] .crew-row-eye.eye-secret')).toHaveCount(1);
+    await page.locator('#crew-grid .crew-card[data-crew-id="c1"] .crew-row-toggle').click();
+    await expect(page.locator('#crew-grid .crew-card[data-crew-id="c1"] .crew-row-eye.eye-open')).toHaveCount(1);
+  });
+
+  test('a collapsed row carries the Huddle unread badge', async ({ page }) => {
+    const data = seedTwoCrews();
+    data.huddle_rooms = [
+      { id: 'room-main', crew_id: 'c1', room_key: 'main', kind: 'main', name: 'Main Huddle', festival_id: null, created_by: TEST_UID, created_at: '2024-01-01T00:00:00Z' },
+    ];
+    data.huddle_messages = [
+      { id: 'm1', room_id: 'room-main', crew_id: 'c1', sender_id: 'kai-uid', kind: 'text', body: 'yo', reactions: {}, created_at: '2099-01-01T00:00:00Z', deleted_at: null },
+    ];
+    await bootAuthedApp(page, { data });
+    await page.evaluate(() => loadHuddleActivityCache());
+    await page.locator('#crew-grid .crew-card[data-crew-id="c2"] .crew-row-toggle').click();
+    const c1 = page.locator('#crew-grid .crew-card[data-crew-id="c1"]');
+    await expect(c1.locator('.crew-row-badge')).toHaveText('1');
+    await expect(c1.locator('.huddle-cta-btn')).toHaveCount(0);
+  });
+
+  test('collapsed rows show a small avatar stack and dim the stripe of secret crews', async ({ page }) => {
+    await bootAuthedApp(page, { data: seedTwoCrews() });
+    const c2 = page.locator('#crew-grid .crew-card[data-crew-id="c2"]');
+    await expect(c2).not.toHaveClass(/is-open/);
+    await expect(c2).toHaveClass(/is-secret/);
+    await expect(c2.locator('.crew-row-avs .avatar')).toHaveCount(1);
+    const filter = await c2.locator('.crew-row-stripe').evaluate(el => getComputedStyle(el).filter);
+    expect(filter).toContain('grayscale');
+    // The open row drops the mini stack — the full roster is in its body.
+    await expect(page.locator('#crew-grid .crew-card.is-open .crew-row-avs')).toHaveCount(0);
+  });
+
+  test('the open row previews the latest Huddle message and opens the Huddle', async ({ page }) => {
+    const data = seedData();
+    data.huddle_rooms = [
+      { id: 'room-main', crew_id: 'c1', room_key: 'main', kind: 'main', name: 'Main Huddle', festival_id: null, created_by: TEST_UID, created_at: '2024-01-01T00:00:00Z' },
+    ];
+    data.huddle_messages = [
+      { id: 'm1', room_id: 'room-main', crew_id: 'c1', sender_id: 'kai-uid', kind: 'text', body: 'who is driving?', reactions: {}, created_at: '2099-01-01T00:00:00Z', deleted_at: null },
+    ];
+    await bootAuthedApp(page, { data });
+    await page.evaluate(() => loadHuddleActivityCache());
+    const last = page.locator('#crew-grid .crew-card.is-open .crew-row-last');
+    await expect(last).toContainText('who is driving?');
+    await last.click();
+    await expect(page.locator('#page-crew-detail')).toHaveClass(/active/);
+  });
+
+  test('quick RSVP adds the next-up rave to your list when you are not going yet', async ({ page }) => {
+    const data = seedData();
+    data.raver_festivals = data.raver_festivals.filter(r => r.raver_id !== 'r-you');
+    await bootAuthedApp(page, { data });
+    const rsvp = page.locator('#crew-grid .crew-card.is-open .crew-row-rsvp');
+    await expect(rsvp).toHaveCount(1);
+    await rsvp.click();
+    await expect(page.locator('#crew-grid .crew-card.is-open .crew-row-rsvp')).toHaveCount(0);
+    await expect(page.locator('#crew-grid .crew-card.is-open .crew-row-fest-going')).toContainText('2 going');
+    const stored = await page.evaluate(() =>
+      (window.__store.raver_festivals || []).some(r => r.raver_id === 'r-you' && r.festival_id === 'f1'));
+    expect(stored).toBe(true);
+  });
+
+  test('no quick RSVP when you are already going', async ({ page }) => {
+    await bootAuthedApp(page);
+    await expect(page.locator('#crew-grid .crew-card.is-open .crew-row-fest')).toHaveCount(1);
+    await expect(page.locator('#crew-grid .crew-row-rsvp')).toHaveCount(0);
   });
 });

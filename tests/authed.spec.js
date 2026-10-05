@@ -51,7 +51,7 @@ test.describe('authenticated app', () => {
 
   test('tapping a crew card opens its detail view', async ({ page }) => {
     await bootAuthedApp(page);
-    await page.locator('#crew-grid .crew-card').first().click();
+    await page.locator('#crew-grid .crew-card .crew-row-open').first().click();
     await expect(page.locator('#page-crew-detail')).toHaveClass(/active/);
     await expect(page.locator('#page-crew-detail')).toContainText('Bass Syndicate');
   });

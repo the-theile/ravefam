@@ -354,107 +354,143 @@
     text-shadow: 0 1px 12px rgba(10,10,18,0.8);
   }
 
-  /* Crew cards */
-  .crew-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+  /* Crew list — accordion rows (one crew open at a time) */
+  .crew-grid { display: flex; flex-direction: column; gap: 10px; max-width: 680px; }
 
   .crew-card {
     background: var(--surface);
     border: 1px solid rgba(255,255,255,0.07);
     border-radius: 18px;
-    padding: 22px;
-    transition: all 0.25s ease;
-    cursor: pointer;
     position: relative;
     overflow: hidden;
+    transition: border-color 0.2s;
   }
-  .crew-card::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(135deg, var(--accent-a) 0%, transparent 70%);
-    opacity: 0.05;
-    transition: opacity 0.25s;
-  }
-  .crew-card > * { position: relative; z-index: 1; }
-  .crew-card:hover { transform: translateY(-3px); border-color: rgba(255,255,255,0.15); }
-  .crew-card:hover::before { opacity: 0.08; }
+  .crew-card.is-open { border-color: color-mix(in srgb, var(--accent-a, var(--neon-pink)) 70%, transparent); }
 
-  .crew-color-bar {
-    height: 4px;
-    border-radius: 100px;
-    margin-bottom: 16px;
-  }
-
-  .crew-card-head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 14px;
-  }
-  .crew-card-head-left {
+  .crew-row-toggle {
+    width: 100%;
     display: flex;
     align-items: center;
-    gap: 10px;
-    min-width: 0;
+    gap: 12px;
+    min-height: 68px;
+    padding: 0 14px 0 0;
+    background: none;
+    border: 0;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
   }
+  .crew-row-stripe { width: 8px; align-self: stretch; flex-shrink: 0; }
+  .crew-row-totem {
+    width: 38px; height: 38px;
+    border-radius: 11px;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 800;
+    font-size: 1.05rem;
+    color: #fff;
+    background: rgba(255,255,255,0.08);
+  }
+  .crew-row-totem img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .crew-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
   .crew-name {
     font-family: 'Outfit', sans-serif;
     font-weight: 800;
     font-size: 1.05rem;
     color: #FFFFFF;
   }
+  .crew-row-text .crew-name, .crew-row-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .crew-row-sub { font-size: 0.78rem; color: var(--muted); }
+  .crew-row-badge {
+    min-width: 22px; height: 22px;
+    padding: 0 6px;
+    box-sizing: border-box;
+    border-radius: 11px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--neon-pink);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 800;
+    flex-shrink: 0;
+  }
+  .crew-row-badge.is-beacon { background: var(--neon-yellow); color: #0A0A12; box-shadow: 0 0 12px rgba(255,230,0,0.45); }
+  .crew-row-chev { flex-shrink: 0; color: var(--muted); transition: transform 0.2s; }
+  .crew-card.is-secret:not(.is-open) .crew-row-stripe { filter: grayscale(1) brightness(0.6); }
+  .crew-row-avs { display: flex; flex-shrink: 0; }
+  .crew-row-avs .avatar { width: 22px; height: 22px; font-size: 0.55rem; margin-left: -7px; border-color: var(--surface); }
+  .crew-row-avs .avatar:first-child { margin-left: 0; }
+  .crew-card.is-open .crew-row-chev { transform: rotate(180deg); }
 
-  /* Next Rave block — visually distinct card-within-card */
-  .crew-fest {
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-left: 3px solid var(--accent-a, var(--neon-pink));
-    border-radius: 10px;
-    padding: 11px 13px;
-    margin-bottom: 16px;
+  .crew-row-body {
+    border-top: 2px dashed rgba(255,255,255,0.08);
+    margin: 0 14px;
+    padding: 14px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
   }
-  .crew-fest-label {
-    font-family: 'Outfit', sans-serif;
-    font-weight: 600;
-    font-size: 0.66rem;
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-    color: var(--neon-green);
-    margin-bottom: 4px;
+  .crew-row-fest { display: flex; gap: 12px; align-items: center; }
+  .crew-row-count {
+    width: 60px; height: 60px;
+    border-radius: 15px;
+    background: var(--bg);
+    border: 1px solid rgba(255,255,255,0.08);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    flex-shrink: 0;
   }
-  .crew-fest-past .crew-fest-label { color: var(--muted); }
-  .crew-fest-empty { border-left-color: rgba(255,255,255,0.1); }
-  .crew-fest-empty .crew-fest-label { color: var(--muted); margin-bottom: 0; }
-  .crew-fest-name {
+  .crew-row-count-n { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.3rem; line-height: 1; color: #fff; }
+  .crew-row-count-u { font-size: 0.56rem; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-top: 3px; }
+  .crew-row-fest-info { min-width: 0; }
+  .crew-row-fest-label {
     font-family: 'Outfit', sans-serif;
     font-weight: 700;
-    font-size: 0.95rem;
-    color: #fff;
-  }
-  .crew-fest-date { font-size: 0.74rem; color: var(--muted); margin-top: 1px; }
-  .crew-fest-going {
-    font-size: 0.74rem;
-    color: var(--text);
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top: 1px solid rgba(255,255,255,0.06);
-  }
-
-  /* Tribe roster section */
-  .crew-tribe {
-    border-top: 1px solid rgba(255,255,255,0.06);
-    padding-top: 13px;
-  }
-  .crew-tribe-label {
-    font-family: 'Outfit', sans-serif;
-    font-weight: 600;
-    font-size: 0.66rem;
+    font-size: 0.62rem;
     text-transform: uppercase;
-    letter-spacing: 0.8px;
-    color: var(--muted);
-    margin-bottom: 9px;
+    letter-spacing: 1.2px;
+    color: var(--accent-a, var(--neon-pink));
   }
+  .crew-row-fest-name { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.98rem; color: #fff; margin-top: 2px; }
+  .crew-row-fest-going { font-size: 0.76rem; color: var(--text); margin-top: 3px; }
+  .crew-row-fest-going b { color: var(--neon-cyan); }
+  .crew-row-rsvp {
+    margin-top: 8px;
+    padding: 6px 12px;
+    border-radius: 100px;
+    border: 1.5px solid var(--neon-cyan);
+    background: rgba(0,245,255,0.08);
+    color: #fff;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.74rem;
+    cursor: pointer;
+  }
+  .crew-row-last {
+    width: 100%;
+    text-align: left;
+    background: var(--surface2);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    padding: 10px 12px;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.8rem;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    cursor: pointer;
+  }
+  .crew-row-last b { color: #fff; }
+  .crew-row-fam { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .crew-row-fam-label { font-size: 0.7rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; text-align: right; }
+  .crew-row-body .huddle-cta-btn { margin-top: 0; }
+  .crew-row-foot { display: flex; align-items: center; justify-content: space-between; min-height: 24px; }
+  .crew-row-open {
+    background: none; border: 0; padding: 6px 0;
+    color: var(--neon-cyan);
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.8rem;
+    cursor: pointer;
+  }
+  .crew-row-eye { display: inline-flex; color: rgba(255,255,255,0.45); }
+  .crew-row-eye.eye-secret { color: #FF2D78; }
 
   .crew-members { display: flex; align-items: center; gap: -6px; }
   .avatar {
@@ -493,27 +529,6 @@
   .status-locked-in { background: rgba(255,230,0,0.15); color: var(--neon-yellow); }
   .status-secret { background: rgba(255,45,120,0.12); color: #FF2D78; }
 
-  /* Eye badge — absolute bottom-right of crew card */
-  .secret-eye-badge {
-    position: absolute;
-    bottom: 14px; right: 14px;
-    width: 24px; height: 24px;
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    pointer-events: none;
-    z-index: 3;
-    flex-shrink: 0;
-  }
-  .secret-eye-badge.eye-secret {
-    background: rgba(255,45,120,0.15);
-    border: 1.5px solid rgba(255,45,120,0.35);
-    color: #FF2D78;
-  }
-  .secret-eye-badge.eye-open {
-    background: rgba(255,255,255,0.06);
-    border: 1.5px solid rgba(255,255,255,0.15);
-    color: rgba(255,255,255,0.45);
-  }
 
   /* Crew Next Festival block (crew detail page) — styled as a taped
      Backstage Pass credential card: cream stock, photo corners, a barcode
@@ -663,6 +678,7 @@
     color: var(--muted);
   }
   .crew-add-card:hover { border-color: var(--neon-pink); color: var(--neon-pink); }
+  .crew-grid .crew-add-card { min-height: 0; padding: 14px; text-align: center; }
   .add-icon { font-size: 2rem; }
   .add-label { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.85rem; }
 
@@ -10162,7 +10178,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.9.0';
+  const APP_VERSION = '2.10.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -13420,6 +13436,7 @@
     const entry = _huddleActivityCache[row.crew_id];
     if (entry) {
       entry.lastMessageAt = row.created_at;
+      entry.lastMessage = { sender_id: row.sender_id, kind: row.kind, body: row.body };
       if (row.kind === 'beacon' && row.expires_at && row.expires_at > new Date().toISOString()) entry.hasBeacon = true;
     }
     renderCrews();
@@ -16731,7 +16748,7 @@
     people.forEach(p => {
       raverUpcoming(p).forEach(f => {
         const key = f.name.toLowerCase();
-        if (!upcoming[key]) upcoming[key] = { date: f._d, name: f.name, who: [], whoRavers: [] };
+        if (!upcoming[key]) upcoming[key] = { id: f.id, date: f._d, name: f.name, who: [], whoRavers: [] };
         if (f._d < upcoming[key].date) upcoming[key].date = f._d;
         upcoming[key].who.push(displayName(p).split(' ')[0]);
         upcoming[key].whoRavers.push(p);
@@ -16746,7 +16763,7 @@
 
     if (upList.length) {
       const next = upList[0];
-      return { kind: 'upcoming', name: next.name, date: next.date, who: next.who, whoRavers: next.whoRavers };
+      return { kind: 'upcoming', id: next.id, name: next.name, date: next.date, who: next.who, whoRavers: next.whoRavers };
     }
     if (!socialOnly && past.length) {
       past.sort((a,b) => b.date - a.date);
@@ -17675,53 +17692,18 @@
       return 0;
     }).filter(crew => !query || crew.name.toLowerCase().includes(query));
 
+    // Accordion: one crew open at a time. Until the raver picks one (or if
+    // their pick is filtered out / gone), the soonest-fest crew starts open.
+    const pickVisible = _crewOpenId != null && sortedCrews.some(c => String(c.id) === String(_crewOpenId));
+    const openId = _crewOpenId === null ? null : (pickVisible ? _crewOpenId : sortedCrews[0]?.id);
+
     sortedCrews.forEach(crew => {
-      const s = STATUS[crew.status];
+      const isOpen = openId != null && String(crew.id) === String(openId);
       const card = document.createElement('div');
-      card.className = 'crew-card';
-      card.style.setProperty('--accent-a', crew.color);
-      card.onclick = () => openDetail(crew.id);
-      const leadBadge = crew.isLead ? '👑 You lead' : '';
-      // socialOnly=true: only show fest when at least one non-logged-in member is going.
-      const n = crewNextUp(crew, true);
-
-      // Build the "next fest" block
-      let festBlock;
-      if (n.kind === 'upcoming') {
-        const when = `${n.date.getDate()} ${MON_SHORT[n.date.getMonth()]}`;
-        const goingNames = n.who.length ? n.who.map(w => escHtml(w)).join(', ') : 'Nobody yet';
-        festBlock = `
-          <div class="crew-fest">
-            <div class="crew-fest-label">⏳ Next up · ${countdownLabel(n.date)}</div>
-            <div class="crew-fest-name">${escHtml(n.name)}</div>
-            <div class="crew-fest-date">${when}</div>
-            <div class="crew-fest-going">🎟️ ${n.who.length} going: ${goingNames}</div>
-          </div>`;
-      } else {
-        festBlock = '';
-      }
-
-      card.innerHTML = `
-        <div class="crew-color-bar" style="background:${safeGradient(crew.gradient)}"></div>
-        ${crew.status === 'secret'
-          ? `<div class="secret-eye-badge eye-secret" title="Secret — only you can see this crew"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg></div>`
-          : `<div class="secret-eye-badge eye-open" title="Crew is visible to members"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>`}
-        <div class="crew-card-head">
-          <div class="crew-card-head-left">
-            ${crewTotemMarkHTML(crew)}
-            <div class="crew-name">${escHtml(crew.name)}</div>
-          </div>
-          <button type="button" class="crew-status ${s.cls}${crew.isLead ? ' tappable' : ''}"
-                onclick="event.stopPropagation(); toggleStatus('${escJsAttr(crew.id)}')"
-                title="${crew.isLead ? 'Tap to change status' : 'Only the Crew Lead can change status'}">${s.label}</button>
-        </div>
-        ${festBlock}
-        <div class="crew-tribe">
-          <div class="crew-tribe-label">👥 The FAM · ${crew.members.length} ${crew.members.length!==1?'members':'member'}${leadBadge ? ` · ${leadBadge}` : ''}</div>
-          <div class="crew-members">${avatarsHTML(crew.members)}</div>
-        </div>
-        ${huddleCtaHTML(crew.id)}
-      `;
+      card.className = 'crew-card' + (isOpen ? ' is-open' : '') + (crew.status === 'secret' ? ' is-secret' : '');
+      card.dataset.crewId = crew.id;
+      card.style.setProperty('--accent-a', safeColor(crew.color, '#FF2D78'));
+      card.innerHTML = crewRowHTML(crew, isOpen);
       grid.insertBefore(card, addCard);
     });
     // Update dynamic count
@@ -17729,6 +17711,111 @@
     if (countEl) countEl.textContent = crews.length ? crews.length + ' active' : '';
     if (_huddleActivityCache === null) loadHuddleActivityCache();
     } catch(err) { console.error('[renderCrews]', err); const el = document.getElementById('crew-grid'); if (el) el.innerHTML = sectionErrorHTML('crews'); }
+  }
+
+  // ===== CREW LIST ROWS (Crews tab accordion) =====
+  // undefined = default (first crew open); null = raver collapsed everything.
+  let _crewOpenId;
+
+  function toggleCrewRow(crewId) {
+    const sel = `#crew-grid .crew-card[data-crew-id="${CSS.escape(String(crewId))}"]`;
+    _crewOpenId = document.querySelector(sel)?.classList.contains('is-open') ? null : crewId;
+    renderCrews();
+    document.querySelector(`${sel} .crew-row-toggle`)?.focus();
+  }
+
+  function crewRowMeToo(festId) {
+    const me = squad.find(x => x.isYou);
+    if (!me) return;
+    if ((me.festIds || []).some(id => String(id) === String(festId))) { showToast('Already on your list'); return; }
+    me.festIds = [...(me.festIds || []), festId];
+    if (currentUser) dbAddRaverFestival(me.id, festId);
+    renderSquad(); renderEvents(); renderCrews();
+    showToast("🎟️ You're going too!");
+  }
+
+  function crewRowTotemHTML(crew) {
+    if (crew.totemPhotoUrl) return `<span class="crew-row-totem"><img src="${escHtml(crew.totemPhotoUrl)}" alt=""></span>`;
+    const glyph = crew.totemIcon
+      ? (TOTEM_ICON_MAP[crew.totemIcon] || '✦')
+      : escHtml((Array.from((crew.name || '').trim())[0] || '✦').toUpperCase());
+    return `<span class="crew-row-totem" style="background:${safeGradient(crew.gradient)}">${glyph}</span>`;
+  }
+
+  function crewRowHTML(crew, isOpen) {
+    const jsId = escJsAttr(crew.id);
+    const bodyId = `crew-row-body-${escHtml(String(crew.id))}`;
+    // socialOnly=true: only show fest when at least one non-logged-in member is going.
+    const n = crewNextUp(crew, true);
+    const upcoming = n.kind === 'upcoming';
+    const count = crew.members.length;
+    const membersLabel = `${count} ${count !== 1 ? 'members' : 'member'}`;
+    const sub = upcoming
+      ? `${escHtml(n.name)} · ${countdownLabel(n.date)} · ${n.who.length} going`
+      : membersLabel;
+
+    // Collapsed rows carry the Huddle signal; the open row shows the full CTA instead.
+    const badge = isOpen ? null : huddleActivityBadge(crew.id);
+    const badgeHTML = badge
+      ? `<span class="crew-row-badge${badge.beacon ? ' is-beacon' : ''}" aria-label="${badge.beacon ? 'Beacon active in the Huddle' : `${badge.unread} unread in the Huddle`}">${badge.unread ? (badge.unread > 99 ? '99+' : badge.unread) : '📣'}</span>`
+      : '';
+
+    const head = `
+      <button type="button" class="crew-row-toggle" aria-expanded="${isOpen}" aria-controls="${bodyId}" onclick="toggleCrewRow('${jsId}')">
+        <span class="crew-row-stripe" style="background:${safeGradient(crew.gradient)}"></span>
+        ${crewRowTotemHTML(crew)}
+        <span class="crew-row-text">
+          <span class="crew-name">${escHtml(crew.name)}</span>
+          <span class="crew-row-sub">${sub}</span>
+        </span>
+        ${isOpen ? '' : `<span class="crew-row-avs" aria-hidden="true">${avatarsHTML(crew.members.slice(0, 3))}</span>`}
+        ${badgeHTML}
+        <svg class="crew-row-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>`;
+    if (!isOpen) return head;
+
+    let festHTML = '';
+    if (upcoming) {
+      const stamp = countdownStampParts(n.date) || { n: '—', u: '' };
+      const when = `${n.date.getDate()} ${MON_SHORT[n.date.getMonth()]}`;
+      const goingNames = n.who.length ? n.who.map(w => escHtml(w)).join(', ') : 'Nobody yet';
+      const meGoing = (n.whoRavers || []).some(r => r.isYou) || !squad.some(r => r.isYou);
+      festHTML = `
+        <div class="crew-row-fest">
+          <div class="crew-row-count"><span class="crew-row-count-n">${stamp.n}</span><span class="crew-row-count-u">${stamp.u}</span></div>
+          <div class="crew-row-fest-info">
+            <div class="crew-row-fest-label">Next up · ${when}</div>
+            <div class="crew-row-fest-name">${escHtml(n.name)}</div>
+            <div class="crew-row-fest-going"><b>${n.who.length} going</b> · ${goingNames}</div>
+            ${meGoing || !n.id ? '' : `<button type="button" class="crew-row-rsvp" onclick="crewRowMeToo('${escJsAttr(n.id)}')">+ I'm going too</button>`}
+          </div>
+        </div>`;
+    }
+
+    const last = _huddleActivityCache && _huddleActivityCache[crew.id]?.lastMessage;
+    const lastSnippet = last ? huddleMessageSnippetText(last) : '';
+    const lastHTML = lastSnippet
+      ? `<button type="button" class="crew-row-last" onclick="openDetail('${jsId}', {tab:'huddle'})"><b>${escHtml(huddleSenderName(last.sender_id))}:</b> ${escHtml(lastSnippet)}</button>`
+      : '';
+
+    const eye = crew.status === 'secret'
+      ? `<span class="crew-row-eye eye-secret" role="img" aria-label="Secret — only you can see this crew" title="Secret — only you can see this crew"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg></span>`
+      : `<span class="crew-row-eye eye-open" role="img" aria-label="Crew is visible to members" title="Crew is visible to members"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>`;
+
+    return `${head}
+      <div class="crew-row-body" id="${bodyId}">
+        ${festHTML}
+        <div class="crew-row-fam">
+          <div class="crew-members">${avatarsHTML(crew.members)}</div>
+          <div class="crew-row-fam-label">${membersLabel}${crew.isLead ? ' · 👑 You lead' : ''}</div>
+        </div>
+        ${lastHTML}
+        ${huddleCtaHTML(crew.id)}
+        <div class="crew-row-foot">
+          <button type="button" class="crew-row-open" onclick="openDetail('${jsId}')">Open crew page →</button>
+          ${eye}
+        </div>
+      </div>`;
   }
 
   // Batched "is there Huddle activity worth surfacing" prefetch for the crew
@@ -17757,7 +17844,7 @@
       _huddleReadMap = readMap;
 
       const { data } = await sb.from('huddle_messages')
-        .select('crew_id, room_id, sender_id, created_at, kind, expires_at')
+        .select('crew_id, room_id, sender_id, created_at, kind, expires_at, body')
         .in('crew_id', ids)
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
@@ -17769,6 +17856,7 @@
         const c = cache[row.crew_id];
         if (!c) return;
         if (!c.lastMessageAt) c.lastMessageAt = row.created_at;
+        if (!c.lastMessage && !isBlockedUser(row.sender_id)) c.lastMessage = { sender_id: row.sender_id, kind: row.kind, body: row.body };
         if (row.kind === 'beacon' && row.expires_at && row.expires_at > nowIso) c.hasBeacon = true;
         roomCrewMap[row.room_id] = row.crew_id;
         if (row.sender_id === currentUser.id || isBlockedUser(row.sender_id)) return;
