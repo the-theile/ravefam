@@ -56,6 +56,7 @@ test.describe('ravers / profile', () => {
   test('opening the vibe tag sheet, toggling a chip, and hitting Done persists after Save', async ({ page }) => {
     await bootAuthedApp(page);
     await page.evaluate(() => enterProfileEditMode('r-you'));
+    await page.click('#page-profile .profile-tab[data-tab="vibe"]');
     await page.click('#vibe-edit-btn');
     await expect(page.locator('#tag-sheet')).toHaveClass(/open/);
     const addedId = await page.evaluate(() => VIBE_PRESETS.find(p => p.cat === 'chaos' && !editingVibeTags.has(p.id)).id);
@@ -70,6 +71,7 @@ test.describe('ravers / profile', () => {
   test('cancelling the vibe tag sheet does not persist an in-sheet toggle', async ({ page }) => {
     await bootAuthedApp(page);
     await page.evaluate(() => enterProfileEditMode('r-you'));
+    await page.click('#page-profile .profile-tab[data-tab="vibe"]');
     await page.click('#vibe-edit-btn');
     const skippedId = await page.evaluate(() => VIBE_PRESETS.find(p => p.cat === 'chaos' && !editingVibeTags.has(p.id)).id);
     await page.click(`#tag-sheet-accordions .vibe-preset[onclick*="${skippedId}"]`);
@@ -84,6 +86,7 @@ test.describe('ravers / profile', () => {
   test('opening the genre sheet, toggling a chip, and hitting Done persists after Save', async ({ page }) => {
     await bootAuthedApp(page);
     await page.evaluate(() => enterProfileEditMode('r-you'));
+    await page.click('#page-profile .profile-tab[data-tab="vibe"]');
     await page.click('#genre-edit-btn');
     await expect(page.locator('#tag-sheet')).toHaveClass(/open/);
     const added = await page.evaluate(() => allGenrePresets().find(g => genreCategory(g) === 'house' && !editingGenres.has(g)));
@@ -97,6 +100,7 @@ test.describe('ravers / profile', () => {
   test('cancelling the genre sheet does not persist an in-sheet toggle', async ({ page }) => {
     await bootAuthedApp(page);
     await page.evaluate(() => enterProfileEditMode('r-you'));
+    await page.click('#page-profile .profile-tab[data-tab="vibe"]');
     await page.click('#genre-edit-btn');
     const skipped = await page.evaluate(() => allGenrePresets().find(g => genreCategory(g) === 'house' && !editingGenres.has(g)));
     await page.click(`#tag-sheet-accordions .genre-preset[onclick*="${skipped.replace(/'/g, "\\'")}"]`);
