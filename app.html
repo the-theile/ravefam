@@ -422,6 +422,7 @@
   .crew-row-avs { display: flex; flex-shrink: 0; }
   .crew-row-avs .avatar { width: 22px; height: 22px; font-size: 0.55rem; margin-left: -7px; border-color: var(--surface); }
   .crew-row-avs .avatar:first-child { margin-left: 0; }
+  @media (max-width: 380px) { .crew-row-avs { display: none; } }
   .crew-card.is-open .crew-row-chev { transform: rotate(180deg); }
 
   .crew-row-body {
@@ -455,8 +456,8 @@
   .crew-row-fest-name { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.98rem; color: #fff; margin-top: 2px; }
   .crew-row-fest-going { font-size: 0.76rem; color: var(--text); margin-top: 3px; }
   .crew-row-fest-going b { color: var(--neon-cyan); }
+  .crew-row-rsvps { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   .crew-row-rsvp {
-    margin-top: 8px;
     padding: 6px 12px;
     border-radius: 100px;
     border: 1.5px solid var(--neon-cyan);
@@ -465,6 +466,8 @@
     font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.74rem;
     cursor: pointer;
   }
+  .crew-row-rsvp.is-interest { border-color: rgba(255,255,255,0.18); background: transparent; color: var(--text); }
+  .crew-row-rsvp.is-interest.on { border-color: var(--neon-yellow); color: var(--neon-yellow); background: rgba(255,230,0,0.08); }
   .crew-row-last {
     width: 100%;
     text-align: left;
@@ -678,7 +681,6 @@
     color: var(--muted);
   }
   .crew-add-card:hover { border-color: var(--neon-pink); color: var(--neon-pink); }
-  .crew-grid .crew-add-card { min-height: 0; padding: 14px; text-align: center; }
   .add-icon { font-size: 2rem; }
   .add-label { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.85rem; }
 
@@ -1291,6 +1293,20 @@
 
   /* Crews search */
   .crew-search-wrap { position: relative; margin-bottom: 16px; }
+  .crew-search-row { display: flex; gap: 8px; align-items: stretch; margin-bottom: 16px; }
+  .crew-search-row .crew-search-wrap { flex: 1; min-width: 0; margin-bottom: 0; }
+  .crew-search-row .crew-add-card {
+    width: auto; min-width: 112px; min-height: 0;
+    flex-shrink: 0;
+    padding: 0 14px;
+    border: 1.5px solid rgba(255,45,120,0.45);
+    border-radius: 12px;
+    color: var(--neon-pink);
+    text-align: center;
+    white-space: nowrap;
+  }
+  .crew-search-row .add-icon { font-size: 1rem; margin-right: 4px; }
+  .crew-search-row .add-label { font-size: 0.82rem; }
   .crew-search {
     width: 100%; box-sizing: border-box;
     background: var(--surface);
@@ -8961,16 +8977,17 @@
           </svg>
         </button>
       </div>
-      <div class="crew-search-wrap">
-        <span class="crew-search-icon">🔍</span>
-        <input class="crew-search" id="crew-search" aria-label="Search crews" type="text" placeholder="Search crews…" oninput="renderCrews()" autocomplete="off">
+      <div class="crew-search-row">
+        <div class="crew-search-wrap">
+          <span class="crew-search-icon">🔍</span>
+          <input class="crew-search" id="crew-search" aria-label="Search crews" type="text" placeholder="Search crews…" oninput="renderCrews()" autocomplete="off">
+        </div>
+        <button type="button" class="crew-add-card" onclick="openModal()">
+          <span class="add-icon">＋</span><span class="add-label">New crew</span>
+        </button>
       </div>
       <div class="crew-grid" id="crew-grid">
         <!-- Crew cards rendered by JS -->
-        <button type="button" class="crew-add-card" onclick="openModal()">
-          <div class="add-icon">＋</div>
-          <div class="add-label">Start Your Crew Free</div>
-        </button>
       </div>
     </div>
 
@@ -17728,8 +17745,14 @@
     const me = squad.find(x => x.isYou);
     if (!me) return;
     if ((me.festIds || []).some(id => String(id) === String(festId))) { showToast('Already on your list'); return; }
+    // Going and Interested are mutually exclusive (same as toggleInterestedInFest).
+    const wasInterested = (me.interestedFestIds || []).some(id => String(id) === String(festId));
+    me.interestedFestIds = (me.interestedFestIds || []).filter(id => String(id) !== String(festId));
     me.festIds = [...(me.festIds || []), festId];
-    if (currentUser) dbAddRaverFestival(me.id, festId);
+    if (currentUser) {
+      dbAddRaverFestival(me.id, festId);
+      if (wasInterested) dbRemoveRaverFestivalInterest(me.id, festId);
+    }
     renderSquad(); renderEvents(); renderCrews();
     showToast("🎟️ You're going too!");
   }
@@ -17779,7 +17802,9 @@
       const stamp = countdownStampParts(n.date) || { n: '—', u: '' };
       const when = `${n.date.getDate()} ${MON_SHORT[n.date.getMonth()]}`;
       const goingNames = n.who.length ? n.who.map(w => escHtml(w)).join(', ') : 'Nobody yet';
-      const meGoing = (n.whoRavers || []).some(r => r.isYou) || !squad.some(r => r.isYou);
+      const me = squad.find(r => r.isYou);
+      const meGoing = !me || (n.whoRavers || []).some(r => r.isYou);
+      const meInterested = !!me && (me.interestedFestIds || []).some(id => String(id) === String(n.id));
       festHTML = `
         <div class="crew-row-fest">
           <div class="crew-row-count"><span class="crew-row-count-n">${stamp.n}</span><span class="crew-row-count-u">${stamp.u}</span></div>
@@ -17787,7 +17812,10 @@
             <div class="crew-row-fest-label">Next up · ${when}</div>
             <div class="crew-row-fest-name">${escHtml(n.name)}</div>
             <div class="crew-row-fest-going"><b>${n.who.length} going</b> · ${goingNames}</div>
-            ${meGoing || !n.id ? '' : `<button type="button" class="crew-row-rsvp" onclick="crewRowMeToo('${escJsAttr(n.id)}')">+ I'm going too</button>`}
+            ${meGoing || !n.id ? '' : `<div class="crew-row-rsvps">
+              <button type="button" class="crew-row-rsvp" onclick="crewRowMeToo('${escJsAttr(n.id)}')">+ I'm going too</button>
+              <button type="button" class="crew-row-rsvp is-interest${meInterested ? ' on' : ''}" aria-pressed="${meInterested}" onclick="toggleInterestedInFest('${escJsAttr(n.id)}')">${meInterested ? '👀 Interested ✓' : '👀 Interested'}</button>
+            </div>`}
           </div>
         </div>`;
     }

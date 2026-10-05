@@ -186,7 +186,7 @@ test.describe('crews', () => {
     const data = seedData();
     data.raver_festivals = data.raver_festivals.filter(r => r.raver_id !== 'r-you');
     await bootAuthedApp(page, { data });
-    const rsvp = page.locator('#crew-grid .crew-card.is-open .crew-row-rsvp');
+    const rsvp = page.locator('#crew-grid .crew-card.is-open .crew-row-rsvp:not(.is-interest)');
     await expect(rsvp).toHaveCount(1);
     await rsvp.click();
     await expect(page.locator('#crew-grid .crew-card.is-open .crew-row-rsvp')).toHaveCount(0);
@@ -200,5 +200,41 @@ test.describe('crews', () => {
     await bootAuthedApp(page);
     await expect(page.locator('#crew-grid .crew-card.is-open .crew-row-fest')).toHaveCount(1);
     await expect(page.locator('#crew-grid .crew-row-rsvp')).toHaveCount(0);
+  });
+
+  test('quick RSVP can mark you Interested, and Going then clears it', async ({ page }) => {
+    const data = seedData();
+    data.raver_festivals = data.raver_festivals.filter(r => r.raver_id !== 'r-you');
+    await bootAuthedApp(page, { data });
+    const interest = page.locator('#crew-grid .crew-card.is-open .crew-row-rsvp.is-interest');
+    await expect(interest).toHaveAttribute('aria-pressed', 'false');
+    await interest.click();
+    await expect(interest).toHaveAttribute('aria-pressed', 'true');
+    const interested = () => page.evaluate(() =>
+      (window.__store.raver_festival_interest || []).some(r => r.raver_id === 'r-you' && r.festival_id === 'f1'));
+    expect(await interested()).toBe(true);
+
+    await page.locator('#crew-grid .crew-card.is-open .crew-row-rsvp:not(.is-interest)').click();
+    await expect(page.locator('#crew-grid .crew-row-rsvp')).toHaveCount(0);
+    expect(await interested()).toBe(false);
+  });
+
+  test('"+ New crew" sits beside the search bar and opens the create modal', async ({ page }) => {
+    await bootAuthedApp(page);
+    const btn = page.locator('.crew-search-row .crew-add-card');
+    await expect(btn).toHaveText(/New crew/);
+    await expect(page.locator('#crew-grid .crew-add-card')).toHaveCount(0);
+    const [s, b] = await Promise.all([
+      page.locator('.crew-search-row .crew-search-wrap').boundingBox(),
+      btn.boundingBox(),
+    ]);
+    expect(Math.abs((s.y + s.height / 2) - (b.y + b.height / 2))).toBeLessThan(4);
+    expect(b.x).toBeGreaterThan(s.x + s.width - 1);
+  });
+
+  test('collapsed avatar stack hides on small phones', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 740 });
+    await bootAuthedApp(page, { data: seedTwoCrews() });
+    await expect(page.locator('#crew-grid .crew-card[data-crew-id="c2"] .crew-row-avs')).toBeHidden();
   });
 });
