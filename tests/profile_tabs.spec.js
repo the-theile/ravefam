@@ -84,3 +84,38 @@ test.describe('profile tabs', () => {
     await expect(row.locator('.our-photo-label')).toBeVisible();
   });
 });
+
+test.describe('profile tabs · quick edits', () => {
+  test('✓ Going on a managed profile removes the rave after confirming', async ({ page }) => {
+    await bootAuthedApp(page);
+    await page.evaluate(() => openProfile('r-sam'));
+    await page.locator('#page-profile .prow-btn.going').first().click();
+    await page.locator('#confirm-ok-btn').click();
+    await page.waitForTimeout(150);
+    const sam = await page.evaluate(() => getRaver('r-sam').festIds.map(String));
+    expect(sam).not.toContain('f1');
+  });
+
+  test("someone else's profile shows how many raves you share", async ({ page }) => {
+    const data = seedData();
+    data.raver_festivals.push({ raver_id: 'r-kai', festival_id: 'f1' });
+    await bootAuthedApp(page, { data });
+    await page.evaluate(() => openProfile('r-kai'));
+    await page.locator('#page-profile .profile-tab[data-tab="raves"]').click();
+    await expect(page.locator('#page-profile .prow-together')).toContainText('both going to 1 rave');
+  });
+
+  test('the ⋯ menu opens and closes, and holds Report', async ({ page }) => {
+    await bootAuthedApp(page);
+    await page.evaluate(() => openProfile('r-kai'));
+    const more = page.locator('.profile-actions [aria-label="More actions"]');
+    const menu = page.locator('.profile-actions .profile-more-menu');
+    await expect(menu).toBeHidden();
+    await more.click();
+    await expect(menu).toBeVisible();
+    await expect(menu.locator('.pmm-item', { hasText: 'Report' })).toBeVisible();
+    // A tap anywhere outside closes it
+    await page.evaluate(() => document.body.click());
+    await expect(menu).toBeHidden();
+  });
+});

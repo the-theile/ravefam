@@ -5398,6 +5398,12 @@
     flex-shrink: 0; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.7rem; cursor: pointer;
     color: var(--neon-cyan); background: transparent; border: 1px dashed rgba(0,245,255,0.45); border-radius: 999px; padding: 6px 10px;
   }
+  .prow-btn.going { color: #06130a; background: var(--neon-green); border: 1px solid var(--neon-green); }
+  .prow-together {
+    margin-bottom: 10px; padding: 8px 12px; border-radius: 12px; font-size: 0.8rem;
+    background: rgba(0,245,255,0.07); border: 1px solid rgba(0,245,255,0.3);
+  }
+  .prow-together b { color: var(--neon-cyan); }
   .prow-more { display: block; background: none; border: 0; padding: 8px 0 0; color: var(--muted); font-size: 0.75rem; cursor: pointer; font-family: inherit; }
   .prow-more:hover { color: var(--neon-cyan); }
   .profile-manage-btn {
@@ -5410,6 +5416,27 @@
   .profile-manage-btn b { display: block; font-family: 'Outfit', sans-serif; font-size: 0.92rem; }
   .profile-manage-btn .pmb-sub { font-size: 0.74rem; color: var(--muted); }
   .profile-manage-btn .pmb-arrow { color: var(--neon-green); font-size: 1.2rem; }
+  /* Compact view-mode hero — tabs reach the first screen */
+  #page-profile .profile-hero-banner { height: 40px; }
+  .profile-hero-body { padding-bottom: 14px; }
+  .profile-hero-body .profile-avatar-ring { width: 80px; height: 80px; margin-top: -30px; }
+  .profile-hero-body .profile-avatar,
+  .profile-hero-body .profile-avatar-photo { width: 74px; height: 74px; font-size: 1.5rem; }
+  .profile-hero-body .profile-id { padding-top: 8px; }
+  /* ⋯ menu for the less-used actions on someone else's profile */
+  .profile-more { position: relative; margin-left: auto; }
+  .profile-more-menu {
+    position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; min-width: 190px;
+    display: flex; flex-direction: column; padding: 6px; border-radius: 14px;
+    background: var(--surface2); border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 12px 30px rgba(0,0,0,0.5);
+  }
+  .profile-more-menu[hidden] { display: none; }
+  .pmm-item {
+    text-align: left; background: none; border: 0; color: var(--text); font-family: inherit; font-size: 0.86rem;
+    padding: 10px 12px; border-radius: 9px; cursor: pointer; white-space: nowrap;
+  }
+  .pmm-item:hover, .pmm-item:focus-visible { background: rgba(255,255,255,0.06); }
+  .pmm-item.danger { color: var(--neon-pink); }
   .profile-manage-bar {
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; padding: 10px 14px;
     border-radius: 14px; border: 1px dashed rgba(0,245,255,0.45); background: rgba(0,245,255,0.06); font-size: 0.8rem;
@@ -10346,8 +10373,8 @@
     const uid = btn.dataset.blockUid;
     const sync = () => {
       const blocked = isBlockedUser(uid);
-      btn.textContent = blocked ? '✅' : '🚫';
       btn.title = blocked ? 'Unblock' : 'Block';
+      btn.textContent = (blocked ? '✅' : '🚫') + (btn.classList.contains('pmm-item') ? ` ${btn.title}` : '');
       btn.setAttribute('aria-label', btn.title);
     };
     if (isBlockedUser(uid)) dbUnblockUser(uid).then(sync);
@@ -28915,6 +28942,7 @@
       b.setAttribute('aria-selected', String(on));
     });
     document.querySelectorAll('#page-profile .profile-tab-pane').forEach(p => { p.hidden = p.dataset.tab !== tab; });
+    scrollProfilePaneIntoView();
   }
 
   function setProfileRaveSeg(raverId, seg) {
@@ -28925,6 +28953,71 @@
       b.setAttribute('aria-pressed', String(on));
     });
     document.querySelectorAll('#page-profile .profile-seg-pane').forEach(p => { p.hidden = p.dataset.seg !== seg; });
+  }
+
+  // When the tab bar is stuck, start the new pane just under it instead of mid-scroll
+  function scrollProfilePaneIntoView() {
+    const page = document.getElementById('page-profile');
+    const bar = page?.querySelector('.profile-tabs');
+    const pane = page?.querySelector('.profile-tab-pane:not([hidden])');
+    if (!bar || !pane) return;
+    const stickTop = parseFloat(getComputedStyle(page).getPropertyValue('--ptabs-top')) || 0;
+    const top = pane.getBoundingClientRect().top + window.scrollY - stickTop - bar.offsetHeight - 14;
+    if (window.scrollY > top) window.scrollTo(0, top);
+  }
+
+  // Swipe left/right on a pane to change tab (not on sideways shelves or fields)
+  let _profileSwipeReady = false;
+  function initProfileTabSwipe() {
+    const page = document.getElementById('page-profile');
+    if (_profileSwipeReady || !page) return;
+    _profileSwipeReady = true;
+    let sx = 0, sy = 0, tracking = false;
+    page.addEventListener('touchstart', e => {
+      const t = e.touches[0];
+      tracking = e.touches.length === 1 && !!e.target.closest('.profile-tab-pane')
+        && !e.target.closest('.shelf-row, input, textarea, select, .tag-edit-wrap');
+      sx = t.clientX; sy = t.clientY;
+    }, { passive: true });
+    page.addEventListener('touchend', e => {
+      if (!tracking) return;
+      tracking = false;
+      const t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
+      if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 2) return;
+      const tabs = [...page.querySelectorAll('.profile-tab')];
+      const i = tabs.findIndex(b => b.classList.contains('active'));
+      tabs[i + (dx < 0 ? 1 : -1)]?.click();
+    }, { passive: true });
+  }
+
+  function toggleProfileMoreMenu(btn) {
+    const menu = btn.nextElementSibling;
+    if (!menu) return;
+    if (!menu.hidden) { closeProfileMoreMenu(); return; }
+    menu.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    document.addEventListener('click', _onProfileMoreOutside);
+  }
+
+  function _onProfileMoreOutside(e) {
+    if (e.target.closest?.('.profile-more')) return;
+    closeProfileMoreMenu();
+  }
+
+  function closeProfileMoreMenu() {
+    document.removeEventListener('click', _onProfileMoreOutside);
+    document.querySelectorAll('#page-profile .profile-more-menu').forEach(m => { m.hidden = true; });
+    document.querySelectorAll('#page-profile .profile-more > button').forEach(b => b.setAttribute('aria-expanded', 'false'));
+  }
+
+  // ✓ Going pill on your own / managed going rows — confirm, then remove in place
+  function profileRemoveRave(raverId, festId) {
+    const f = festivals.find(x => String(x.id) === String(festId));
+    showConfirm('Remove rave?', `Take ${f ? `“${f.name}”` : 'this rave'} off the going list?`, 'Remove', () => {
+      const y = window.scrollY;
+      removeBeenTo(raverId, festId);
+      window.scrollTo(0, y);
+    });
   }
 
   // "+ Me too" on someone else's going list — adds the rave to *your* list, stays on their profile
@@ -29258,9 +29351,13 @@
       const raveSeg = _profileRaveSeg[String(r.id)] || 'going';
       const me = r.isYou ? null : squad.find(x => x.isYou);
       const myFestIds = new Set((me?.festIds || []).map(String));
+      const managedRaves = r.isYou || (perms.editFests && !perms.isClaimed);
+      const together = me ? upcomingFests.filter(f => myFestIds.has(String(f.id))).length : 0;
       const raveRow = (f) => {
         const mine = me && myFestIds.has(String(f.id));
-        const right = !me ? ''
+        const right = managedRaves
+          ? `<button type="button" class="prow-btn going" aria-label="Remove ${escHtml(f.name)}" onclick="profileRemoveRave('${rid}','${escJsAttr(f.id)}')">✓ Going</button>`
+          : !me ? ''
           : mine ? `<span class="prow-tag">You're going too</span>`
           : `<button type="button" class="prow-btn" onclick="profileMeToo('${rid}','${escJsAttr(f.id)}')">+ Me too</button>`;
         return `
@@ -29289,13 +29386,34 @@
         </div>` : `
         <div class="profile-section" style="${sg(0)}">
           <div class="profile-seg">${segBtn('going', `Going · ${upcomingFests.length}`)}${segBtn('been', `Been to · ${pastFests.length}`)}</div>
-          <div class="profile-seg-pane" data-seg="going"${raveSeg === 'going' ? '' : ' hidden'}>${goingRows}</div>
+          <div class="profile-seg-pane" data-seg="going"${raveSeg === 'going' ? '' : ' hidden'}>
+            ${together ? `<div class="prow-together">You and ${firstName} are both going to <b>${together} rave${together === 1 ? '' : 's'}</b></div>` : ''}
+            ${goingRows}
+          </div>
           <div class="profile-seg-pane" data-seg="been"${raveSeg === 'been' ? '' : ' hidden'}>
             ${pastShelf}
             ${pastFests.length ? `<button type="button" class="prow-more" onclick="openProfileListSheet('been','${rid}')">See all ${pastFests.length} ›</button>` : ''}
           </div>
         </div>
         ${manageBtn}`;
+
+      // Less-used actions on someone else's profile live behind ⋯
+      const moreItems = [
+        perms.canDisconnect ? `<button type="button" class="pmm-item" data-raver-id="${r.id}" onclick="showDisconnectConfirm(this.dataset.raverId)">🔗 Disconnect account</button>` : '',
+        !r.isYou && currentUser ? `<button type="button" class="pmm-item" data-raver-id="${r.id}" onclick="showReportModal('raver', this.dataset.raverId)">🚩 Report</button>` : '',
+        currentUser && r.claimedBy && r.claimedBy !== currentUser.id ? `<button type="button" class="pmm-item" data-block-uid="${escHtml(r.claimedBy)}" onclick="toggleBlockFromProfile(this)" title="${isBlockedUser(r.claimedBy) ? 'Unblock' : 'Block'}" aria-label="${isBlockedUser(r.claimedBy) ? 'Unblock' : 'Block'}">${isBlockedUser(r.claimedBy) ? '✅ Unblock' : '🚫 Block'}</button>` : '',
+        perms.canDelete ? `<button type="button" class="pmm-item danger" data-raver-id="${r.id}" onclick="deleteUnclaimedProfile(this.dataset.raverId)">🗑️ Delete profile</button>` : '',
+        isModerator() ? `<button type="button" class="pmm-item danger" data-raver-id="${r.id}" onclick="showPurgeRaverDataConfirm(this.dataset.raverId)" title="Permanently delete this person's data (verified deletion request only)">☠️ Purge data</button>` : '',
+      ].filter(Boolean);
+      const moreMenu = moreItems.length ? `
+          <div class="profile-more">
+            <button type="button" class="btn btn-ghost" style="padding:11px 14px;" aria-label="More actions" aria-haspopup="true" aria-expanded="false" onclick="toggleProfileMoreMenu(this)">⋯</button>
+            <div class="profile-more-menu" role="menu" hidden onclick="if(event.target.closest('.pmm-item'))closeProfileMoreMenu()">${moreItems.join('')}</div>
+          </div>` : '';
+      // Own-profile icons stay visible
+      const ownIcons = r.isYou ? `
+          <button class="btn btn-ghost" style="padding:11px;" data-raver-id="${r.id}" onclick="openPrivacySettingsModal(this.dataset.raverId)" title="Privacy & Permissions">🔒</button>
+          <button class="btn btn-ghost" style="padding:11px;" data-raver-id="${r.id}" onclick="toggleSeeAsCrew(this.dataset.raverId)" title="See as your crew">👁</button>` : '';
 
       // Unclaimed profile you manage — say so, with RSVPs + claim link one tap away
       const manageBar = (currentUser && !r.isYou && !perms.isClaimed && perms.editFests) ? `
@@ -29340,13 +29458,8 @@
         <div class="profile-actions" data-raver-id="${r.id}">
           ${ currentUser && (r.isYou || (perms.isLeaderOfRaver && !perms.isClaimed)) ? `<button class="btn btn-primary" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="enterProfileEditMode(this.dataset.raverId)">✏️ Edit Profile</button>` : ''}
           ${ !perms.isClaimed && perms.isLeaderOfRaver && r.qrToken ? `<button class="btn btn-ghost" style="padding:11px;" data-raver-id="${r.id}" onclick="showQRModal(this.dataset.raverId)" title="Share invite QR">📲</button>` : ''}
-          ${r.isYou ? `<button class="btn btn-ghost" style="padding:11px;" data-raver-id="${r.id}" onclick="openPrivacySettingsModal(this.dataset.raverId)" title="Privacy & Permissions">🔒</button>` : ''}
-          ${r.isYou ? `<button class="btn btn-ghost" style="padding:11px;" data-raver-id="${r.id}" onclick="toggleSeeAsCrew(this.dataset.raverId)" title="See as your crew">👁</button>` : ''}
-          ${perms.canDisconnect ? `<button class="btn btn-ghost btn-disconnect" data-raver-id="${r.id}" onclick="showDisconnectConfirm(this.dataset.raverId)" title="Disconnect account">🔗</button>` : ''}
-          ${!r.isYou && currentUser ? `<button class="btn btn-ghost" style="padding:11px;" data-raver-id="${r.id}" onclick="showReportModal('raver', this.dataset.raverId)" title="Report">🚩</button>` : ''}
-          ${!r.isYou && currentUser && r.claimedBy && r.claimedBy !== currentUser.id ? `<button class="btn btn-ghost" style="padding:11px;" data-block-uid="${escHtml(r.claimedBy)}" onclick="toggleBlockFromProfile(this)" title="${isBlockedUser(r.claimedBy) ? 'Unblock' : 'Block'}" aria-label="${isBlockedUser(r.claimedBy) ? 'Unblock' : 'Block'}">${isBlockedUser(r.claimedBy) ? '✅' : '🚫'}</button>` : ''}
-          ${perms.canDelete ? `<button class="btn btn-ghost" style="padding:11px;color:var(--neon-pink);border-color:rgba(255,45,120,0.3);" data-raver-id="${r.id}" onclick="deleteUnclaimedProfile(this.dataset.raverId)">🗑️</button>` : ''}
-          ${isModerator() ? `<button class="btn btn-ghost" style="padding:11px;color:var(--neon-pink);border-color:rgba(255,45,120,0.3);" data-raver-id="${r.id}" onclick="showPurgeRaverDataConfirm(this.dataset.raverId)" title="Permanently delete this person's data (verified deletion request only)">☠️</button>` : ''}
+          ${ownIcons}
+          ${moreMenu}
         </div>
 
         ${connectBlock}
@@ -29495,6 +29608,7 @@
       `;
       // Tabs stick just under the app header
       profilePage.style.setProperty('--ptabs-top', `${document.querySelector('header')?.offsetHeight || 0}px`);
+      initProfileTabSwipe();
       profilePage.classList.toggle('see-as-crew', seeAsCrew);
       if (seeAsCrew) {
         profilePage.insertAdjacentHTML('afterbegin', `<div class="see-as-crew-banner"><span>👁 Viewing as your crew — this is what they see.</span><button type="button" class="btn btn-ghost" onclick="toggleSeeAsCrew('${escJsAttr(raw.id)}')">Done</button></div>`);

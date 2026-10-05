@@ -82,13 +82,18 @@ test.describe('blocking users', () => {
     await bootAuthedApp(page, { data: seedWithChat(), sessionOver: SESSION_OVER });
     await page.evaluate(() => openProfile('r-kai'));
     const btn = page.locator('.profile-actions [data-block-uid="kai-uid"]');
+    const more = page.locator('.profile-actions [aria-label="More actions"]');
     await expect(btn).toHaveAttribute('title', 'Block');
 
+    // Block lives in the ⋯ menu on someone else's profile
+    await more.click();
     await btn.click();
     await page.locator('#confirm-ok-btn').click();
     await expect(btn).toHaveAttribute('title', 'Unblock');
+    await expect(btn).toHaveText('✅ Unblock');
     expect(await page.evaluate(() => isBlockedUser('kai-uid'))).toBe(true);
 
+    await more.click();
     await btn.click();
     await expect(btn).toHaveAttribute('title', 'Block');
     expect(await page.evaluate(() => isBlockedUser('kai-uid'))).toBe(false);
