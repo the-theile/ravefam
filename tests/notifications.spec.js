@@ -186,11 +186,14 @@ test.describe('notifications', () => {
     await expect(page.locator('#notif-badge')).not.toHaveClass(/has-unread/);
   });
 
-  test('the footer opens Settings on the notification toggles', async ({ page }) => {
+  test('the footer opens the Settings hub, where Delete my account is reachable', async ({ page }) => {
     await bootAuthedApp(page);
     await page.evaluate(() => { openNotifDrawer(); });
-    await page.locator('.notif-drawer-footer button', { hasText: 'Notification settings' }).click();
+    await page.locator('.notif-drawer-footer button', { hasText: 'Settings' }).click();
+    await expect(page.locator('#notif-drawer-overlay')).not.toHaveClass(/open/);
     await expect(page.locator('#privacy-settings-overlay')).toHaveClass(/open/);
-    await expect(page.locator('#settings-title')).toHaveText('🔔 Notifications');
+    await expect(page.locator('#settings-title')).toHaveText('⚙️ Settings');
+    await page.locator('#delete-account-btn').scrollIntoViewIfNeeded();
+    await expect(page.locator('#delete-account-btn')).toBeVisible();
   });
 });

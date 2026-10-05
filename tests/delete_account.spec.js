@@ -30,7 +30,7 @@ test.describe('self-serve account deletion', () => {
 
   test('settings exposes the delete-account entry point', async ({ page }) => {
     await bootAuthedApp(page);
-    await page.evaluate(() => openPrivacySettingsModal(squad.find(r => r.isYou).id));
+    await page.evaluate(() => notifDrawerSettings());
     await expect(page.locator('#privacy-settings-overlay')).toHaveClass(/open/);
     await page.locator('#delete-account-btn').click();
     await expect(page.locator('#privacy-settings-overlay')).not.toHaveClass(/open/);
