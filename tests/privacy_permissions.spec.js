@@ -78,6 +78,7 @@ test.describe('privacy & permissions', () => {
     await bootAuthedApp(page, { data });
 
     await page.evaluate(() => openProfile('r-kai'));
+    await page.locator('#page-profile .profile-tab[data-tab="raves"]').click();
     const profileText = await page.locator('#page-profile').innerText();
     expect(profileText).toContain('Location private');
     expect(profileText).not.toContain('Based in Lisbon');
