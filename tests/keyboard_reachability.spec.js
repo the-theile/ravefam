@@ -120,17 +120,18 @@ test.describe('the converted leaf controls', () => {
     expect(probe.h).toBeGreaterThan(14);
   });
 
-  test('the crew status badge is a button on the card', async ({ page }) => {
+  test('the crew row header is a button that reports its expanded state', async ({ page }) => {
     await bootAuthedApp(page);
     await page.evaluate(() => switchTab('crews'));
     await page.waitForTimeout(250);
     const info = await page.evaluate(() => {
-      const el = document.querySelector('.crew-status');
-      return el && { tag: el.tagName, type: el.getAttribute('type'), text: el.textContent.trim() };
+      const el = document.querySelector('#crew-grid .crew-row-toggle');
+      return el && { tag: el.tagName, type: el.getAttribute('type'), expanded: el.getAttribute('aria-expanded'), text: el.textContent.trim() };
     });
     test.skip(!info, 'no crew card in this seed');
     expect(info.tag).toBe('BUTTON');
     expect(info.type).toBe('button');
+    expect(['true', 'false']).toContain(info.expanded);
     expect(info.text.length).toBeGreaterThan(0);
   });
 
