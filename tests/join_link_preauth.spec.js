@@ -67,10 +67,10 @@ test.describe('?join= link while signed out', () => {
     data.crews[0].status = 'secret';
     await openJoinLink(page, 'inv-c1', data);
 
-    // A dead link is no reason to bar the door.
-    await page.evaluate(() => dismissIntercept('signup'));
-    await expect(page.locator('#claim-intercept')).not.toHaveClass(/open/);
-    // One flow: signing up is the same email-or-phone field as logging in.
+    // A dead link is no reason to bar the door: the sign-up field sits right
+    // under the expired-invite card. One flow: signing up is the same
+    // email-or-phone field as logging in.
+    await expect(page.locator('#claim-intercept')).toHaveClass(/dead/);
     await expect(page.locator('#auth-login-form')).toBeVisible();
     await expect(page.locator('#login-id')).toBeVisible();
   });

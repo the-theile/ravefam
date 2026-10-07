@@ -9808,32 +9808,6 @@
   </div>
 </div>
 
-<!-- Edit Unclaimed Profile Modal -->
-<div class="modal-overlay" id="edit-unclaimed-overlay" onclick="if(event.target===this)closeEditUnclaimedModal()">
-  <div class="modal" style="max-width:380px;">
-    <div class="modal-title" style="margin-bottom:16px;">Edit Profile</div>
-    <div class="form-group">
-      <label for="edit-unclaimed-name" class="form-label">Name</label>
-      <input class="form-input" id="edit-unclaimed-name" placeholder="Full name">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Handle <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
-      <input class="form-input" id="edit-unclaimed-handle" aria-label="Handle" placeholder="@handle">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Note <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
-      <input class="form-input" id="edit-unclaimed-note" aria-label="How you met" placeholder="e.g. met at Coachella">
-    </div>
-    <div class="modal-actions" style="margin-top:8px;justify-content:space-between;">
-      <button class="btn btn-ghost" style="color:var(--neon-pink);border-color:rgba(255,45,120,0.25);padding:10px 14px;font-size:0.8rem;" onclick="deleteUnclaimedProfile(_editUnclaimedRaverId)">🗑️ Delete</button>
-      <div style="display:flex;gap:8px;">
-        <button class="btn btn-ghost" onclick="closeEditUnclaimedModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="saveEditUnclaimed()">Save</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- Raver Avatar Color Picker Modal (unclaimed profiles, creator only) -->
 <div class="modal-overlay" id="raver-color-overlay" onclick="if(event.target===this)closeRaverColorPicker()">
   <div class="modal" style="max-width:340px;">
@@ -10185,7 +10159,6 @@
   (function() {
     const tab = new URLSearchParams(window.location.search).get('tab');
     if (tab === 'signup' || tab === 'login') {
-      window._pendingAuthTab = tab;
       document.title = tab === 'signup' ? 'Sign Up · RaveFAM 🎉' : 'Log In · RaveFAM 🔥';
     }
   })();
@@ -11849,7 +11822,6 @@
     const pendingJoin  = sessionStorage.getItem('pendingCrewJoin');
     // Coming back on this device: prefill the email or number they last used.
     const last = readLastLogin();
-    window._pendingAuthTab = null;
     const idInput = document.getElementById('login-id');
     if (last?.value && !idInput.value) idInput.value = last.method === 'phone' ? formatPhoneDisplay(last.value) : last.value;
     showAuthTab('login');
@@ -13309,16 +13281,6 @@
     if (avatarGlowEl) avatarGlowEl.style.background = `radial-gradient(circle,${crewColor}66 0%,transparent 68%)`;
 
     document.getElementById('claim-intercept').classList.add('open');
-  }
-
-  function dismissIntercept(tab) {
-    document.getElementById('claim-intercept').classList.remove('open');
-    if (tab) {
-      window._pendingAuthTab = tab;
-      // Trigger auth screen re-render to correct tab (it's already showing);
-      // a tap on Create Account / Log in goes straight to the field.
-      showAuthTab(tab, true);
-    }
   }
 
   function copyClaimLink(url) {
@@ -27487,35 +27449,6 @@
     );
   }
 
-  // ── Edit Unclaimed Profile modal ──
-  let _editUnclaimedRaverId = null;
-
-  function closeEditUnclaimedModal() {
-    document.getElementById('edit-unclaimed-overlay').classList.remove('open');
-    _editUnclaimedRaverId = null;
-  }
-
-  function saveEditUnclaimed() {
-    const r = getRaver(_editUnclaimedRaverId);
-    if (!r) return;
-    if (!raverPerms(r).editName) { showToast('🔒 Only the crew lead or a moderator can edit this profile'); return; }
-    const name = document.getElementById('edit-unclaimed-name')?.value.trim();
-    if (!name) { showToast('⚠️ Name can\'t be empty'); return; }
-    r.name = name;
-    r.handle = document.getElementById('edit-unclaimed-handle')?.value.trim() || '';
-    r.notes = document.getElementById('edit-unclaimed-note')?.value.trim() || '';
-    closeEditUnclaimedModal();
-    renderCrews();
-    renderDetail(activeDetailId);
-    showToast(`✅ ${name.split(' ')[0]}'s profile updated`);
-    if (currentUser && !String(r.id).startsWith('temp_')) {
-      sb.from('ravers')
-        .update({ name: r.name, handle: r.handle || null, notes: r.notes, updated_at: new Date().toISOString() })
-        .eq('id', r.id)
-        .then(({ error }) => { if (error) showToast('⚠️ Save failed — please try again'); });
-    }
-  }
-
   // Moderator-only permanent erasure for verified data-deletion requests
   // (privacy.html "Your Rights & Choices"). Unlike deleteUnclaimedProfile
   // (soft-delete, unclaimed profiles only), this hard-deletes the raver row
@@ -27579,16 +27512,9 @@
         });
         const keptIdx = squad.findIndex(r2 => String(r2.id) === String(raverId));
         if (keptIdx !== -1) squad.splice(keptIdx, 1);
-        // Deletable from either the "Edit Unclaimed Profile" modal (inside a
-        // crew's detail page) or the full profile page's 🗑️ button — return
-        // to wherever makes sense for the surface it was triggered from.
         const onProfilePage = document.getElementById('page-profile')?.classList.contains('active');
-        if (onProfilePage) {
-          backFromProfile();
-        } else {
-          closeEditUnclaimedModal();
-          renderDetail(activeDetailId);
-        }
+        if (onProfilePage) backFromProfile();
+        else renderDetail(activeDetailId);
         renderCrews();
         showToast(`🗑️ ${firstName}'s profile deleted`);
         if (currentUser && !String(raverId).startsWith('temp_')) {
@@ -30473,10 +30399,6 @@
   let editingGenres = new Set();
   let editingCustomGenres = [];
 
-  // Thin wrappers kept for backward compatibility (e.g. direct calls from tests) —
-  // real logic lives in the shared tag-sheet functions below (tagToggle/tagAddCustom/etc).
-  function toggleGenrePick(genre, el) { tagToggle('genre', genre, el); }
-
   function renderFestPicker() {
     const box = document.getElementById('fest-picker');
     if (!box) return;
@@ -31127,10 +31049,6 @@
       ? `${cfg.editingCustom().length} / ${cfg.maxCustom} custom tags used`
       : `${cfg.editingCustom().length} custom ${cfg.noun} added`;
   }
-
-  // Thin wrappers kept for backward compatibility (e.g. direct calls from tests) —
-  // real logic lives in the shared tag-sheet functions above.
-  function toggleVibePick(id, el) { tagToggle('vibe', id, el); }
 
   function openCustomEmojiPicker() {
     const picker = document.getElementById('vibe-custom-emoji-picker');

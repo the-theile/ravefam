@@ -31,7 +31,7 @@ test.describe('ravers / profile', () => {
     const added = await page.evaluate(() => {
       enterProfileEditMode('r-you');
       const preset = VIBE_PRESETS.find(p => !editingVibeTags.has(p.id));
-      toggleVibePick(preset.id, document.createElement('span'));
+      tagToggle('vibe', preset.id, document.createElement('span'));
       saveProfile();
       return preset.id;
     });
@@ -45,7 +45,7 @@ test.describe('ravers / profile', () => {
       enterProfileEditMode('r-you');
       const presets = allGenrePresets().filter(g => !editingGenres.has(g));
       const g = presets[0];
-      toggleGenrePick(g, document.createElement('span'));
+      tagToggle('genre', g, document.createElement('span'));
       saveProfile();
       return g;
     });
