@@ -10165,7 +10165,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.10.1';
+  const APP_VERSION = '2.11.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -25823,10 +25823,11 @@
       ${linksHTML ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">${linksHTML}</div>` : ''}
       ${(() => {
         // Visible row: the actions most people take (Save, Edit if it's yours).
-        // Kebab: less-common ones (Report, moderator Sponsor toggle).
+        // Kebab: less-common ones (Report, moderator Sponsor toggle and Remove).
         const kebabRows = [
           currentUser ? `<button type="button" class="kebab-menu-row" onclick="toggleKebabMenu('vv-detail-kebab-${escId}'); showReportModal('vendor','${escId}')">🚩 Report</button>` : '',
           isModerator() ? `<button type="button" class="kebab-menu-row" onclick="toggleKebabMenu('vv-detail-kebab-${escId}'); toggleVendorSponsorship('${escId}')">${vendor.is_sponsored ? '🛡️ Unsponsor' : '🛡️ Mark Sponsored'}</button>` : '',
+          isModerator() ? `<button type="button" class="kebab-menu-row danger" onclick="toggleKebabMenu('vv-detail-kebab-${escId}'); confirmRemoveVendor('${escId}')">🗑️ Remove listing</button>` : '',
         ].filter(Boolean).join('');
         const kebabHtml = kebabRows ? `
           <div class="kebab-wrap" style="align-self:center;">
@@ -26093,6 +26094,26 @@
   async function handleDeleteVendorSpot(spotId, vendorId) {
     const ok = await dbDeleteVendorSpot(spotId, vendorId);
     if (ok) openVendorDetail(vendorId);
+  }
+
+  // Moderator takedown without waiting for a report. Soft delete, so Recent
+  // Deletes in the Mod Dashboard can restore it.
+  function confirmRemoveVendor(vendorId) {
+    if (!isModerator()) { showToast('🔒 Moderators only'); return; }
+    const vendor = vendors.find(v => v.id === vendorId);
+    if (!vendor) return;
+    showConfirmWithReason(
+      `Remove ${vendor.name}?`,
+      'Takes this listing out of Vendor Village for everyone. You can restore it from Recent Deletes in the Mod Dashboard.',
+      '🗑️ Remove',
+      async (reason) => {
+        if (!await dbDeleteVendor(vendorId, reason)) return;
+        closeVendorDetail();
+        renderVendorVillagePanel();
+        showToast(`🗑️ ${vendor.name} removed`);
+      },
+      { label: 'Reason (logged for the mod team)', placeholder: 'e.g. reported as a scam' }
+    );
   }
 
   // ===== VENUE DIRECTORY — data layer =====
@@ -26660,6 +26681,7 @@
       <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;">
         ${currentUser && venue.created_by === currentUser.id ? `<button class="btn btn-ghost" style="flex:1;" onclick="openEditVenueModal('${escId}')">✏️ Edit Listing</button>` : ''}
         ${currentUser ? `<button class="btn btn-ghost btn-danger" style="flex:1;" onclick="showReportModal('venue','${escId}')">🚩 Report</button>` : ''}
+        ${isModerator() ? `<button class="btn btn-ghost btn-danger" style="flex:1;" onclick="confirmRemoveVenue('${escId}')">🗑️ Remove</button>` : ''}
         <button class="btn btn-ghost" style="flex:1;" onclick="closeVenueDetail()">Close</button>
       </div>
 
@@ -26752,6 +26774,26 @@
   async function handleDeleteVenueReview(reviewId, venueId) {
     const ok = await dbDeleteVenueReview(reviewId, venueId);
     if (ok) openVenueDetail(venueId);
+  }
+
+  // Moderator takedown without waiting for a report. Soft delete, so Recent
+  // Deletes in the Mod Dashboard can restore it.
+  function confirmRemoveVenue(venueId) {
+    if (!isModerator()) { showToast('🔒 Moderators only'); return; }
+    const venue = venues.find(v => v.id === venueId);
+    if (!venue) return;
+    showConfirmWithReason(
+      `Remove ${venue.name}?`,
+      'Takes this venue out of the directory for everyone. You can restore it from Recent Deletes in the Mod Dashboard.',
+      '🗑️ Remove',
+      async (reason) => {
+        if (!await dbDeleteVenue(venueId, reason)) return;
+        closeVenueDetail();
+        renderVenueVillagePanel();
+        showToast(`🗑️ ${venue.name} removed`);
+      },
+      { label: 'Reason (logged for the mod team)', placeholder: 'e.g. reported as unsafe' }
+    );
   }
 
   // ===== FAM PINS — Crew Achievements =====

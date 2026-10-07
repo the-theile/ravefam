@@ -284,3 +284,41 @@ test.describe('Venue Directory · location live-mirror', () => {
     await expect(page.locator('.fe-loc-from-venue')).toContainText('New Corrected Address');
   });
 });
+
+test.describe('Venue Directory · moderator Remove', () => {
+  test('a moderator removes a venue from its detail sheet with a reason', async ({ page }) => {
+    await bootAuthedApp(page, { data: seedWithMod() });
+    await openVenueVillage(page);
+    const venueId = await page.evaluate(async () => {
+      const v = await dbAddVenue({ name: 'Unsafe Warehouse', location: '' });
+      renderVenueVillagePanel();
+      return v.id;
+    });
+
+    await page.evaluate((id) => openVenueDetail(id), venueId);
+    await page.locator('#vn-detail-overlay button', { hasText: 'Remove' }).click();
+
+    await expect(page.locator('#confirm-ok-btn')).toBeDisabled();
+    await page.locator('#confirm-reason-input').fill('no fire exits');
+    await page.locator('#confirm-ok-btn').click();
+
+    await expect(page.locator('#vn-detail-overlay')).not.toHaveClass(/open/);
+    await expect(page.locator('#venue-village-root')).not.toContainText('Unsafe Warehouse');
+    const { venue, audit } = await page.evaluate((id) => ({
+      venue: window.__store.venues.find(v => v.id === id),
+      audit: window.__store.audit_logs.find(a => a.action === 'venue.remove' && a.entity_id === id),
+    }), venueId);
+    expect(venue.deleted_at).toBeTruthy();
+    expect(audit.reason).toBe('no fire exits');
+  });
+
+  test('non-moderators do not see Remove', async ({ page }) => {
+    await bootAuthedApp(page);
+    await openVenueVillage(page);
+    const venueId = await page.evaluate(async () => (await dbAddVenue({ name: 'Fine Club', location: '' })).id);
+
+    await page.evaluate((id) => openVenueDetail(id), venueId);
+    await expect(page.locator('#vn-detail-overlay button', { hasText: 'Report' })).toBeVisible();
+    await expect(page.locator('#vn-detail-overlay button', { hasText: /^🗑️ Remove$/ })).toHaveCount(0);
+  });
+});

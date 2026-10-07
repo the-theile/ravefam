@@ -402,3 +402,45 @@ test.describe('Vendor Village · saved-vendor-spotted notification', () => {
     await expect(page.locator('#vv-detail-modal')).toContainText('Soft Landings');
   });
 });
+
+test.describe('Vendor Village · moderator Remove', () => {
+  test('a moderator removes a listing from its detail sheet with a reason', async ({ page }) => {
+    await bootAuthedApp(page, { data: seedWithMod() });
+    await openVendorVillage(page);
+    const vendorId = await page.evaluate(async () => {
+      const v = await dbAddVendor({ name: 'Fake Merch Tent', category: 'other', description: '', websiteUrl: '', instagram: '' });
+      renderVendorVillagePanel();
+      return v.id;
+    });
+
+    await page.evaluate((id) => openVendorDetail(id), vendorId);
+    await page.locator('#vv-detail-overlay .kebab-btn').click();
+    await page.locator('#vv-detail-overlay .kebab-menu-row', { hasText: 'Remove listing' }).click();
+
+    // Reason is required before the action fires.
+    await expect(page.locator('#confirm-ok-btn')).toBeDisabled();
+    await page.locator('#confirm-reason-input').fill('selling counterfeit tickets');
+    await page.locator('#confirm-ok-btn').click();
+
+    await expect(page.locator('#vv-detail-overlay')).not.toHaveClass(/open/);
+    await expect(page.locator('#vendor-village-root')).not.toContainText('Fake Merch Tent');
+    const { vendor, audit } = await page.evaluate((id) => ({
+      vendor: window.__store.vendors.find(v => v.id === id),
+      audit: window.__store.audit_logs.find(a => a.action === 'vendor.remove' && a.entity_id === id),
+    }), vendorId);
+    expect(vendor.deleted_at).toBeTruthy();
+    expect(audit.reason).toBe('selling counterfeit tickets');
+  });
+
+  test('non-moderators do not see Remove listing', async ({ page }) => {
+    await bootAuthedApp(page);
+    await openVendorVillage(page);
+    const vendorId = await page.evaluate(async () =>
+      (await dbAddVendor({ name: 'Honest Booth', category: 'other', description: '', websiteUrl: '', instagram: '' })).id);
+
+    await page.evaluate((id) => openVendorDetail(id), vendorId);
+    await page.locator('#vv-detail-overlay .kebab-btn').click();
+    await expect(page.locator('#vv-detail-overlay .kebab-menu-row', { hasText: 'Report' })).toBeVisible();
+    await expect(page.locator('#vv-detail-overlay .kebab-menu-row', { hasText: 'Remove listing' })).toHaveCount(0);
+  });
+});
