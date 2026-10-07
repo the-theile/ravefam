@@ -28,7 +28,7 @@ test.describe('stats', () => {
     await expect(heroNumbers.nth(0)).toHaveText('0');       // 0 Raves Logged
   });
 
-  test('Vibe DNA share card opens with your genres, vibes and personality', async ({ page }) => {
+  test('Vibe DNA shows on Stats without its own share card; Wrapped carries the genres and vibes', async ({ page }) => {
     const d = statsData();
     // Vibe DNA only unlocks at 3+ logged raves.
     d.festivals.push({ id: 'f-past2', name: 'Second Past Fest', date: '2021-06-01', location: 'Berlin, DE', color: '#00F5FF', days: 1, deleted_at: null });
@@ -38,14 +38,20 @@ test.describe('stats', () => {
     await page.evaluate(() => { switchTab('stats'); loadStatsPage(); });
 
     const vibeDnaCard = page.locator('#stats-content .stats-section-card', { has: page.locator('.stats-section-title', { hasText: 'Vibe DNA' }) });
-    await vibeDnaCard.locator('button', { hasText: 'Share' }).click();
+    await expect(vibeDnaCard).toContainText('Techno');
+    await expect(vibeDnaCard.locator('button', { hasText: 'Share' })).toHaveCount(0);
 
-    await expect(page.locator('#vibedna-share-overlay')).toHaveClass(/open/);
-    await expect(page.locator('#vibedna-share-card .radar-share-name')).toHaveText('Theile');
-    await expect(page.locator('#vibedna-share-card')).toContainText('Techno');
-    await expect(page.locator('#vibedna-share-card')).toContainText('House');
-    await page.evaluate(() => closeVibeDnaShareCard());
-    await expect(page.locator('#vibedna-share-overlay')).not.toHaveClass(/open/);
+    // Wrapped is the one share card for your vibe (its December / 5-rave gate
+    // lives on the Stats button, so open it directly here).
+    await page.evaluate(() => openWrapped());
+    await expect(page.locator('#wrapped-overlay')).toHaveClass(/open/);
+    const card = page.locator('#wrapped-card');
+    await expect(card).toContainText('Genres');
+    await expect(card).toContainText('Techno');
+    await expect(card).toContainText('House');
+    await expect(card).toContainText('Your Vibes');
+    await page.evaluate(() => closeWrapped());
+    await expect(page.locator('#wrapped-overlay')).not.toHaveClass(/open/);
   });
 
   test('Rave Passport: tapping a filled stamp opens that rave, tapping an empty slot starts logging one', async ({ page }) => {
