@@ -4306,12 +4306,9 @@
   .crew-feature-panel { margin-bottom: 16px; }
 
   /* ── Huddle: crew chat (full-screen "comms channel" surface) ── */
-  /* The Huddle used to render as an accordion panel inside crew detail with
-     its own 50vh scrollbox — a chat nested inside a scrolling page, which
-     read as a feed of cards rather than a conversation. It now opens as a
-     full-screen surface that owns the viewport: fixed header, flexible
+  /* Full-screen surface that owns the viewport: fixed header, flexible
      message stream, composer pinned above the keyboard. The crew-detail
-     tile keeps a compact preview that launches it.
+     tile shows a compact preview that launches it.
 
      Visual language is "festival comms channel": monospaced timestamps and
      labels, a faint scanline field, ticket-stub day markers, and a
@@ -11960,8 +11957,8 @@
   });
 
   // Keyboard: submit on Enter in auth forms
-  // Only from a field inside the auth card: an overlay on top (the claim-code
-  // boxes, the intercept) used to fall through to doLogin() and text/email a
+  // Only from a field inside the auth card, so Enter in an overlay on top (the
+  // claim-code boxes, the intercept) can't fall through to doLogin() and send a
   // code to a prefilled address. Buttons and links handle their own Enter.
   document.addEventListener('keydown', e => {
     if (e.key !== 'Enter' || e.isComposing) return;
@@ -13584,10 +13581,8 @@
 
     // --- Background lookups ---
     // Badges/menus and the artist/venue catalogs don't gate the Crews/Squad
-    // first paint (nothing below reads them), so fire them all off together
-    // instead of one-at-a-time and let them resolve whenever — previously
-    // each of these was its own awaited round trip *before* the data the
-    // Crews page actually needs even started loading.
+    // first paint (nothing below reads them), so fire them off together
+    // without awaiting.
     dbLoadModerators().catch(reportBackgroundFailure('dbLoadModerators')).then(() => {
       updateModBadge();
       return isModerator() ? dbLoadFlags().catch(reportBackgroundFailure('dbLoadFlags')) : null;
@@ -13609,10 +13604,9 @@
     loadAllFestVibes().catch(reportBackgroundFailure('loadAllFestVibes'));
 
     // --- Critical path for first paint: festivals, ravers, crews, nicknames.
-    // These used to run as four separate sequential awaits; the festivals/
-    // ravers/crews network calls don't depend on each other's *data* (only
-    // the processing below does), so fire them together and process in
-    // dependency order once all three land.
+    // The festivals/ravers/crews calls don't depend on each other's data
+    // (only the processing below does), so fetch them together and process
+    // in dependency order once all three land.
     const [
       { data: dbFests, error: fErr },
       { data: dbRavers, error: rErr },
@@ -13828,8 +13822,8 @@
 
     // Once/day (not once/session — a browser restart later the same day
     // shouldn't re-show it) plus an opt-in week-long snooze from the link
-    // in the modal. Both keyed per-user, in localStorage since they need
-    // to survive across sessions unlike the old sessionStorage flag.
+    // in the modal. Both keyed per-user, in localStorage so they survive
+    // across sessions.
     const lastShownKey = `ravefam_welcome_last_${currentUser.id}`;
     const snoozeKey = `ravefam_welcome_snooze_${currentUser.id}`;
     const snoozeUntil = Number(localStorage.getItem(snoozeKey) || 0);
@@ -14896,7 +14890,7 @@
   }
 
   // Mod Dashboard "Recent Deletes" tab — the one read path against audit_logs
-  // (previously write-only from logAudit). Moderator-only per RLS.
+  // (logAudit writes them). Moderator-only per RLS.
   async function dbLoadRecentDestructiveActions(limit = 50) {
     if (!isModerator()) return [];
     const { data, error } = await sb.from('audit_logs')
@@ -17200,7 +17194,7 @@
   // only allows navigator.share()/clipboard.writeText() as a direct result
   // of a tap; if the button's click handler has to await html2canvas first,
   // that window is gone by the time the share call actually runs, so it
-  // (and the text fallback that used to run after it) can silently fail.
+  // can silently fail.
   // Pre-rendering means the tap itself does no async rendering work at all.
   async function prepareCrewShareImage(crew) {
     const token = ++_crewShareToken;
@@ -17225,23 +17219,10 @@
       const canvas = await withTimeout(
         html2canvas(card, {
           backgroundColor: '#050509', scale: 2, useCORS: true, logging: true,
-          // html2canvas clones the WHOLE document (not just `card`) to
-          // replicate CSS cascade correctly — this is a big single-page app
-          // with many hidden pages/modals/tabs all mounted in the DOM at
-          // once, and skipping <video> alone (the first culprit found) just
-          // meant the NEXT unrelated element became the new blocker with no
-          // further diagnosis possible (logging stopped dead after "Starting
-          // document clone", no per-element output at all before timing
-          // out). Skip everything that isn't the card itself, a descendant
-          // of it, or an ancestor of it (ancestors are still needed so the
-          // clone's layout/stacking context lines up) — EXCEPT anything
-          // inside <head>, which must always survive regardless of its
-          // relationship to the card: it's a sibling of <body>, not an
-          // ancestor, so the first version of this predicate stripped the
-          // entire stylesheet along with it — instant render, zero layout,
-          // every .crew-share-* class rule just gone (confirmed live: the
-          // exported image had only inline styles applied, nothing from
-          // the stylesheet).
+          // html2canvas clones the whole document, and the app's hidden
+          // pages/modals stall the clone. Keep only the card, its descendants
+          // and its ancestors (needed for layout), plus everything in <head>
+          // so the stylesheet survives.
           ignoreElements: (el) => {
             if (document.head.contains(el) || el === document.head) return false;
             return el.tagName === 'VIDEO' || (el !== card && !card.contains(el) && !el.contains(card));
@@ -19934,8 +19915,7 @@
       : { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
-  // Voice-note durations used to render as `0:${seconds}`, which printed a
-  // 84-second note as "0:84". Format properly from total seconds.
+  // m:ss from total seconds (84s → "1:24").
   function huddleDurationLabel(ms) {
     const total = Math.max(0, Math.round((ms || 0) / 1000));
     return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
@@ -20217,9 +20197,8 @@
 
   // ── Chat screen shell ──
   // Built once per open. The composer inside it is deliberately NOT part of
-  // any re-render: the old panel rebuilt its entire root on every incoming
-  // message, which wiped whatever you were typing, dropped focus, and closed
-  // the mobile keyboard mid-sentence.
+  // any re-render, so an incoming message never wipes a draft, drops focus,
+  // or closes the mobile keyboard.
   function openHuddleScreen() {
     let screen = document.getElementById('huddle-screen');
     if (!screen) {
@@ -20352,8 +20331,8 @@
     const roomPillHTML = r =>
       `<button type="button" class="huddle-room-pill${r.id === _huddleActiveRoomId ? ' active' : ''}" data-room-id="${r.id}" onclick="switchHuddleRoom(this.dataset.roomId)">${huddleRoomLabel(r)}${unreadBadge(roomUnread(r))}</button>`;
 
-    // A crew that rages every weekend accumulates rooms fast, and the dead
-    // ones used to sit above the live ones. Past raves fold into one row that
+    // A crew that rages every weekend accumulates rooms fast, so past raves
+    // fold into one row below the live ones. That row
     // carries their combined unread count, so nothing gets lost behind it.
     // The room you're actually in is never nested away.
     const pastRooms = huddleRooms.filter(r => huddleRoomIsPast(r) && r.id !== _huddleActiveRoomId);
@@ -22252,11 +22231,9 @@
     if (btnEl) btnEl.classList.add('active');
   }
 
-  // The per-rave chat used to be embedded as a Rave Plan section, which split
-  // "the crew chat" across two places. It now lives in the unified Huddle
-  // switcher, and Rave Plan just links to it — but the room still has to be
-  // materialized here so the shortcut lands somewhere and the unread badge is
-  // accurate before anyone has opened it.
+  // Per-rave chat lives in the Huddle switcher and Rave Plan links to it, so
+  // the room is materialized here: the shortcut needs a target and the unread
+  // badge must be accurate before anyone has opened it.
   async function ensureHuddleRoomForFestival(crewId, festivalId) {
     if (!crewId || !festivalId || !currentUser) return null;
     await ensureHuddleRooms(crewId);
@@ -27040,8 +27017,7 @@
   }
 
   // Glyph paths for the crew feature tiles below — hand-drawn stroke icons in
-  // the same style as the app's other inline SVGs (logout/QR/eye), each glyph
-  // distinct so Pins and Dream Board no longer share an emoji.
+  // the same style as the app's other inline SVGs (logout/QR/eye).
   const CREW_FEATURE_GLYPHS = {
     huddle: '<path d="M4 4h16v12H8l-4 4V4z"/>',
     pins: '<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>',
@@ -28014,8 +27990,8 @@
   // onboarding copy) — and a Locked In crew has closed its roster, so pushing
   // an invite in either state contradicts the status the leader chose. Mirrors
   // the canInvite check that already gates the crew-wide ?join= link.
-  // A raver in no crew at all keeps the old behaviour: there's no crew status
-  // to respect, and they're still a blackbook contact worth inviting.
+  // A raver in no crew at all is always invitable: there's no crew status to
+  // respect, and they're still a blackbook contact worth inviting.
   function raverInviteIsLive(raverId) {
     const inCrews = crews.filter(c => (c.squadIds || []).some(id => String(id) === String(raverId)));
     if (!inCrews.length) return true;
@@ -28593,11 +28569,9 @@
   function vibeTagHTML(vtId, isCustom, mini, removableRaverId, ownerRaverId) {
     const cls = `vibe-display-tag ${isCustom ? 'is-custom' : 'is-preset'}${mini ? ' vibe-mini' : ''}`;
     const field = isCustom ? 'customVibeTags' : 'vibeTags';
-    // For a custom tag, vtId IS the user's own text — and crewmates can tag each
-    // other — so it used to reach a crewmate's browser inside a JS string in an
-    // onclick, escaped for apostrophes only. A quote broke out of the attribute.
-    // The id travels as a data attribute now (escHtml is correct there) and a
-    // delegated handler reads it back; nothing is generated as code.
+    // For a custom tag, vtId IS user text that renders in a crewmate's browser.
+    // It travels as an escHtml'd data attribute read by a delegated handler —
+    // never interpolated into an inline onclick.
     const label = isCustom ? vtId : (getPreset(vtId)?.label || vtId);
     const dataFor = (raverId) =>
       `data-raver="${escHtml(String(raverId))}" data-field="${escHtml(field)}" ` +
@@ -31587,10 +31561,9 @@
               }
             }
             // When a raver's temp ID is replaced with a real DB UUID, patch any
-            // crew.squadIds still holding the old temp ID. Without this fix,
-            // the next renderCrews() call does squad.find(r => r.id === 'temp_*'),
-            // finds nothing, silently drops the member, and dbSaveCrewMembers also
-            // skips them (temp IDs are filtered before the DB insert).
+            // crew.squadIds still holding the old temp ID; otherwise renderCrews()
+            // silently drops the member and dbSaveCrewMembers skips them (temp IDs
+            // are filtered before the DB insert).
             let anyCrewUpdated = false;
             crews.forEach(crew => {
               const idx = crew.squadIds.findIndex(sid => String(sid) === String(oldTempId));
@@ -33956,8 +33929,8 @@
   // "Suggest a Vibe Tag" — lets a crew member add (never remove) a vibe tag
   // on a claimed crewmate's profile from view mode, immediately, without
   // needing owner-only Edit Profile access. Deliberately a separate, minimal
-  // sheet rather than reusing the edit-session-coupled tag-sheet (openTagSheet)
-  // used by Edit Profile, to avoid any regression risk to that save flow.
+  // sheet rather than reusing openTagSheet, which is coupled to the Edit
+  // Profile save session.
   let _suggestVibeRaverId = null;
 
   function openSuggestVibeSheet(raverId) {
@@ -35060,12 +35033,10 @@
   });
 
   // ── Focus containment ─────────────────────────────────────────────────────
-  // Focus used to walk straight out of an open sheet and into the page behind
-  // it, which was still fully tabbable. Every overlay is a sibling of #main-app
-  // (the shell closes before the first overlay in the markup), so marking the
-  // shell inert while one is open takes the whole page underneath out of the
-  // tab order AND the accessibility tree — one attribute, and no need to touch
-  // the ~40 functions that open overlays.
+  // Every overlay is a sibling of #main-app (the shell closes before the first
+  // overlay in the markup), so marking the shell inert while one is open takes
+  // the page underneath out of the tab order and the accessibility tree,
+  // without touching the ~40 functions that open overlays.
   const INERT_SHELL_IDS = ['main-app', 'auth-screen'];
   let _lastShellFocus = null;
 
@@ -36154,9 +36125,8 @@
 
   // ── Push notification deep links ──────────────────────────────────────────
   // Beacon and mention pushes carry crewId / roomId / messageId (see the
-  // send-beacon-push and send-mention-push functions). Tapping one used to just
-  // focus whatever was already on screen, so the notification told you where to
-  // look and then didn't take you there. Two arrival paths: a cold start reads
+  // send-beacon-push and send-mention-push functions); tapping one opens that
+  // room and message. Two arrival paths: a cold start reads
   // the ids off the URL, a running tab receives them by postMessage — focusing
   // an open window doesn't navigate it.
   let _pendingHuddleDeepLink = null;
@@ -36196,9 +36166,7 @@
   _pendingHuddleDeepLink = readHuddleDeepLinkFromUrl();
 
   // Quick-link from a drawer Huddle entry straight to that room. Every room
-  // kind — main, custom, and per-rave — now lives behind the one Huddle
-  // switcher, so this opens the chat directly on the target room rather than
-  // routing through whichever tile used to host it.
+  // kind (main, custom, per-rave) lives behind the one Huddle switcher.
   async function openHuddleFromNotif(crewId, roomId, roomKind, festivalId) {
     closeNotifDrawer();
     switchTab('crews');
@@ -36562,7 +36530,7 @@
     return `${Math.floor(h / 24)}d ago`;
   }
 
-  // Opening the drawer no longer marks anything read — a row stays new until
+  // Opening the drawer doesn't mark anything read: a row stays new until
   // it's tapped or Mark all read is used.
   function openNotifDrawer() {
     _notifTab = 'all';
