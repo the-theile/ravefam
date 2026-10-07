@@ -8137,40 +8137,8 @@
     position: relative; margin-bottom: 16px;
   }
 
-  /* ===== VIBE DNA SHARE CARD ===== */
-  /* Reuses .radar-share-header/-avatar/-eyebrow/-name/-footer (purely structural,
-     not radar-specific) and .wrapped-personality-block/.stats-pill for the body —
-     only the overlay/card shell and headline get their own rules. */
-  #vibedna-share-overlay {
-    display: none;
-    position: fixed;
-    inset: 0;
-    z-index: 600;
-    background: rgba(0,0,0,0.88);
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-    overflow-y: auto;
-  }
-  #vibedna-share-overlay.open { display: flex; }
-  #vibedna-share-card {
-    width: 100%;
-    max-width: 380px;
-    border-radius: 24px;
-    padding: 32px 26px 26px;
-    background: linear-gradient(160deg,#06000f,#12002a,#080018);
-    border: 1px solid rgba(255,45,120,0.28);
-    box-shadow: 0 0 80px rgba(255,45,120,0.18), 0 0 40px rgba(191,0,255,0.12);
-    position: relative;
-    overflow: hidden;
-    margin: auto;
-  }
-  .vibedna-share-headline {
-    font-family: 'Urbanist', sans-serif; font-weight: 900; font-size: 1.7rem; line-height: 1.05;
-    color: #fff; margin-bottom: 16px; position: relative;
-  }
-  .vibedna-share-headline span { color: var(--neon-pink); }
-  .vibedna-share-label {
+  /* Section labels (Genres / Your Vibes) on the Rave Wrapped card. */
+  .wrapped-label {
     font-size: 0.67rem; color: rgba(255,255,255,0.4); font-family: 'Outfit', sans-serif;
     font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
     margin: 12px 0 4px; position: relative;
@@ -8648,7 +8616,7 @@
   #update-banner { padding-top: calc(9px + env(safe-area-inset-top, 0px)); }
   .scanner-header { padding-top: calc(20px + env(safe-area-inset-top, 0px)); }
   .modal-overlay, .spt-modal, .photo-lightbox,
-  #wrapped-overlay, #radar-share-overlay, #vibedna-share-overlay, #crew-share-overlay, #rave-share-overlay {
+  #wrapped-overlay, #radar-share-overlay, #crew-share-overlay, #rave-share-overlay {
     padding-top: max(20px, calc(env(safe-area-inset-top, 0px) + 12px));
     padding-bottom: max(20px, calc(env(safe-area-inset-bottom, 0px) + 12px));
   }
@@ -9140,10 +9108,6 @@
 
 <div id="radar-share-overlay" onclick="if(event.target===this)closeRadarShareCard()">
   <div id="radar-share-card"><!-- rendered by JS --></div>
-</div>
-
-<div id="vibedna-share-overlay" onclick="if(event.target===this)closeVibeDnaShareCard()">
-  <div id="vibedna-share-card"><!-- rendered by JS --></div>
 </div>
 
 <!-- Modal -->
@@ -10167,7 +10131,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.11.1';
+  const APP_VERSION = '2.12.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -14088,7 +14052,7 @@
     const { data, error } = await sb.from('point_events')
       .select('*').eq('raver_id', raverId).order('created_at', { ascending: false }).limit(30);
     if (error) { console.error('point_events load error', error); list.innerHTML = `<div style="font-size:0.76rem;color:var(--muted);padding:8px 0;">Couldn't load your activity — try again.</div>`; return; }
-    if (!data || !data.length) { list.innerHTML = `<div style="font-size:0.76rem;color:var(--muted);padding:8px 0;">No points yet — go make some memories 🎪</div>`; return; }
+    if (!data || !data.length) { list.innerHTML = `<div style="font-size:0.76rem;color:var(--muted);padding:8px 0;">No points yet. Go make some memories 🎪</div>`; return; }
     const eventTypes = await loadPlurEventTypes();
     const descByType = Object.fromEntries(eventTypes.map(e => [e.event_type, e.description]));
     list.innerHTML = data.map(ev => {
@@ -14452,7 +14416,7 @@
     if (!count && !hasUpcoming && !sharedCities.length && !sharedGenres.length) {
       return `<div class="raves-together-empty">
         <div class="raves-together-empty-icon">🎪</div>
-        <div class="raves-together-empty-text">No raves together yet — find one to hit together?</div>
+        <div class="raves-together-empty-text">No raves together yet. Find one to hit as a pair.</div>
       </div>`;
     }
 
@@ -17142,7 +17106,7 @@
       // Text-only means the visual pass itself isn't part of what's being
       // shared — say so up front (not just as a last-resort message) so the
       // user knows to grab the visual separately if they want it.
-      showToast('🕺 Our AI agents are raving too hard. Screenshot instead!');
+      toastError("Couldn't build the image. Screenshot the card instead");
       shareCrewTextFallback(crew);
     }
   }
@@ -17477,7 +17441,7 @@
     if (_raveShareBlob) {
       shareRaveImageBlob(fest, _raveShareBlob);
     } else {
-      showToast('🕺 Our AI agents are raving too hard. Screenshot instead!');
+      toastError("Couldn't build the image. Screenshot the card instead");
       shareRaveTextFallback(fest);
     }
   }
@@ -17526,8 +17490,8 @@
   function sectionErrorHTML(section) {
     return `<div class="es-block" style="grid-column:1/-1;padding:40px 24px;">
       <div class="es-icon">⚠️</div>
-      <div class="es-headline">Something went wrong</div>
-      <div class="es-sub">We couldn't load this section.</div>
+      <div class="es-headline">That didn't load</div>
+      <div class="es-sub">Give it a moment and try again.</div>
       <button class="btn btn-ghost" onclick="retryRender('${escJsAttr(section)}')" style="margin-top:12px;">Try again</button>
     </div>`;
   }
@@ -17554,7 +17518,7 @@
         emptyMsg.innerHTML = `
           <div class="es-block" style="padding:40px 24px 20px">
             <div class="es-icon">👑</div>
-            <div class="es-headline">You're crewless — and that's a crime</div>
+            <div class="es-headline">Every rave needs a crew</div>
             <div class="es-sub">Build your first crew and start rounding up your ravers.</div>
           </div>
         `;
@@ -18079,7 +18043,7 @@
       modDashOpenFlags = open;
       body.innerHTML = open.length
         ? `<div class="events-list">${open.map(flagCardHTML).join('')}</div>`
-        : `<div class="es-block" style="padding:40px 24px;"><div class="es-icon">✨</div><div class="es-headline">Nothing to review</div><div class="es-sub">All clear — the fam's behaving.</div></div>`;
+        : `<div class="es-block" style="padding:40px 24px;"><div class="es-icon">✨</div><div class="es-headline">Nothing to review</div><div class="es-sub">All clear. The fam's behaving.</div></div>`;
     } else if (modDashTab === 'recent') {
       body.innerHTML = recent.length
         ? `<div class="events-list">${recent.map(recentDeleteCardHTML).join('')}</div>`
@@ -18747,7 +18711,7 @@
       <div class="es-block" style="padding:18px 10px 22px;">
         <div class="es-icon">📖</div>
         <div class="es-headline">Moderator Reference</div>
-        <div class="es-sub">How permissions actually work in the app — internal notes for mods, not shown anywhere else.</div>
+        <div class="es-sub">How permissions actually work in the app. Internal notes for mods, not shown anywhere else.</div>
       </div>
       ${MOD_GUIDE_SECTIONS.map(modGuideSectionHTML).join('')}
     `;
@@ -20914,7 +20878,7 @@
         <div class="es-block">
           <div class="es-icon">🔍</div>
           <div class="es-headline">Find it again</div>
-          <div class="es-sub">Search what your crew said — across every Huddle room — and jump straight to it.</div>
+          <div class="es-sub">Search what your crew said across every Huddle room and jump straight to it.</div>
         </div>`;
       return;
     }
@@ -22398,7 +22362,7 @@
     }).join('');
 
     const emptyState = tasks.length === 0
-      ? (uid ? gamePlanTemplatePickerHTML(crewId) : `<div class="archive-empty es-block"><div class="es-icon">✅</div><div class="es-headline">No tasks yet</div><div class="es-sub">Add what needs to get done before this rave — tickets, packing, ride share, whatever.</div></div>`)
+      ? (uid ? gamePlanTemplatePickerHTML(crewId) : `<div class="archive-empty es-block"><div class="es-icon">✅</div><div class="es-headline">Nothing on the list yet</div><div class="es-sub">Add what needs doing before this rave: tickets, packing, ride share, whatever.</div></div>`)
       : '';
     const isLead = !!crew?.isLead;
     const tipHTML = tasks.length ? fadingTipHTML(isLead ? 'raveplan_tasks_lead' : 'raveplan_tasks', isLead
@@ -22573,7 +22537,7 @@
     }).join('');
 
     const emptyState = roles.length === 0
-      ? `<div class="archive-empty es-block"><div class="es-icon">🎭</div><div class="es-headline">No roles assigned yet</div><div class="es-sub">Give people a job for this rave — driver, navigator, vibe curator, whatever your crew needs.</div></div>`
+      ? `<div class="archive-empty es-block"><div class="es-icon">🎭</div><div class="es-headline">Nobody's on duty yet</div><div class="es-sub">Give people a job for this rave: driver, navigator, vibe curator, whatever your crew needs.</div></div>`
       : '';
 
     return `
@@ -22964,7 +22928,7 @@
     }).join('');
 
     const emptyState = ideas.length === 0
-      ? `<div class="archive-empty es-block"><div class="es-icon">✨</div><div class="es-headline">No outfit ideas yet</div><div class="es-sub">Set a theme and drop inspo links so the crew can coordinate looks.</div></div>`
+      ? `<div class="archive-empty es-block"><div class="es-icon">✨</div><div class="es-headline">No fits planned yet</div><div class="es-sub">Set a theme and drop inspo links so the crew can coordinate looks.</div></div>`
       : '';
 
     return `
@@ -24444,7 +24408,7 @@
 
     const cards = visible.map(jam => renderJamCard(jam, uid, canManage, crewId)).join('');
     const emptyMsg = crewJams.length === 0
-      ? `<div class="jam-empty es-block"><div class="es-icon">🎧</div><div class="es-headline">Dead air detected</div><div class="es-sub">Someone drop the first playlist — for the love of the music gods.</div></div>`
+      ? `<div class="jam-empty es-block"><div class="es-icon">🎧</div><div class="es-headline">Dead air detected</div><div class="es-sub">Drop the first playlist and set the crew's sound.</div></div>`
       : visible.length === 0
       ? `<div class="jam-empty" style="text-align:center;padding:20px 0;color:var(--muted);font-size:0.82rem;">No playlists match these filters</div>`
       : '';
@@ -25382,7 +25346,7 @@
       .filter(v => vendorMatchesSearch(v, query));
     const cards = visible.map(v => vendorCardHTML(v)).join('');
     const emptyMsg = vendors.length === 0
-      ? `<div class="jam-empty es-block"><div class="es-icon">🏪</div><div class="es-headline">No vendors yet</div><div class="es-sub">Be the first to post a vendor you love — merch, kandi, glass, gear, whatever keeps the fam supplied.</div></div>`
+      ? `<div class="jam-empty es-block"><div class="es-icon">🏪</div><div class="es-headline">The village is empty</div><div class="es-sub">Post a vendor you love: merch, kandi, glass, gear, whatever keeps the fam supplied.</div></div>`
       : visible.length === 0
       ? `<div class="jam-empty" style="text-align:center;padding:20px 0;color:var(--muted);font-size:0.82rem;">${query ? `No vendors match “${escHtml(_vendorSearchQuery.trim())}”` : 'No vendors in this category yet'}</div>`
       : '';
@@ -25848,7 +25812,7 @@
       ${currentUser ? vendorReviewComposerHTML(vendor.id, myReview) : ''}
       <div class="jam-cards-list" style="margin-top:12px;">
         ${myReview ? vendorReviewRowHTML(myReview, vendor.id) : ''}
-        ${allReviews.length === 0 ? `<div class="fest-empty" style="text-align:center;padding:14px 0;">No reviews yet — be the first.</div>` : ''}
+        ${allReviews.length === 0 ? `<div class="fest-empty" style="text-align:center;padding:14px 0;">No reviews yet. Be the first.</div>` : ''}
         ${otherReviews.map(r => vendorReviewRowHTML(r, vendor.id)).join('')}
       </div>
 
@@ -26035,7 +25999,7 @@
       <div class="section-banner"><span class="banner-inner">📍 Recently Spotted</span></div>
       ${currentUser ? vendorSpotComposerHTML(vendorId) : ''}
       <div class="jam-cards-list" style="margin-top:12px;">
-        ${live.length === 0 ? `<div class="fest-empty" style="text-align:center;padding:14px 0;">No one's spotted them recently — be the first to call it out.</div>` : ''}
+        ${live.length === 0 ? `<div class="fest-empty" style="text-align:center;padding:14px 0;">No one's spotted them lately. Seen them? Call it out.</div>` : ''}
         ${live.map(vendorSpotRowHTML).join('')}
       </div>
     `;
@@ -26382,7 +26346,7 @@
     const visible = venues.filter(v => venueMatchesSearch(v, query));
     const cards = visible.map(v => venueCardHTML(v)).join('');
     const emptyMsg = venues.length === 0
-      ? `<div class="jam-empty es-block"><div class="es-icon">🏛️</div><div class="es-headline">No venues yet</div><div class="es-sub">Be the first to post a venue — a club, warehouse, or festival grounds the fam should know about.</div></div>`
+      ? `<div class="jam-empty es-block"><div class="es-icon">🏛️</div><div class="es-headline">No venues on the map yet</div><div class="es-sub">Post a club, warehouse, or festival grounds the fam should know about.</div></div>`
       : visible.length === 0
       ? `<div class="jam-empty" style="text-align:center;padding:20px 0;color:var(--muted);font-size:0.82rem;">${query ? `No venues match “${escHtml(_venueSearchQuery.trim())}”` : 'No venues yet'}</div>`
       : '';
@@ -26669,7 +26633,7 @@
       ? `<div class="jam-cards-list" style="margin-top:8px;">
           ${raves.map(f => `<div class="jam-card" style="cursor:pointer;" role="button" tabindex="0" aria-label="Open ${escHtml(f.name)}" onclick="closeVenueDetail(); openRaveFocus('${escJsAttr(String(f.id))}')"><div class="jam-card-toprow"><span class="jam-title">${escHtml(f.name)}</span></div><div class="jam-meta">${escHtml(f.date || '')}</div></div>`).join('')}
         </div>`
-      : `<div class="fest-empty" style="margin-top:4px;">No raves linked here yet — the first one added here shows up automatically.</div>`;
+      : `<div class="fest-empty" style="margin-top:4px;">No raves linked here yet. New raves at this venue show up automatically.</div>`;
 
     return `
       <div class="modal-title">${escHtml(venue.name)}</div>
@@ -26694,7 +26658,7 @@
       ${currentUser ? venueReviewComposerHTML(venue.id, myReview) : ''}
       <div class="jam-cards-list" style="margin-top:12px;">
         ${myReview ? venueReviewRowHTML(myReview, venue.id) : ''}
-        ${allReviews.length === 0 ? `<div class="fest-empty" style="text-align:center;padding:14px 0;">No reviews yet — be the first.</div>` : ''}
+        ${allReviews.length === 0 ? `<div class="fest-empty" style="text-align:center;padding:14px 0;">No reviews yet. Be the first.</div>` : ''}
         ${otherReviews.map(r => venueReviewRowHTML(r, venue.id)).join('')}
       </div>
     `;
@@ -28858,7 +28822,7 @@
         ? `<div id="inline-fp-${escHtml(r.id)}"></div>`
         : tab === 'been'
           ? (past.length ? past.map(f => festRow(f, `<span class="fest-when">${f._d.getFullYear()}</span>`)).join('') : '<div class="fest-empty">No raves in their history yet</div>')
-          : (up.length ? up.map(f => festRow(f, `<span class="fest-when" style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;"><span>${festWhenLabel(f)}</span><span class="fest-cd">⏳ ${countdownLabel(f._d)}</span></span>`)).join('') : '<div class="fest-empty">No raves lined up yet — check Suggested</div>');
+          : (up.length ? up.map(f => festRow(f, `<span class="fest-when" style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;"><span>${festWhenLabel(f)}</span><span class="fest-cd">⏳ ${countdownLabel(f._d)}</span></span>`)).join('') : '<div class="fest-empty">No raves lined up yet. Check Suggested for ideas</div>');
       return { title: `🎟️ Manage raves${r.isYou ? '' : ' · ' + escHtml(displayName(r).split(' ')[0])}`, n: '', body: seg + body };
     }
     if (kind === 'been') {
@@ -28888,7 +28852,7 @@
               <div class="profile-crew-arrow">›</div>
             </div>`;
         }).join('')
-      : '<div class="fest-empty">Still flying solo — no crews yet</div>' };
+      : '<div class="fest-empty">Flying solo for now. No crews yet</div>' };
   }
 
   function renderProfileListSheet() {
@@ -29145,10 +29109,10 @@
         onkeydown="if(event.key==='Enter'&&this.value.trim()){addTag('${escJsAttr(r.id)}','${escJsAttr(field)}',this.value);this.value='';}" style="margin-top:4px;">`;
     const genreChips = r.genres.length
       ? r.genres.map(g => tagChip(g, 'genres')).join('')
-      : '<span class="fest-empty" style="font-size:0.8rem;">No genres tracked yet — what moves you?</span>';
+      : '<span class="fest-empty" style="font-size:0.8rem;">No genres yet. What moves you?</span>';
     const favChips = r.favArtistIds.length
       ? r.favArtistIds.map(id => tagChip(id, 'favArtists')).join('')
-      : '<span class="fest-empty" style="font-size:0.8rem;">No artists pinned yet — who are you dying to see?</span>';
+      : '<span class="fest-empty" style="font-size:0.8rem;">No artists pinned yet. Who are you dying to see?</span>';
 
     // Connect buttons — show instagram if public; show phone if owned or phone_visible
     const connectBtns = [];
@@ -29364,7 +29328,7 @@
                 <span class="shelf-crew-role">${isLead ? '👑 Lead' : '🎧 Member'}</span>
               </button>`;
           }).join('')}</div>`
-        : '<div class="fest-empty">Still flying solo — no crews yet</div>';
+        : '<div class="fest-empty">Flying solo for now. No crews yet</div>';
       // Sound = genres + favourite artists in one block, clamped to ~2 rows when long
       const soundCount = r.genres.length + r.favArtistIds.length;
       const soundClamped = soundCount > 8;
@@ -29373,7 +29337,7 @@
              <div class="tag-edit-wrap">${r.genres.length ? genreChips : ''}${r.favArtistIds.length ? favChips : ''}</div>
            </div>
            ${soundClamped ? `<button type="button" class="shelf-expand" aria-expanded="false" aria-controls="shelf-sound-${escHtml(r.id)}" onclick="toggleShelfSound(this, ${soundCount})">Show all ${soundCount} ▾</button>` : ''}`
-        : `<span class="fest-empty" style="font-size:0.8rem;">No genres or artists yet — what moves ${r.isYou ? 'you' : 'them'}?</span>`;
+        : `<span class="fest-empty" style="font-size:0.8rem;">No genres or artists yet. What moves ${r.isYou ? 'you' : 'them'}?</span>`;
 
       // ===== Profile tabs — Raves · Vibe · Crews · Us/Notes =====
       const firstName = escHtml(displayName(r).split(' ')[0]);
@@ -29526,7 +29490,7 @@
             const customVibes = (r.customVibeTags||[]).map(v => vibeTagHTML(v, true, false, null, canReportTags ? r.id : null)).join('');
             return (presetVibes || customVibes)
               ? `<div class="profile-vibes">${presetVibes}${customVibes}</div>`
-              : `<div class="fest-empty">No vibes tagged yet${r.isYou || perms.isLeaderOfRaver ? ' — what\'s your flavor? Edit profile to add some' : ' — what\'s their flavor?'}</div>`;
+              : `<div class="fest-empty">No vibes tagged yet${r.isYou || perms.isLeaderOfRaver ? '. What\'s your flavor? Edit profile to add some' : '. What\'s their flavor?'}</div>`;
           })()}
           ${(!r.isYou && currentUser) ? `<button class="tag-edit-btn" style="margin-top:8px;" onclick="openSuggestVibeSheet('${escJsAttr(r.id)}')">🏷️ Suggest a vibe tag</button>` : ''}
         </div>
@@ -29628,7 +29592,7 @@
 
         <div class="profile-section" style="${sg(1)}">
           <h3>📝 Notes</h3>
-          ${r.isYou ? `<div class="profile-note">${r.notes ? escHtml(r.notes) : '<span class="fest-empty">No notes yet — a secret only you can read</span>'}</div>` : (() => {
+          ${r.isYou ? `<div class="profile-note">${r.notes ? escHtml(r.notes) : '<span class="fest-empty">No notes yet. Only you can read these</span>'}</div>` : (() => {
             const savedNotes = escHtml(viewerNotesCache[String(r.id)] || '');
             return `<p style="font-size:0.72rem;color:var(--muted);margin-bottom:8px;line-height:1.4;">Private — only you can see this.</p>
               <textarea id="viewer-notes-${r.id}" aria-label="Your private notes about this raver" class="inline-notes-area"
@@ -29971,7 +29935,7 @@
       const hl = a.is_headliner ? ' 🌟' : '';
       return `<span class="fav-chip" style="--chip-col:${artistColor(artist.name)};">${escHtml(artist.name)}${hl}${seenBtn}${planBtn}${removeBtn}</span>`;
     }).join('');
-    const chipsOrEmpty = chipHtml || `<span class="fest-empty" style="font-size:0.78rem;">No lineup tagged yet${canEdit ? ' — who played?' : ''}</span>`;
+    const chipsOrEmpty = chipHtml || `<span class="fest-empty" style="font-size:0.78rem;">No lineup tagged yet${canEdit ? '. Who played?' : ''}</span>`;
 
     const addHtml = canEdit ? `
       <div class="fest-search-wrap" style="margin-top:8px;">
@@ -30456,7 +30420,7 @@
           const col = (d && d >= TODAY) ? '#39FF14' : '#00F5FF';
           return `<span class="fest-sel-chip" style="--chip-col:${col};">${escHtml(f.name)}<button class="tag-remove-btn" onclick="festRemoveSel('${escJsAttr(f.id)}')">✕</button></span>`;
         }).join('')
-      : `<span class="fest-empty" style="font-size:0.78rem;">No raves in your history yet — let's fix that</span>`;
+      : `<span class="fest-empty" style="font-size:0.78rem;">No raves in your history yet. Let's fix that</span>`;
 
     // Upcoming quick-tap chips (next 10)
     const upcoming = festivals
@@ -30507,7 +30471,7 @@
     const selArtists = [...editingFavArtistIds].map(id => findArtistById(id)).filter(Boolean);
     wrap.innerHTML = selArtists.length
       ? selArtists.map(a => favArtistChipHTML(a, { onRemove: `artistRemoveSel('${a.id}')` })).join('')
-      : `<span class="fest-empty" style="font-size:0.78rem;">No artists pinned yet — who are you dying to see?</span>`;
+      : `<span class="fest-empty" style="font-size:0.78rem;">No artists pinned yet. Who are you dying to see?</span>`;
   }
 
   function artistRemoveSel(id) {
@@ -30570,7 +30534,7 @@
           const col = (d && d >= TODAY) ? '#39FF14' : '#00F5FF';
           return `<span class="fest-sel-chip" style="--chip-col:${col};">${escHtml(f.name)}<button class="tag-remove-btn" onclick="festRemoveSel('${escJsAttr(f.id)}')">✕</button></span>`;
         }).join('')
-      : `<span class="fest-empty" style="font-size:0.78rem;">No raves in your history yet — let's fix that</span>`;
+      : `<span class="fest-empty" style="font-size:0.78rem;">No raves in your history yet. Let's fix that</span>`;
   }
 
   function festToggleQuick(id, el) {
@@ -36515,7 +36479,7 @@
       </div>`;
     }).join('');
     const logRows = log.length ? log.map(e => `<div class="plur-ledger-row"><div class="plur-ledger-row-text"><strong style="color:var(--neon-yellow);">+${e.amount} ${GK_TRACKS[e.track] || ''}</strong> · ${escHtml(descByType[e.event_type] || e.event_type)}<div class="plur-ledger-row-ts">${relativeTime(new Date(e.created_at).getTime())}</div></div></div>`).join('')
-      : '<div class="fest-empty">No points yet — go make some memories 🎪</div>';
+      : '<div class="fest-empty">No points yet. Go make some memories 🎪</div>';
     // Ways to earn next: event types you haven't earned recently, emptiest tracks first.
     const earned = new Set(log.map(e => e.event_type));
     const byTotal = t => totals?.[`${t}_points`] || 0;
@@ -36861,7 +36825,7 @@
       html += `<div class="stats-locked stats-locked-wrapped">
         <div class="stats-locked-icon" onclick="wrappedStarTap()" style="cursor:pointer;" title="✨" role="button" tabindex="0" aria-label="Unlock Rave Wrapped">✨</div>
         <div class="stats-locked-title">Rave Wrapped ${thisYear}</div>
-        <div class="stats-locked-sub">🔒 Available in December — your year-in-review card is ready and waiting</div>
+        <div class="stats-locked-sub">🔒 Opens in December. Your year-in-review card is ready and waiting</div>
       </div>`;
     } else {
       const needed = 5 - totalRaves;
@@ -36879,7 +36843,7 @@
       const genres = you.genres || [];
       const topTags = allTags.slice(0, 6);
       html += `<div class="stats-section-card">
-        <div class="stats-section-title">🧬 Vibe DNA<button class="radarmap-replay-btn" style="margin-left:auto;" onclick="openVibeDnaShareCard()" title="Share your Vibe DNA" aria-label="Share your Vibe DNA">📲 Share</button></div>
+        <div class="stats-section-title">🧬 Vibe DNA</div>
         <div class="stats-personality">
           <div class="stats-personality-emoji">${personality.emoji}</div>
           <div>
@@ -36897,7 +36861,7 @@
       html += `<div class="stats-locked">
         <div class="stats-locked-icon">🧬</div>
         <div class="stats-locked-title">Vibe DNA</div>
-        <div class="stats-locked-sub">Log ${needed} more rave${needed !== 1 ? 's' : ''} to unlock your Vibe DNA — genres, tags & personality type</div>
+        <div class="stats-locked-sub">Log ${needed} more rave${needed !== 1 ? 's' : ''} to unlock your Vibe DNA: genres, tags & personality type</div>
         <div class="stats-progress-bar"><div class="stats-progress-fill" style="width:${pct}%"></div></div>
       </div>`;
     }
@@ -37137,7 +37101,7 @@
             <div class="stats-lb-name${isYou ? ' you' : ''}">${escHtml(m.name)}${isOG ? `<span class="stats-lb-og">OG</span>` : ''}</div>
             <div class="stats-lb-val">${m.raveCount} rave${m.raveCount!==1?'s':''}</div>
           </div>`;
-        }).join('') : '<div class="archive-empty" style="padding:16px 0;">No raves logged yet — start adding raves to see who leads the pack 🏆</div>'}
+        }).join('') : '<div class="archive-empty" style="padding:16px 0;">No raves logged yet. Add some to see who leads the pack 🏆</div>'}
       </div>
       ${vibeAwardHtml}
       ${crewYoyRows.length ? `
@@ -37184,7 +37148,7 @@
     if (loading) {
       body = '<div class="archive-empty" style="padding:16px 0;">Loading…</div>';
     } else if (!rows.length) {
-      body = '<div class="archive-empty" style="padding:16px 0;">No PLUR points yet — start earning to see who leads the pack ✨</div>';
+      body = '<div class="archive-empty" style="padding:16px 0;">No PLUR points yet. Earn some to see who leads the pack ✨</div>';
     } else {
       const amInList = rows.some(r => you && String(r.raver_id) === String(you.id));
       const rowsHtml = rows.map(r => {
@@ -37237,6 +37201,8 @@
 
     const allTags = [...(you.vibeTags || []), ...(you.customVibeTags || [])];
     const personality = getPersonalityLabel(you.genres || [], allTags);
+    const genres = (you.genres || []).slice(0, 6);
+    const topTags = allTags.slice(0, 6);
     const myCrew = crews.find(c => (c.squadIds || []).some(id => String(id) === String(you.id)));
 
     document.getElementById('wrapped-card').innerHTML = `
@@ -37267,6 +37233,8 @@
           <div class="wrapped-personality-sub">${escHtml(personality.sub || '')}</div>
         </div>
       </div>
+      ${genres.length ? `<div class="wrapped-label">Genres</div><div style="margin-bottom:6px;position:relative;">${genres.map(g => `<span class="stats-pill">${escHtml(g)}</span>`).join('')}</div>` : ''}
+      ${topTags.length ? `<div class="wrapped-label">Your Vibes</div><div style="margin-bottom:14px;position:relative;">${topTags.map(t => { const p = getPreset(t); return `<span class="stats-pill cyan">${escHtml(p ? `${p.icon} ${p.label}` : t)}</span>`; }).join('')}</div>` : ''}
       ${myCrew ? `<div style="font-size:0.68rem;color:rgba(255,255,255,0.3);font-family:'Outfit',sans-serif;margin-bottom:14px;position:relative;">🫂 ${escHtml(myCrew.name)}</div>` : ''}
       <div class="wrapped-footer">myravefam.com · Track your rave life</div>
       <div class="wrapped-actions">
@@ -37469,102 +37437,6 @@
       }
     } catch {
       showChrome();
-      showToast('📋 Screenshot this card to share!');
-    }
-  }
-
-  // ===== Vibe DNA Share Card — same lightweight synchronous html2canvas
-  // approach as the Radar card (no remote photos to fetch, just text/pills). =====
-  function openVibeDnaShareCard() {
-    const you = squad.find(r => r.isYou);
-    if (!you) return;
-    const allTags = [...(you.vibeTags || []), ...(you.customVibeTags || [])];
-    const personality = getPersonalityLabel(you.genres || [], allTags);
-    const emojiCounts = {};
-    Object.keys(festVibesCache).forEach(fid => {
-      const mine = (festVibesCache[fid] || []).find(v => String(v.raverId) === String(you.id));
-      if (mine?.emoji) emojiCounts[mine.emoji] = (emojiCounts[mine.emoji] || 0) + 1;
-    });
-    const topEmoji = Object.entries(emojiCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
-    renderVibeDnaShareCard(you, personality, you.genres || [], allTags.slice(0, 6), topEmoji);
-    document.getElementById('vibedna-share-overlay').classList.add('open');
-  }
-
-  function closeVibeDnaShareCard() {
-    document.getElementById('vibedna-share-overlay').classList.remove('open');
-  }
-
-  function renderVibeDnaShareCard(you, personality, genres, topTags, topEmoji) {
-    const genresHtml = genres.length
-      ? `<div class="vibedna-share-label">Genres</div><div>${genres.map(g => `<span class="stats-pill">${escHtml(g)}</span>`).join('')}</div>`
-      : '';
-    const tagsHtml = topTags.length
-      ? `<div class="vibedna-share-label">Your Vibes</div><div>${topTags.map(t => { const p = getPreset(t); return `<span class="stats-pill cyan">${escHtml(p ? `${p.icon} ${p.label}` : t)}</span>`; }).join('')}</div>`
-      : '';
-    const emojiHtml = topEmoji
-      ? `<div class="vibedna-share-label">Signature Emoji</div><div style="font-size:1.9rem;">${topEmoji}</div>`
-      : '';
-
-    document.getElementById('vibedna-share-card').innerHTML = `
-      <div class="radar-share-header">
-        <div class="radar-share-avatar" style="background:${you.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)'}">${initials(you.name).toUpperCase()}</div>
-        <div>
-          <div class="radar-share-eyebrow">myravefam.com</div>
-          <div class="radar-share-name">${escHtml(you.name)}</div>
-        </div>
-      </div>
-      <div class="vibedna-share-headline">Vibe <span>DNA</span> 🧬</div>
-      <div class="wrapped-personality-block">
-        <div class="wrapped-personality-emoji">${personality.emoji}</div>
-        <div>
-          <div class="wrapped-personality-label">${escHtml(personality.label)}</div>
-          <div class="wrapped-personality-sub">${escHtml(personality.sub || '')}</div>
-        </div>
-      </div>
-      ${genresHtml}
-      ${tagsHtml}
-      ${emojiHtml}
-      <div class="radar-share-footer" style="margin-top:16px;">myravefam.com · Track your rave life</div>
-      <div class="wrapped-actions">
-        <button class="wrapped-share-btn" onclick="shareVibeDnaCard()">📲 Share Card</button>
-        <button class="wrapped-close-btn" onclick="closeVibeDnaShareCard()">Close</button>
-      </div>
-    `;
-  }
-
-  async function shareVibeDnaCard() {
-    const card = document.getElementById('vibedna-share-card');
-    const actions = card.querySelector('.wrapped-actions');
-    if (actions) actions.style.display = 'none';
-    try {
-      if (typeof html2canvas !== 'undefined') {
-        const canvas = await html2canvas(card, { backgroundColor: '#06000f', scale: 2, useCORS: true, logging: false, ignoreElements: (el) => {
-          if (document.head.contains(el) || el === document.head) return false;
-          return el.tagName === 'VIDEO' || (el !== card && !card.contains(el) && !el.contains(card));
-        } });
-        if (actions) actions.style.display = '';
-        canvas.toBlob(async (blob) => {
-          if (!blob) { toastError('Could not generate image'); return; }
-          const file = new File([blob], 'my-vibe-dna.png', { type: 'image/png' });
-          if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            try { await navigator.share({ files: [file], title: 'My Vibe DNA — RaveFAM' }); } catch {}
-          } else {
-            const url = URL.createObjectURL(blob);
-            try {
-              const a = document.createElement('a');
-              a.href = url; a.download = 'my-vibe-dna.png'; a.click();
-              showToast('📥 Vibe DNA card downloaded!');
-            } finally {
-              setTimeout(() => URL.revokeObjectURL(url), 1000);
-            }
-          }
-        }, 'image/png');
-      } else {
-        if (actions) actions.style.display = '';
-        showToast('📋 Screenshot this card to share!');
-      }
-    } catch {
-      if (actions) actions.style.display = '';
       showToast('📋 Screenshot this card to share!');
     }
   }
@@ -37823,7 +37695,7 @@
   function renderRadarMapEmptyState(mapEl) {
     mapEl.innerHTML = '';
     if (typeof L === 'undefined') {
-      mapEl.innerHTML = `<div class="citymap-loading">No raves on the radar yet… time to find the next one 👀</div>`;
+      mapEl.innerHTML = `<div class="citymap-loading">No raves on the radar yet. Time to find the next one 👀</div>`;
       return;
     }
     // Florida Gulf Coast / Tampa Bay — a friendly default center while nothing's on the radar.
@@ -37836,7 +37708,7 @@
     overlay.className = 'radarmap-empty';
     overlay.innerHTML = `
       ${raverAvatarHTML(me?.avatarUrl, me?.gradient || 'linear-gradient(135deg,#FF2D78,#00F5FF)', me?.name || '?', 'radar-empty-avatar', '')}
-      <div class="radarmap-empty-msg">No raves on the radar yet… time to find the next one 👀</div>
+      <div class="radarmap-empty-msg">No raves on the radar yet. Time to find the next one 👀</div>
     `;
     mapEl.appendChild(overlay);
   }
@@ -38135,7 +38007,7 @@
         <div class="stats-empty-state">
           <div class="stats-empty-icon">🎤</div>
           <div class="stats-empty-title">No lineup data yet</div>
-          <div class="stats-empty-sub">Tag artists to your past raves and check off who you personally caught — they'll show up here.</div>
+          <div class="stats-empty-sub">Tag artists on your past raves and check off who you caught. They'll show up here.</div>
         </div>`;
       return;
     }
