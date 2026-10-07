@@ -10192,7 +10192,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.10.0';
+  const APP_VERSION = '2.10.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -14674,29 +14674,6 @@
     }
   }
 
-  async function dbSaveRaverFestivalInterest(raverId, interestedFestIds) {
-    const newIdStrs = interestedFestIds.map(String);
-    if (newIdStrs.length > 0) {
-      const rows = interestedFestIds.map(fid => ({ raver_id: raverId, festival_id: fid }));
-      const { error } = await sb.from('raver_festival_interest')
-        .upsert(rows, { onConflict: 'raver_id,festival_id', ignoreDuplicates: true });
-      if (error) {
-        console.error('raver_festival_interest upsert error', error);
-        showToast('⚠️ Could not save interest');
-        return;
-      }
-      const { data: existing } = await sb.from('raver_festival_interest').select('festival_id').eq('raver_id', raverId);
-      if (existing) {
-        const toDelete = existing.map(r => r.festival_id).filter(id => !newIdStrs.includes(String(id)));
-        if (toDelete.length) {
-          await sb.from('raver_festival_interest').delete().eq('raver_id', raverId).in('festival_id', toDelete);
-        }
-      }
-    } else {
-      await sb.from('raver_festival_interest').delete().eq('raver_id', raverId);
-    }
-  }
-
   // Targeted single-row RSVP writes. Unlike the full-list save helpers above,
   // these only touch the one festival the user acted on, so a stale client list
   // can never prune rows added out-of-band (e.g. RSVPs migrated by a profile merge).
@@ -15162,29 +15139,6 @@
           canvas.width = w; canvas.height = h;
           canvas.getContext('2d').drawImage(img, 0, 0, w, h);
           canvas.toBlob(b => b ? resolve(b) : reject(new Error('Canvas export failed')), 'image/jpeg', quality);
-        };
-        img.src = e.target.result;
-      };
-      reader.readAsDataURL(file);
-    });
-  }
-
-  // Compress an image File to a base64 data URL (for localStorage)
-  function compressImageToDataUrl(file, maxDim) {
-    return new Promise(resolve => {
-      const reader = new FileReader();
-      reader.onload = e => {
-        const img = new Image();
-        img.onload = () => {
-          let w = img.width, h = img.height;
-          if (w > maxDim || h > maxDim) {
-            if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
-            else { w = Math.round(w * maxDim / h); h = maxDim; }
-          }
-          const canvas = document.createElement('canvas');
-          canvas.width = w; canvas.height = h;
-          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-          resolve(canvas.toDataURL('image/jpeg', 0.8));
         };
         img.src = e.target.result;
       };
@@ -16412,23 +16366,6 @@
     );
   }
 
-  const RAVE_PLACEHOLDERS = [
-    // 1 — Crowd + lasers
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80"><rect width="120" height="80" fill="#0a0a14"/><rect x="0" y="52" width="120" height="28" fill="#0d0d1a"/><ellipse cx="60" cy="52" rx="80" ry="12" fill="#111126" opacity="0.8"/><line x1="60" y1="8" x2="10" y2="52" stroke="#ff2d78" stroke-width="1" opacity="0.7"/><line x1="60" y1="8" x2="30" y2="52" stroke="#39ff14" stroke-width="1" opacity="0.7"/><line x1="60" y1="8" x2="90" y2="52" stroke="#00cfff" stroke-width="1" opacity="0.7"/><line x1="60" y1="8" x2="110" y2="52" stroke="#ff2d78" stroke-width="1" opacity="0.7"/><circle cx="60" cy="8" r="3" fill="#fff" opacity="0.9"/><g fill="#1a1a2e"><rect x="5" y="46" width="6" height="14" rx="1"/><rect x="14" y="42" width="6" height="18" rx="1"/><rect x="23" y="44" width="6" height="16" rx="1"/><rect x="32" y="40" width="6" height="20" rx="1"/><rect x="41" y="43" width="6" height="17" rx="1"/><rect x="50" y="41" width="6" height="19" rx="1"/><rect x="59" y="44" width="6" height="16" rx="1"/><rect x="68" y="42" width="6" height="18" rx="1"/><rect x="77" y="45" width="6" height="15" rx="1"/><rect x="86" y="40" width="6" height="20" rx="1"/><rect x="95" y="43" width="6" height="17" rx="1"/><rect x="104" y="46" width="6" height="14" rx="1"/></g><circle cx="18" cy="58" r="3" fill="#ff2d78" opacity="0.5"/><circle cx="34" cy="55" r="2" fill="#39ff14" opacity="0.5"/><circle cx="52" cy="60" r="3" fill="#00cfff" opacity="0.4"/><circle cx="70" cy="56" r="2" fill="#ff2d78" opacity="0.5"/><circle cx="88" cy="59" r="3" fill="#39ff14" opacity="0.4"/><circle cx="104" cy="57" r="2" fill="#fff" opacity="0.3"/><text x="60" y="76" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="5" font-family="sans-serif">tap to upload</text></svg>`,
-    // 2 — DJ booth
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80"><rect width="120" height="80" fill="#080810"/><rect x="0" y="55" width="120" height="25" fill="#0c0c18"/><rect x="25" y="35" width="70" height="22" rx="4" fill="#151528" stroke="rgba(57,255,20,0.3)" stroke-width="1"/><circle cx="40" cy="46" r="7" fill="#1a1a30" stroke="rgba(57,255,20,0.5)" stroke-width="1"/><circle cx="80" cy="46" r="7" fill="#1a1a30" stroke="rgba(57,255,20,0.5)" stroke-width="1"/><circle cx="40" cy="46" r="3" fill="rgba(57,255,20,0.3)"/><circle cx="80" cy="46" r="3" fill="rgba(57,255,20,0.3)"/><rect x="52" y="39" width="16" height="3" rx="1.5" fill="#39ff14" opacity="0.6"/><rect x="52" y="44" width="16" height="3" rx="1.5" fill="#ff2d78" opacity="0.6"/><rect x="52" y="49" width="16" height="3" rx="1.5" fill="#00cfff" opacity="0.6"/><line x1="30" y1="14" x2="50" y2="35" stroke="#ff2d78" stroke-width="1.5" opacity="0.6"/><line x1="60" y1="10" x2="60" y2="35" stroke="#39ff14" stroke-width="1.5" opacity="0.6"/><line x1="90" y1="14" x2="70" y2="35" stroke="#00cfff" stroke-width="1.5" opacity="0.6"/><circle cx="30" cy="14" r="2" fill="#ff2d78"/><circle cx="60" cy="10" r="2" fill="#39ff14"/><circle cx="90" cy="14" r="2" fill="#00cfff"/><rect x="0" y="55" width="120" height="2" fill="rgba(255,45,120,0.15)"/><text x="60" y="76" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="5" font-family="sans-serif">tap to upload</text></svg>`,
-    // 3 — Festival stage
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80"><rect width="120" height="80" fill="#050510"/><rect x="10" y="30" width="100" height="35" rx="3" fill="#0e0e20"/><rect x="10" y="30" width="100" height="5" fill="#1a1a35"/><rect x="15" y="38" width="90" height="22" rx="2" fill="#0a0a1a"/><line x1="60" y1="5" x2="20" y2="38" stroke="#ff2d78" stroke-width="1.5" opacity="0.8"/><line x1="60" y1="5" x2="60" y2="38" stroke="#fff" stroke-width="1" opacity="0.5"/><line x1="60" y1="5" x2="100" y2="38" stroke="#39ff14" stroke-width="1.5" opacity="0.8"/><circle cx="60" cy="5" r="3" fill="#fff" opacity="0.9"/><rect x="45" y="48" width="30" height="12" rx="2" fill="#151530"/><rect x="52" y="51" width="16" height="6" rx="1" fill="#39ff14" opacity="0.3"/><rect x="10" y="30" width="3" height="35" fill="#1e1e38"/><rect x="107" y="30" width="3" height="35" fill="#1e1e38"/><rect x="0" y="65" width="120" height="15" fill="#0a0a14"/><g fill="rgba(255,255,255,0.15)"><ellipse cx="20" cy="68" rx="5" ry="3"/><ellipse cx="40" cy="70" rx="4" ry="2"/><ellipse cx="60" cy="67" rx="6" ry="3"/><ellipse cx="80" cy="69" rx="5" ry="2"/><ellipse cx="100" cy="68" rx="4" ry="3"/></g><text x="60" y="78" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="5" font-family="sans-serif">tap to upload</text></svg>`,
-    // 4 — Neon disco ball
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80"><rect width="120" height="80" fill="#07070f"/><line x1="60" y1="0" x2="60" y2="18" stroke="rgba(255,255,255,0.3)" stroke-width="1"/><circle cx="60" cy="32" r="14" fill="#111122" stroke="rgba(255,255,255,0.15)" stroke-width="1"/><line x1="46" y1="26" x2="74" y2="26" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/><line x1="46" y1="32" x2="74" y2="32" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/><line x1="46" y1="38" x2="74" y2="38" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/><line x1="51" y1="18" x2="51" y2="46" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/><line x1="57" y1="18" x2="57" y2="46" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/><line x1="63" y1="18" x2="63" y2="46" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/><line x1="69" y1="18" x2="69" y2="46" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/><rect x="54" y="29" width="6" height="6" rx="1" fill="rgba(255,255,255,0.6)" transform="rotate(15,57,32)"/><line x1="30" y1="10" x2="45" y2="28" stroke="#ff2d78" stroke-width="1" opacity="0.7"/><line x1="90" y1="10" x2="75" y2="28" stroke="#39ff14" stroke-width="1" opacity="0.7"/><line x1="15" y1="32" x2="46" y2="32" stroke="#00cfff" stroke-width="1" opacity="0.5"/><line x1="105" y1="32" x2="74" y2="32" stroke="#ff2d78" stroke-width="1" opacity="0.5"/><circle cx="28" cy="55" r="3" fill="#ff2d78" opacity="0.4"/><circle cx="52" cy="60" r="2" fill="#39ff14" opacity="0.4"/><circle cx="72" cy="58" r="3" fill="#00cfff" opacity="0.4"/><circle cx="96" cy="62" r="2" fill="#ff2d78" opacity="0.5"/><rect x="0" y="68" width="120" height="12" fill="#0a0a14"/><g fill="rgba(255,255,255,0.12)"><ellipse cx="15" cy="72" rx="4" ry="2"/><ellipse cx="35" cy="71" rx="5" ry="2"/><ellipse cx="58" cy="72" rx="4" ry="2"/><ellipse cx="80" cy="71" rx="5" ry="2"/><ellipse cx="105" cy="72" rx="4" ry="2"/></g><text x="60" y="78" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="5" font-family="sans-serif">tap to upload</text></svg>`
-  ];
-
-  function ravePlaceholderSvg(seed) {
-    const idx = Math.abs(seed || 0) % RAVE_PLACEHOLDERS.length;
-    const encoded = btoa(unescape(encodeURIComponent(RAVE_PLACEHOLDERS[idx])));
-    return `data:image/svg+xml;base64,${encoded}`;
-  }
-
   // --- Double-tap a tab to refresh that view from the server ---
   const REFRESHABLE_TABS = new Set(['crews', 'events', 'members', 'stats']);
   let _lastTabTap = { page: null, time: 0 };
@@ -16782,21 +16719,6 @@
       return { kind: 'past', name: last.name, date: last.date, who: [last.who] };
     }
     return { kind: 'none' };
-  }
-
-  // Build the display string for a crew's festival line.
-  function crewEventLine(crew) {
-    const n = crewNextUp(crew);
-    if (n.kind === 'upcoming') {
-      const who = n.who.length ? ` · ${n.who.length} going: ${n.who.join(', ')}` : '';
-      const cd = countdownLabel(n.date);
-      const when = `${n.date.getDate()} ${MON_SHORT[n.date.getMonth()]}`;
-      return `🎵 ${n.name} · ${when} · ⏳ ${cd}${who}`;
-    }
-    if (n.kind === 'past') {
-      return `📍 Last seen at ${n.name} · ${n.date.getFullYear()}`;
-    }
-    return `🎵 No upcoming raves planned`;
   }
 
   function crewNextFestBlock(crew) {
@@ -27568,16 +27490,6 @@
   // ── Edit Unclaimed Profile modal ──
   let _editUnclaimedRaverId = null;
 
-  function showEditUnclaimedModal(raverId) {
-    const r = getRaver(raverId);
-    if (!r) return;
-    _editUnclaimedRaverId = raverId;
-    document.getElementById('edit-unclaimed-name').value = r.name || '';
-    document.getElementById('edit-unclaimed-handle').value = r.handle || '';
-    document.getElementById('edit-unclaimed-note').value = r.notes || '';
-    document.getElementById('edit-unclaimed-overlay').classList.add('open');
-  }
-
   function closeEditUnclaimedModal() {
     document.getElementById('edit-unclaimed-overlay').classList.remove('open');
     _editUnclaimedRaverId = null;
@@ -30564,9 +30476,6 @@
   // Thin wrappers kept for backward compatibility (e.g. direct calls from tests) —
   // real logic lives in the shared tag-sheet functions below (tagToggle/tagAddCustom/etc).
   function toggleGenrePick(genre, el) { tagToggle('genre', genre, el); }
-  function addCustomGenre() { tagAddCustom('genre'); }
-  function removeCustomGenre(i) { tagRemoveCustom('genre', i); }
-  function renderCustomGenres() { renderTagSummary('genre'); }
 
   function renderFestPicker() {
     const box = document.getElementById('fest-picker');
@@ -30758,91 +30667,6 @@
     if (chip) chip.classList.add('picked');
   }
 
-  function nfNameSuggest(q) {
-    const results = document.getElementById('nf-name-results');
-    if (!results) return;
-    const query = (q || '').trim().toLowerCase();
-    if (!query) { results.innerHTML = ''; results.style.display = 'none'; return; }
-    const matches = festivals.filter(f => !f.archived && f.name.toLowerCase().includes(query)).slice(0, 5);
-    if (!matches.length) { results.innerHTML = ''; results.style.display = 'none'; return; }
-    results.innerHTML = matches.map(f => {
-      const d = festDate(f);
-      const when = d ? `${d.getDate()} ${MON_SHORT[d.getMonth()]} ${d.getFullYear()}` : '';
-      const meta = [when, escHtml(f.location)].filter(Boolean).join(' · ');
-      return `<div class="fest-search-item" onmousedown="nfPickExisting('${escJsAttr(f.id)}')">
-        <span class="fest-search-name">${escHtml(f.name)}</span>
-        ${meta ? `<span class="fest-search-meta">${meta}</span>` : ''}
-      </div>`;
-    }).join('');
-    results.style.display = 'block';
-  }
-
-  function nfPickExisting(id) {
-    const fest = festivals.find(f => String(f.id) === String(id));
-    if (!fest) return;
-    editingFestIds.add(fest.id);
-    renderFestSelected();
-    hideNewFest();
-    const chip = document.querySelector(`.fest-quick-chip[data-fid="${id}"]`);
-    if (chip) chip.classList.add('picked');
-    showToast(`Added ${fest.name} ✓`);
-  }
-
-  let nfIsGoing = true;
-  function setNfGoing(going) {
-    nfIsGoing = going;
-    document.getElementById('nf-going-btn')?.classList.toggle('active', going);
-    document.getElementById('nf-been-btn')?.classList.toggle('active', !going);
-    const dateInput = document.getElementById('nf-date');
-    if (dateInput && !dateInput.value) {
-      if (!going) {
-        const d = new Date(TODAY); d.setDate(d.getDate() - 1);
-        dateInput.value = d.toISOString().slice(0, 10);
-      }
-    }
-  }
-
-  function showNewFest() {
-    nfIsGoing = true;
-    const form = document.getElementById('new-fest-form');
-    const btn = document.getElementById('show-new-fest-btn');
-    if (form) form.style.display = 'block';
-    if (btn) btn.style.display = 'none';
-  }
-  function hideNewFest() {
-    const form = document.getElementById('new-fest-form');
-    const btn = document.getElementById('show-new-fest-btn');
-    if (form) form.style.display = 'none';
-    if (btn) btn.style.display = 'block';
-    const nfName = document.getElementById('nf-name'); if (nfName) nfName.value = '';
-    const nfDate = document.getElementById('nf-date'); if (nfDate) nfDate.value = '';
-    const nfLoc  = document.getElementById('nf-loc');  if (nfLoc)  nfLoc.value  = '';
-    const nfNR   = document.getElementById('nf-name-results'); if (nfNR) { nfNR.innerHTML = ''; nfNR.style.display = 'none'; }
-    nfIsGoing = true;
-  }
-
-  function createFestivalInline() {
-    const name = val('nf-name');
-    let date = document.getElementById('nf-date').value;
-    const loc = val('nf-loc');
-    if (!name) { showToast('Rave needs a name ✍️'); return; }
-    if (!date) {
-      const d = new Date(TODAY); d.setDate(d.getDate() + (nfIsGoing ? 1 : -1));
-      date = d.toISOString().slice(0, 10);
-    }
-    let fest = findFestivalByName(name, date);
-    if (fest) {
-      showToast(`"${fest.name}" already exists — added ✓`);
-    } else {
-      fest = { id: ++festSeq, name, date, location: loc };
-      festivals.push(fest);
-      showToast(`🎉 Added ${name}`);
-    }
-    editingFestIds.add(fest.id);
-    hideNewFest();
-    renderFestPicker();
-  }
-
   // ── New Rave Popup (shared by profile editor modal & inline edit mode) ──────
   let _newRaveCtx = null; // 'profile-editor' or a raverId string
 
@@ -30991,92 +30815,6 @@
       </div>`;
     }).join('');
     results.style.display = 'block';
-  }
-
-  function ifpShowNewForm(raverId) {
-    const form = document.getElementById(`ifp-new-form-${raverId}`);
-    const btn = document.getElementById(`ifp-show-new-${raverId}`);
-    if (form) form.style.display = 'block';
-    if (btn) btn.style.display = 'none';
-  }
-
-  function ifpHideNewForm(raverId) {
-    const form = document.getElementById(`ifp-new-form-${raverId}`);
-    const btn = document.getElementById(`ifp-show-new-${raverId}`);
-    if (form) form.style.display = 'none';
-    if (btn) btn.style.display = 'block';
-  }
-
-  function ifpSetGoing(raverId, going) {
-    document.getElementById(`ifp-going-btn-${raverId}`)?.classList.toggle('active', going);
-    document.getElementById(`ifp-been-btn-${raverId}`)?.classList.toggle('active', !going);
-    const dateInput = document.getElementById(`ifp-nf-date-${raverId}`);
-    if (dateInput && !dateInput.value) {
-      const d = new Date(TODAY); d.setDate(d.getDate() + (going ? 1 : -1));
-      dateInput.value = d.toISOString().slice(0, 10);
-    }
-  }
-
-  function ifpNameSuggest(raverId, q) {
-    const results = document.getElementById(`ifp-nf-results-${raverId}`);
-    if (!results) return;
-    const query = (q || '').trim().toLowerCase();
-    if (!query) { results.innerHTML = ''; results.style.display = 'none'; return; }
-    const matches = festivals.filter(f => !f.archived && f.name.toLowerCase().includes(query)).slice(0, 5);
-    if (!matches.length) { results.innerHTML = ''; results.style.display = 'none'; return; }
-    results.innerHTML = matches.map(f => {
-      const d = festDate(f);
-      const when = d ? `${d.getDate()} ${MON_SHORT[d.getMonth()]} ${d.getFullYear()}` : '';
-      const meta = [when, escHtml(f.location)].filter(Boolean).join(' · ');
-      return `<div class="fest-search-item" onmousedown="ifpPickExisting('${escJsAttr(raverId)}','${escJsAttr(f.id)}')">
-        <span class="fest-search-name">${escHtml(f.name)}</span>
-        ${meta ? `<span class="fest-search-meta">${meta}</span>` : ''}
-      </div>`;
-    }).join('');
-    results.style.display = 'block';
-  }
-
-  function ifpPickExisting(raverId, festId) {
-    const fest = festivals.find(f => String(f.id) === String(festId));
-    if (!fest) return;
-    addBeenTo(raverId, fest.id);
-  }
-
-  function ifpCreateFest(raverId) {
-    const nameEl = document.getElementById(`ifp-nf-name-${raverId}`);
-    const dateEl = document.getElementById(`ifp-nf-date-${raverId}`);
-    const locEl = document.getElementById(`ifp-nf-loc-${raverId}`);
-    const goingBtn = document.getElementById(`ifp-going-btn-${raverId}`);
-    const name = (nameEl?.value || '').trim();
-    let date = dateEl?.value || '';
-    const loc = (locEl?.value || '').trim();
-    const isGoing = goingBtn?.classList.contains('active') ?? true;
-    if (!name) { showToast('Rave needs a name ✍️'); return; }
-    if (!date) {
-      const d = new Date(TODAY); d.setDate(d.getDate() + (isGoing ? 1 : -1));
-      date = d.toISOString().slice(0, 10);
-    }
-    let fest = findFestivalByName(name, date);
-    if (fest) {
-      showToast(`"${fest.name}" already exists — added ✓`);
-    } else {
-      fest = { id: ++festSeq, name, date, location: loc };
-      festivals.push(fest);
-      showToast(`🎉 Added ${name}`);
-    }
-    addBeenTo(raverId, fest.id);
-  }
-
-  // Edit the logged-in user's own raver profile from the header button
-  function openOwnProfileEditor() {
-    const me = squad.find(r => r.isYou);
-    if (me) {
-      enterProfileEditMode(me.id);
-    } else {
-      // No raver profile yet — open onboarding-style full form
-      isOnboarding = false;
-      openProfileEditor(null);
-    }
   }
 
   function closeProfileEditor() {
@@ -31393,9 +31131,6 @@
   // Thin wrappers kept for backward compatibility (e.g. direct calls from tests) —
   // real logic lives in the shared tag-sheet functions above.
   function toggleVibePick(id, el) { tagToggle('vibe', id, el); }
-  function addCustomVibe() { tagAddCustom('vibe'); }
-  function removeCustomVibe(i) { tagRemoveCustom('vibe', i); }
-  function renderCustomVibeTags() { renderTagSummary('vibe'); }
 
   function openCustomEmojiPicker() {
     const picker = document.getElementById('vibe-custom-emoji-picker');
@@ -31676,7 +31411,6 @@
       ? { ...preset, label: tt.other ? tt.other : preset.label }
       : preset;
   }
-  function ticketTypeLabel(tt) { return ticketTypeInfo(tt)?.label || null; }
 
   // Who from the tribe references a given festival id (String-coerced for UUID safety)
   function festivalGoers(festId) {
@@ -33883,16 +33617,6 @@
     progressBar.style.width = `${(checked/total)*100}%`;
   }
 
-  function toggleCheck(el) {
-    el.classList.toggle('checked');
-    if (el.classList.contains('checked')) {
-      el.querySelector('.check-box').textContent = '✓';
-    } else {
-      el.querySelector('.check-box').textContent = '';
-    }
-    countChecks();
-  }
-
   countChecks();
 
   // ── Inline tag editing (genres & favArtists) ─────────────────────────────
@@ -35923,7 +35647,6 @@
   let _notifications = [];
 
   function loadNotifs() { return _notifications; }
-  function saveNotifs() {} // intentional no-op — kept so no stray call breaks
 
   function addNotification(message, links) {
     const data = nlData(links);
