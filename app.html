@@ -4306,12 +4306,9 @@
   .crew-feature-panel { margin-bottom: 16px; }
 
   /* ── Huddle: crew chat (full-screen "comms channel" surface) ── */
-  /* The Huddle used to render as an accordion panel inside crew detail with
-     its own 50vh scrollbox — a chat nested inside a scrolling page, which
-     read as a feed of cards rather than a conversation. It now opens as a
-     full-screen surface that owns the viewport: fixed header, flexible
+  /* Full-screen surface that owns the viewport: fixed header, flexible
      message stream, composer pinned above the keyboard. The crew-detail
-     tile keeps a compact preview that launches it.
+     tile shows a compact preview that launches it.
 
      Visual language is "festival comms channel": monospaced timestamps and
      labels, a faint scanline field, ticket-stub day markers, and a
@@ -9811,32 +9808,6 @@
   </div>
 </div>
 
-<!-- Edit Unclaimed Profile Modal -->
-<div class="modal-overlay" id="edit-unclaimed-overlay" onclick="if(event.target===this)closeEditUnclaimedModal()">
-  <div class="modal" style="max-width:380px;">
-    <div class="modal-title" style="margin-bottom:16px;">Edit Profile</div>
-    <div class="form-group">
-      <label for="edit-unclaimed-name" class="form-label">Name</label>
-      <input class="form-input" id="edit-unclaimed-name" placeholder="Full name">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Handle <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
-      <input class="form-input" id="edit-unclaimed-handle" aria-label="Handle" placeholder="@handle">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Note <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
-      <input class="form-input" id="edit-unclaimed-note" aria-label="How you met" placeholder="e.g. met at Coachella">
-    </div>
-    <div class="modal-actions" style="margin-top:8px;justify-content:space-between;">
-      <button class="btn btn-ghost" style="color:var(--neon-pink);border-color:rgba(255,45,120,0.25);padding:10px 14px;font-size:0.8rem;" onclick="deleteUnclaimedProfile(_editUnclaimedRaverId)">🗑️ Delete</button>
-      <div style="display:flex;gap:8px;">
-        <button class="btn btn-ghost" onclick="closeEditUnclaimedModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="saveEditUnclaimed()">Save</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- Raver Avatar Color Picker Modal (unclaimed profiles, creator only) -->
 <div class="modal-overlay" id="raver-color-overlay" onclick="if(event.target===this)closeRaverColorPicker()">
   <div class="modal" style="max-width:340px;">
@@ -10188,14 +10159,13 @@
   (function() {
     const tab = new URLSearchParams(window.location.search).get('tab');
     if (tab === 'signup' || tab === 'login') {
-      window._pendingAuthTab = tab;
       document.title = tab === 'signup' ? 'Sign Up · RaveFAM 🎉' : 'Log In · RaveFAM 🔥';
     }
   })();
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.10.0';
+  const APP_VERSION = '2.11.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -11852,7 +11822,6 @@
     const pendingJoin  = sessionStorage.getItem('pendingCrewJoin');
     // Coming back on this device: prefill the email or number they last used.
     const last = readLastLogin();
-    window._pendingAuthTab = null;
     const idInput = document.getElementById('login-id');
     if (last?.value && !idInput.value) idInput.value = last.method === 'phone' ? formatPhoneDisplay(last.value) : last.value;
     showAuthTab('login');
@@ -11960,8 +11929,8 @@
   });
 
   // Keyboard: submit on Enter in auth forms
-  // Only from a field inside the auth card: an overlay on top (the claim-code
-  // boxes, the intercept) used to fall through to doLogin() and text/email a
+  // Only from a field inside the auth card, so Enter in an overlay on top (the
+  // claim-code boxes, the intercept) can't fall through to doLogin() and send a
   // code to a prefilled address. Buttons and links handle their own Enter.
   document.addEventListener('keydown', e => {
     if (e.key !== 'Enter' || e.isComposing) return;
@@ -13314,16 +13283,6 @@
     document.getElementById('claim-intercept').classList.add('open');
   }
 
-  function dismissIntercept(tab) {
-    document.getElementById('claim-intercept').classList.remove('open');
-    if (tab) {
-      window._pendingAuthTab = tab;
-      // Trigger auth screen re-render to correct tab (it's already showing);
-      // a tap on Create Account / Log in goes straight to the field.
-      showAuthTab(tab, true);
-    }
-  }
-
   function copyClaimLink(url) {
     navigator.clipboard.writeText(url).then(() => showToast('📋 Link copied!')).catch(() => showToast('⚠️ Copy failed'));
   }
@@ -13584,10 +13543,8 @@
 
     // --- Background lookups ---
     // Badges/menus and the artist/venue catalogs don't gate the Crews/Squad
-    // first paint (nothing below reads them), so fire them all off together
-    // instead of one-at-a-time and let them resolve whenever — previously
-    // each of these was its own awaited round trip *before* the data the
-    // Crews page actually needs even started loading.
+    // first paint (nothing below reads them), so fire them off together
+    // without awaiting.
     dbLoadModerators().catch(reportBackgroundFailure('dbLoadModerators')).then(() => {
       updateModBadge();
       return isModerator() ? dbLoadFlags().catch(reportBackgroundFailure('dbLoadFlags')) : null;
@@ -13609,10 +13566,9 @@
     loadAllFestVibes().catch(reportBackgroundFailure('loadAllFestVibes'));
 
     // --- Critical path for first paint: festivals, ravers, crews, nicknames.
-    // These used to run as four separate sequential awaits; the festivals/
-    // ravers/crews network calls don't depend on each other's *data* (only
-    // the processing below does), so fire them together and process in
-    // dependency order once all three land.
+    // The festivals/ravers/crews calls don't depend on each other's data
+    // (only the processing below does), so fetch them together and process
+    // in dependency order once all three land.
     const [
       { data: dbFests, error: fErr },
       { data: dbRavers, error: rErr },
@@ -13828,8 +13784,8 @@
 
     // Once/day (not once/session — a browser restart later the same day
     // shouldn't re-show it) plus an opt-in week-long snooze from the link
-    // in the modal. Both keyed per-user, in localStorage since they need
-    // to survive across sessions unlike the old sessionStorage flag.
+    // in the modal. Both keyed per-user, in localStorage so they survive
+    // across sessions.
     const lastShownKey = `ravefam_welcome_last_${currentUser.id}`;
     const snoozeKey = `ravefam_welcome_snooze_${currentUser.id}`;
     const snoozeUntil = Number(localStorage.getItem(snoozeKey) || 0);
@@ -14680,29 +14636,6 @@
     }
   }
 
-  async function dbSaveRaverFestivalInterest(raverId, interestedFestIds) {
-    const newIdStrs = interestedFestIds.map(String);
-    if (newIdStrs.length > 0) {
-      const rows = interestedFestIds.map(fid => ({ raver_id: raverId, festival_id: fid }));
-      const { error } = await sb.from('raver_festival_interest')
-        .upsert(rows, { onConflict: 'raver_id,festival_id', ignoreDuplicates: true });
-      if (error) {
-        console.error('raver_festival_interest upsert error', error);
-        showToast('⚠️ Could not save interest');
-        return;
-      }
-      const { data: existing } = await sb.from('raver_festival_interest').select('festival_id').eq('raver_id', raverId);
-      if (existing) {
-        const toDelete = existing.map(r => r.festival_id).filter(id => !newIdStrs.includes(String(id)));
-        if (toDelete.length) {
-          await sb.from('raver_festival_interest').delete().eq('raver_id', raverId).in('festival_id', toDelete);
-        }
-      }
-    } else {
-      await sb.from('raver_festival_interest').delete().eq('raver_id', raverId);
-    }
-  }
-
   // Targeted single-row RSVP writes. Unlike the full-list save helpers above,
   // these only touch the one festival the user acted on, so a stale client list
   // can never prune rows added out-of-band (e.g. RSVPs migrated by a profile merge).
@@ -14896,7 +14829,7 @@
   }
 
   // Mod Dashboard "Recent Deletes" tab — the one read path against audit_logs
-  // (previously write-only from logAudit). Moderator-only per RLS.
+  // (logAudit writes them). Moderator-only per RLS.
   async function dbLoadRecentDestructiveActions(limit = 50) {
     if (!isModerator()) return [];
     const { data, error } = await sb.from('audit_logs')
@@ -15168,29 +15101,6 @@
           canvas.width = w; canvas.height = h;
           canvas.getContext('2d').drawImage(img, 0, 0, w, h);
           canvas.toBlob(b => b ? resolve(b) : reject(new Error('Canvas export failed')), 'image/jpeg', quality);
-        };
-        img.src = e.target.result;
-      };
-      reader.readAsDataURL(file);
-    });
-  }
-
-  // Compress an image File to a base64 data URL (for localStorage)
-  function compressImageToDataUrl(file, maxDim) {
-    return new Promise(resolve => {
-      const reader = new FileReader();
-      reader.onload = e => {
-        const img = new Image();
-        img.onload = () => {
-          let w = img.width, h = img.height;
-          if (w > maxDim || h > maxDim) {
-            if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
-            else { w = Math.round(w * maxDim / h); h = maxDim; }
-          }
-          const canvas = document.createElement('canvas');
-          canvas.width = w; canvas.height = h;
-          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-          resolve(canvas.toDataURL('image/jpeg', 0.8));
         };
         img.src = e.target.result;
       };
@@ -16418,23 +16328,6 @@
     );
   }
 
-  const RAVE_PLACEHOLDERS = [
-    // 1 — Crowd + lasers
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80"><rect width="120" height="80" fill="#0a0a14"/><rect x="0" y="52" width="120" height="28" fill="#0d0d1a"/><ellipse cx="60" cy="52" rx="80" ry="12" fill="#111126" opacity="0.8"/><line x1="60" y1="8" x2="10" y2="52" stroke="#ff2d78" stroke-width="1" opacity="0.7"/><line x1="60" y1="8" x2="30" y2="52" stroke="#39ff14" stroke-width="1" opacity="0.7"/><line x1="60" y1="8" x2="90" y2="52" stroke="#00cfff" stroke-width="1" opacity="0.7"/><line x1="60" y1="8" x2="110" y2="52" stroke="#ff2d78" stroke-width="1" opacity="0.7"/><circle cx="60" cy="8" r="3" fill="#fff" opacity="0.9"/><g fill="#1a1a2e"><rect x="5" y="46" width="6" height="14" rx="1"/><rect x="14" y="42" width="6" height="18" rx="1"/><rect x="23" y="44" width="6" height="16" rx="1"/><rect x="32" y="40" width="6" height="20" rx="1"/><rect x="41" y="43" width="6" height="17" rx="1"/><rect x="50" y="41" width="6" height="19" rx="1"/><rect x="59" y="44" width="6" height="16" rx="1"/><rect x="68" y="42" width="6" height="18" rx="1"/><rect x="77" y="45" width="6" height="15" rx="1"/><rect x="86" y="40" width="6" height="20" rx="1"/><rect x="95" y="43" width="6" height="17" rx="1"/><rect x="104" y="46" width="6" height="14" rx="1"/></g><circle cx="18" cy="58" r="3" fill="#ff2d78" opacity="0.5"/><circle cx="34" cy="55" r="2" fill="#39ff14" opacity="0.5"/><circle cx="52" cy="60" r="3" fill="#00cfff" opacity="0.4"/><circle cx="70" cy="56" r="2" fill="#ff2d78" opacity="0.5"/><circle cx="88" cy="59" r="3" fill="#39ff14" opacity="0.4"/><circle cx="104" cy="57" r="2" fill="#fff" opacity="0.3"/><text x="60" y="76" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="5" font-family="sans-serif">tap to upload</text></svg>`,
-    // 2 — DJ booth
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80"><rect width="120" height="80" fill="#080810"/><rect x="0" y="55" width="120" height="25" fill="#0c0c18"/><rect x="25" y="35" width="70" height="22" rx="4" fill="#151528" stroke="rgba(57,255,20,0.3)" stroke-width="1"/><circle cx="40" cy="46" r="7" fill="#1a1a30" stroke="rgba(57,255,20,0.5)" stroke-width="1"/><circle cx="80" cy="46" r="7" fill="#1a1a30" stroke="rgba(57,255,20,0.5)" stroke-width="1"/><circle cx="40" cy="46" r="3" fill="rgba(57,255,20,0.3)"/><circle cx="80" cy="46" r="3" fill="rgba(57,255,20,0.3)"/><rect x="52" y="39" width="16" height="3" rx="1.5" fill="#39ff14" opacity="0.6"/><rect x="52" y="44" width="16" height="3" rx="1.5" fill="#ff2d78" opacity="0.6"/><rect x="52" y="49" width="16" height="3" rx="1.5" fill="#00cfff" opacity="0.6"/><line x1="30" y1="14" x2="50" y2="35" stroke="#ff2d78" stroke-width="1.5" opacity="0.6"/><line x1="60" y1="10" x2="60" y2="35" stroke="#39ff14" stroke-width="1.5" opacity="0.6"/><line x1="90" y1="14" x2="70" y2="35" stroke="#00cfff" stroke-width="1.5" opacity="0.6"/><circle cx="30" cy="14" r="2" fill="#ff2d78"/><circle cx="60" cy="10" r="2" fill="#39ff14"/><circle cx="90" cy="14" r="2" fill="#00cfff"/><rect x="0" y="55" width="120" height="2" fill="rgba(255,45,120,0.15)"/><text x="60" y="76" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="5" font-family="sans-serif">tap to upload</text></svg>`,
-    // 3 — Festival stage
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80"><rect width="120" height="80" fill="#050510"/><rect x="10" y="30" width="100" height="35" rx="3" fill="#0e0e20"/><rect x="10" y="30" width="100" height="5" fill="#1a1a35"/><rect x="15" y="38" width="90" height="22" rx="2" fill="#0a0a1a"/><line x1="60" y1="5" x2="20" y2="38" stroke="#ff2d78" stroke-width="1.5" opacity="0.8"/><line x1="60" y1="5" x2="60" y2="38" stroke="#fff" stroke-width="1" opacity="0.5"/><line x1="60" y1="5" x2="100" y2="38" stroke="#39ff14" stroke-width="1.5" opacity="0.8"/><circle cx="60" cy="5" r="3" fill="#fff" opacity="0.9"/><rect x="45" y="48" width="30" height="12" rx="2" fill="#151530"/><rect x="52" y="51" width="16" height="6" rx="1" fill="#39ff14" opacity="0.3"/><rect x="10" y="30" width="3" height="35" fill="#1e1e38"/><rect x="107" y="30" width="3" height="35" fill="#1e1e38"/><rect x="0" y="65" width="120" height="15" fill="#0a0a14"/><g fill="rgba(255,255,255,0.15)"><ellipse cx="20" cy="68" rx="5" ry="3"/><ellipse cx="40" cy="70" rx="4" ry="2"/><ellipse cx="60" cy="67" rx="6" ry="3"/><ellipse cx="80" cy="69" rx="5" ry="2"/><ellipse cx="100" cy="68" rx="4" ry="3"/></g><text x="60" y="78" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="5" font-family="sans-serif">tap to upload</text></svg>`,
-    // 4 — Neon disco ball
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80"><rect width="120" height="80" fill="#07070f"/><line x1="60" y1="0" x2="60" y2="18" stroke="rgba(255,255,255,0.3)" stroke-width="1"/><circle cx="60" cy="32" r="14" fill="#111122" stroke="rgba(255,255,255,0.15)" stroke-width="1"/><line x1="46" y1="26" x2="74" y2="26" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/><line x1="46" y1="32" x2="74" y2="32" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/><line x1="46" y1="38" x2="74" y2="38" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/><line x1="51" y1="18" x2="51" y2="46" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/><line x1="57" y1="18" x2="57" y2="46" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/><line x1="63" y1="18" x2="63" y2="46" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/><line x1="69" y1="18" x2="69" y2="46" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/><rect x="54" y="29" width="6" height="6" rx="1" fill="rgba(255,255,255,0.6)" transform="rotate(15,57,32)"/><line x1="30" y1="10" x2="45" y2="28" stroke="#ff2d78" stroke-width="1" opacity="0.7"/><line x1="90" y1="10" x2="75" y2="28" stroke="#39ff14" stroke-width="1" opacity="0.7"/><line x1="15" y1="32" x2="46" y2="32" stroke="#00cfff" stroke-width="1" opacity="0.5"/><line x1="105" y1="32" x2="74" y2="32" stroke="#ff2d78" stroke-width="1" opacity="0.5"/><circle cx="28" cy="55" r="3" fill="#ff2d78" opacity="0.4"/><circle cx="52" cy="60" r="2" fill="#39ff14" opacity="0.4"/><circle cx="72" cy="58" r="3" fill="#00cfff" opacity="0.4"/><circle cx="96" cy="62" r="2" fill="#ff2d78" opacity="0.5"/><rect x="0" y="68" width="120" height="12" fill="#0a0a14"/><g fill="rgba(255,255,255,0.12)"><ellipse cx="15" cy="72" rx="4" ry="2"/><ellipse cx="35" cy="71" rx="5" ry="2"/><ellipse cx="58" cy="72" rx="4" ry="2"/><ellipse cx="80" cy="71" rx="5" ry="2"/><ellipse cx="105" cy="72" rx="4" ry="2"/></g><text x="60" y="78" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="5" font-family="sans-serif">tap to upload</text></svg>`
-  ];
-
-  function ravePlaceholderSvg(seed) {
-    const idx = Math.abs(seed || 0) % RAVE_PLACEHOLDERS.length;
-    const encoded = btoa(unescape(encodeURIComponent(RAVE_PLACEHOLDERS[idx])));
-    return `data:image/svg+xml;base64,${encoded}`;
-  }
-
   // --- Double-tap a tab to refresh that view from the server ---
   const REFRESHABLE_TABS = new Set(['crews', 'events', 'members', 'stats']);
   let _lastTabTap = { page: null, time: 0 };
@@ -16788,21 +16681,6 @@
       return { kind: 'past', name: last.name, date: last.date, who: [last.who] };
     }
     return { kind: 'none' };
-  }
-
-  // Build the display string for a crew's festival line.
-  function crewEventLine(crew) {
-    const n = crewNextUp(crew);
-    if (n.kind === 'upcoming') {
-      const who = n.who.length ? ` · ${n.who.length} going: ${n.who.join(', ')}` : '';
-      const cd = countdownLabel(n.date);
-      const when = `${n.date.getDate()} ${MON_SHORT[n.date.getMonth()]}`;
-      return `🎵 ${n.name} · ${when} · ⏳ ${cd}${who}`;
-    }
-    if (n.kind === 'past') {
-      return `📍 Last seen at ${n.name} · ${n.date.getFullYear()}`;
-    }
-    return `🎵 No upcoming raves planned`;
   }
 
   function crewNextFestBlock(crew) {
@@ -17200,7 +17078,7 @@
   // only allows navigator.share()/clipboard.writeText() as a direct result
   // of a tap; if the button's click handler has to await html2canvas first,
   // that window is gone by the time the share call actually runs, so it
-  // (and the text fallback that used to run after it) can silently fail.
+  // can silently fail.
   // Pre-rendering means the tap itself does no async rendering work at all.
   async function prepareCrewShareImage(crew) {
     const token = ++_crewShareToken;
@@ -17225,23 +17103,10 @@
       const canvas = await withTimeout(
         html2canvas(card, {
           backgroundColor: '#050509', scale: 2, useCORS: true, logging: true,
-          // html2canvas clones the WHOLE document (not just `card`) to
-          // replicate CSS cascade correctly — this is a big single-page app
-          // with many hidden pages/modals/tabs all mounted in the DOM at
-          // once, and skipping <video> alone (the first culprit found) just
-          // meant the NEXT unrelated element became the new blocker with no
-          // further diagnosis possible (logging stopped dead after "Starting
-          // document clone", no per-element output at all before timing
-          // out). Skip everything that isn't the card itself, a descendant
-          // of it, or an ancestor of it (ancestors are still needed so the
-          // clone's layout/stacking context lines up) — EXCEPT anything
-          // inside <head>, which must always survive regardless of its
-          // relationship to the card: it's a sibling of <body>, not an
-          // ancestor, so the first version of this predicate stripped the
-          // entire stylesheet along with it — instant render, zero layout,
-          // every .crew-share-* class rule just gone (confirmed live: the
-          // exported image had only inline styles applied, nothing from
-          // the stylesheet).
+          // html2canvas clones the whole document, and the app's hidden
+          // pages/modals stall the clone. Keep only the card, its descendants
+          // and its ancestors (needed for layout), plus everything in <head>
+          // so the stylesheet survives.
           ignoreElements: (el) => {
             if (document.head.contains(el) || el === document.head) return false;
             return el.tagName === 'VIDEO' || (el !== card && !card.contains(el) && !el.contains(card));
@@ -19934,8 +19799,7 @@
       : { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
-  // Voice-note durations used to render as `0:${seconds}`, which printed a
-  // 84-second note as "0:84". Format properly from total seconds.
+  // m:ss from total seconds (84s → "1:24").
   function huddleDurationLabel(ms) {
     const total = Math.max(0, Math.round((ms || 0) / 1000));
     return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
@@ -20217,9 +20081,8 @@
 
   // ── Chat screen shell ──
   // Built once per open. The composer inside it is deliberately NOT part of
-  // any re-render: the old panel rebuilt its entire root on every incoming
-  // message, which wiped whatever you were typing, dropped focus, and closed
-  // the mobile keyboard mid-sentence.
+  // any re-render, so an incoming message never wipes a draft, drops focus,
+  // or closes the mobile keyboard.
   function openHuddleScreen() {
     let screen = document.getElementById('huddle-screen');
     if (!screen) {
@@ -20352,8 +20215,8 @@
     const roomPillHTML = r =>
       `<button type="button" class="huddle-room-pill${r.id === _huddleActiveRoomId ? ' active' : ''}" data-room-id="${r.id}" onclick="switchHuddleRoom(this.dataset.roomId)">${huddleRoomLabel(r)}${unreadBadge(roomUnread(r))}</button>`;
 
-    // A crew that rages every weekend accumulates rooms fast, and the dead
-    // ones used to sit above the live ones. Past raves fold into one row that
+    // A crew that rages every weekend accumulates rooms fast, so past raves
+    // fold into one row below the live ones. That row
     // carries their combined unread count, so nothing gets lost behind it.
     // The room you're actually in is never nested away.
     const pastRooms = huddleRooms.filter(r => huddleRoomIsPast(r) && r.id !== _huddleActiveRoomId);
@@ -22252,11 +22115,9 @@
     if (btnEl) btnEl.classList.add('active');
   }
 
-  // The per-rave chat used to be embedded as a Rave Plan section, which split
-  // "the crew chat" across two places. It now lives in the unified Huddle
-  // switcher, and Rave Plan just links to it — but the room still has to be
-  // materialized here so the shortcut lands somewhere and the unread badge is
-  // accurate before anyone has opened it.
+  // Per-rave chat lives in the Huddle switcher and Rave Plan links to it, so
+  // the room is materialized here: the shortcut needs a target and the unread
+  // badge must be accurate before anyone has opened it.
   async function ensureHuddleRoomForFestival(crewId, festivalId) {
     if (!crewId || !festivalId || !currentUser) return null;
     await ensureHuddleRooms(crewId);
@@ -25962,10 +25823,11 @@
       ${linksHTML ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">${linksHTML}</div>` : ''}
       ${(() => {
         // Visible row: the actions most people take (Save, Edit if it's yours).
-        // Kebab: less-common ones (Report, moderator Sponsor toggle).
+        // Kebab: less-common ones (Report, moderator Sponsor toggle and Remove).
         const kebabRows = [
           currentUser ? `<button type="button" class="kebab-menu-row" onclick="toggleKebabMenu('vv-detail-kebab-${escId}'); showReportModal('vendor','${escId}')">🚩 Report</button>` : '',
           isModerator() ? `<button type="button" class="kebab-menu-row" onclick="toggleKebabMenu('vv-detail-kebab-${escId}'); toggleVendorSponsorship('${escId}')">${vendor.is_sponsored ? '🛡️ Unsponsor' : '🛡️ Mark Sponsored'}</button>` : '',
+          isModerator() ? `<button type="button" class="kebab-menu-row danger" onclick="toggleKebabMenu('vv-detail-kebab-${escId}'); confirmRemoveVendor('${escId}')">🗑️ Remove listing</button>` : '',
         ].filter(Boolean).join('');
         const kebabHtml = kebabRows ? `
           <div class="kebab-wrap" style="align-self:center;">
@@ -26232,6 +26094,26 @@
   async function handleDeleteVendorSpot(spotId, vendorId) {
     const ok = await dbDeleteVendorSpot(spotId, vendorId);
     if (ok) openVendorDetail(vendorId);
+  }
+
+  // Moderator takedown without waiting for a report. Soft delete, so Recent
+  // Deletes in the Mod Dashboard can restore it.
+  function confirmRemoveVendor(vendorId) {
+    if (!isModerator()) { showToast('🔒 Moderators only'); return; }
+    const vendor = vendors.find(v => v.id === vendorId);
+    if (!vendor) return;
+    showConfirmWithReason(
+      `Remove ${vendor.name}?`,
+      'Takes this listing out of Vendor Village for everyone. You can restore it from Recent Deletes in the Mod Dashboard.',
+      '🗑️ Remove',
+      async (reason) => {
+        if (!await dbDeleteVendor(vendorId, reason)) return;
+        closeVendorDetail();
+        renderVendorVillagePanel();
+        showToast(`🗑️ ${vendor.name} removed`);
+      },
+      { label: 'Reason (logged for the mod team)', placeholder: 'e.g. reported as a scam' }
+    );
   }
 
   // ===== VENUE DIRECTORY — data layer =====
@@ -26799,6 +26681,7 @@
       <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;">
         ${currentUser && venue.created_by === currentUser.id ? `<button class="btn btn-ghost" style="flex:1;" onclick="openEditVenueModal('${escId}')">✏️ Edit Listing</button>` : ''}
         ${currentUser ? `<button class="btn btn-ghost btn-danger" style="flex:1;" onclick="showReportModal('venue','${escId}')">🚩 Report</button>` : ''}
+        ${isModerator() ? `<button class="btn btn-ghost btn-danger" style="flex:1;" onclick="confirmRemoveVenue('${escId}')">🗑️ Remove</button>` : ''}
         <button class="btn btn-ghost" style="flex:1;" onclick="closeVenueDetail()">Close</button>
       </div>
 
@@ -26891,6 +26774,26 @@
   async function handleDeleteVenueReview(reviewId, venueId) {
     const ok = await dbDeleteVenueReview(reviewId, venueId);
     if (ok) openVenueDetail(venueId);
+  }
+
+  // Moderator takedown without waiting for a report. Soft delete, so Recent
+  // Deletes in the Mod Dashboard can restore it.
+  function confirmRemoveVenue(venueId) {
+    if (!isModerator()) { showToast('🔒 Moderators only'); return; }
+    const venue = venues.find(v => v.id === venueId);
+    if (!venue) return;
+    showConfirmWithReason(
+      `Remove ${venue.name}?`,
+      'Takes this venue out of the directory for everyone. You can restore it from Recent Deletes in the Mod Dashboard.',
+      '🗑️ Remove',
+      async (reason) => {
+        if (!await dbDeleteVenue(venueId, reason)) return;
+        closeVenueDetail();
+        renderVenueVillagePanel();
+        showToast(`🗑️ ${venue.name} removed`);
+      },
+      { label: 'Reason (logged for the mod team)', placeholder: 'e.g. reported as unsafe' }
+    );
   }
 
   // ===== FAM PINS — Crew Achievements =====
@@ -27040,8 +26943,7 @@
   }
 
   // Glyph paths for the crew feature tiles below — hand-drawn stroke icons in
-  // the same style as the app's other inline SVGs (logout/QR/eye), each glyph
-  // distinct so Pins and Dream Board no longer share an emoji.
+  // the same style as the app's other inline SVGs (logout/QR/eye).
   const CREW_FEATURE_GLYPHS = {
     huddle: '<path d="M4 4h16v12H8l-4 4V4z"/>',
     pins: '<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>',
@@ -27589,45 +27491,6 @@
     );
   }
 
-  // ── Edit Unclaimed Profile modal ──
-  let _editUnclaimedRaverId = null;
-
-  function showEditUnclaimedModal(raverId) {
-    const r = getRaver(raverId);
-    if (!r) return;
-    _editUnclaimedRaverId = raverId;
-    document.getElementById('edit-unclaimed-name').value = r.name || '';
-    document.getElementById('edit-unclaimed-handle').value = r.handle || '';
-    document.getElementById('edit-unclaimed-note').value = r.notes || '';
-    document.getElementById('edit-unclaimed-overlay').classList.add('open');
-  }
-
-  function closeEditUnclaimedModal() {
-    document.getElementById('edit-unclaimed-overlay').classList.remove('open');
-    _editUnclaimedRaverId = null;
-  }
-
-  function saveEditUnclaimed() {
-    const r = getRaver(_editUnclaimedRaverId);
-    if (!r) return;
-    if (!raverPerms(r).editName) { showToast('🔒 Only the crew lead or a moderator can edit this profile'); return; }
-    const name = document.getElementById('edit-unclaimed-name')?.value.trim();
-    if (!name) { showToast('⚠️ Name can\'t be empty'); return; }
-    r.name = name;
-    r.handle = document.getElementById('edit-unclaimed-handle')?.value.trim() || '';
-    r.notes = document.getElementById('edit-unclaimed-note')?.value.trim() || '';
-    closeEditUnclaimedModal();
-    renderCrews();
-    renderDetail(activeDetailId);
-    showToast(`✅ ${name.split(' ')[0]}'s profile updated`);
-    if (currentUser && !String(r.id).startsWith('temp_')) {
-      sb.from('ravers')
-        .update({ name: r.name, handle: r.handle || null, notes: r.notes, updated_at: new Date().toISOString() })
-        .eq('id', r.id)
-        .then(({ error }) => { if (error) showToast('⚠️ Save failed — please try again'); });
-    }
-  }
-
   // Moderator-only permanent erasure for verified data-deletion requests
   // (privacy.html "Your Rights & Choices"). Unlike deleteUnclaimedProfile
   // (soft-delete, unclaimed profiles only), this hard-deletes the raver row
@@ -27691,16 +27554,9 @@
         });
         const keptIdx = squad.findIndex(r2 => String(r2.id) === String(raverId));
         if (keptIdx !== -1) squad.splice(keptIdx, 1);
-        // Deletable from either the "Edit Unclaimed Profile" modal (inside a
-        // crew's detail page) or the full profile page's 🗑️ button — return
-        // to wherever makes sense for the surface it was triggered from.
         const onProfilePage = document.getElementById('page-profile')?.classList.contains('active');
-        if (onProfilePage) {
-          backFromProfile();
-        } else {
-          closeEditUnclaimedModal();
-          renderDetail(activeDetailId);
-        }
+        if (onProfilePage) backFromProfile();
+        else renderDetail(activeDetailId);
         renderCrews();
         showToast(`🗑️ ${firstName}'s profile deleted`);
         if (currentUser && !String(raverId).startsWith('temp_')) {
@@ -28014,8 +27870,8 @@
   // onboarding copy) — and a Locked In crew has closed its roster, so pushing
   // an invite in either state contradicts the status the leader chose. Mirrors
   // the canInvite check that already gates the crew-wide ?join= link.
-  // A raver in no crew at all keeps the old behaviour: there's no crew status
-  // to respect, and they're still a blackbook contact worth inviting.
+  // A raver in no crew at all is always invitable: there's no crew status to
+  // respect, and they're still a blackbook contact worth inviting.
   function raverInviteIsLive(raverId) {
     const inCrews = crews.filter(c => (c.squadIds || []).some(id => String(id) === String(raverId)));
     if (!inCrews.length) return true;
@@ -28593,11 +28449,9 @@
   function vibeTagHTML(vtId, isCustom, mini, removableRaverId, ownerRaverId) {
     const cls = `vibe-display-tag ${isCustom ? 'is-custom' : 'is-preset'}${mini ? ' vibe-mini' : ''}`;
     const field = isCustom ? 'customVibeTags' : 'vibeTags';
-    // For a custom tag, vtId IS the user's own text — and crewmates can tag each
-    // other — so it used to reach a crewmate's browser inside a JS string in an
-    // onclick, escaped for apostrophes only. A quote broke out of the attribute.
-    // The id travels as a data attribute now (escHtml is correct there) and a
-    // delegated handler reads it back; nothing is generated as code.
+    // For a custom tag, vtId IS user text that renders in a crewmate's browser.
+    // It travels as an escHtml'd data attribute read by a delegated handler —
+    // never interpolated into an inline onclick.
     const label = isCustom ? vtId : (getPreset(vtId)?.label || vtId);
     const dataFor = (raverId) =>
       `data-raver="${escHtml(String(raverId))}" data-field="${escHtml(field)}" ` +
@@ -30587,13 +30441,6 @@
   let editingGenres = new Set();
   let editingCustomGenres = [];
 
-  // Thin wrappers kept for backward compatibility (e.g. direct calls from tests) —
-  // real logic lives in the shared tag-sheet functions below (tagToggle/tagAddCustom/etc).
-  function toggleGenrePick(genre, el) { tagToggle('genre', genre, el); }
-  function addCustomGenre() { tagAddCustom('genre'); }
-  function removeCustomGenre(i) { tagRemoveCustom('genre', i); }
-  function renderCustomGenres() { renderTagSummary('genre'); }
-
   function renderFestPicker() {
     const box = document.getElementById('fest-picker');
     if (!box) return;
@@ -30784,91 +30631,6 @@
     if (chip) chip.classList.add('picked');
   }
 
-  function nfNameSuggest(q) {
-    const results = document.getElementById('nf-name-results');
-    if (!results) return;
-    const query = (q || '').trim().toLowerCase();
-    if (!query) { results.innerHTML = ''; results.style.display = 'none'; return; }
-    const matches = festivals.filter(f => !f.archived && f.name.toLowerCase().includes(query)).slice(0, 5);
-    if (!matches.length) { results.innerHTML = ''; results.style.display = 'none'; return; }
-    results.innerHTML = matches.map(f => {
-      const d = festDate(f);
-      const when = d ? `${d.getDate()} ${MON_SHORT[d.getMonth()]} ${d.getFullYear()}` : '';
-      const meta = [when, escHtml(f.location)].filter(Boolean).join(' · ');
-      return `<div class="fest-search-item" onmousedown="nfPickExisting('${escJsAttr(f.id)}')">
-        <span class="fest-search-name">${escHtml(f.name)}</span>
-        ${meta ? `<span class="fest-search-meta">${meta}</span>` : ''}
-      </div>`;
-    }).join('');
-    results.style.display = 'block';
-  }
-
-  function nfPickExisting(id) {
-    const fest = festivals.find(f => String(f.id) === String(id));
-    if (!fest) return;
-    editingFestIds.add(fest.id);
-    renderFestSelected();
-    hideNewFest();
-    const chip = document.querySelector(`.fest-quick-chip[data-fid="${id}"]`);
-    if (chip) chip.classList.add('picked');
-    showToast(`Added ${fest.name} ✓`);
-  }
-
-  let nfIsGoing = true;
-  function setNfGoing(going) {
-    nfIsGoing = going;
-    document.getElementById('nf-going-btn')?.classList.toggle('active', going);
-    document.getElementById('nf-been-btn')?.classList.toggle('active', !going);
-    const dateInput = document.getElementById('nf-date');
-    if (dateInput && !dateInput.value) {
-      if (!going) {
-        const d = new Date(TODAY); d.setDate(d.getDate() - 1);
-        dateInput.value = d.toISOString().slice(0, 10);
-      }
-    }
-  }
-
-  function showNewFest() {
-    nfIsGoing = true;
-    const form = document.getElementById('new-fest-form');
-    const btn = document.getElementById('show-new-fest-btn');
-    if (form) form.style.display = 'block';
-    if (btn) btn.style.display = 'none';
-  }
-  function hideNewFest() {
-    const form = document.getElementById('new-fest-form');
-    const btn = document.getElementById('show-new-fest-btn');
-    if (form) form.style.display = 'none';
-    if (btn) btn.style.display = 'block';
-    const nfName = document.getElementById('nf-name'); if (nfName) nfName.value = '';
-    const nfDate = document.getElementById('nf-date'); if (nfDate) nfDate.value = '';
-    const nfLoc  = document.getElementById('nf-loc');  if (nfLoc)  nfLoc.value  = '';
-    const nfNR   = document.getElementById('nf-name-results'); if (nfNR) { nfNR.innerHTML = ''; nfNR.style.display = 'none'; }
-    nfIsGoing = true;
-  }
-
-  function createFestivalInline() {
-    const name = val('nf-name');
-    let date = document.getElementById('nf-date').value;
-    const loc = val('nf-loc');
-    if (!name) { showToast('Rave needs a name ✍️'); return; }
-    if (!date) {
-      const d = new Date(TODAY); d.setDate(d.getDate() + (nfIsGoing ? 1 : -1));
-      date = d.toISOString().slice(0, 10);
-    }
-    let fest = findFestivalByName(name, date);
-    if (fest) {
-      showToast(`"${fest.name}" already exists — added ✓`);
-    } else {
-      fest = { id: ++festSeq, name, date, location: loc };
-      festivals.push(fest);
-      showToast(`🎉 Added ${name}`);
-    }
-    editingFestIds.add(fest.id);
-    hideNewFest();
-    renderFestPicker();
-  }
-
   // ── New Rave Popup (shared by profile editor modal & inline edit mode) ──────
   let _newRaveCtx = null; // 'profile-editor' or a raverId string
 
@@ -31017,92 +30779,6 @@
       </div>`;
     }).join('');
     results.style.display = 'block';
-  }
-
-  function ifpShowNewForm(raverId) {
-    const form = document.getElementById(`ifp-new-form-${raverId}`);
-    const btn = document.getElementById(`ifp-show-new-${raverId}`);
-    if (form) form.style.display = 'block';
-    if (btn) btn.style.display = 'none';
-  }
-
-  function ifpHideNewForm(raverId) {
-    const form = document.getElementById(`ifp-new-form-${raverId}`);
-    const btn = document.getElementById(`ifp-show-new-${raverId}`);
-    if (form) form.style.display = 'none';
-    if (btn) btn.style.display = 'block';
-  }
-
-  function ifpSetGoing(raverId, going) {
-    document.getElementById(`ifp-going-btn-${raverId}`)?.classList.toggle('active', going);
-    document.getElementById(`ifp-been-btn-${raverId}`)?.classList.toggle('active', !going);
-    const dateInput = document.getElementById(`ifp-nf-date-${raverId}`);
-    if (dateInput && !dateInput.value) {
-      const d = new Date(TODAY); d.setDate(d.getDate() + (going ? 1 : -1));
-      dateInput.value = d.toISOString().slice(0, 10);
-    }
-  }
-
-  function ifpNameSuggest(raverId, q) {
-    const results = document.getElementById(`ifp-nf-results-${raverId}`);
-    if (!results) return;
-    const query = (q || '').trim().toLowerCase();
-    if (!query) { results.innerHTML = ''; results.style.display = 'none'; return; }
-    const matches = festivals.filter(f => !f.archived && f.name.toLowerCase().includes(query)).slice(0, 5);
-    if (!matches.length) { results.innerHTML = ''; results.style.display = 'none'; return; }
-    results.innerHTML = matches.map(f => {
-      const d = festDate(f);
-      const when = d ? `${d.getDate()} ${MON_SHORT[d.getMonth()]} ${d.getFullYear()}` : '';
-      const meta = [when, escHtml(f.location)].filter(Boolean).join(' · ');
-      return `<div class="fest-search-item" onmousedown="ifpPickExisting('${escJsAttr(raverId)}','${escJsAttr(f.id)}')">
-        <span class="fest-search-name">${escHtml(f.name)}</span>
-        ${meta ? `<span class="fest-search-meta">${meta}</span>` : ''}
-      </div>`;
-    }).join('');
-    results.style.display = 'block';
-  }
-
-  function ifpPickExisting(raverId, festId) {
-    const fest = festivals.find(f => String(f.id) === String(festId));
-    if (!fest) return;
-    addBeenTo(raverId, fest.id);
-  }
-
-  function ifpCreateFest(raverId) {
-    const nameEl = document.getElementById(`ifp-nf-name-${raverId}`);
-    const dateEl = document.getElementById(`ifp-nf-date-${raverId}`);
-    const locEl = document.getElementById(`ifp-nf-loc-${raverId}`);
-    const goingBtn = document.getElementById(`ifp-going-btn-${raverId}`);
-    const name = (nameEl?.value || '').trim();
-    let date = dateEl?.value || '';
-    const loc = (locEl?.value || '').trim();
-    const isGoing = goingBtn?.classList.contains('active') ?? true;
-    if (!name) { showToast('Rave needs a name ✍️'); return; }
-    if (!date) {
-      const d = new Date(TODAY); d.setDate(d.getDate() + (isGoing ? 1 : -1));
-      date = d.toISOString().slice(0, 10);
-    }
-    let fest = findFestivalByName(name, date);
-    if (fest) {
-      showToast(`"${fest.name}" already exists — added ✓`);
-    } else {
-      fest = { id: ++festSeq, name, date, location: loc };
-      festivals.push(fest);
-      showToast(`🎉 Added ${name}`);
-    }
-    addBeenTo(raverId, fest.id);
-  }
-
-  // Edit the logged-in user's own raver profile from the header button
-  function openOwnProfileEditor() {
-    const me = squad.find(r => r.isYou);
-    if (me) {
-      enterProfileEditMode(me.id);
-    } else {
-      // No raver profile yet — open onboarding-style full form
-      isOnboarding = false;
-      openProfileEditor(null);
-    }
   }
 
   function closeProfileEditor() {
@@ -31416,13 +31092,6 @@
       : `${cfg.editingCustom().length} custom ${cfg.noun} added`;
   }
 
-  // Thin wrappers kept for backward compatibility (e.g. direct calls from tests) —
-  // real logic lives in the shared tag-sheet functions above.
-  function toggleVibePick(id, el) { tagToggle('vibe', id, el); }
-  function addCustomVibe() { tagAddCustom('vibe'); }
-  function removeCustomVibe(i) { tagRemoveCustom('vibe', i); }
-  function renderCustomVibeTags() { renderTagSummary('vibe'); }
-
   function openCustomEmojiPicker() {
     const picker = document.getElementById('vibe-custom-emoji-picker');
     const btn = document.getElementById('vibe-emoji-btn');
@@ -31587,10 +31256,9 @@
               }
             }
             // When a raver's temp ID is replaced with a real DB UUID, patch any
-            // crew.squadIds still holding the old temp ID. Without this fix,
-            // the next renderCrews() call does squad.find(r => r.id === 'temp_*'),
-            // finds nothing, silently drops the member, and dbSaveCrewMembers also
-            // skips them (temp IDs are filtered before the DB insert).
+            // crew.squadIds still holding the old temp ID; otherwise renderCrews()
+            // silently drops the member and dbSaveCrewMembers skips them (temp IDs
+            // are filtered before the DB insert).
             let anyCrewUpdated = false;
             crews.forEach(crew => {
               const idx = crew.squadIds.findIndex(sid => String(sid) === String(oldTempId));
@@ -31703,7 +31371,6 @@
       ? { ...preset, label: tt.other ? tt.other : preset.label }
       : preset;
   }
-  function ticketTypeLabel(tt) { return ticketTypeInfo(tt)?.label || null; }
 
   // Who from the tribe references a given festival id (String-coerced for UUID safety)
   function festivalGoers(festId) {
@@ -33910,16 +33577,6 @@
     progressBar.style.width = `${(checked/total)*100}%`;
   }
 
-  function toggleCheck(el) {
-    el.classList.toggle('checked');
-    if (el.classList.contains('checked')) {
-      el.querySelector('.check-box').textContent = '✓';
-    } else {
-      el.querySelector('.check-box').textContent = '';
-    }
-    countChecks();
-  }
-
   countChecks();
 
   // ── Inline tag editing (genres & favArtists) ─────────────────────────────
@@ -33956,8 +33613,8 @@
   // "Suggest a Vibe Tag" — lets a crew member add (never remove) a vibe tag
   // on a claimed crewmate's profile from view mode, immediately, without
   // needing owner-only Edit Profile access. Deliberately a separate, minimal
-  // sheet rather than reusing the edit-session-coupled tag-sheet (openTagSheet)
-  // used by Edit Profile, to avoid any regression risk to that save flow.
+  // sheet rather than reusing openTagSheet, which is coupled to the Edit
+  // Profile save session.
   let _suggestVibeRaverId = null;
 
   function openSuggestVibeSheet(raverId) {
@@ -35060,12 +34717,10 @@
   });
 
   // ── Focus containment ─────────────────────────────────────────────────────
-  // Focus used to walk straight out of an open sheet and into the page behind
-  // it, which was still fully tabbable. Every overlay is a sibling of #main-app
-  // (the shell closes before the first overlay in the markup), so marking the
-  // shell inert while one is open takes the whole page underneath out of the
-  // tab order AND the accessibility tree — one attribute, and no need to touch
-  // the ~40 functions that open overlays.
+  // Every overlay is a sibling of #main-app (the shell closes before the first
+  // overlay in the markup), so marking the shell inert while one is open takes
+  // the page underneath out of the tab order and the accessibility tree,
+  // without touching the ~40 functions that open overlays.
   const INERT_SHELL_IDS = ['main-app', 'auth-screen'];
   let _lastShellFocus = null;
 
@@ -35952,7 +35607,6 @@
   let _notifications = [];
 
   function loadNotifs() { return _notifications; }
-  function saveNotifs() {} // intentional no-op — kept so no stray call breaks
 
   function addNotification(message, links) {
     const data = nlData(links);
@@ -36154,9 +35808,8 @@
 
   // ── Push notification deep links ──────────────────────────────────────────
   // Beacon and mention pushes carry crewId / roomId / messageId (see the
-  // send-beacon-push and send-mention-push functions). Tapping one used to just
-  // focus whatever was already on screen, so the notification told you where to
-  // look and then didn't take you there. Two arrival paths: a cold start reads
+  // send-beacon-push and send-mention-push functions); tapping one opens that
+  // room and message. Two arrival paths: a cold start reads
   // the ids off the URL, a running tab receives them by postMessage — focusing
   // an open window doesn't navigate it.
   let _pendingHuddleDeepLink = null;
@@ -36196,9 +35849,7 @@
   _pendingHuddleDeepLink = readHuddleDeepLinkFromUrl();
 
   // Quick-link from a drawer Huddle entry straight to that room. Every room
-  // kind — main, custom, and per-rave — now lives behind the one Huddle
-  // switcher, so this opens the chat directly on the target room rather than
-  // routing through whichever tile used to host it.
+  // kind (main, custom, per-rave) lives behind the one Huddle switcher.
   async function openHuddleFromNotif(crewId, roomId, roomKind, festivalId) {
     closeNotifDrawer();
     switchTab('crews');
@@ -36562,7 +36213,7 @@
     return `${Math.floor(h / 24)}d ago`;
   }
 
-  // Opening the drawer no longer marks anything read — a row stays new until
+  // Opening the drawer doesn't mark anything read: a row stays new until
   // it's tapped or Mark all read is used.
   function openNotifDrawer() {
     _notifTab = 'all';
