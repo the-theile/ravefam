@@ -258,6 +258,79 @@ function collectDeclaredGlobals(code) {
   return names;
 }
 
+/**
+ * Dead CSS: a declaration that a later rule with the same selector, in the same
+ * @media/@supports context, sets again. Same selector means same specificity, so
+ * the later one always wins and the earlier one never applies. This file grew
+ * 30-odd of these as rules were restyled further down instead of edited in place.
+ *
+ * Allowed: repeats inside one rule (`height: 100vh; height: 100dvh;` is a
+ * fallback), an earlier !important the later rule doesn't match, and a group
+ * rule (`.a, .b { … }`) unless every selector in it is overridden.
+ */
+function collectDeadCss(html) {
+  const found = [];
+  const styleRe = /<style[^>]*>([\s\S]*?)<\/style>/gi;
+  let sm;
+  while ((sm = styleRe.exec(html))) {
+    const base = html.slice(0, sm.index + sm[0].indexOf('>') + 1).split('\n').length - 1;
+    const css = sm[1].replace(/\/\*[\s\S]*?\*\//g, c => c.replace(/[^\n]/g, ' '));
+    const rules = [];
+    const stack = [];
+    let start = 0;
+    for (let i = 0; i < css.length; i++) {
+      const c = css[i];
+      if (c === '"' || c === "'") { i = css.indexOf(c, i + 1); continue; }
+      if (c === '}') { stack.pop(); start = i + 1; continue; }
+      if (c !== '{') continue;
+      const prelude = css.slice(start, i).trim();
+      if (prelude.startsWith('@') && !/^@(font-face|page)/.test(prelude)) {
+        stack.push(prelude); start = i + 1; continue;
+      }
+      let j = i + 1;
+      for (let depth = 1; depth; j++) {
+        if (css[j] === '{') depth++;
+        else if (css[j] === '}') depth--;
+      }
+      if (!stack.some(s => s.startsWith('@keyframes'))) {
+        const lead = css.slice(start, i).length - css.slice(start, i).trimStart().length;
+        rules.push({
+          sels: prelude.split(',').map(s => s.trim().replace(/\s+/g, ' ')),
+          ctx: stack.join(' / '),
+          line: base + css.slice(0, start + lead).split('\n').length,
+          decls: css.slice(i + 1, j - 1).split(/;(?![^(]*\))/)
+            .filter(d => d.includes(':'))
+            .map(d => { const k = d.indexOf(':'); return [d.slice(0, k).trim().toLowerCase(), d.slice(k + 1).trim()]; }),
+        });
+      }
+      start = j; i = j - 1;
+    }
+    const last = new Map();      // ctx|selector|prop -> [rule index, value]
+    const overridden = new Map(); // rule index|prop -> Set of overridden selectors
+    rules.forEach((r, idx) => {
+      for (const s of r.sels) {
+        for (const [k, v] of r.decls) {
+          const key = `${r.ctx}|${s}|${k}`;
+          const prev = last.get(key);
+          if (prev && prev[0] !== idx && !(prev[1].includes('!important') && !v.includes('!important'))) {
+            const ok = `${prev[0]}|${k}`;
+            if (!overridden.has(ok)) overridden.set(ok, { sels: new Set(), by: r.line });
+            overridden.get(ok).sels.add(s);
+            overridden.get(ok).by = r.line;
+          }
+          last.set(key, [idx, v]);
+        }
+      }
+    });
+    for (const [ok, { sels, by }] of overridden) {
+      const [idx, prop] = ok.split('|');
+      const r = rules[idx];
+      if (r.sels.every(s => sels.has(s))) found.push({ line: r.line, sel: r.sels.join(', '), prop, by });
+    }
+  }
+  return found.sort((a, b) => a.line - b.line);
+}
+
 async function lintFile(file) {
   const html = fs.readFileSync(file, 'utf8');
   const code = extractScripts(html);
@@ -376,10 +449,16 @@ async function lintFile(file) {
     console.log(`${file}:${line}  error  ${detail} — use escJsAttr: ${snippet}  unsafe-handler-interpolation`);
   }
 
-  const total = errors.length + deadHandlers + unsafeInterps;
+  const deadCss = collectDeadCss(html);
+  for (const { line, sel, prop, by } of deadCss) {
+    console.log(`${file}:${line}  error  '${prop}' on ${sel} is overridden by the same selector at line ${by}  dead-css`);
+  }
+
+  const total = errors.length + deadHandlers + unsafeInterps + deadCss.length;
   console.log(`\n${file}: ${total} error(s), ${warnings.length} warning(s)` +
     (deadHandlers ? ` — ${deadHandlers} dead inline handler(s)` : '') +
-    (unsafeInterps ? ` — ${unsafeInterps} unsafely interpolated handler(s)` : ''));
+    (unsafeInterps ? ` — ${unsafeInterps} unsafely interpolated handler(s)` : '') +
+    (deadCss.length ? ` — ${deadCss.length} dead CSS declaration(s)` : ''));
   return total;
 }
 
