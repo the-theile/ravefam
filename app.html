@@ -10131,7 +10131,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.12.1';
+  const APP_VERSION = '2.12.2';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -11316,7 +11316,10 @@
         ? 'That code has expired. Tap Resend code for a fresh one.'
         : "That code didn't match. Double-check the text and try again.";
     }
-    return msg || 'Something went wrong. Please try again.';
+    console.warn('smsErrorMessage: unmapped auth error', error);
+    return stage === 'verify'
+      ? "Couldn't check that code. Try again."
+      : "Couldn't send the code. Try again in a moment.";
   }
 
   async function sendSmsCode(phone) {
@@ -11506,7 +11509,10 @@
     if (stage === 'send' && !phone && (code === 'email_address_invalid' || code === 'validation_failed')) {
       return "That email doesn't look right. Double-check it.";
     }
-    return msg || 'Something went wrong. Please try again.';
+    console.warn('linkErrorMessage: unmapped auth error', error);
+    return stage === 'verify'
+      ? "Couldn't check that code. Try again."
+      : "Couldn't send the code. Try again in a moment.";
   }
 
   async function linkRequest(value) {
@@ -12888,8 +12894,8 @@
       actions = `<button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="backToScan()">Try Again</button>`;
     } else {
       icon    = '⚠️';
-      title   = 'Something went wrong';
-      desc    = "An error occurred while claiming your spot. Please try again.";
+      title   = "Couldn't claim your spot";
+      desc    = "Your spot is still saved. Try again, or ask your crew leader for a fresh invite.";
       actions = `<button class="btn btn-ghost" style="width:100%;padding:14px;" onclick="backToScan()">Try Again</button>`;
     }
     document.getElementById('error-body').innerHTML = `
@@ -13250,7 +13256,7 @@
   }
 
   function copyClaimLink(url) {
-    navigator.clipboard.writeText(url).then(() => showToast('📋 Link copied!')).catch(() => toastError('Copy failed'));
+    navigator.clipboard.writeText(url).then(() => showToast('📋 Link copied')).catch(() => toastError('Copy failed'));
   }
 
   let _reloadDebounce = null;
@@ -14293,7 +14299,7 @@
     if (_vibePickerFestId && _vibePickerFestId !== String(festId)) closeVibePicker(_vibePickerFestId);
     _vibePickerFestId = String(festId);
     const me = squad.find(r => r.isYou);
-    if (!me) { showToast('Claim your profile to add a vibe ✨'); return; }
+    if (!me) { showToast('Claim your profile to add a vibe'); return; }
     const existing = (festVibesCache[String(festId)] || []).find(v => String(v.raverId) === String(me.id));
     _vibePickerEmoji = existing?.emoji || null;
     const emojiGrid = VIBE_EMOJIS.map(e =>
@@ -14336,19 +14342,19 @@
   }
 
   async function doVibeSave(festId) {
-    if (!_vibePickerEmoji) { showToast('Pick an emoji first 🎉'); return; }
+    if (!_vibePickerEmoji) { showToast('Pick an emoji first'); return; }
     const caption = (document.getElementById(`vibe-caption-input-${festId}`)?.value || '').trim();
     await saveFestVibe(festId, _vibePickerEmoji, caption);
     closeVibePicker(festId);
     renderVibeRow(festId);
-    showToast('🔥 Vibe set!');
+    showToast('🔥 Vibe set');
   }
 
   async function doVibeClear(festId) {
     await clearFestVibe(festId);
     closeVibePicker(festId);
     renderVibeRow(festId);
-    showToast('Vibe cleared ✓');
+    showToast('✓ Vibe cleared');
   }
 
   function howWeMetSectionHTML(viewingRaverId, stories, raver) {
@@ -14477,7 +14483,7 @@
     const r = getRaver(raverId);
     const section = document.getElementById('how-we-met-section');
     if (section && r) section.innerHTML = howWeMetSectionHTML(raverId, metStoriesCache[String(raverId)] || {}, r);
-    showToast('✅ Memory saved!');
+    showToast('✅ Memory saved');
   }
 
   // ===== SUPABASE WRITE HELPERS =====
@@ -15116,7 +15122,7 @@
       if (currentUser) await sb.from('ravers').update({ avatar_url: url }).eq('id', String(raverId));
       renderSquad();
       openProfile(r.id);
-      showToast('✅ Profile photo updated!');
+      showToast('✅ Profile photo updated');
     } catch(e) {
       console.error('Profile photo upload error', e);
       toastError('Upload failed. Try again');
@@ -15297,7 +15303,7 @@
       renderCrews();
       renderDetail(crewId);
       refreshCrewEditTotemSection(crewId);
-      showToast('✅ Totem photo set!');
+      showToast('✅ Totem photo set');
     } catch(e) {
       console.error('Totem upload error', e);
       toastError('Upload failed. Try again');
@@ -15335,7 +15341,7 @@
       renderCrews();
       renderDetail(crewId);
       refreshCrewEditTotemSection(crewId);
-      showToast('✅ Totem icon set!');
+      showToast('✅ Totem icon set');
     };
     if (crew.totemPhotoUrl) {
       showPhotoConfirm({
@@ -15888,7 +15894,7 @@
       renderSquad();
       const r = squad.find(x => String(x.id) === String(viewingRaverId));
       if (r) openProfile(r.id);
-      showToast('📸 Photo saved!');
+      showToast('📸 Photo saved');
     } catch(e) {
       console.error('Our photo upload error', e);
       toastError('Upload failed. Try again');
@@ -16308,7 +16314,7 @@
       await loadAllData();
       renderSquad(); renderCrews(); renderEvents();
       if (page === 'stats') loadStatsPage();
-      showToast('Refreshed ✓');
+      showToast('✓ Refreshed');
     } catch (err) {
       console.error('[refreshTab]', err);
       toastError('Could not refresh. Try again');
@@ -16949,13 +16955,13 @@
     if (navigator.clipboard && navigator.clipboard.writeText) {
       try {
         await navigator.clipboard.writeText(text);
-        showToast('📋 Copied. Screenshot the card to share it too!');
+        showToast('📋 Copied. Screenshot the card to share it too.');
         return;
       } catch (e) {
         console.error('crew share: clipboard.writeText failed', e);
       }
     }
-    showToast('📋 Screenshot this card to share!');
+    showToast('📋 Screenshot this card to share');
   }
 
   // Switching Full Crew/This Rave or the photo checkbox replaces the card's
@@ -17140,12 +17146,12 @@
       } else {
         const a = document.createElement('a');
         a.href = url; a.download = fileName; a.click();
-        showToast('📥 Crew card downloaded!');
+        showToast('📥 Crew card downloaded');
       }
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (e) {
       console.error('crew share: image path failed entirely', e);
-      showToast('📋 Screenshot this card to share!');
+      showToast('📋 Screenshot this card to share');
       await shareCrewTextFallback(crew);
     }
   }
@@ -17353,13 +17359,13 @@
     if (navigator.clipboard && navigator.clipboard.writeText) {
       try {
         await navigator.clipboard.writeText(text);
-        showToast(linkOnly ? '🔗 Link copied!' : '📋 Copied. Screenshot the card to share it too!');
+        showToast(linkOnly ? '🔗 Link copied!' : '📋 Copied. Screenshot the card to share it too.');
         return;
       } catch (e) {
         console.error('rave share: clipboard.writeText failed', e);
       }
     }
-    showToast('📋 Screenshot this card to share!');
+    showToast('📋 Screenshot this card to share');
   }
 
   // See flattenAvatarImagesForCapture's note — html2canvas ignores
@@ -17468,12 +17474,12 @@
       } else {
         const a = document.createElement('a');
         a.href = url; a.download = fileName; a.click();
-        showToast('📥 Rave poster downloaded!');
+        showToast('📥 Rave poster downloaded');
       }
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (e) {
       console.error('rave share: image path failed entirely', e);
-      showToast('📋 Screenshot this card to share!');
+      showToast('📋 Screenshot this card to share');
       await shareRaveTextFallback(fest);
     }
   }
@@ -22416,7 +22422,7 @@
     if (!gp) return;
     const existing = new Set(gamePlanItems.filter(it => it.kind === 'task').map(t => (t.text || '').toLowerCase()));
     const toAdd = GAME_PLAN_TASK_STARTER_PACK.filter(t => !existing.has(t.toLowerCase()));
-    if (!toAdd.length) { showToast('Already on the list!'); return; }
+    if (!toAdd.length) { showToast('Already on the list'); return; }
     await Promise.all(toAdd.map(t => dbAddGamePlanTask(gp.id, crewId, t, null)));
     rerenderGamePlanChecklist(crewId);
   }
@@ -25588,7 +25594,7 @@
       }
     }
     vendorReviewsCache[vendor.id] = [];
-    showToast('🏪 Vendor added!');
+    showToast('🏪 Vendor added');
     await checkAndAwardVendorBadges();
     switchVendorTab('browse', document.querySelector('#vendor-village-root .stats-subtab'));
   }
@@ -25714,7 +25720,7 @@
 
   function copyDiscountCode(code) {
     navigator.clipboard.writeText(code);
-    showToast('📋 Code copied!');
+    showToast('📋 Code copied');
   }
 
   // ===== VENDOR VILLAGE — Detail view + reviews =====
@@ -25908,7 +25914,7 @@
     const ok = await dbUpsertVendorReview(vendorId, { rating: _vendorDetailDraftRating, body, photoUrl, attributeTags });
     if (!ok) { if (btn) { btn.disabled = false; btn.textContent = originalLabel; } return; }
     if (!existingReview && _guidance && !_guidance.quests.first_vendor_review) showFirstReviewMoment(vendorId);
-    else showToast('⭐ Review saved!');
+    else showToast('⭐ Review saved');
     openVendorDetail(vendorId);
     if (vendorVillageTab === 'browse') renderVendorBrowsePanel();
   }
@@ -26028,7 +26034,7 @@
     const caption = document.getElementById('vv-spot-caption').value;
     const spot = await dbAddVendorSpot(vendorId, _vendorSpotFestivalId, caption);
     if (!spot) return;
-    showToast('📍 Posted!');
+    showToast('📍 Posted');
     await checkAndAwardVendorBadges();
     openVendorDetail(vendorId);
     if (vendorVillageTab === 'browse') renderVendorBrowsePanel();
@@ -26480,7 +26486,7 @@
       }
     }
     venueReviewsCache[venue.id] = [];
-    showToast('🏛️ Venue added!');
+    showToast('🏛️ Venue added');
     switchVenueTab('browse', document.querySelector('#venue-village-root .stats-subtab'));
   }
 
@@ -26704,7 +26710,7 @@
     const body = document.getElementById('vn-review-body').value;
     const ok = await dbUpsertVenueReview(venueId, { rating: _venueDetailDraftRating, body });
     if (!ok) { if (btn) { btn.disabled = false; btn.textContent = originalLabel; } return; }
-    showToast('⭐ Review saved!');
+    showToast('⭐ Review saved');
     openVenueDetail(venueId);
     if (venueVillageTab === 'browse') renderVenueBrowsePanel();
   }
@@ -28105,7 +28111,7 @@
     if (!url) return;
     try {
       await navigator.clipboard.writeText(url);
-      showToast('🔗 Invite link copied! Send it to anyone you want in the crew.');
+      showToast('🔗 Invite link copied. Send it to anyone you want in the crew.');
     } catch {
       // No clipboard (insecure context / denied): leave the link selected.
       const input = document.getElementById('crew-invite-url');
@@ -30640,14 +30646,14 @@
     if (!fest) return;
     _nrpAddToContext(fest);
     closeNewRavePopup();
-    showToast(`Added ${fest.name} ✓`);
+    showToast(`✓ Added ${fest.name}`);
   }
 
   async function saveNewRavePopup() {
     const name = (document.getElementById('nrp-name')?.value || '').trim();
     const date = document.getElementById('nrp-date')?.value || '';
     const location = (document.getElementById('nrp-loc')?.value || '').trim();
-    if (!name) { showToast('Rave needs a name ✍️'); return; }
+    if (!name) { showToast('Rave needs a name'); return; }
     let fest = findFestivalByName(name, date);
     if (!fest) {
       let festId;
@@ -30661,7 +30667,7 @@
       festivals.push(fest);
       showToast(`🎉 Added ${name}`);
     } else {
-      showToast(`"${fest.name}" already exists. Added ✓`);
+      showToast(`✓ ${fest.name} was already listed. Added it`);
     }
     _nrpAddToContext(fest);
     closeNewRavePopup();
@@ -31104,7 +31110,7 @@
   function saveProfile() {
     console.log('[saveProfile] called, editingId=', editingId);
     const name = val('pf-name');
-    if (!name) { showToast('Give them a name first ✍️'); return; }
+    if (!name) { showToast('Give them a name first'); return; }
     const handleInput = document.getElementById('pf-handle');
     const rawHandle = handleInput
       ? (handleInput.value || '').trim().toLowerCase().replace(/^@/, '')
@@ -31199,7 +31205,7 @@
           showToast(`🎉 Created ${r.name} and added to ${crew.name}`);
         }
       } else {
-        showToast(`🎉 ${r.name} is in the fam! 🔥`);
+        showToast(`🎉 ${r.name} is in the fam!`);
         openCrewPickDialog(r.id);
       }
 
@@ -32395,7 +32401,7 @@
       if (error) throw error;
       const f = getFestival(festivalId);
       if (f) f.mapUrl = data.publicUrl;
-      showToast('✅ Festival map updated!');
+      showToast('✅ Festival map updated');
       openRaveEditor(festivalId);
     } catch (e) {
       console.error('Festival map upload error', e);
@@ -33286,8 +33292,8 @@
     const lng = lngRaw ? parseFloat(lngRaw) : null;
     const daysRaw = parseInt(document.getElementById('fe-days')?.value || '', 10);
     const days = daysRaw >= 1 && daysRaw <= 14 ? daysRaw : null;
-    if (!name) { showToast('Rave needs a name ✍️'); return; }
-    if (!date) { showToast('Pick a date 📅'); return; }
+    if (!name) { showToast('Rave needs a name'); return; }
+    if (!date) { showToast('Pick a date'); return; }
 
     const color = editRaveColor || null;
     const venueId = editingVenueId || null;
@@ -33632,7 +33638,7 @@
     if (currentUser) dbSaveRaver({ ...r }, r.id);
     renderSquad();
     renderSuggestVibeBody(raverId);
-    showToast('✅ Vibe tag added!');
+    showToast('✅ Vibe tag added');
     if (document.getElementById('page-profile')?.classList.contains('active')) openProfile(raverId);
   }
 
@@ -33650,7 +33656,7 @@
     if (currentUser) dbSaveRaver({ ...r }, r.id);
     renderSquad();
     closeSuggestVibeSheet();
-    showToast('✅ Vibe tag added!');
+    showToast('✅ Vibe tag added');
     if (document.getElementById('page-profile')?.classList.contains('active')) openProfile(raverId);
   }
 
@@ -35267,7 +35273,7 @@
     myRaver.handle = handle;
     hideHandlePicker();
     renderSquad();
-    showToast(`🎧 @${handle} locked and loaded!`);
+    showToast(`🎧 @${handle} locked and loaded`);
   }
 
   // ===== ONBOARDING =====
@@ -35325,7 +35331,7 @@
     const alreadySetUp = !!existingRaver?.handle;
     if (alreadySetUp) {
       obGoToStep(3);
-      showToast('🎤 Good news: your tag carried over. One quick question left!');
+      showToast('🎤 Good news: your tag carried over. One quick question left.');
     } else {
       if (subEl) {
         subEl.textContent = _pendingPostClaimCrewName
@@ -35541,7 +35547,7 @@
       return;
     }
     addNotification("✨ Profile locked in. You're on the grid: scan QR codes, join crews, and let the fam find you in the wild.");
-    showToast('✅ Identity confirmed. The fam will find you. 🎤');
+    showToast('✅ Identity confirmed. The fam will find you.');
     obAfterIdentity();
   }
 
@@ -37279,7 +37285,7 @@
             try {
               const a = document.createElement('a');
               a.href = url; a.download = 'my-rave-life.png'; a.click();
-              showToast('📥 Wrapped card downloaded!');
+              showToast('📥 Wrapped card downloaded');
             } finally {
               setTimeout(() => URL.revokeObjectURL(url), 1000);
             }
@@ -37287,11 +37293,11 @@
         }, 'image/png');
       } else {
         if (actions) actions.style.display = '';
-        showToast('📋 Screenshot this card to share!');
+        showToast('📋 Screenshot this card to share');
       }
     } catch {
       if (actions) actions.style.display = '';
-      showToast('📋 Screenshot this card to share!');
+      showToast('📋 Screenshot this card to share');
     }
   }
 
@@ -37425,7 +37431,7 @@
             try {
               const a = document.createElement('a');
               a.href = url; a.download = 'my-radar.png'; a.click();
-              showToast('📥 Radar card downloaded!');
+              showToast('📥 Radar card downloaded');
             } finally {
               setTimeout(() => URL.revokeObjectURL(url), 1000);
             }
@@ -37433,11 +37439,11 @@
         }, 'image/png');
       } else {
         showChrome();
-        showToast('📋 Screenshot this card to share!');
+        showToast('📋 Screenshot this card to share');
       }
     } catch {
       showChrome();
-      showToast('📋 Screenshot this card to share!');
+      showToast('📋 Screenshot this card to share');
     }
   }
 
