@@ -63,6 +63,14 @@ const PEOPLE = [
   ['r-nico', 'Nico B.', 'nicob', null, 'Miami, FL', ['Techno'], []],
 ];
 
+// Claimed ravers show a profile picture, unclaimed spots keep the initials
+// bubble (as in the app). Illustrated stand-ins from scripts/landing-avatars/
+// until real crew photos, shared with permission, replace them.
+const AVATARS = {
+  'r-you': 'alex', 'r-dani': 'dani', 'r-tess': 'tess', 'r-kai': 'kai', 'r-marco': 'marco', 'r-priya': 'priya',
+};
+const avatarUrl = (id) => (AVATARS[id] ? `/scripts/landing-avatars/${AVATARS[id]}.svg` : null);
+
 const UPCOMING = [
   { id: 'f-edc', name: 'EDC Orlando', date: '2026-11-06', days: 3, location: 'Tinker Field, Orlando FL', color: '#FF2D78' },
 ];
@@ -78,7 +86,7 @@ function demoData({ crewStatus = 'recruiting' } = {}) {
   const ravers = PEOPLE.map(([id, name, handle, uid, base, genres, vibes], i) => ({
     id, name, handle, is_you: id === 'r-you', created_by: TEST_UID, claimed_by: uid,
     status: uid ? 'claimed' : 'unclaimed', base, gradient: GRADS[i % GRADS.length],
-    avatar_url: null, blocked_tags: [], genres, instagram: '', radiate: '', phone: '',
+    avatar_url: avatarUrl(id), blocked_tags: [], genres, instagram: '', radiate: '', phone: '',
     phone_visible: false, met_story: '', notes: '', qr_token: `qr-${id}`,
     vibe_tags: vibes, custom_vibe_tags: [], deleted_at: null,
   }));
@@ -87,8 +95,8 @@ function demoData({ crewStatus = 'recruiting' } = {}) {
   dani.instagram = '@danivibes';
 
   const festivals = [...UPCOMING, ...PAST].map((f) => ({ ...f, deleted_at: null }));
-  const going = ['r-you', 'r-dani', 'r-tess', 'r-kai', 'r-marco', 'r-priya'];
-  const interested = ['r-jo', 'r-sam', 'r-lena'];
+  const going = ['r-you', 'r-dani', 'r-tess', 'r-kai', 'r-marco', 'r-priya', 'r-jo', 'r-sam'];
+  const interested = ['r-lena', 'r-rio', 'r-nico'];
   const raver_festivals = [
     ...going.map((r) => ({ raver_id: r, festival_id: 'f-edc' })),
     ...PAST.map((f, i) => ({ raver_id: 'r-you', festival_id: f.id, ticket_type: ['ga', 'ga', 'vip', 'ga', 'ga'][i] })),
