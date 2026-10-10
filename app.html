@@ -10160,7 +10160,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.12.5';
+  const APP_VERSION = '2.13.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -10869,6 +10869,20 @@
   // to the native side, so we navigate the webview to it here. The launch URL
   // is remembered per session so Supabase's URL cleanup can't cause a reload loop.
   const IS_NATIVE_APP = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+
+  // Taps via @capacitor/haptics. Only builds that bundle the plugin have it, so this
+  // does nothing on the web and in older iOS builds.
+  function nativeHaptics() {
+    return (IS_NATIVE_APP && window.Capacitor.Plugins && window.Capacitor.Plugins.Haptics) || null;
+  }
+  function hapticImpact(style) {
+    const H = nativeHaptics();
+    if (H) Promise.resolve().then(() => H.impact({ style })).catch(() => {});
+  }
+  function hapticSuccess() {
+    const H = nativeHaptics();
+    if (H) Promise.resolve().then(() => H.notification({ type: 'SUCCESS' })).catch(() => {});
+  }
 
   // Share the app itself (stands in for the Ko-fi links inside the iOS app).
   // Native share sheet via @capacitor/share, falling back to Web Share / copy.
@@ -11729,10 +11743,11 @@
   // `.citymap .leaflet-tile-pane` filter, which only touches the tile pane so
   // markers, popups and attribution keep their real colors.
   const BASEMAP_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-  function addBasemapTiles(map) {
+  function addBasemapTiles(map, extraOptions) {
     return L.tileLayer(BASEMAP_TILES, {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      maxZoom: 19
+      maxZoom: 19,
+      ...extraOptions
     }).addTo(map);
   }
 
@@ -37790,7 +37805,7 @@
     const animate = rawPoints.length > 1 && !prefersReducedMotion();
     // The journey opens tight on rave #1 and widens from there; the static view starts wide.
     const map = L.map(mapEl, { scrollWheelZoom: false, zoomControl: true }).setView([rawPoints[0].lat, rawPoints[0].lng], animate ? 7 : 4);
-    addBasemapTiles(map);
+    addBasemapTiles(map, { keepBuffer: 4 }); // hold more off-screen tiles so flights don't flash grey
     radarMapInstance = map;
 
     const pathGroup = L.layerGroup().addTo(map);
@@ -37815,6 +37830,7 @@
 
       const el = marker.getElement();
       if (el) el.style.filter = `drop-shadow(0 0 ${isNext ? 10 : 7}px ${p.color})`;
+      if (pop) hapticImpact(isNext ? 'MEDIUM' : 'LIGHT');
 
       markerEntries.push({ marker, el, point: { ...p }, isNext });
     }
@@ -37849,7 +37865,10 @@
     }
 
     if (animate) {
-      flyThroughRadarPoints(map, rawPoints, { revealMarker, relayout, drawLeg, onSettled: settle });
+      flyThroughRadarPoints(map, rawPoints, {
+        revealMarker, relayout, drawLeg,
+        onSettled: () => { if (radarMapInstance === map) hapticSuccess(); settle(); }
+      });
     } else {
       if (rawPoints.length > 1) map.fitBounds(rawPoints.map(p => [p.lat, p.lng]), { padding: [36, 36] });
       rawPoints.forEach((_, i) => revealMarker(i, false));
@@ -37878,10 +37897,11 @@
   // where the line lands — a satellite widening its scan rather than jumping
   // straight to the full picture.
   function flyThroughRadarPoints(map, rawPoints, { revealMarker, relayout, drawLeg, onSettled }) {
-    const stepMs = Math.max(900, Math.min(2600, 18000 / (rawPoints.length - 1)));
-    const FLY_MS = Math.round(stepMs * 0.5);
+    const stepMs = Math.max(1300, Math.min(3400, 24000 / (rawPoints.length - 1)));
+    const FLY_MS = Math.round(stepMs * 0.45);
     const LEG_MS = Math.round(stepMs * 0.35);
-    const HOLD_MS = Math.round(stepMs * 0.15);
+    const HOLD_MS = Math.round(stepMs * 0.2);
+    const SAME_CITY_BEAT_MS = 400; // extra pause between same-city pops, which skip the fly and leg
     const alive = () => radarMapInstance === map; // false once the page is left or Replay rebuilds
 
     let i = 1;
@@ -37900,7 +37920,7 @@
           revealMarker(i, true);
           relayout();
           i++;
-          setTimeout(i < rawPoints.length ? step : onSettled, HOLD_MS + (legPx < 12 ? 250 : 0));
+          setTimeout(i < rawPoints.length ? step : onSettled, HOLD_MS + (legPx < 12 ? SAME_CITY_BEAT_MS : 0));
         });
       };
       // Already comfortably in view (e.g. another rave in the same city) — no need to fly.
@@ -37909,12 +37929,68 @@
       map.flyToBounds(bounds, { padding: [36, 36], maxZoom: 9, duration: FLY_MS / 1000 });
     }
 
-    // Short beat for the first tiles to land before #1 appears, then hold on it.
-    setTimeout(() => {
+    // Warm the tile cache for every view the journey will pass through before #1
+    // appears, so flights land on a loaded map instead of grey squares. Capped so a
+    // slow connection delays the start by a few seconds at most.
+    const tilesReady = Promise.race([preloadRadarTiles(map, rawPoints), new Promise(r => setTimeout(r, 3000))]);
+    Promise.all([tilesReady, new Promise(r => setTimeout(r, 450))]).then(() => {
       if (!alive()) return;
       revealMarker(0, true);
-      setTimeout(step, Math.max(500, HOLD_MS * 2));
-    }, 450);
+      setTimeout(step, Math.max(700, HOLD_MS * 2));
+    });
+  }
+
+  // The views the journey will fly to (see flyThroughRadarPoints), each as the
+  // center/zoom flyToBounds would land on, with the same padding and maxZoom.
+  function radarJourneyViews(map, rawPoints) {
+    const views = [{ center: L.latLng(rawPoints[0].lat, rawPoints[0].lng), zoom: map.getZoom() }];
+    for (let i = 1; i < rawPoints.length; i++) {
+      const bounds = L.latLngBounds(rawPoints.slice(0, i + 1).map(p => [p.lat, p.lng]));
+      const zoom = Math.min(9, map.getBoundsZoom(bounds, false, L.point(72, 72)));
+      const sw = map.project(bounds.getSouthWest(), zoom), ne = map.project(bounds.getNorthEast(), zoom);
+      views.push({ center: map.unproject(sw.add(ne).divideBy(2), zoom), zoom });
+    }
+    return views;
+  }
+
+  // Fetches the basemap tiles covering each journey view, plus the in-between zoom
+  // levels a flight passes through, into the browser cache (Leaflet's own <img> tiles
+  // then load from it). Resolves once they've all loaded or failed.
+  function preloadRadarTiles(map, rawPoints) {
+    const MAX_TILES = 160; // stay a polite OSM tile client
+    const TILE = 256;
+    const half = map.getSize().divideBy(2);
+    const views = radarJourneyViews(map, rawPoints);
+    const urls = new Set();
+    function addView(center, zoom) {
+      const z = Math.round(zoom);
+      const c = map.project(center, z);
+      const min = c.subtract(half).divideBy(TILE).floor(), max = c.add(half).divideBy(TILE).floor();
+      const n = 1 << z;
+      for (let y = min.y; y <= max.y; y++) {
+        if (y < 0 || y >= n) continue;
+        for (let x = min.x; x <= max.x; x++) {
+          if (urls.size >= MAX_TILES) return;
+          urls.add(L.Util.template(BASEMAP_TILES, { x: ((x % n) + n) % n, y, z }));
+        }
+      }
+    }
+    views.forEach((v, k) => {
+      addView(v.center, v.zoom);
+      const prev = views[k - 1];
+      if (!prev) return;
+      const mid = L.latLng((prev.center.lat + v.center.lat) / 2, (prev.center.lng + v.center.lng) / 2);
+      for (let z = Math.min(prev.zoom, v.zoom); z < Math.max(prev.zoom, v.zoom); z++) addView(mid, z);
+    });
+    return new Promise(resolve => {
+      let left = urls.size;
+      if (!left) { resolve(); return; }
+      urls.forEach(url => {
+        const img = new Image();
+        img.onload = img.onerror = () => { if (--left === 0) resolve(); };
+        img.src = url;
+      });
+    });
   }
 
   function lerpColor(a, b, t) {
