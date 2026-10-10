@@ -475,13 +475,12 @@
   .crew-row-rsvp {
     padding: 6px 12px;
     border-radius: 100px;
-    border: 1.5px solid var(--neon-cyan);
-    background: rgba(var(--neon-cyan-rgb),0.08);
-    color: var(--white);
+    border: 1.5px solid rgba(var(--white-rgb),0.18);
+    background: transparent;
+    color: var(--text);
     font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.74rem;
     cursor: pointer;
   }
-  .crew-row-rsvp.is-interest { border-color: rgba(var(--white-rgb),0.18); background: transparent; color: var(--text); }
   .crew-row-rsvp.is-interest.on { border-color: var(--neon-yellow); color: var(--neon-yellow); background: rgba(var(--neon-yellow-rgb),0.08); }
   .crew-row-last {
     width: 100%;
@@ -1313,6 +1312,10 @@
   .crew-search-row .crew-add-card {
     width: auto; min-width: 112px; min-height: 0;
     flex-shrink: 0;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
     padding: 0 14px;
     border: 1.5px solid rgba(var(--neon-pink-rgb),0.45);
     border-radius: 12px;
@@ -1320,8 +1323,8 @@
     text-align: center;
     white-space: nowrap;
   }
-  .crew-search-row .add-icon { font-size: 1rem; margin-right: 4px; }
-  .crew-search-row .add-label { font-size: 0.82rem; }
+  .crew-search-row .add-icon { font-size: 1rem; line-height: 1; }
+  .crew-search-row .add-label { font-size: 0.82rem; line-height: 1; }
   .crew-search {
     width: 100%; box-sizing: border-box;
     background: var(--surface);
@@ -35792,6 +35795,50 @@
     return [];
   }
 
+  // Why a points_earned notification landed. The row only stores the track and
+  // amount in its message, but data.event_type has been there all along, so the
+  // reason is resolved at render time and older rows get context too. Falls back
+  // to the point_event_types description (if already loaded) for new types.
+  const NOTIF_POINTS_WHY = {
+    profile_complete: 'Completed your profile',
+    profile_refresh: 'Kept your profile fresh',
+    festival_solo: 'Raved solo',
+    festival_shared: 'Raved together with a crewmate',
+    festival_early_rsvp: 'RSVP’d Going early',
+    beacon_checkin: 'Checked in with Huddle Beacon',
+    rave_milestone: 'Hit a rave milestone',
+    archive_link_added: 'Added an archive link from a shared rave',
+    crew_jam_added: 'Added a jam for the crew',
+    dream_pin_hyped: 'Hyped someone’s dream-board pin',
+    game_plan_item_added: 'Added to a crew Game Plan',
+    game_plan_template_applied: 'Started a Game Plan from a template',
+    met_story_written: 'Wrote a met story',
+    crew_milestone_festivals: 'Your crew hit a festivals-together milestone',
+    sets_synced: 'Synced your sets',
+    invite_claimed_inviter: 'Someone claimed your invite',
+    invite_claimed_inviter_merge: 'Someone claimed your invite',
+    invite_claimed_invitee: 'Claimed your spot in the fam',
+    crew_created: 'Created a crew',
+    crew_joined: 'Joined a crew',
+    poll_organizer_qualified: 'Ran a poll the whole crew voted on',
+    poll_full_participation_voter: 'Voted on every poll in your crew',
+    crew_full_roster: 'Every spot in your crew got claimed',
+    crew_bridge_rave: 'Raved with more than one of your crews',
+    realm_discovered: 'Discovered a new corner of the app',
+    vendor_review_written: 'Left a vendor review',
+    vendor_spot_posted: 'Posted a vendor spot',
+    game_plan_safety_role: 'Took a safety role in a Game Plan',
+    account_tenure_bonus: 'Loyalty bonus for sticking around',
+    fam_pin_individual_bonus: 'Earned an individual FAM Pin'
+  };
+  function notifPointsWhy(n) {
+    const t = n.type === 'points_earned' && n.data && n.data.event_type;
+    if (!t) return '';
+    if (NOTIF_POINTS_WHY[t]) return NOTIF_POINTS_WHY[t];
+    const row = (_plurEventTypesCache || []).find(e => e.event_type === t);
+    return row ? row.description : '';
+  }
+
   function notifLinkHTML(l, innerHtml) {
     const attrs = [
       `data-nl-kind="${escHtml(String(l.k))}"`,
@@ -36043,6 +36090,8 @@
       }
     } else {
       ({ html: messageHtml, linked } = linkifyNotifMessage(e.text, notifLinkTargets(n)));
+      const why = notifPointsWhy(n);
+      if (why) moreHtml = `<div class="notif-more">${escHtml(why)}</div>`;
     }
     const buttons = grouped ? [] : notifActionButtons(n);
     const actionsHtml = buttons.length
