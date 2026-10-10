@@ -7681,6 +7681,12 @@
   .radar-marker-next { animation: radarMarkerPulseNext 1.7s ease-in-out infinite; }
   @keyframes radarMarkerPulse { 0%,100% { opacity: 0.78; transform: scale(1); } 50% { opacity: 1; transform: scale(1.1); } }
   @keyframes radarMarkerPulseNext { 0%,100% { opacity: 0.88; transform: scale(1); } 50% { opacity: 1; transform: scale(1.26); } }
+  /* Journey reveal: each marker pops in as the path reaches it, then settles into its pulse. */
+  .radar-marker.radar-marker-pop { animation: radarMarkerPop 0.55s cubic-bezier(0.32,0.72,0,1) both, radarMarkerPulse 2.6s ease-in-out 0.55s infinite; }
+  .radar-marker-next.radar-marker-pop { animation: radarMarkerPop 0.55s cubic-bezier(0.32,0.72,0,1) both, radarMarkerPulseNext 1.7s ease-in-out 0.55s infinite; }
+  @keyframes radarMarkerPop { 0% { opacity: 0; transform: scale(0.2); } 60% { opacity: 1; transform: scale(1.35); } 100% { opacity: 0.85; transform: scale(1); } }
+  .radar-label-pop { animation: radarLabelPop 0.4s ease-out 0.15s both; }
+  @keyframes radarLabelPop { from { opacity: 0; } }
   .radar-marker-label {
     background: none; border: none; box-shadow: none; padding: 0;
     font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: 0.68rem;
@@ -37766,65 +37772,74 @@
 
   function buildRadarMap(mapEl, rawPoints) {
     mapEl.innerHTML = '';
-    const map = L.map(mapEl, { scrollWheelZoom: false, zoomControl: true }).setView([rawPoints[0].lat, rawPoints[0].lng], 4);
+    const animate = rawPoints.length > 1 && !prefersReducedMotion();
+    // The journey opens tight on rave #1 and widens from there; the static view starts wide.
+    const map = L.map(mapEl, { scrollWheelZoom: false, zoomControl: true }).setView([rawPoints[0].lat, rawPoints[0].lng], animate ? 7 : 4);
     addBasemapTiles(map);
     radarMapInstance = map;
 
-    function settle() {
-      if (radarMapInstance !== map) return; // page left mid-animation
+    const pathGroup = L.layerGroup().addTo(map);
+    const markerEntries = []; // grows as raves are revealed, in chronological order
 
-      const points = declutterRadarPoints(map, rawPoints);
+    function revealMarker(i, pop) {
+      const p = rawPoints[i];
+      const isNext = i === 0;
+      const marker = L.circleMarker([p.lat, p.lng], {
+        radius: isNext ? 14 : 11,
+        color: p.color,
+        weight: 2,
+        fillColor: p.color,
+        fillOpacity: 0.55,
+        className: 'radar-marker' + (isNext ? ' radar-marker-next' : '') + (pop ? ' radar-marker-pop' : '')
+      }).addTo(map);
 
-      const markerEntries = points.map((p, i) => {
-        const isNext = i === 0;
-        const radius = isNext ? 14 : 11;
-        const marker = L.circleMarker([p.lat, p.lng], {
-          radius,
-          color: p.color,
-          weight: 2,
-          fillColor: p.color,
-          fillOpacity: 0.55,
-          className: 'radar-marker' + (isNext ? ' radar-marker-next' : '')
-        }).addTo(map);
+      const d = festDate(p.fest);
+      const days = Math.ceil((d - TODAY) / 86400000);
+      marker.bindPopup(`<strong>${escHtml(p.fest.name)}</strong><br>in ${days} day${days !== 1 ? 's' : ''}`);
+      marker.bindTooltip(String(i + 1), { permanent: true, direction: 'center', className: 'radar-marker-label' + (pop ? ' radar-label-pop' : ''), interactive: false });
 
-        const d = festDate(p.fest);
-        const days = Math.ceil((d - TODAY) / 86400000);
-        marker.bindPopup(`<strong>${escHtml(p.fest.name)}</strong><br>in ${days} day${days !== 1 ? 's' : ''}`);
-        marker.bindTooltip(String(i + 1), { permanent: true, direction: 'center', className: 'radar-marker-label', interactive: false });
+      const el = marker.getElement();
+      if (el) el.style.filter = `drop-shadow(0 0 ${isNext ? 10 : 7}px ${p.color})`;
 
-        const el = marker.getElement();
-        if (el) el.style.filter = `drop-shadow(0 0 ${isNext ? 10 : 7}px ${p.color})`;
+      markerEntries.push({ marker, el, point: { ...p }, isNext });
+    }
 
-        return { marker, el, point: p, isNext };
+    // Fans out whichever markers are revealed so far (see declutterRadarPoints), so a
+    // same-city cluster opens into its ring one rave at a time. Also re-run on every zoom
+    // change: the fan-out is a fixed lat/lng delta sized for the zoom it was computed at,
+    // so without this the ring keeps growing on screen as the user zooms in.
+    function relayout() {
+      if (radarMapInstance !== map || !markerEntries.length) return;
+      const repositioned = declutterRadarPoints(map, rawPoints.slice(0, markerEntries.length));
+      markerEntries.forEach((entry, k) => {
+        entry.marker.setLatLng([repositioned[k].lat, repositioned[k].lng]);
+        entry.point = repositioned[k];
       });
+    }
+    map.on('zoomend', relayout);
 
-      // Uses rawPoints (true geocoded coordinates), not the decluttered fan-out — the path
-      // is supposed to show the real journey between raves. Drawing it through the fanned-out
-      // marker positions instead turns any same-city cluster into a fake little loop, since
-      // the fan-out arranges same-city raves in a circle and the path just traces that circle.
-      drawRadarPath(map, rawPoints);
-      startRadarPingCanvas(map, markerEntries);
-
-      // The fan-out offset is computed as a fixed lat/lng delta sized to look right in
-      // *pixels* at the zoom active when it was computed. Leaflet re-projects that fixed
-      // delta to more and more screen pixels the further the user zooms in afterward (the
-      // zoom controls are live), so without this the ring keeps growing on screen the more
-      // you zoom in instead of staying put. Recompute and reposition on every zoom change
-      // so the on-screen fan-out radius stays constant regardless of what zoom you're at.
-      map.on('zoomend', () => {
-        if (radarMapInstance !== map) return;
-        const repositioned = declutterRadarPoints(map, rawPoints);
-        markerEntries.forEach((entry, i) => {
-          entry.marker.setLatLng([repositioned[i].lat, repositioned[i].lng]);
-          entry.point = repositioned[i];
-        });
+    // Legs use rawPoints (true geocoded coordinates), not the decluttered fan-out — the path
+    // is supposed to show the real journey between raves. Drawing it through the fanned-out
+    // marker positions instead turns any same-city cluster into a fake little loop.
+    function drawLeg(i, durationMs, onDone) {
+      drawRadarLeg(map, pathGroup, rawPoints[i - 1], rawPoints[i], durationMs, () => {
+        markerEntries.forEach(entry => entry.marker.bringToFront()); // keep dots above the line
+        if (onDone) onDone();
       });
     }
 
-    if (rawPoints.length > 1 && !prefersReducedMotion()) {
-      flyThroughRadarPoints(map, rawPoints, settle);
+    function settle() {
+      if (radarMapInstance !== map) return; // page left mid-animation
+      startRadarPingCanvas(map, markerEntries);
+    }
+
+    if (animate) {
+      flyThroughRadarPoints(map, rawPoints, { revealMarker, relayout, drawLeg, onSettled: settle });
     } else {
       if (rawPoints.length > 1) map.fitBounds(rawPoints.map(p => [p.lat, p.lng]), { padding: [36, 36] });
+      rawPoints.forEach((_, i) => revealMarker(i, false));
+      relayout();
+      for (let i = 1; i < rawPoints.length; i++) drawLeg(i, 0);
       settle();
     }
   }
@@ -37833,22 +37848,58 @@
     return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   }
 
-  // Zooms the map out one rave at a time, in the same chronological order as the
-  // numbered markers (1, then 1-2, then 1-2-3, ...), before settling on the final
-  // view that fits them all — a satellite widening its scan rather than jumping
+  // Runs cb once the map finishes moving, with a timeout fallback — Leaflet can skip
+  // 'moveend' when a flyToBounds target matches the current view.
+  function afterRadarMove(map, maxMs, cb) {
+    let fired = false;
+    const go = () => { if (fired) return; fired = true; map.off('moveend', go); cb(); };
+    map.on('moveend', go);
+    setTimeout(go, maxMs);
+  }
+
+  // Plays the journey one rave at a time, in the same chronological order as the
+  // numbered markers: #1 pops in, then for each next rave the map widens to fit
+  // everything so far, the path draws the leg over to it, and its marker pops in
+  // where the line lands — a satellite widening its scan rather than jumping
   // straight to the full picture.
-  function flyThroughRadarPoints(map, rawPoints, onSettled) {
-    const stepMs = Math.max(220, Math.min(650, 3000 / (rawPoints.length - 1)));
+  function flyThroughRadarPoints(map, rawPoints, { revealMarker, relayout, drawLeg, onSettled }) {
+    const stepMs = Math.max(900, Math.min(2600, 18000 / (rawPoints.length - 1)));
+    const FLY_MS = Math.round(stepMs * 0.5);
+    const LEG_MS = Math.round(stepMs * 0.35);
+    const HOLD_MS = Math.round(stepMs * 0.15);
+    const alive = () => radarMapInstance === map; // false once the page is left or Replay rebuilds
+
     let i = 1;
     function step() {
-      if (radarMapInstance !== map) return; // page left mid-animation
+      if (!alive()) return;
       const bounds = rawPoints.slice(0, i + 1).map(p => [p.lat, p.lng]);
-      const done = i + 1 >= rawPoints.length;
-      i++;
-      map.once('moveend', () => { if (done) onSettled(); else setTimeout(step, 40); });
-      map.flyToBounds(bounds, { padding: [36, 36], duration: stepMs / 1000 });
+      const a = rawPoints[i - 1], b = rawPoints[i];
+      const proceed = () => {
+        if (!alive()) return;
+        relayout();
+        // Same-city raves share a geocode, so their leg has no length on screen — skip
+        // straight to the pop instead of a long beat where nothing visibly happens.
+        const legPx = map.latLngToContainerPoint([a.lat, a.lng]).distanceTo(map.latLngToContainerPoint([b.lat, b.lng]));
+        drawLeg(i, legPx < 12 ? 0 : LEG_MS, () => {
+          if (!alive()) return;
+          revealMarker(i, true);
+          relayout();
+          i++;
+          setTimeout(i < rawPoints.length ? step : onSettled, HOLD_MS + (legPx < 12 ? 250 : 0));
+        });
+      };
+      // Already comfortably in view (e.g. another rave in the same city) — no need to fly.
+      if (map.getBounds().pad(-0.1).contains([b.lat, b.lng])) { proceed(); return; }
+      afterRadarMove(map, FLY_MS + 600, proceed);
+      map.flyToBounds(bounds, { padding: [36, 36], maxZoom: 9, duration: FLY_MS / 1000 });
     }
-    step();
+
+    // Short beat for the first tiles to land before #1 appears, then hold on it.
+    setTimeout(() => {
+      if (!alive()) return;
+      revealMarker(0, true);
+      setTimeout(step, Math.max(500, HOLD_MS * 2));
+    }, 450);
   }
 
   function lerpColor(a, b, t) {
@@ -37859,42 +37910,39 @@
     return `#${((1 << 24) + (r << 16) + (g << 8) + b2).toString(16).slice(1)}`;
   }
 
-  // Connecting polyline in chronological order, color-gradiented between each rave's
-  // radar-dot color by chopping every leg into small interpolated segments (Leaflet has
-  // no native per-vertex gradient stroke). Segments reveal progressively for the "draw-on".
-  function drawRadarPath(map, points) {
-    if (points.length < 2) return;
+  // One leg of the connecting path (a → b), color-gradiented between the two raves'
+  // radar-dot colors by chopping it into small interpolated segments (Leaflet has no
+  // native per-vertex gradient stroke). Segments reveal progressively for the "draw-on";
+  // durationMs 0 draws it instantly.
+  function drawRadarLeg(map, group, a, b, durationMs, onDone) {
     const SEGS = 18;
-    const segments = [];
-    for (let i = 0; i < points.length - 1; i++) {
-      const a = points[i], b = points[i + 1];
-      for (let s = 0; s < SEGS; s++) {
-        const t0 = s / SEGS, t1 = (s + 1) / SEGS;
-        const latlngs = [
-          [a.lat + (b.lat - a.lat) * t0, a.lng + (b.lng - a.lng) * t0],
-          [a.lat + (b.lat - a.lat) * t1, a.lng + (b.lng - a.lng) * t1]
-        ];
-        segments.push({ latlngs, color: lerpColor(a.color, b.color, (t0 + t1) / 2) });
-      }
+    const glow = [], core = [];
+    for (let s = 0; s < SEGS; s++) {
+      const t0 = s / SEGS, t1 = (s + 1) / SEGS;
+      const latlngs = [
+        [a.lat + (b.lat - a.lat) * t0, a.lng + (b.lng - a.lng) * t0],
+        [a.lat + (b.lat - a.lat) * t1, a.lng + (b.lng - a.lng) * t1]
+      ];
+      const color = lerpColor(a.color, b.color, (t0 + t1) / 2);
+      glow.push(L.polyline(latlngs, { color, weight: 9, opacity: 0.22, lineCap: 'round', interactive: false }));
+      core.push(L.polyline(latlngs, { color, weight: 2.5, opacity: 0.95, lineCap: 'round', interactive: false }));
     }
 
-    const group = L.layerGroup().addTo(map);
-    const glow = segments.map(seg => L.polyline(seg.latlngs, { color: seg.color, weight: 9, opacity: 0.22, lineCap: 'round', interactive: false }));
-    const core = segments.map(seg => L.polyline(seg.latlngs, { color: seg.color, weight: 2.5, opacity: 0.95, lineCap: 'round', interactive: false }));
-
-    const DRAW_MS = 2400;
-    const start = performance.now();
     let revealed = 0;
+    const revealTo = n => { for (; revealed < n; revealed++) { glow[revealed].addTo(group); core[revealed].addTo(group); } };
+    if (!durationMs) { revealTo(SEGS); if (onDone) onDone(); return; }
+
+    const start = performance.now();
     function frame(now) {
-      const raw = Math.min(1, (now - start) / DRAW_MS);
-      const eased = 1 - Math.pow(1 - raw, 3); // ease-out, similar feel to the app's cubic-bezier(0.32,0.72,0,1) transitions
-      const target = Math.floor(eased * segments.length);
-      for (; revealed < target; revealed++) { glow[revealed].addTo(group); core[revealed].addTo(group); }
+      if (radarMapInstance !== map) { radarPathRafId = null; return; } // page left mid-draw
+      const raw = Math.min(1, (now - start) / durationMs);
+      const eased = raw < 0.5 ? 4 * raw * raw * raw : 1 - Math.pow(-2 * raw + 2, 3) / 2; // ease-in-out, so the line "travels"
+      revealTo(raw < 1 ? Math.floor(eased * SEGS) : SEGS);
       if (raw < 1) {
         radarPathRafId = requestAnimationFrame(frame);
       } else {
-        for (; revealed < segments.length; revealed++) { glow[revealed].addTo(group); core[revealed].addTo(group); }
         radarPathRafId = null;
+        if (onDone) onDone();
       }
     }
     radarPathRafId = requestAnimationFrame(frame);
