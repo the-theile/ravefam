@@ -53,7 +53,7 @@ const PEOPLE = [
   ['r-dani', 'Dani V.', 'danivibes', 'uid-dani', 'Tampa, FL', ['Melodic Bass', 'Trance'],
     ['vt-kandi', 'vt-glittergremlin', 'vt-lineupguru', 'vt-raincoat', 'vt-mirrorball']],
   ['r-tess', 'Tess K.', 'tesswubs', 'uid-tess', 'Orlando, FL', ['Dubstep', 'Riddim'], ['vt-bassface']],
-  ['r-kai', 'Kai M.', 'kaibeats', 'uid-kai', 'Miami, FL', ['Techno'], ['vt-sunglasses']],
+  ['r-kai', 'Kai M.', 'kaibeats', 'uid-kai', 'Ibiza, Spain', ['Techno'], ['vt-sunglasses']],
   ['r-marco', 'Marco D.', 'marcod', 'uid-marco', 'Orlando, FL', ['House'], []],
   ['r-priya', 'Priya S.', 'priyaplur', 'uid-priya', 'Gainesville, FL', ['Trance'], []],
   ['r-jo', 'Jordan L.', 'jordanl', null, 'Orlando, FL', ['Bass'], []],
@@ -64,12 +64,13 @@ const PEOPLE = [
 ];
 
 // Claimed ravers show a profile picture, unclaimed spots keep the initials
-// bubble (as in the app). Illustrated stand-ins from scripts/landing-avatars/
-// until real crew photos, shared with permission, replace them.
+// bubble (as in the app). Files live in scripts/landing-avatars/: real crew
+// photos (.jpg) only for people who said yes, illustrated stand-ins (.svg)
+// for everyone else until they do.
 const AVATARS = {
-  'r-you': 'alex', 'r-dani': 'dani', 'r-tess': 'tess', 'r-kai': 'kai', 'r-marco': 'marco', 'r-priya': 'priya',
+  'r-you': 'alex.jpg', 'r-dani': 'dani.svg', 'r-tess': 'tess.svg', 'r-kai': 'kai.jpg', 'r-marco': 'marco.svg', 'r-priya': 'priya.svg',
 };
-const avatarUrl = (id) => (AVATARS[id] ? `/scripts/landing-avatars/${AVATARS[id]}.svg` : null);
+const avatarUrl = (id) => (AVATARS[id] ? `/scripts/landing-avatars/${AVATARS[id]}` : null);
 
 const UPCOMING = [
   { id: 'f-edc', name: 'EDC Orlando', date: '2026-11-06', days: 3, location: 'Tinker Field, Orlando FL', color: '#FF2D78' },
