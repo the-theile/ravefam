@@ -9526,6 +9526,11 @@
           <span class="settings-nav-text"><span class="poll-setting-label">Tips &amp; hints</span><span class="poll-setting-hint">Intros and tips as you find new stuff</span></span>
           <button class="poll-anon-toggle" id="tips-settings-toggle" onclick="toggleTipsEnabled(this)"></button>
         </div>
+        <div class="settings-nav-row native-only" id="haptics-settings-row">
+          <span class="settings-nav-ico" style="background:rgba(var(--neon-cyan-rgb),0.12);">📳</span>
+          <span class="settings-nav-text"><span class="poll-setting-label">Haptics</span><span class="poll-setting-hint">Taps when you RSVP, vote, react and more</span></span>
+          <button class="poll-anon-toggle" id="haptics-settings-toggle" onclick="toggleHapticsEnabled(this)"></button>
+        </div>
         <button type="button" class="settings-nav-row" onclick="closePrivacySettingsModal();openAppGuide()">
           <span class="settings-nav-ico" style="background:rgba(var(--white-rgb),0.06);">❔</span>
           <span class="settings-nav-text"><span class="poll-setting-label">Guide &amp; Help</span></span>
@@ -10220,7 +10225,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.14.3';
+  const APP_VERSION = '2.15.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -10931,9 +10936,15 @@
   const IS_NATIVE_APP = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 
   // Taps via @capacitor/haptics. Only builds that bundle the plugin have it, so this
-  // does nothing on the web and in older iOS builds.
+  // does nothing on the web and in older iOS builds. Settings → Haptics turns them
+  // off on this device.
+  const HAPTICS_OFF_KEY = 'ravefam_haptics_off';
+  function hapticsEnabled() {
+    try { return localStorage.getItem(HAPTICS_OFF_KEY) !== '1'; } catch { return true; }
+  }
   function nativeHaptics() {
-    return (IS_NATIVE_APP && window.Capacitor.Plugins && window.Capacitor.Plugins.Haptics) || null;
+    if (!IS_NATIVE_APP || !hapticsEnabled()) return null;
+    return (window.Capacitor.Plugins && window.Capacitor.Plugins.Haptics) || null;
   }
   function hapticImpact(style) {
     const H = nativeHaptics();
@@ -10942,6 +10953,10 @@
   function hapticSuccess() {
     const H = nativeHaptics();
     if (H) Promise.resolve().then(() => H.notification({ type: 'SUCCESS' })).catch(() => {});
+  }
+  function hapticError() {
+    const H = nativeHaptics();
+    if (H) Promise.resolve().then(() => H.notification({ type: 'ERROR' })).catch(() => {});
   }
 
   // Share the app itself (stands in for the Ko-fi links inside the iOS app).
@@ -12650,6 +12665,7 @@
     // Flash effect
     const flash = document.getElementById('scan-flash');
     if (flash) { flash.classList.remove('flash'); void flash.offsetWidth; flash.classList.add('flash'); }
+    hapticImpact('HEAVY');
     handleClaimToken(token, false);
   }
 
@@ -12824,6 +12840,7 @@
   }
 
   function claimToggleChip(el) {
+    hapticImpact('LIGHT');
     el.classList.toggle('declined');
     el.setAttribute('aria-pressed', el.classList.contains('declined') ? 'false' : 'true');
   }
@@ -13179,6 +13196,7 @@
 
     document.getElementById('claim-success-screen').classList.add('open');
     launchConfetti();
+    hapticSuccess();
     if (window._successAutoClose) clearTimeout(window._successAutoClose);
     window._successAutoClose = setTimeout(closeSuccessScreen, 7000);
   }
@@ -13360,7 +13378,7 @@
   }
 
   function copyClaimLink(url) {
-    navigator.clipboard.writeText(url).then(() => showToast('📋 Link copied')).catch(() => toastError('Copy failed'));
+    navigator.clipboard.writeText(url).then(() => { hapticSuccess(); showToast('📋 Link copied'); }).catch(() => toastError('Copy failed'));
   }
 
   let _reloadDebounce = null;
@@ -13452,8 +13470,9 @@
       badge.classList.add('plur-celebrate-burst');
     }
     if (title) title.textContent = ev.badge_name;
-    if (sub)   sub.textContent   = `You've leveled up in ${meta.name || 'PLUR'} . Keep it going!`;
+    if (sub)   sub.textContent   = `You've leveled up in ${meta.name || 'PLUR'}. Keep it going!`;
     document.getElementById('plur-tier-celebrate-overlay')?.classList.add('open');
+    hapticSuccess();
   }
 
   function closePlurTierCelebration() {
@@ -16423,6 +16442,11 @@
       _tabRefreshing = false;
     }
   }
+
+  // Light tick for bottom-nav taps only; switchTab is also called from code.
+  document.querySelector('nav')?.addEventListener('click', e => {
+    if (e.target.closest('.nav-tab')) hapticImpact('LIGHT');
+  });
 
   function switchTab(page, el) {
     const _now = Date.now();
@@ -21109,12 +21133,14 @@
     huddleMessages.push(optimistic);
     renderHuddleUI();
     huddleScrollMessagesToBottom();
+    hapticImpact('LIGHT');
     const { data, error } = await sb.from('huddle_messages').insert({
       room_id: _huddleActiveRoomId, crew_id: _huddleActiveCrewId, sender_id: currentUser.id, ...fields
     }).select().single();
     const idx = huddleMessages.findIndex(m => m.id === tempId);
     if (error || !data) {
       if (idx >= 0) { huddleMessages[idx]._pending = false; huddleMessages[idx]._failed = true; }
+      hapticError();
       renderHuddleUI();
       return;
     }
@@ -21385,6 +21411,7 @@
   async function toggleHuddleReaction(messageId, emoji) {
     const msg = huddleMessages.find(m => String(m.id) === String(messageId));
     if (!msg || !currentUser) return;
+    hapticImpact('LIGHT');
     const uid = currentUser.id;
     const reactions = { ...(msg.reactions || {}) };
     const existing = reactions[emoji] || [];
@@ -22529,6 +22556,7 @@
   }
 
   async function toggleGamePlanTask(itemId, done) {
+    hapticImpact(done ? 'MEDIUM' : 'LIGHT');
     await dbToggleGamePlanTaskDone(itemId, done);
     rerenderGamePlanChecklist(_gamePlanActiveCrewId);
     if (done) {
@@ -22541,7 +22569,7 @@
     const myRaver = squad.find(r => r.isYou);
     if (!myRaver) return;
     const data = await dbClaimGamePlanTask(itemId, myRaver.id);
-    if (data) markCrewQuest('task', _gamePlanActiveCrewId);
+    if (data) { hapticImpact('MEDIUM'); markCrewQuest('task', _gamePlanActiveCrewId); }
     rerenderGamePlanChecklist(_gamePlanActiveCrewId);
     if (data) postGamePlanActivity(_gamePlanActiveCrewId, _gamePlanActiveFestivalId, `🙋 ${displayName(myRaver).split(' ')[0]} claimed "${data.text}"`);
   }
@@ -23113,6 +23141,7 @@
   }
 
   async function toggleGamePlanOutfitReaction(itemId, emoji) {
+    hapticImpact('LIGHT');
     await dbToggleReaction('game_plan_items', gamePlanItems, itemId, emoji);
     rerenderGamePlanOutfit(_gamePlanActiveCrewId);
   }
@@ -23190,6 +23219,7 @@
   }
 
   async function toggleHype(pinId, crewId) {
+    hapticImpact('LIGHT');
     await dbToggleHype(pinId);
     rerenderDreamBoard(crewId);
     checkAndAwardBadges(crewId);
@@ -24028,6 +24058,7 @@
     if (!poll || !pollIsOpen(poll) || !currentUser) return;
     const existing = (crewPollVotes[pollId] || []).find(v => v.voter_user_id === currentUser.id);
     if (existing) { showToast('You\'ve already voted on this one 👀'); return; }
+    hapticImpact('MEDIUM');
     await dbVotePoll(pollId, String(voteValue));
     rerenderPolls(crewId);
     checkAndAwardBadges(crewId);
@@ -24064,6 +24095,7 @@
   }
 
   async function togglePollReaction(pollId, crewId, emoji) {
+    hapticImpact('LIGHT');
     await dbTogglePollReaction(pollId, emoji);
     rerenderPolls(crewId);
   }
@@ -24659,6 +24691,7 @@
   }
 
   async function toggleJamReaction(jamId, crewId, emoji) {
+    hapticImpact('LIGHT');
     await dbToggleJamReaction(jamId, emoji);
     rerenderJams(crewId);
   }
@@ -25820,8 +25853,7 @@
   }
 
   function copyDiscountCode(code) {
-    navigator.clipboard.writeText(code);
-    showToast('📋 Code copied');
+    navigator.clipboard.writeText(code).then(() => { hapticSuccess(); showToast('📋 Code copied'); }).catch(() => toastError('Copy failed'));
   }
 
   // ===== VENDOR VILLAGE — Detail view + reviews =====
@@ -27491,6 +27523,7 @@
     crew.members.push({ i: initials(me.name), c: me.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)', t: '#000', url: me.avatarUrl || null });
     renderCrews();
     renderDetail(id);
+    hapticSuccess();
     showToast(`🎉 You joined ${crew.name}!`);
     if (currentUser) {
       dbAddCrewMember(crew.id, me.id);
@@ -28212,6 +28245,7 @@
     if (!url) return;
     try {
       await navigator.clipboard.writeText(url);
+      hapticSuccess();
       showToast('🔗 Invite link copied. Send it to anyone you want in the crew.');
     } catch {
       // No clipboard (insecure context / denied): leave the link selected.
@@ -31324,7 +31358,7 @@
       closeProfileEditor();
       renderSquad(); renderCrews(); renderEvents();
       if (r.isYou) {
-        addNotification(`✨ Profile locked in! You're now on the grid — scan QR codes, join crews, and let the fam find you in the wild.`);
+        addNotification(PROFILE_LOCKED_IN_MSG);
       }
 
       if (pendingFest) {
@@ -33104,6 +33138,7 @@
     const isGoing = you.festIds.some(fid => String(fid) === String(festId));
     if (isGoing) {
       you.festIds = you.festIds.filter(fid => String(fid) !== String(festId));
+      hapticImpact('LIGHT');
       showToast('Removed from your raves');
     } else {
       const fest = festivals.find(f => String(f.id) === String(festId));
@@ -33111,6 +33146,7 @@
       // Mutually exclusive: clear Interested if switching to Going
       you.interestedFestIds = (you.interestedFestIds || []).filter(fid => String(fid) !== String(festId));
       you.festIds.push(fest ? fest.id : festId);
+      hapticImpact('MEDIUM');
       showToast(isPast ? `🎟️ Sent it at ${fest?.name || 'that rave'}!` : `✅ You're going to ${fest?.name || 'that rave'}!`);
       addNotification(isPast ? `🎟️ Logged! You sent it at ${fest?.name || 'that rave'}.` : `🎪 You're locked in for ${fest?.name || 'that rave'}! Pack your kit, charge the glowsticks, and get ready for the frequencies.`, [nlRave(fest)]);
       // Let each of your crews know — skip Secret crews, same posture as notifyCrewMembers.
@@ -33218,12 +33254,14 @@
     const isInterested = you.interestedFestIds.some(fid => String(fid) === String(festId));
     if (isInterested) {
       you.interestedFestIds = you.interestedFestIds.filter(fid => String(fid) !== String(festId));
+      hapticImpact('LIGHT');
       showToast('Removed from interested');
     } else {
       const fest = festivals.find(f => String(f.id) === String(festId));
       // Mutually exclusive: clear Going if switching to Interested
       you.festIds = (you.festIds || []).filter(fid => String(fid) !== String(festId));
       you.interestedFestIds.push(fest ? fest.id : festId);
+      hapticImpact('MEDIUM');
       showToast(`👀 Watching ${fest?.name || 'that rave'}`);
     }
     renderSetupPill();
@@ -33696,19 +33734,6 @@
   countChecks();
 
   // ── Inline tag editing (genres & favArtists) ─────────────────────────────
-  function addTag(raverId, field, value) {
-    const v = (value || '').trim();
-    if (!v) return;
-    const r = getRaver(raverId);
-    if (!r) return;
-    const blocked = r.blockedTags || [];
-    if (blocked.includes(v.toLowerCase())) { showToast('That tag was blocked by the profile owner.'); return; }
-    if ((r[field] || []).map(x => x.toLowerCase()).includes(v.toLowerCase())) { showToast('Already on the list'); return; }
-    r[field] = [...(r[field] || []), v];
-    if (currentUser) dbSaveRaver({ ...r }, r.id);
-    renderSquad();
-    openProfile(raverId);
-  }
   function removeTag(raverId, field, value) {
     const r = getRaver(raverId);
     if (!r) return;
@@ -34143,6 +34168,9 @@
     pushToggle.classList.remove('on');
     mentionToggle.classList.remove('on');
     document.getElementById('tips-settings-toggle').classList.toggle('on', _guidance?.help_level !== 'pro');
+    // Builds without the plugin (App Store build before the haptics release) can't buzz.
+    document.getElementById('haptics-settings-row').style.display = window.Capacitor?.Plugins?.Haptics ? '' : 'none';
+    document.getElementById('haptics-settings-toggle').classList.toggle('on', hapticsEnabled());
     const loads = [renderShareLinkSettings(), renderLineupAlertSettings()];
     renderBlockedRaversSettings();
     showSettingsPage(page);
@@ -34560,6 +34588,14 @@
     showToast(on ? 'Tips turned on' : 'Tips turned off');
   }
 
+  function toggleHapticsEnabled(btn) {
+    const on = !btn.classList.contains('on');
+    btn.classList.toggle('on', on);
+    try { on ? localStorage.removeItem(HAPTICS_OFF_KEY) : localStorage.setItem(HAPTICS_OFF_KEY, '1'); } catch {}
+    hapticImpact('MEDIUM');
+    showToast(on ? 'Haptics turned on' : 'Haptics turned off');
+  }
+
   // Intros, tips and one-time hints come back; places stay found.
   function resetGuidanceTips() {
     if (!_guidance) return;
@@ -34792,6 +34828,7 @@
         msg = "You don't have permission to do that.";
       }
     }
+    hapticError();
     showToast(msg, 'error');
   }
 
@@ -35690,7 +35727,7 @@
       if (btn) { btn.disabled = false; btn.textContent = "I'm Ready →"; }
       return;
     }
-    addNotification("✨ Profile locked in. You're on the grid: scan QR codes, join crews, and let the fam find you in the wild.");
+    addNotification(PROFILE_LOCKED_IN_MSG);
     showToast('✅ Identity confirmed. The fam will find you.');
     obAfterIdentity();
   }
@@ -35741,6 +35778,9 @@
   let _notifications = [];
 
   function loadNotifs() { return _notifications; }
+
+  // Sent once your own profile exists, from the profile editor or onboarding.
+  const PROFILE_LOCKED_IN_MSG = "✨ Profile locked in. You're on the grid: scan QR codes, join crews, and let the fam find you in the wild.";
 
   function addNotification(message, links) {
     const data = nlData(links);
@@ -36607,6 +36647,7 @@
       _wrappedUnlocked = true;
       _wrappedStarTaps = 0;
       loadStatsPage();
+      hapticSuccess();
       showToast('✨ You found it. Rave Wrapped unlocked!');
     }
   }
