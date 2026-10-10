@@ -43,6 +43,7 @@ Each native PR adds a line here; **After release** holds web changes that wait o
 
 - Lineup Explorer and other myravefam.com pages stay in the app's webview (`server.allowNavigation`) (#387)
 - Edge swipe-back on pages outside `/app` (#386, #387)
+- Haptic taps as each rave pops in on the Radar Map, plus a success tap at the end (`@capacitor/haptics`)
 
 **After release**
 - Re-add `/lineup-explorer` and `/lineup-explorer/*` to `.well-known/apple-app-site-association`
