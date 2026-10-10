@@ -7704,7 +7704,39 @@
   }
   .radarmap-replay-btn:hover { background: rgba(var(--neon-cyan-rgb),0.16); border-color: rgba(var(--neon-cyan-rgb),0.5); }
   .radarmap-replay-btn:active { transform: scale(0.96); }
-  .radarmap { height: 320px; }
+  .radarmap { height: 380px; }
+  /* Journey HUD: miles odometer (top-right) and the caption card along the bottom,
+     kept above the OSM attribution. Popups (z 700) still open above both. */
+  .radar-odo {
+    position: absolute; top: 10px; right: 10px; z-index: 640; pointer-events: none;
+    font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: 0.68rem; letter-spacing: 0.06em;
+    font-variant-numeric: tabular-nums; color: var(--neon-cyan);
+    background: rgba(var(--bg-rgb),0.78); border: 1px solid rgba(var(--neon-cyan-rgb),0.3);
+    border-radius: 100px; padding: 5px 10px;
+  }
+  .radar-odo span { color: var(--muted); font-size: 0.58rem; margin-left: 4px; }
+  .radar-caption {
+    position: absolute; left: 10px; right: 10px; bottom: 24px; z-index: 640;
+    display: flex; align-items: center; gap: 10px; min-height: 58px; padding: 9px 12px;
+    background: rgba(var(--surface-rgb),0.92); border: 1px solid rgba(var(--white-rgb),0.08);
+    border-radius: 14px; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    font-family: 'Outfit', sans-serif; color: var(--text);
+  }
+  .radar-caption:empty { display: none; }
+  .radar-caption.tappable { cursor: pointer; }
+  .radar-caption.tappable:active { transform: scale(0.98); }
+  .radar-caption-swap { animation: radarCaptionIn 0.35s cubic-bezier(0.32,0.72,0,1); }
+  @keyframes radarCaptionIn { from { opacity: 0; transform: translateY(6px); } }
+  .radar-caption-dot { width: 11px; height: 11px; border-radius: 50%; flex: none; background: currentColor; box-shadow: 0 0 10px currentColor; }
+  .radar-caption-main { flex: 1; min-width: 0; }
+  .radar-caption-title { font-weight: 700; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .radar-caption-sub { font-size: 0.74rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .radar-caption-num { font-family: 'Orbitron', sans-serif; font-weight: 800; font-size: 1rem; color: var(--muted); flex: none; }
+  .radar-recap-stats { font-size: 0.8rem; color: var(--muted); line-height: 1.35; }
+  .radar-recap-stats b { font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: 0.82rem; color: var(--text); font-variant-numeric: tabular-nums; }
+  .radar-recap-title { font-family: 'Orbitron', sans-serif; font-size: 0.58rem; letter-spacing: 0.16em; color: var(--neon-green); margin-bottom: 2px; }
+  .radar-comet { pointer-events: none; }
+  @media (prefers-reduced-motion: reduce) { .radar-caption-swap { animation: none; } }
   .radar-marker {
     transform-box: fill-box; transform-origin: center;
     transition: filter 0.15s ease-out;
@@ -10177,7 +10209,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.13.0';
+  const APP_VERSION = '2.14.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -37873,6 +37905,7 @@
 
     const pathGroup = L.layerGroup().addTo(map);
     const markerEntries = []; // grows as raves are revealed, in chronological order
+    const hud = createRadarHud(mapEl, rawPoints);
 
     function revealMarker(i, pop) {
       const p = rawPoints[i];
@@ -37893,7 +37926,7 @@
 
       const el = marker.getElement();
       if (el) el.style.filter = `drop-shadow(0 0 ${isNext ? 10 : 7}px ${p.color})`;
-      if (pop) hapticImpact(isNext ? 'MEDIUM' : 'LIGHT');
+      if (pop) { hapticImpact(isNext ? 'MEDIUM' : 'LIGHT'); hud.stop(i); }
 
       markerEntries.push({ marker, el, point: { ...p }, isNext });
     }
@@ -37919,21 +37952,23 @@
       drawRadarLeg(map, pathGroup, rawPoints[i - 1], rawPoints[i], durationMs, () => {
         markerEntries.forEach(entry => entry.marker.bringToFront()); // keep dots above the line
         if (onDone) onDone();
-      });
+      }, u => hud.legProgress(i, u));
     }
 
     function settle() {
       if (radarMapInstance !== map) return; // page left mid-animation
+      hud.recap();
       startRadarPingCanvas(map, markerEntries);
     }
 
     if (animate) {
       flyThroughRadarPoints(map, rawPoints, {
         revealMarker, relayout, drawLeg,
+        depart: i => hud.travel(i),
         onSettled: () => { if (radarMapInstance === map) hapticSuccess(); settle(); }
       });
     } else {
-      if (rawPoints.length > 1) map.fitBounds(rawPoints.map(p => [p.lat, p.lng]), { padding: [36, 36] });
+      if (rawPoints.length > 1) map.fitBounds(rawPoints.map(p => [p.lat, p.lng]), RADAR_VIEW_PADDING);
       rawPoints.forEach((_, i) => revealMarker(i, false));
       relayout();
       for (let i = 1; i < rawPoints.length; i++) drawLeg(i, 0);
@@ -37959,7 +37994,7 @@
   // everything so far, the path draws the leg over to it, and its marker pops in
   // where the line lands — a satellite widening its scan rather than jumping
   // straight to the full picture.
-  function flyThroughRadarPoints(map, rawPoints, { revealMarker, relayout, drawLeg, onSettled }) {
+  function flyThroughRadarPoints(map, rawPoints, { revealMarker, relayout, drawLeg, depart, onSettled }) {
     const stepMs = Math.max(1300, Math.min(3400, 24000 / (rawPoints.length - 1)));
     const FLY_MS = Math.round(stepMs * 0.45);
     const LEG_MS = Math.round(stepMs * 0.35);
@@ -37978,6 +38013,9 @@
         // Same-city raves share a geocode, so their leg has no length on screen — skip
         // straight to the pop instead of a long beat where nothing visibly happens.
         const legPx = map.latLngToContainerPoint([a.lat, a.lng]).distanceTo(map.latLngToContainerPoint([b.lat, b.lng]));
+        // A real trip swaps the caption to "Heading to …" as the line sets off (the last
+        // rave's card stays up through the flight so it can be read); same-city raves just pop in.
+        if (legPx >= 12) depart(i);
         drawLeg(i, legPx < 12 ? 0 : LEG_MS, () => {
           if (!alive()) return;
           revealMarker(i, true);
@@ -37986,10 +38024,10 @@
           setTimeout(i < rawPoints.length ? step : onSettled, HOLD_MS + (legPx < 12 ? SAME_CITY_BEAT_MS : 0));
         });
       };
-      // Already comfortably in view (e.g. another rave in the same city) — no need to fly.
-      if (map.getBounds().pad(-0.1).contains([b.lat, b.lng])) { proceed(); return; }
+      // Already comfortably in view, clear of the caption card — no need to fly.
+      if (radarPointInView(map, b)) { proceed(); return; }
       afterRadarMove(map, FLY_MS + 600, proceed);
-      map.flyToBounds(bounds, { padding: [36, 36], maxZoom: 9, duration: FLY_MS / 1000 });
+      map.flyToBounds(bounds, { ...RADAR_VIEW_PADDING, maxZoom: 9, duration: FLY_MS / 1000 });
     }
 
     // Warm the tile cache for every view the journey will pass through before #1
@@ -38003,17 +38041,106 @@
     });
   }
 
+  // Map padding for every journey view: room for the odometer up top and the caption
+  // card (plus the OSM attribution under it) along the bottom.
+  const RADAR_VIEW_PADDING = { paddingTopLeft: [36, 44], paddingBottomRight: [36, 116] };
+
+  function radarPointInView(map, p) {
+    const pt = map.latLngToContainerPoint([p.lat, p.lng]), size = map.getSize();
+    const [l, t] = RADAR_VIEW_PADDING.paddingTopLeft, [r, b] = RADAR_VIEW_PADDING.paddingBottomRight;
+    return pt.x >= l && pt.x <= size.x - r && pt.y >= t && pt.y <= size.y - b;
+  }
+
   // The views the journey will fly to (see flyThroughRadarPoints), each as the
-  // center/zoom flyToBounds would land on, with the same padding and maxZoom.
+  // center/zoom flyToBounds would land on, with the same padding and maxZoom
+  // (mirrors Leaflet's _getBoundsCenterZoom).
   function radarJourneyViews(map, rawPoints) {
+    const tl = L.point(RADAR_VIEW_PADDING.paddingTopLeft), br = L.point(RADAR_VIEW_PADDING.paddingBottomRight);
     const views = [{ center: L.latLng(rawPoints[0].lat, rawPoints[0].lng), zoom: map.getZoom() }];
     for (let i = 1; i < rawPoints.length; i++) {
       const bounds = L.latLngBounds(rawPoints.slice(0, i + 1).map(p => [p.lat, p.lng]));
-      const zoom = Math.min(9, map.getBoundsZoom(bounds, false, L.point(72, 72)));
+      const zoom = Math.min(9, map.getBoundsZoom(bounds, false, tl.add(br)));
       const sw = map.project(bounds.getSouthWest(), zoom), ne = map.project(bounds.getNorthEast(), zoom);
-      views.push({ center: map.unproject(sw.add(ne).divideBy(2), zoom), zoom });
+      const center = map.unproject(sw.add(ne).divideBy(2).add(br.subtract(tl).divideBy(2)), zoom);
+      views.push({ center, zoom });
     }
     return views;
+  }
+
+  // Short place name from a rave's location ("Jacksonville, Florida, United States"
+  // → "Jacksonville" for parts=1, "Jacksonville, Florida" for parts=2).
+  function radarPlaceName(f, parts) {
+    return (festivalLocationSource(f).location || '').split(',').map(x => x.trim()).filter(Boolean).slice(0, parts).join(', ');
+  }
+
+  // Journey HUD laid over the map: a miles odometer that ticks up as each leg draws,
+  // and a caption card that says where the journey is heading, then which rave just
+  // landed (tap to open it), then a recap of the whole radar once it settles.
+  function createRadarHud(mapEl, rawPoints) {
+    const odo = document.createElement('div');
+    odo.className = 'radar-odo';
+    const cap = document.createElement('div');
+    cap.className = 'radar-caption';
+    cap.setAttribute('aria-live', 'polite');
+    mapEl.appendChild(odo);
+    mapEl.appendChild(cap);
+    L.DomEvent.disableClickPropagation(cap); // taps on the card shouldn't reach the map
+
+    const legMiles = rawPoints.map((p, i) => i ? haversineMiles(rawPoints[i - 1].lat, rawPoints[i - 1].lng, p.lat, p.lng) : 0);
+    const legDone = rawPoints.map(() => 0);
+    const setOdo = () => {
+      const mi = legMiles.reduce((sum, m, i) => sum + m * legDone[i], 0);
+      odo.innerHTML = `${Math.round(mi).toLocaleString()}<span>MI</span>`;
+    };
+    setOdo();
+
+    function show(html, onTap) {
+      cap.innerHTML = html;
+      cap.onclick = onTap || null;
+      cap.classList.toggle('tappable', !!onTap);
+      if (onTap) { cap.setAttribute('role', 'button'); cap.tabIndex = 0; } else { cap.removeAttribute('role'); cap.removeAttribute('tabindex'); }
+      cap.classList.remove('radar-caption-swap');
+      void cap.offsetWidth; // restart the swap animation
+      cap.classList.add('radar-caption-swap');
+    }
+    cap.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && cap.onclick) { e.preventDefault(); cap.onclick(); } });
+
+    return {
+      legProgress(i, u) { legDone[i] = u; setOdo(); },
+      travel(i) {
+        const from = rawPoints[i - 1], to = rawPoints[i], mi = legMiles[i], fly = mi > 400;
+        show(`<span class="radar-caption-dot" style="color:${to.color};"></span>
+          <div class="radar-caption-main">
+            <div class="radar-caption-title">${fly ? '✈️' : '🚗'} Heading to ${escHtml(radarPlaceName(to.fest, 1) || 'the next rave')}</div>
+            <div class="radar-caption-sub">${fly ? 'Fly' : 'Drive'} · ${Math.round(mi).toLocaleString()} mi from ${escHtml(radarPlaceName(from.fest, 1) || 'the last one')}</div>
+          </div>`);
+      },
+      stop(i) {
+        const p = rawPoints[i], f = p.fest, d = festDate(f);
+        const days = Math.ceil((d - TODAY) / 86400000);
+        const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const place = radarPlaceName(f, 2);
+        show(`<span class="radar-caption-dot" style="color:${p.color};"></span>
+          <div class="radar-caption-main">
+            <div class="radar-caption-title">${escHtml(f.name)}</div>
+            <div class="radar-caption-sub">${escHtml(dateLabel)}${place ? ' · ' + escHtml(place) : ''} · in ${days} day${days !== 1 ? 's' : ''}</div>
+          </div>
+          <span class="radar-caption-num">${String(i + 1).padStart(2, '0')}</span>`, () => openRaveFocus(String(f.id)));
+      },
+      recap() {
+        if (rawPoints.length < 2) { this.stop(0); return; }
+        rawPoints.forEach((_, i) => { legDone[i] = 1; });
+        setOdo();
+        const cities = new Set(rawPoints.map(p => radarPlaceName(p.fest, 2).toLowerCase() || `${p.lat.toFixed(2)},${p.lng.toFixed(2)}`)).size;
+        const miles = Math.round(legMiles.reduce((a, b) => a + b, 0));
+        const span = Math.round((festDate(rawPoints[rawPoints.length - 1].fest) - festDate(rawPoints[0].fest)) / 86400000);
+        show(`<div class="radar-caption-main">
+            <div class="radar-recap-title">YOUR RADAR RUN</div>
+            <div class="radar-recap-stats"><b>${rawPoints.length}</b> raves · <b>${cities}</b> ${cities === 1 ? 'city' : 'cities'} · <b>${miles.toLocaleString()}</b> mi${span > 0 ? ` · <b>${span}</b> days` : ''}</div>
+          </div>
+          <button type="button" class="radarmap-replay-btn" style="margin-left:0;flex:none;" onclick="openRadarShareCard()" aria-label="Share your radar">📲 Share</button>`);
+      }
+    };
   }
 
   // Fetches the basemap tiles covering each journey view, plus the in-between zoom
@@ -38068,15 +38195,23 @@
   // radar-dot colors by chopping it into small interpolated segments (Leaflet has no
   // native per-vertex gradient stroke). Segments reveal progressively for the "draw-on";
   // durationMs 0 draws it instantly.
-  function drawRadarLeg(map, group, a, b, durationMs, onDone) {
-    const SEGS = 18;
+  function drawRadarLeg(map, group, a, b, durationMs, onDone, onProgress) {
+    const SEGS = 24;
+    // Bow the leg into a flight arc: a quadratic curve in projected (screen-shaped)
+    // space whose control point sits off the midpoint, toward the top of the map.
+    const z = map.getZoom();
+    const pa = map.project([a.lat, a.lng], z), pb = map.project([b.lat, b.lng], z);
+    const len = pa.distanceTo(pb);
+    let nx = 0, ny = 0;
+    if (len > 1) { nx = -(pb.y - pa.y) / len; ny = (pb.x - pa.x) / len; if (ny > 0) { nx = -nx; ny = -ny; } }
+    const cx = (pa.x + pb.x) / 2 + nx * len * 0.2, cy = (pa.y + pb.y) / 2 + ny * len * 0.2;
+    const arcAt = t => map.unproject(L.point(
+      (1 - t) * (1 - t) * pa.x + 2 * (1 - t) * t * cx + t * t * pb.x,
+      (1 - t) * (1 - t) * pa.y + 2 * (1 - t) * t * cy + t * t * pb.y), z);
     const glow = [], core = [];
     for (let s = 0; s < SEGS; s++) {
       const t0 = s / SEGS, t1 = (s + 1) / SEGS;
-      const latlngs = [
-        [a.lat + (b.lat - a.lat) * t0, a.lng + (b.lng - a.lng) * t0],
-        [a.lat + (b.lat - a.lat) * t1, a.lng + (b.lng - a.lng) * t1]
-      ];
+      const latlngs = [arcAt(t0), arcAt(t1)];
       const color = lerpColor(a.color, b.color, (t0 + t1) / 2);
       glow.push(L.polyline(latlngs, { color, weight: 9, opacity: 0.22, lineCap: 'round', interactive: false }));
       core.push(L.polyline(latlngs, { color, weight: 2.5, opacity: 0.95, lineCap: 'round', interactive: false }));
@@ -38084,7 +38219,12 @@
 
     let revealed = 0;
     const revealTo = n => { for (; revealed < n; revealed++) { glow[revealed].addTo(group); core[revealed].addTo(group); } };
-    if (!durationMs) { revealTo(SEGS); if (onDone) onDone(); return; }
+    if (!durationMs) { revealTo(SEGS); if (onProgress) onProgress(1); if (onDone) onDone(); return; }
+
+    // Comet head: a bright dot leading the line as it draws.
+    const head = L.circleMarker(arcAt(0), { radius: 4.5, color: b.color, weight: 2, fillColor: '#ffffff', fillOpacity: 1, interactive: false, className: 'radar-comet' }).addTo(group);
+    const headEl = head.getElement();
+    if (headEl) headEl.style.filter = `drop-shadow(0 0 6px ${b.color}) drop-shadow(0 0 12px ${b.color})`;
 
     const start = performance.now();
     function frame(now) {
@@ -38092,10 +38232,13 @@
       const raw = Math.min(1, (now - start) / durationMs);
       const eased = raw < 0.5 ? 4 * raw * raw * raw : 1 - Math.pow(-2 * raw + 2, 3) / 2; // ease-in-out, so the line "travels"
       revealTo(raw < 1 ? Math.floor(eased * SEGS) : SEGS);
+      head.setLatLng(arcAt(eased));
+      if (onProgress) onProgress(eased);
       if (raw < 1) {
         radarPathRafId = requestAnimationFrame(frame);
       } else {
         radarPathRafId = null;
+        group.removeLayer(head);
         if (onDone) onDone();
       }
     }
