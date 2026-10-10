@@ -10209,7 +10209,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.14.0';
+  const APP_VERSION = '2.14.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -29124,96 +29124,53 @@
     btn.textContent = expanded ? 'Show less ▴' : `Show all ${total} ▾`;
   }
 
-  function openProfile(id, editMode = false, origin = null) {
-    const raw = getRaver(id);
-    if (!raw) return;
+  // ===== Profile page render (openProfile) =====
+  // openProfile() coordinates; each piece below builds one part of the page
+  // from a shared ctx: { raw, r, editMode, seeAsCrew, perms, upcomingFests, pastFests }.
+  const PROFILE_STAGE_PAL = ['#FF2D78','#BF00FF','#00F5FF','#39FF14','#FFB800','#FF3355'];
+
+  function profileCtx(raw, editMode) {
     // 2.0 "See as your crew": your own profile rendered as a crewmate sees it —
     // isYou off, so raverPerms applies your real privacy switches. Read-only.
     const seeAsCrew = _seeAsCrew && raw.isYou && !editMode;
     const r = seeAsCrew ? { ...raw, isYou: false } : raw;
-    if (origin !== null) profileOrigin = origin;
-    if (_raverHistoryLoadedFor !== String(id)) {
-      raverHistoryRows = [];
-      _raverHistoryLoadedFor = String(id);
+    return {
+      raw, r, editMode, seeAsCrew,
+      // Permission flags for this viewer on this raver
+      perms: raverPerms(r),
+      // Upcoming: sorted soonest-first; past: most recent first
+      upcomingFests: raverUpcoming(r),
+      pastFests: raverPast(r),
+    };
+  }
+
+  // Inline tag chips — in view mode chips are display-only; editing requires Edit Profile
+  function profileTagChipHTML(ctx, val, field) {
+    const { r, editMode, perms } = ctx;
+    if (field === 'favArtists') {
+      const artist = findArtistById(val);
+      if (!artist) return '';
+      const canEdit = editMode && (r.isYou || perms.editArtists);
+      const onRemove = canEdit
+        ? `showConfirm('Remove tag?','Remove “${escJsAttr(artist.name)}”?','Remove',()=>removeTag('${r.id}','favArtists','${artist.id}'))`
+        : null;
+      return favArtistChipHTML(artist, canEdit ? { onRemove } : null);
     }
-
-    // Upcoming: sorted soonest-first, with date + countdown
-    const upcomingFests = raverUpcoming(r);
-    const festListUpcoming = upcomingFests.length
-      ? upcomingFests.map(f => `
-          <div class="fest-row">
-            <span>${escHtml(f.name)}<span class="fest-loc">📍 ${escHtml(f.location || 'TBD')}</span></span>
-            <span class="fest-when">${festWhenLabel(f)} <span class="fest-cd">⏳ ${countdownLabel(f._d)}</span></span>
-          </div>`).join('')
-      : '<div class="fest-empty">No raves lined up yet</div>';
-
-    // Past: most recent first, year shown
-    const pastFests = raverPast(r);
-    const festListPast = pastFests.length
-      ? pastFests.map(f => `
-          <div class="fest-row">
-            <span>${escHtml(f.name)}<span class="fest-loc">📍 ${escHtml(f.location || 'TBD')}</span></span>
-            <span class="fest-when">${f._d.getFullYear()}</span>
-          </div>`).join('')
-      : '<div class="fest-empty">No raves in your history yet</div>';
-
-    // Permission flags for this viewer on this raver
-    const perms = raverPerms(r);
-
-    // Personal next-rave countdown banner
-    // === PROFILE PRIVACY & PERMISSIONS ===
-    // Respect RSVP privacy here too — otherwise a "keep RSVPs private" viewer
-    // would still leak their next rave via this banner.
-    let nextBanner = '';
-    if (upcomingFests.length && (r.isYou || perms.rsvpsVisible)) {
-      const f = upcomingFests[0];
-      const n = daysUntil(f._d);
-      nextBanner = `
-        <div class="countdown-banner cd-slim" style="background:${safeGradient(r.gradient)}">
-          <div class="cd-main">
-            <div class="cd-label">⏳ Next rave</div>
-            <div class="cd-fest">${escHtml(f.name)}</div>
-            <div class="cd-date">${festWhenLabel(f)} · 📍 ${escHtml(f.location || 'TBD')}</div>
-          </div>
-          <div class="cd-num" aria-label="${n === 0 ? "It's today" : n === 1 ? '1 day to go' : n + ' days to go'}">${n === 0 ? '🔥<small>TODAY</small>' : `${n}<small>${n === 1 ? 'DAY' : 'DAYS'}</small>`}</div>
-        </div>`;
-    }
-
-    // Inline tag chips — in view mode chips are display-only; editing requires Edit Profile
-    const blockedTags = r.blockedTags || [];
-    function tagChip(val, field) {
-      if (field === 'favArtists') {
-        const artist = findArtistById(val);
-        if (!artist) return '';
-        const canEdit = editMode && (r.isYou || perms.editArtists);
-        const onRemove = canEdit
-          ? `showConfirm('Remove tag?','Remove \u201C${escJsAttr(artist.name)}\u201D?','Remove',()=>removeTag('${r.id}','favArtists','${artist.id}'))`
-          : null;
-        return favArtistChipHTML(artist, canEdit ? { onRemove } : null);
+    const col = genreColor(val);
+    const cs = `--chip-col:${col};`;
+    if (editMode) {
+      const canEdit = r.isYou || perms.editGenres;
+      if (canEdit) {
+        return `<span class="fav-chip tag-removable" style="${cs}">${escHtml(val)}<button class="tag-remove-btn" title="Remove ${escHtml(val)}" aria-label="Remove ${escHtml(val)}"
+          onclick="showConfirm('Remove tag?','Remove “${escJsAttr(val)}”?','Remove',()=>removeTag('${escJsAttr(r.id)}','${escJsAttr(field)}','${escJsAttr(val)}'))">&nbsp;✕</button></span>`;
       }
-      const col = genreColor(val);
-      const cs = `--chip-col:${col};`;
-      if (editMode) {
-        const canEdit = r.isYou || perms.editGenres;
-        if (canEdit) {
-          return `<span class="fav-chip tag-removable" style="${cs}">${escHtml(val)}<button class="tag-remove-btn" title="Remove ${escHtml(val)}" aria-label="Remove ${escHtml(val)}"
-            onclick="showConfirm('Remove tag?','Remove \u201C${escJsAttr(val)}\u201D?','Remove',()=>removeTag('${escJsAttr(r.id)}','${escJsAttr(field)}','${escJsAttr(val)}'))">&nbsp;✕</button></span>`;
-        }
-      }
-      return `<span class="fav-chip" style="${cs}">${escHtml(val)}</span>`;
     }
-    const addTagInput = (field, placeholder) => `
-      <input class="tag-add-input" id="tag-input-${field}" aria-label="${escHtml(placeholder)}" placeholder="${placeholder}"
-        enterkeyhint="done" inputmode="text"
-        onkeydown="if(event.key==='Enter'&&this.value.trim()){addTag('${escJsAttr(r.id)}','${escJsAttr(field)}',this.value);this.value='';}" style="margin-top:4px;">`;
-    const genreChips = r.genres.length
-      ? r.genres.map(g => tagChip(g, 'genres')).join('')
-      : '<span class="fest-empty" style="font-size:0.8rem;">No genres yet. What moves you?</span>';
-    const favChips = r.favArtistIds.length
-      ? r.favArtistIds.map(id => tagChip(id, 'favArtists')).join('')
-      : '<span class="fest-empty" style="font-size:0.8rem;">No artists pinned yet. Who are you dying to see?</span>';
+    return `<span class="fav-chip" style="${cs}">${escHtml(val)}</span>`;
+  }
 
-    // Connect buttons — show instagram if public; show phone if owned or phone_visible
+  // Connect buttons — show instagram if public; show phone if owned or phone_visible
+  function profileConnectHTML(ctx) {
+    const { r, perms } = ctx;
     const connectBtns = [];
     // Instagram: show if it's your profile, if you can edit the raver (unclaimed crew member), or if the raver is claimed (public social handle)
     const showInstagram = r.isYou || perms.editInstagram || (perms.isClaimed && !!r.instagram);
@@ -29228,13 +29185,16 @@
       connectBtns.push(`<a class="connect-btn connect-call" href="tel:${tel}">📞 Call</a>`);
       connectBtns.push(`<a class="connect-btn connect-text" href="sms:${tel}">💬 Text</a>`);
     }
-    const connectBlock = connectBtns.length
+    return connectBtns.length
       ? `<div class="connect-row">${connectBtns.join('')}</div>`
       : (r.isYou ? '' : r.readOnly ? '' : `<div class="connect-empty">No contact info yet — add it in Edit Profile.</div>`);
+  }
 
-    // Profile avatar — show photo if set; upload button for own claimed profile;
-    // color-swatch tap for an unclaimed profile, but only for the raver the
-    // *creator* stubbed in (matches ravers_update RLS: creator rights end at claim time).
+  // Profile avatar — show photo if set; upload button for own claimed profile;
+  // color-swatch tap for an unclaimed profile, but only for the raver the
+  // *creator* stubbed in (matches ravers_update RLS: creator rights end at claim time).
+  function profileAvatarHTML(ctx) {
+    const { r, editMode, perms } = ctx;
     const showAvatarUpload = editMode && r.isYou && !!currentUser;
     const canEditAvatarColor = editMode && !showAvatarUpload && !perms.isClaimed && !!currentUser
       && !!(r.createdBy && String(r.createdBy) === String(currentUser.id));
@@ -29243,7 +29203,7 @@
     const avatarContent = r.avatarUrl
       ? `<img class="profile-avatar-photo" src="${escHtml(r.avatarUrl)}" alt="${escHtml(r.name)}">`
       : initials(r.name).toUpperCase();
-    const avatarEl = showAvatarUpload
+    return showAvatarUpload
       ? `<div class="avatar-col">
            <div class="profile-avatar-ring paused" style="margin-top:0;cursor:default;">
              <div class="profile-avatar" style="background:${avatarBg};${avatarOverflow}">${avatarContent}</div>
@@ -29266,474 +29226,528 @@
            <button class="avatar-photo-btn" data-raver-id="${r.id}" onclick="openRaverColorPicker(this.dataset.raverId)">🎨 Change color</button>
          </div>`
       : `<div class="profile-avatar" style="background:${avatarBg};${avatarOverflow}">${avatarContent}</div>`;
+  }
+
+  // Next-rave countdown beside Our Photo (someone else's profile), or whichever exists
+  function profilePhotoCountdownHTML(ctx) {
+    const { r, perms, upcomingFests } = ctx;
+    // Personal next-rave countdown banner
+    // === PROFILE PRIVACY & PERMISSIONS ===
+    // Respect RSVP privacy here too — otherwise a "keep RSVPs private" viewer
+    // would still leak their next rave via this banner.
+    let nextBanner = '';
+    if (upcomingFests.length && (r.isYou || perms.rsvpsVisible)) {
+      const f = upcomingFests[0];
+      const n = daysUntil(f._d);
+      nextBanner = `
+        <div class="countdown-banner cd-slim" style="background:${safeGradient(r.gradient)}">
+          <div class="cd-main">
+            <div class="cd-label">⏳ Next rave</div>
+            <div class="cd-fest">${escHtml(f.name)}</div>
+            <div class="cd-date">${festWhenLabel(f)} · 📍 ${escHtml(f.location || 'TBD')}</div>
+          </div>
+          <div class="cd-num" aria-label="${n === 0 ? "It's today" : n === 1 ? '1 day to go' : n + ' days to go'}">${n === 0 ? '🔥<small>TODAY</small>' : `${n}<small>${n === 1 ? 'DAY' : 'DAYS'}</small>`}</div>
+        </div>`;
+    }
 
     // Our Photo section — only shown when viewing someone else's profile
     const showOurPhotos = !r.isYou && (squad.find(x => x.isYou) || currentUser);
     const ourPhotoHTML = showOurPhotos ? `<div id="our-photos-async-wrap">${ourPhotoSectionHTML(r.id)}</div>` : '';
 
-    // Countdown + Our Photo layout
-    let photoCountdownBlock;
     if (upcomingFests.length && ourPhotoHTML) {
       // Side-by-side: countdown left, our photos right
-      photoCountdownBlock = `
+      return `
         <div class="our-photo-countdown-row slim">
           ${nextBanner}
           ${ourPhotoHTML}
         </div>`;
-    } else if (upcomingFests.length) {
-      photoCountdownBlock = nextBanner;
-    } else if (ourPhotoHTML) {
-      // No countdown — our photo centered in standalone card
-      photoCountdownBlock = `<div class="our-photos-standalone">${ourPhotoHTML}</div>`;
-    } else {
-      photoCountdownBlock = '';
     }
+    if (upcomingFests.length) return nextBanner;
+    // No countdown — our photo centered in standalone card
+    if (ourPhotoHTML) return `<div class="our-photos-standalone">${ourPhotoHTML}</div>`;
+    return '';
+  }
 
-    const profilePage = document.getElementById('page-profile');
+  function renderProfileEdit(ctx, profilePage, avatarEl) {
+    const { r } = ctx;
+    closeProfileListSheet();
+    const isOwnProfile = r.isYou;
+    // Handle: only shown/editable for own profile; hidden entirely for crew-leader editing unclaimed
+    const handleField = isOwnProfile
+      ? (r.claimedBy && r.handle
+          ? `<div style="font-size:0.9rem;color:var(--muted);">${escHtml(r.handle)} <span style="font-size:0.7rem;color:var(--neon-green);">✓ Claimed</span></div>`
+          : `<input class="profile-edit-hero-input handle-input" id="pf-handle" aria-label="Your tag" value="${(r.handle||'').replace(/"/g,'&quot;')}" placeholder="@handle">`)
+      : '';
 
-    if (editMode) {
-      closeProfileListSheet();
-      const isOwnProfile = r.isYou;
-      // Handle: only shown/editable for own profile; hidden entirely for crew-leader editing unclaimed
-      const handleField = isOwnProfile
-        ? (r.claimedBy && r.handle
-            ? `<div style="font-size:0.9rem;color:var(--muted);">${escHtml(r.handle)} <span style="font-size:0.7rem;color:var(--neon-green);">✓ Claimed</span></div>`
-            : `<input class="profile-edit-hero-input handle-input" id="pf-handle" aria-label="Your tag" value="${(r.handle||'').replace(/"/g,'&quot;')}" placeholder="@handle">`)
-        : '';
+    // Edit tabs — Basics · Vibe · Notes. Every pane stays in the DOM (only
+    // hidden) so saveProfile() still reads all pf-* fields.
+    const editRid = escJsAttr(r.id);
+    const viewTab = _profileTabs[String(r.id)] || profileDefaultTab(r);
+    const editTab = viewTab === 'vibe' ? 'vibe' : viewTab === 'us' ? 'notes' : 'basics';
+    _profileEditTab = editTab;
+    const editTabBar = `<div class="profile-tabs" role="tablist" aria-label="Edit sections">${[['basics', 'Basics'], ['vibe', 'Vibe'], ['notes', 'Notes']].map(([k, label]) => `
+        <button type="button" role="tab" class="profile-tab${k === editTab ? ' active' : ''}" data-tab="${k}" aria-selected="${k === editTab}" onclick="setProfileEditTab('${escJsAttr(k)}')">${label}</button>`).join('')}
+      </div>`;
+    const epane = (k) => `class="profile-tab-pane" data-tab="${k}" role="tabpanel"${k === editTab ? '' : ' hidden'}`;
+    const editFirst = escHtml(displayName(r).split(' ')[0]);
+    // Raves save straight away through the Manage raves sheet, not the Save button
+    const editRavesBtn = (isOwnProfile || raverPerms(r).editFests) ? `
+      <button type="button" class="profile-manage-btn" onclick="openProfileListSheet('manage','${editRid}')">
+        <span class="pmb-text"><b>🎟️ Manage raves${isOwnProfile ? '' : ` for ${editFirst}`}</b><span class="pmb-sub" id="pf-raves-sub">${raverUpcoming(r).length} going · saves straight away</span></span>
+        <span class="pmb-arrow">›</span>
+      </button>` : '';
 
-      // Edit tabs — Basics · Vibe · Notes. Every pane stays in the DOM (only
-      // hidden) so saveProfile() still reads all pf-* fields.
-      const editRid = escJsAttr(r.id);
-      const viewTab = _profileTabs[String(r.id)] || profileDefaultTab(r);
-      const editTab = viewTab === 'vibe' ? 'vibe' : viewTab === 'us' ? 'notes' : 'basics';
-      _profileEditTab = editTab;
-      const editTabBar = `<div class="profile-tabs" role="tablist" aria-label="Edit sections">${[['basics', 'Basics'], ['vibe', 'Vibe'], ['notes', 'Notes']].map(([k, label]) => `
-          <button type="button" role="tab" class="profile-tab${k === editTab ? ' active' : ''}" data-tab="${k}" aria-selected="${k === editTab}" onclick="setProfileEditTab('${escJsAttr(k)}')">${label}</button>`).join('')}
+    profilePage.innerHTML = `
+      <button class="profile-back" data-raver-id="${r.id}" onclick="cancelProfileEdit(this.dataset.raverId)">← Cancel</button>
+      <div class="profile-hero edit-mode">
+        <div class="profile-hero-bar" style="background:${safeGradient(r.gradient)}"></div>
+        ${avatarEl}
+        <div class="profile-id">
+          <div class="profile-edit-label">✏️ Editing</div>
+          <input class="profile-edit-hero-input" id="pf-name" aria-label="Name" value="${(r.name||'').replace(/"/g,'&quot;')}" placeholder="Name" maxlength="80">
+          ${handleField}
+          <input class="profile-edit-hero-input base-input" id="pf-base" aria-label="Home base" value="${(r.base||'').replace(/"/g,'&quot;')}" placeholder="📍 Home base" maxlength="60">
+        </div>
+      </div>
+
+      ${editTabBar}
+
+      <div ${epane('basics')}>
+      <div class="profile-section">
+        <h3>📱 Contact</h3>
+        ${fieldRow('Instagram','pf-instagram', r.instagram, '@samraves', false, 30)}
+        ${fieldRow('Radiate','pf-radiate', r.radiate, 'e.g. @samraves', false, 50)}
+        ${fieldRow('Phone','pf-phone', r.phone, '+44 7700 900000', false, 20)}
+        ${isOwnProfile ? `
+          <div class="phone-visibility-row">
+            <input type="checkbox" id="pf-phone-visible" ${r.phoneVisible ? 'checked' : ''}>
+            <label for="pf-phone-visible" style="cursor:pointer;">Share phone number with crewmates</label>
+          </div>` : `<p style="font-size:0.72rem;color:var(--muted);margin-top:6px;line-height:1.4;">Stored for crew reference — not linked to a registered account.</p>`}
+      </div>
+
+      ${editRavesBtn}
+      </div>
+
+      <div ${epane('vibe')}>
+      <div class="profile-section">
+        <h3>⚡ Vibe Tags</h3>
+        <div class="tag-summary-card">
+          <div class="tag-summary-chips" id="vibe-summary-chips"></div>
+          <button class="tag-edit-btn" id="vibe-edit-btn" onclick="openTagSheet('vibe')">✏️ Edit Vibe Tags</button>
+        </div>
+      </div>
+
+      <div class="profile-section">
+        <h3>🎶 Genres</h3>
+        <div class="tag-summary-card">
+          <div class="tag-summary-chips" id="genre-summary-chips"></div>
+          <button class="tag-edit-btn" id="genre-edit-btn" onclick="openTagSheet('genre')">✏️ Edit Genres</button>
+        </div>
+      </div>
+
+      <div class="profile-section">
+        <h3>🎵 Favourite Artists</h3>
+        <div id="artist-picker"></div>
+      </div>
+
+      </div>
+
+      <div ${epane('notes')}>
+      <div class="profile-section">
+        <h3>📝 Notes</h3>
+        ${fieldRow('','pf-notes', r.notes, isOwnProfile ? 'Anything about yourself…' : "What's their vibe?", true)}
+      </div>
+      </div>
+
+      <div class="profile-save-bar">
+        <button type="button" class="btn btn-ghost" data-raver-id="${r.id}" onclick="cancelProfileEdit(this.dataset.raverId)">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="saveProfile()">${isOwnProfile ? 'Save Changes 🔥' : `Save ${editFirst}'s profile`}<span class="psb-dirty" title="Unsaved changes" hidden></span></button>
+      </div>
+    `;
+    // Tabs stick under the app header; the Save bar sits just above the bottom nav on phones
+    const _nav = document.querySelector('nav');
+    profilePage.style.setProperty('--ptabs-top', `${document.querySelector('header')?.offsetHeight || 0}px`);
+    profilePage.style.setProperty('--psave-bottom', `${_nav && getComputedStyle(_nav).position === 'fixed' ? _nav.offsetHeight : 0}px`);
+    profilePage.oninput = (e) => {
+      if (String(e.target.id || '').startsWith('pf-')) profilePage.querySelector('.psb-dirty')?.removeAttribute('hidden');
+    };
+    initProfileTabSwipe();
+    renderArtistPicker();
+    renderTagSummary('vibe');
+    renderTagSummary('genre');
+  }
+
+  // Profile tab panes — Raves · Vibe · Crews · Us/Notes.
+  // v: values shared by the view and its panes (see renderProfileView)
+
+  // Raves tab — next few as rows; editing lives in the Manage raves sheet
+  function profileRavesPaneHTML(ctx, v) {
+    const { r, perms, upcomingFests, pastFests } = ctx;
+    const { rid, sg, firstName } = v;
+    const SHELF_CAP = 10;
+    const shortLoc = (f) => escHtml((f.location || 'TBD').split(',')[0]);
+    const seeAllTile = (kind, n) => `<button type="button" class="shelf-see-all-tile" onclick="openProfileListSheet('${escJsAttr(kind)}','${rid}')">See all<br>${n} ›</button>`;
+    const pastShelf = pastFests.length
+      ? `<div class="shelf-row">${pastFests.slice(0, SHELF_CAP).map((f, i) => `
+          <button type="button" class="shelf-poster" style="--poster-col:${PROFILE_STAGE_PAL[i % PROFILE_STAGE_PAL.length]};" onclick="openRaveFocus('${escJsAttr(f.id)}')">
+            <span class="sp-name">${escHtml(f.name)}</span>
+            <span class="sp-meta">${shortLoc(f)} · ${f._d.getFullYear()}</span>
+          </button>`).join('')}${pastFests.length > SHELF_CAP ? seeAllTile('been', pastFests.length) : ''}</div>`
+      : '<div class="fest-empty">No raves in your history yet</div>';
+    const canManageRaves = r.isYou || perms.editFests;
+    const RAVE_ROWS = 4;
+    const raveSeg = _profileRaveSeg[String(r.id)] || 'going';
+    const me = r.isYou ? null : squad.find(x => x.isYou);
+    const myFestIds = new Set((me?.festIds || []).map(String));
+    const managedRaves = r.isYou || (perms.editFests && !perms.isClaimed);
+    const together = me ? upcomingFests.filter(f => myFestIds.has(String(f.id))).length : 0;
+    const raveRow = (f) => {
+      const mine = me && myFestIds.has(String(f.id));
+      const right = managedRaves
+        ? `<button type="button" class="prow-btn going" aria-label="Remove ${escHtml(f.name)}" onclick="profileRemoveRave('${rid}','${escJsAttr(f.id)}')">✓ Going</button>`
+        : !me ? ''
+        : mine ? `<span class="prow-tag">You're going too</span>`
+        : `<button type="button" class="prow-btn" onclick="profileMeToo('${rid}','${escJsAttr(f.id)}')">+ Me too</button>`;
+      return `
+        <div class="prow">
+          <button type="button" class="prow-main" onclick="openRaveFocus('${escJsAttr(f.id)}')" aria-label="${escHtml(f.name)}, ${festWhenLabel(f)}">
+            <span class="prow-date"><span class="prow-mon">${MON_SHORT[f._d.getMonth()].toUpperCase()}</span><span class="prow-day">${f._d.getDate()}</span></span>
+            <span class="prow-info"><span class="prow-name">${escHtml(f.name)}</span><span class="prow-meta">📍 ${shortLoc(f)} · <span class="prow-cd">⏳ ${countdownLabel(f._d)}</span></span></span>
+          </button>
+          ${right}
         </div>`;
-      const epane = (k) => `class="profile-tab-pane" data-tab="${k}" role="tabpanel"${k === editTab ? '' : ' hidden'}`;
-      const editFirst = escHtml(displayName(r).split(' ')[0]);
-      // Raves save straight away through the Manage raves sheet, not the Save button
-      const editRavesBtn = (isOwnProfile || raverPerms(r).editFests) ? `
-        <button type="button" class="profile-manage-btn" onclick="openProfileListSheet('manage','${editRid}')">
-          <span class="pmb-text"><b>🎟️ Manage raves${isOwnProfile ? '' : ` for ${editFirst}`}</b><span class="pmb-sub" id="pf-raves-sub">${raverUpcoming(r).length} going · saves straight away</span></span>
-          <span class="pmb-arrow">›</span>
-        </button>` : '';
-
-      profilePage.innerHTML = `
-        <button class="profile-back" data-raver-id="${r.id}" onclick="cancelProfileEdit(this.dataset.raverId)">← Cancel</button>
-        <div class="profile-hero edit-mode">
-          <div class="profile-hero-bar" style="background:${safeGradient(r.gradient)}"></div>
-          ${avatarEl}
-          <div class="profile-id">
-            <div class="profile-edit-label">✏️ Editing</div>
-            <input class="profile-edit-hero-input" id="pf-name" aria-label="Name" value="${(r.name||'').replace(/"/g,'&quot;')}" placeholder="Name" maxlength="80">
-            ${handleField}
-            <input class="profile-edit-hero-input base-input" id="pf-base" aria-label="Home base" value="${(r.base||'').replace(/"/g,'&quot;')}" placeholder="📍 Home base" maxlength="60">
-          </div>
+    };
+    const goingRows = upcomingFests.length
+      ? upcomingFests.slice(0, RAVE_ROWS).map(raveRow).join('')
+        + (upcomingFests.length > RAVE_ROWS ? `<button type="button" class="prow-more" onclick="openProfileListSheet('going','${rid}')">+${upcomingFests.length - RAVE_ROWS} more · See all ›</button>` : '')
+      : '<div class="fest-empty">No raves lined up yet</div>';
+    const segBtn = (k, label) => `<button type="button" class="profile-seg-btn${raveSeg === k ? ' active' : ''}" data-seg="${k}" aria-pressed="${raveSeg === k}" onclick="setProfileRaveSeg('${rid}','${escJsAttr(k)}')">${label}</button>`;
+    const manageBtn = canManageRaves ? `
+      <button type="button" class="profile-manage-btn" onclick="openProfileListSheet('manage','${rid}')">
+        <span class="pmb-text"><b>Manage raves${r.isYou ? '' : ` for ${firstName}`}</b><span class="pmb-sub">Add, remove and search raves</span></span>
+        <span class="pmb-arrow">›</span>
+      </button>` : '';
+    return !v.ravesVisible ? `
+      <div class="profile-section" style="${sg(0)}">
+        <h3>🎟️ Festivals</h3>
+        <div class="fest-empty">🔒 ${firstName} keeps their RSVPs private.</div>
+      </div>` : `
+      <div class="profile-section" style="${sg(0)}">
+        <div class="profile-seg">${segBtn('going', `Going · ${upcomingFests.length}`)}${segBtn('been', `Been to · ${pastFests.length}`)}</div>
+        <div class="profile-seg-pane" data-seg="going"${raveSeg === 'going' ? '' : ' hidden'}>
+          ${together ? `<div class="prow-together">You and ${firstName} are both going to <b>${together} rave${together === 1 ? '' : 's'}</b></div>` : ''}
+          ${goingRows}
         </div>
-
-        ${editTabBar}
-
-        <div ${epane('basics')}>
-        <div class="profile-section">
-          <h3>📱 Contact</h3>
-          ${fieldRow('Instagram','pf-instagram', r.instagram, '@samraves', false, 30)}
-          ${fieldRow('Radiate','pf-radiate', r.radiate, 'e.g. @samraves', false, 50)}
-          ${fieldRow('Phone','pf-phone', r.phone, '+44 7700 900000', false, 20)}
-          ${isOwnProfile ? `
-            <div class="phone-visibility-row">
-              <input type="checkbox" id="pf-phone-visible" ${r.phoneVisible ? 'checked' : ''}>
-              <label for="pf-phone-visible" style="cursor:pointer;">Share phone number with crewmates</label>
-            </div>` : `<p style="font-size:0.72rem;color:var(--muted);margin-top:6px;line-height:1.4;">Stored for crew reference — not linked to a registered account.</p>`}
+        <div class="profile-seg-pane" data-seg="been"${raveSeg === 'been' ? '' : ' hidden'}>
+          ${pastShelf}
+          ${pastFests.length ? `<button type="button" class="prow-more" onclick="openProfileListSheet('been','${rid}')">See all ${pastFests.length} ›</button>` : ''}
         </div>
+      </div>
+      ${manageBtn}`;
+  }
 
-        ${editRavesBtn}
-        </div>
+  function profileVibePaneHTML(ctx, v) {
+    const { r, perms } = ctx;
+    const { sg, soundCount } = v;
+    // Sound = genres + favourite artists in one block, clamped to ~2 rows when long
+    const genreChips = r.genres.length
+      ? r.genres.map(g => profileTagChipHTML(ctx, g, 'genres')).join('')
+      : '<span class="fest-empty" style="font-size:0.8rem;">No genres yet. What moves you?</span>';
+    const favChips = r.favArtistIds.length
+      ? r.favArtistIds.map(id => profileTagChipHTML(ctx, id, 'favArtists')).join('')
+      : '<span class="fest-empty" style="font-size:0.8rem;">No artists pinned yet. Who are you dying to see?</span>';
+    const soundClamped = soundCount > 8;
+    const soundBody = soundCount
+      ? `<div class="shelf-sound${soundClamped ? ' clamped' : ''}" id="shelf-sound-${escHtml(r.id)}">
+           <div class="tag-edit-wrap">${r.genres.length ? genreChips : ''}${r.favArtistIds.length ? favChips : ''}</div>
+         </div>
+         ${soundClamped ? `<button type="button" class="shelf-expand" aria-expanded="false" aria-controls="shelf-sound-${escHtml(r.id)}" onclick="toggleShelfSound(this, ${soundCount})">Show all ${soundCount} ▾</button>` : ''}`
+      : `<span class="fest-empty" style="font-size:0.8rem;">No genres or artists yet. What moves ${r.isYou ? 'you' : 'them'}?</span>`;
+    return `
 
-        <div ${epane('vibe')}>
-        <div class="profile-section">
-          <h3>⚡ Vibe Tags</h3>
-          <div class="tag-summary-card">
-            <div class="tag-summary-chips" id="vibe-summary-chips"></div>
-            <button class="tag-edit-btn" id="vibe-edit-btn" onclick="openTagSheet('vibe')">✏️ Edit Vibe Tags</button>
-          </div>
-        </div>
-
-        <div class="profile-section">
-          <h3>🎶 Genres</h3>
-          <div class="tag-summary-card">
-            <div class="tag-summary-chips" id="genre-summary-chips"></div>
-            <button class="tag-edit-btn" id="genre-edit-btn" onclick="openTagSheet('genre')">✏️ Edit Genres</button>
-          </div>
-        </div>
-
-        <div class="profile-section">
-          <h3>🎵 Favourite Artists</h3>
-          <div id="artist-picker"></div>
-        </div>
-
-        </div>
-
-        <div ${epane('notes')}>
-        <div class="profile-section">
-          <h3>📝 Notes</h3>
-          ${fieldRow('','pf-notes', r.notes, isOwnProfile ? 'Anything about yourself…' : "What's their vibe?", true)}
-        </div>
-        </div>
-
-        <div class="profile-save-bar">
-          <button type="button" class="btn btn-ghost" data-raver-id="${r.id}" onclick="cancelProfileEdit(this.dataset.raverId)">Cancel</button>
-          <button type="button" class="btn btn-primary" onclick="saveProfile()">${isOwnProfile ? 'Save Changes 🔥' : `Save ${editFirst}'s profile`}<span class="psb-dirty" title="Unsaved changes" hidden></span></button>
-        </div>
-      `;
-      // Tabs stick under the app header; the Save bar sits just above the bottom nav on phones
-      const _nav = document.querySelector('nav');
-      profilePage.style.setProperty('--ptabs-top', `${document.querySelector('header')?.offsetHeight || 0}px`);
-      profilePage.style.setProperty('--psave-bottom', `${_nav && getComputedStyle(_nav).position === 'fixed' ? _nav.offsetHeight : 0}px`);
-      profilePage.oninput = (e) => {
-        if (String(e.target.id || '').startsWith('pf-')) profilePage.querySelector('.psb-dirty')?.removeAttribute('hidden');
-      };
-      initProfileTabSwipe();
-      renderArtistPicker();
-      renderTagSummary('vibe');
-      renderTagSummary('genre');
-    } else {
-      profilePage.classList.remove('profile-edit-mode');
-      profilePage.oninput = null;
-      const _STAGE_PAL = ['#FF2D78','#BF00FF','#00F5FF','#39FF14','#FFB800','#FF3355'];
-      const sg = (i) => `--section-glow:${_STAGE_PAL[i % _STAGE_PAL.length]};`;
-
-      // ===== Profile shelves — each list is one swipeable row; "See all" opens profile-list-sheet =====
-      const SHELF_CAP = 10;
-      const rid = escJsAttr(r.id);
-      const shortLoc = (f) => escHtml((f.location || 'TBD').split(',')[0]);
-      const shelfHead = (title, n, kind) => `<h3>${title}${n ? ` <span class="shelf-count">${n}</span>` : ''}${n ? `<button type="button" class="shelf-see-all" onclick="openProfileListSheet('${escJsAttr(kind)}','${rid}')">See all ›</button>` : ''}</h3>`;
-      const seeAllTile = (kind, n) => `<button type="button" class="shelf-see-all-tile" onclick="openProfileListSheet('${escJsAttr(kind)}','${rid}')">See all<br>${n} ›</button>`;
-      const pastShelf = pastFests.length
-        ? `<div class="shelf-row">${pastFests.slice(0, SHELF_CAP).map((f, i) => `
-            <button type="button" class="shelf-poster" style="--poster-col:${_STAGE_PAL[i % _STAGE_PAL.length]};" onclick="openRaveFocus('${escJsAttr(f.id)}')">
-              <span class="sp-name">${escHtml(f.name)}</span>
-              <span class="sp-meta">${shortLoc(f)} · ${f._d.getFullYear()}</span>
-            </button>`).join('')}${pastFests.length > SHELF_CAP ? seeAllTile('been', pastFests.length) : ''}</div>`
-        : '<div class="fest-empty">No raves in your history yet</div>';
-      const raverCrews = crews.filter(c => (c.squadIds || []).some(sid => String(sid) === String(r.id)));
-      const crewShelf = raverCrews.length
-        ? `<div class="shelf-row">${raverCrews.map(c => {
-            const isLead = c.isLead && String(c.leader_id) === String(r.id);
-            return `
-              <button type="button" class="shelf-crew" onclick="openDetail('${escJsAttr(c.id)}')" aria-label="Open ${escHtml(c.name)}">
-                <span class="shelf-crew-av" style="background:${safeGradient(c.gradient)};">${escHtml(initials(c.name).toUpperCase())}</span>
-                <span class="shelf-crew-name">${escHtml(c.name)}</span>
-                <span class="shelf-crew-role">${isLead ? '👑 Lead' : '🎧 Member'}</span>
-              </button>`;
-          }).join('')}</div>`
-        : '<div class="fest-empty">Flying solo for now. No crews yet</div>';
-      // Sound = genres + favourite artists in one block, clamped to ~2 rows when long
-      const soundCount = r.genres.length + r.favArtistIds.length;
-      const soundClamped = soundCount > 8;
-      const soundBody = soundCount
-        ? `<div class="shelf-sound${soundClamped ? ' clamped' : ''}" id="shelf-sound-${escHtml(r.id)}">
-             <div class="tag-edit-wrap">${r.genres.length ? genreChips : ''}${r.favArtistIds.length ? favChips : ''}</div>
-           </div>
-           ${soundClamped ? `<button type="button" class="shelf-expand" aria-expanded="false" aria-controls="shelf-sound-${escHtml(r.id)}" onclick="toggleShelfSound(this, ${soundCount})">Show all ${soundCount} ▾</button>` : ''}`
-        : `<span class="fest-empty" style="font-size:0.8rem;">No genres or artists yet. What moves ${r.isYou ? 'you' : 'them'}?</span>`;
-
-      // ===== Profile tabs — Raves · Vibe · Crews · Us/Notes =====
-      const firstName = escHtml(displayName(r).split(' ')[0]);
-      const ravesVisible = r.isYou || perms.rsvpsVisible;
-      const canManageRaves = r.isYou || perms.editFests;
-      const vibeCount = (r.vibeTags || []).length + (r.customVibeTags || []).length + soundCount;
-      const activeTab = _profileTabs[String(r.id)] || profileDefaultTab(r);
-      const tabDefs = [
-        ['raves', 'Raves', ravesVisible ? upcomingFests.length : 0],
-        ['vibe', 'Vibe', vibeCount],
-        ['crews', 'Crews', raverCrews.length],
-        ['us', r.isYou ? 'Notes' : 'Us', 0],
-      ];
-      const tabBar = `<div class="profile-tabs" role="tablist" aria-label="Profile sections">${tabDefs.map(([k, label, n]) => `
-          <button type="button" role="tab" class="profile-tab${k === activeTab ? ' active' : ''}" data-tab="${k}" aria-selected="${k === activeTab}" onclick="setProfileTab('${rid}','${escJsAttr(k)}')">${label}${n ? `<sup>${n}</sup>` : ''}</button>`).join('')}
-        </div>`;
-      const pane = (k) => `class="profile-tab-pane" data-tab="${k}" role="tabpanel"${k === activeTab ? '' : ' hidden'}`;
-
-      // Raves tab — next few as rows; editing lives in the Manage raves sheet
-      const RAVE_ROWS = 4;
-      const raveSeg = _profileRaveSeg[String(r.id)] || 'going';
-      const me = r.isYou ? null : squad.find(x => x.isYou);
-      const myFestIds = new Set((me?.festIds || []).map(String));
-      const managedRaves = r.isYou || (perms.editFests && !perms.isClaimed);
-      const together = me ? upcomingFests.filter(f => myFestIds.has(String(f.id))).length : 0;
-      const raveRow = (f) => {
-        const mine = me && myFestIds.has(String(f.id));
-        const right = managedRaves
-          ? `<button type="button" class="prow-btn going" aria-label="Remove ${escHtml(f.name)}" onclick="profileRemoveRave('${rid}','${escJsAttr(f.id)}')">✓ Going</button>`
-          : !me ? ''
-          : mine ? `<span class="prow-tag">You're going too</span>`
-          : `<button type="button" class="prow-btn" onclick="profileMeToo('${rid}','${escJsAttr(f.id)}')">+ Me too</button>`;
-        return `
-          <div class="prow">
-            <button type="button" class="prow-main" onclick="openRaveFocus('${escJsAttr(f.id)}')" aria-label="${escHtml(f.name)}, ${festWhenLabel(f)}">
-              <span class="prow-date"><span class="prow-mon">${MON_SHORT[f._d.getMonth()].toUpperCase()}</span><span class="prow-day">${f._d.getDate()}</span></span>
-              <span class="prow-info"><span class="prow-name">${escHtml(f.name)}</span><span class="prow-meta">📍 ${shortLoc(f)} · <span class="prow-cd">⏳ ${countdownLabel(f._d)}</span></span></span>
-            </button>
-            ${right}
-          </div>`;
-      };
-      const goingRows = upcomingFests.length
-        ? upcomingFests.slice(0, RAVE_ROWS).map(raveRow).join('')
-          + (upcomingFests.length > RAVE_ROWS ? `<button type="button" class="prow-more" onclick="openProfileListSheet('going','${rid}')">+${upcomingFests.length - RAVE_ROWS} more · See all ›</button>` : '')
-        : '<div class="fest-empty">No raves lined up yet</div>';
-      const segBtn = (k, label) => `<button type="button" class="profile-seg-btn${raveSeg === k ? ' active' : ''}" data-seg="${k}" aria-pressed="${raveSeg === k}" onclick="setProfileRaveSeg('${rid}','${escJsAttr(k)}')">${label}</button>`;
-      const manageBtn = canManageRaves ? `
-        <button type="button" class="profile-manage-btn" onclick="openProfileListSheet('manage','${rid}')">
-          <span class="pmb-text"><b>Manage raves${r.isYou ? '' : ` for ${firstName}`}</b><span class="pmb-sub">Add, remove and search raves</span></span>
-          <span class="pmb-arrow">›</span>
-        </button>` : '';
-      const ravesPane = !ravesVisible ? `
-        <div class="profile-section" style="${sg(0)}">
-          <h3>🎟️ Festivals</h3>
-          <div class="fest-empty">🔒 ${firstName} keeps their RSVPs private.</div>
-        </div>` : `
-        <div class="profile-section" style="${sg(0)}">
-          <div class="profile-seg">${segBtn('going', `Going · ${upcomingFests.length}`)}${segBtn('been', `Been to · ${pastFests.length}`)}</div>
-          <div class="profile-seg-pane" data-seg="going"${raveSeg === 'going' ? '' : ' hidden'}>
-            ${together ? `<div class="prow-together">You and ${firstName} are both going to <b>${together} rave${together === 1 ? '' : 's'}</b></div>` : ''}
-            ${goingRows}
-          </div>
-          <div class="profile-seg-pane" data-seg="been"${raveSeg === 'been' ? '' : ' hidden'}>
-            ${pastShelf}
-            ${pastFests.length ? `<button type="button" class="prow-more" onclick="openProfileListSheet('been','${rid}')">See all ${pastFests.length} ›</button>` : ''}
-          </div>
-        </div>
-        ${manageBtn}`;
-
-      // Less-used actions on someone else's profile live behind ⋯
-      const moreItems = [
-        perms.canDisconnect ? `<button type="button" class="pmm-item" data-raver-id="${r.id}" onclick="showDisconnectConfirm(this.dataset.raverId)">🔗 Disconnect account</button>` : '',
-        !r.isYou && currentUser ? `<button type="button" class="pmm-item" data-raver-id="${r.id}" onclick="showReportModal('raver', this.dataset.raverId)">🚩 Report</button>` : '',
-        currentUser && r.claimedBy && r.claimedBy !== currentUser.id ? `<button type="button" class="pmm-item" data-block-uid="${escHtml(r.claimedBy)}" onclick="toggleBlockFromProfile(this)" title="${isBlockedUser(r.claimedBy) ? 'Unblock' : 'Block'}" aria-label="${isBlockedUser(r.claimedBy) ? 'Unblock' : 'Block'}">${isBlockedUser(r.claimedBy) ? '✅ Unblock' : '🚫 Block'}</button>` : '',
-        perms.canDelete ? `<button type="button" class="pmm-item danger" data-raver-id="${r.id}" onclick="deleteUnclaimedProfile(this.dataset.raverId)">🗑️ Delete profile</button>` : '',
-        isModerator() ? `<button type="button" class="pmm-item danger" data-raver-id="${r.id}" onclick="showPurgeRaverDataConfirm(this.dataset.raverId)" title="Permanently delete this person's data (verified deletion request only)">☠️ Purge data</button>` : '',
-      ].filter(Boolean);
-      const moreMenu = moreItems.length ? `
-          <div class="profile-more">
-            <button type="button" class="btn btn-ghost" style="padding:11px 14px;" aria-label="More actions" aria-haspopup="true" aria-expanded="false" onclick="toggleProfileMoreMenu(this)">⋯</button>
-            <div class="profile-more-menu" role="menu" hidden onclick="if(event.target.closest('.pmm-item'))closeProfileMoreMenu()">${moreItems.join('')}</div>
-          </div>` : '';
-      // Own-profile icons stay visible
-      const ownIcons = r.isYou ? `
-          <button class="btn btn-ghost" style="padding:11px;" data-raver-id="${r.id}" onclick="openPrivacySettingsModal(this.dataset.raverId)" title="Privacy & Permissions">🔒</button>
-          <button class="btn btn-ghost" style="padding:11px;" data-raver-id="${r.id}" onclick="toggleSeeAsCrew(this.dataset.raverId)" title="See as your crew">👁</button>` : '';
-
-      // Unclaimed profile you manage — say so, with RSVPs + claim link one tap away
-      const manageBar = (currentUser && !r.isYou && !perms.isClaimed && perms.editFests) ? `
-        <div class="profile-manage-bar">
-          <div class="pmbar-text"><b>You manage this profile.</b> Edits save straight to ${firstName}'s page.</div>
-          <button type="button" onclick="openProfileListSheet('manage','${rid}')">🎟️ RSVPs</button>
-          ${perms.isLeaderOfRaver && r.qrToken ? `<button type="button" data-raver-id="${r.id}" onclick="showQRModal(this.dataset.raverId)">📲 Claim link</button>` : ''}
-        </div>` : '';
-
-      profilePage.innerHTML = `
-        <button class="profile-back" onclick="backFromProfile()">← Back to ${profileOrigin === 'crews' ? 'My Crews' : 'Squad'}</button>
-        <div class="profile-hero-banner" style="background:${safeGradient(r.gradient)}"></div>
-        <div class="profile-hero-body">
-          <div class="profile-avatar-ring" role="button" tabindex="0" aria-label="Pause or resume the spinning avatar ring" onclick="this.classList.toggle('paused')">
-            ${avatarEl}
-          </div>
-          <div class="profile-id">
-            <h2>${r.isYou ? '👑 ' : ''}${escHtml(displayName(r))}${r.isYou ? ' <span style="font-size:0.9rem;color:var(--muted)">(You)</span>' : ''}</h2>
-            ${nicknameCache[String(r.id)] ? `<div class="profile-real-name">Real name: ${escHtml(r.name)}</div>` : ''}
-            ${!r.isYou && currentUser ? `
-              <div class="profile-nickname-row">
-                <span style="font-size:0.7rem;color:var(--muted);">🏷️</span>
-                <span id="ief-wrap-${r.id}-nickname" class="ief-wrap" onclick="if(!event.target.closest('button,input'))startNicknameEdit('${escJsAttr(r.id)}')" style="cursor:pointer;">
-                  ${inlineEditNicknameDisplay(r.id, nicknameCache[String(r.id)] || '')}
-                </span>
-              </div>` : ''}
-            <div class="profile-handle">${escHtml(r.handle)}</div>
-            ${perms.editLocation
-              ? `<div class="profile-base-line">📍 <span id="ief-wrap-${r.id}-base" class="ief-wrap">${inlineEditDisplay(r.id, 'base', r.base)}</span></div>`
-              : perms.baseVisible
-                ? `<div class="profile-base-line">📍 Based in ${escHtml(r.base)}</div>`
-                : `<div class="profile-base-line">📍 Location private</div>`}
-          </div>
-        </div>
-
-        <div id="plur-bar-wrap">${plurBarHTML(r.id)}</div>
-
-        ${photoCountdownBlock}
-
-        ${manageBar}
-
-        <div class="profile-actions" data-raver-id="${r.id}">
-          ${ currentUser && (r.isYou || (perms.isLeaderOfRaver && !perms.isClaimed)) ? `<button class="btn btn-primary" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="enterProfileEditMode(this.dataset.raverId)">✏️ Edit Profile</button>` : ''}
-          ${ !perms.isClaimed && perms.isLeaderOfRaver && r.qrToken ? `<button class="btn btn-ghost" style="padding:11px;" data-raver-id="${r.id}" onclick="showQRModal(this.dataset.raverId)" title="Share invite QR">📲</button>` : ''}
-          ${ownIcons}
-          ${moreMenu}
-        </div>
-
-        ${connectBlock}
-
-        ${tabBar}
-
-        <div ${pane('raves')}>
-        ${ravesPane}
-        </div>
-
-        <div ${pane('vibe')}>
-
-        <div class="profile-section" style="${sg(2)}">
-          <h3>⚡ Vibe Tags</h3>
-          ${(() => {
-            const canReportTags = !r.isYou && currentUser;
-            const presetVibes = (r.vibeTags||[]).map(v => vibeTagHTML(v, false, false, null, canReportTags ? r.id : null)).join('');
-            const customVibes = (r.customVibeTags||[]).map(v => vibeTagHTML(v, true, false, null, canReportTags ? r.id : null)).join('');
-            return (presetVibes || customVibes)
-              ? `<div class="profile-vibes">${presetVibes}${customVibes}</div>`
-              : `<div class="fest-empty">No vibes tagged yet${r.isYou || perms.isLeaderOfRaver ? '. What\'s your flavor? Edit profile to add some' : '. What\'s their flavor?'}</div>`;
-          })()}
-          ${(!r.isYou && currentUser) ? `<button class="tag-edit-btn" style="margin-top:8px;" onclick="openSuggestVibeSheet('${escJsAttr(r.id)}')">🏷️ Suggest a vibe tag</button>` : ''}
-        </div>
-
-        <div class="profile-section" style="${sg(3)}">
-          <h3>🎶 Sound${soundCount ? ` <span class="shelf-count">${soundCount}</span>` : ''}</h3>
-          ${soundBody}
-        </div>
-
+      <div class="profile-section" style="${sg(2)}">
+        <h3>⚡ Vibe Tags</h3>
         ${(() => {
-          const myPins = raverAchievements.filter(a => String(a.raver_id) === String(r.id));
-          if (!myPins.length) return '';
-          const pinItems = myPins.map(a => {
-            const def = BADGE_DEFINITIONS.find(b => b.id === a.badge_id);
-            if (!def) return '';
-            const crewForBadge = crews.find(c => String(c.id) === String(a.crew_id));
-            const crewName = crewForBadge ? crewForBadge.name : 'A Crew';
-            return `
-              <div class="fam-pin fam-pin-sm earned profile-fam-pin" title="${escHtml(def.name)}">
-                <span>${escHtml(def.emoji)}</span>
-                <div class="profile-pin-tooltip">${escHtml(def.name)}<br><span style="color:var(--muted);font-size:0.7rem;">${escHtml(crewName)}</span></div>
-              </div>`;
-          }).join('');
-          return `
-            <div class="profile-section" style="${sg(0)}">
-              <h3>📌 FAM Pins</h3>
-              <div class="profile-fam-pins-grid">${pinItems}</div>
-            </div>`;
+          const canReportTags = !r.isYou && currentUser;
+          const presetVibes = (r.vibeTags||[]).map(v => vibeTagHTML(v, false, false, null, canReportTags ? r.id : null)).join('');
+          const customVibes = (r.customVibeTags||[]).map(v => vibeTagHTML(v, true, false, null, canReportTags ? r.id : null)).join('');
+          return (presetVibes || customVibes)
+            ? `<div class="profile-vibes">${presetVibes}${customVibes}</div>`
+            : `<div class="fest-empty">No vibes tagged yet${r.isYou || perms.isLeaderOfRaver ? '. What\'s your flavor? Edit profile to add some' : '. What\'s their flavor?'}</div>`;
         })()}
+        ${(!r.isYou && currentUser) ? `<button class="tag-edit-btn" style="margin-top:8px;" onclick="openSuggestVibeSheet('${escJsAttr(r.id)}')">🏷️ Suggest a vibe tag</button>` : ''}
+      </div>
 
-        ${r.isYou ? vendorBadgeProfileMentionHTML() : ''}
-        </div>
+      <div class="profile-section" style="${sg(3)}">
+        <h3>🎶 Sound${soundCount ? ` <span class="shelf-count">${soundCount}</span>` : ''}</h3>
+        ${soundBody}
+      </div>
 
-        <div ${pane('crews')}>
-        <div class="profile-section" style="${sg(5)}">
-          ${shelfHead('🎪 Crews', raverCrews.length, 'crews')}
-          ${crewShelf}
-        </div>
-
-        </div>
-
-        <div ${pane('us')}>
-
-        ${!r.isYou && squad.find(x => x.isYou) ? `
-        <div class="profile-section" style="${sg(0)}">
-          <h3>🎉 You &amp; ${escHtml(displayName(r))}</h3>
-          ${ravesTogetherSectionHTML(squad.find(x => x.isYou), r)}
-        </div>` : ''}
-
-        ${!r.isYou ? `
-        <div class="profile-section" style="${sg(0)}">
-          <h3>🤝 How We Met</h3>
-          ${seeAsCrew ? '' : oneTimeHintHTML('how_we_met', `Only you and ${displayName(r).split(' ')[0]} see your story. Writing one earns +10 Love.`, GK_COLORS.ravers)}
-          <div id="how-we-met-section">
-            ${howWeMetSectionHTML(r.id, metStoriesCache[String(r.id)] || null, r)}
-          </div>
-        </div>` : ''}
-
-        ${(!r.isYou && currentUser) ? (() => {
-          // Contact section: owner's shared fields + your private phone
-          const theirInstagram = perms.editInstagram
-            ? `<div class="contact-row">
-                 <div class="contact-their-label">Instagram</div>
-                 <div class="contact-their-phone"><span id="ief-wrap-${r.id}-instagram" class="ief-wrap">${inlineEditDisplay(r.id, 'instagram', r.instagram || '')}</span></div>
-               </div>`
-            : '';
-          const theirRadiate = perms.editRadiate
-            ? `<div class="contact-row">
-                 <div class="contact-their-label">Radiate</div>
-                 <div class="contact-their-phone"><span id="ief-wrap-${r.id}-radiate" class="ief-wrap">${inlineEditDisplay(r.id, 'radiate', r.radiate || '')}</span></div>
-               </div>`
-            : '';
-          const theirPhone = (perms.editPhone && !perms.isClaimed)
-            ? `<div class="contact-row">
-                 <div class="contact-their-label">Their phone (crew reference)</div>
-                 <div class="contact-their-phone"><span id="ief-wrap-${r.id}-phone" class="ief-wrap">${inlineEditDisplay(r.id, 'phone', r.phone || '')}</span></div>
-               </div>`
-            : (perms.isClaimed
-                ? `<div class="contact-row">
-                     <div class="contact-their-label">Their phone</div>
-                     <div class="${r.phoneVisible ? 'contact-their-phone' : 'contact-phone-hidden'}">${r.phoneVisible ? (escHtml(r.phone) || '—') : '🔒 Hidden by owner'}</div>
-                   </div>`
-                : '');
-          const myPhone = `<div class="contact-row">
-              <div class="contact-your-label">Saved number (private)</div>
-              <div class="contact-their-phone"><span id="ief-wrap-${r.id}-private-phone" class="ief-wrap">${privatePhoneDisplay(r.id)}</span></div>
+      ${(() => {
+        const myPins = raverAchievements.filter(a => String(a.raver_id) === String(r.id));
+        if (!myPins.length) return '';
+        const pinItems = myPins.map(a => {
+          const def = BADGE_DEFINITIONS.find(b => b.id === a.badge_id);
+          if (!def) return '';
+          const crewForBadge = crews.find(c => String(c.id) === String(a.crew_id));
+          const crewName = crewForBadge ? crewForBadge.name : 'A Crew';
+          return `
+            <div class="fam-pin fam-pin-sm earned profile-fam-pin" title="${escHtml(def.name)}">
+              <span>${escHtml(def.emoji)}</span>
+              <div class="profile-pin-tooltip">${escHtml(def.name)}<br><span style="color:var(--muted);font-size:0.7rem;">${escHtml(crewName)}</span></div>
             </div>`;
-          if (!theirInstagram && !theirRadiate && !theirPhone && !perms.isClaimed) return '';
-          return `<div class="profile-section" style="${sg(1)}">
-            <h3>📱 Contact</h3>
-            <div class="profile-contact-section">
-              ${theirInstagram}
-              ${theirRadiate}
-              ${theirPhone}
-              ${myPhone}
-            </div>
+        }).join('');
+        return `
+          <div class="profile-section" style="${sg(0)}">
+            <h3>📌 FAM Pins</h3>
+            <div class="profile-fam-pins-grid">${pinItems}</div>
           </div>`;
-        })() : ''}
+      })()}
 
-        <div class="profile-section" style="${sg(1)}">
-          <h3>📝 Notes</h3>
-          ${r.isYou ? `<div class="profile-note">${r.notes ? escHtml(r.notes) : '<span class="fest-empty">No notes yet. Only you can read these</span>'}</div>` : (() => {
-            const savedNotes = escHtml(viewerNotesCache[String(r.id)] || '');
-            return `<p style="font-size:0.72rem;color:var(--muted);margin-bottom:8px;line-height:1.4;">Private — only you can see this.</p>
-              <textarea id="viewer-notes-${r.id}" aria-label="Your private notes about this raver" class="inline-notes-area"
-                placeholder="Vibe check, inside jokes, things to remember…"
-                oninput="saveViewerNote('${escJsAttr(r.id)}',this.value);const s=document.getElementById('notes-saved-${r.id}');if(s){s.classList.add('show');clearTimeout(s._t);s._t=setTimeout(()=>s.classList.remove('show'),1400);}"
-              >${savedNotes}</textarea>
-              <div id="notes-saved-${r.id}" class="inline-notes-saved">Saved ✓</div>`;
-          })()}
-        </div>
-
-        <div class="profile-section" style="${sg(2)}">
-          <h3>
-            <button type="button" class="profile-section-toggle" aria-expanded="${raverHistoryExpanded}" aria-controls="raver-history-body" onclick="toggleRaverHistorySection()">
-              <span>📜 History</span>
-              <span id="raver-history-toggle-label" style="font-size:0.72rem;color:var(--muted);">${raverHistoryExpanded ? '▲ Hide' : '▼ Show'}</span>
-            </button>
-          </h3>
-          <div id="raver-history-body" style="${raverHistoryExpanded ? '' : 'display:none;'}">
-            ${buildHistoryListHTML(raverHistoryRows, { showReason: isModerator(), emptyMessage: 'Check back after the next edit 👀' })}
-          </div>
-        </div>
-        </div>
+      ${r.isYou ? vendorBadgeProfileMentionHTML() : ''}
       `;
-      // Tabs stick just under the app header
-      profilePage.style.setProperty('--ptabs-top', `${document.querySelector('header')?.offsetHeight || 0}px`);
-      initProfileTabSwipe();
-      profilePage.classList.toggle('see-as-crew', seeAsCrew);
-      if (seeAsCrew) {
-        profilePage.insertAdjacentHTML('afterbegin', `<div class="see-as-crew-banner"><span>👁 Viewing as your crew — this is what they see.</span><button type="button" class="btn btn-ghost" onclick="toggleSeeAsCrew('${escJsAttr(raw.id)}')">Done</button></div>`);
-      }
-      // Keep an open "See all" sheet in sync (e.g. after ✕ removes a rave); close it if the profile changed
-      if (_profileListSheet) {
-        if (_profileListSheet.raverId === String(r.id)) renderProfileListSheet();
-        else closeProfileListSheet();
-      }
-    }
-    // Swap to profile page (hide nav active states; this is a sub-page)
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    profilePage.classList.add('active');
-    window.scrollTo(0,0);
+  }
 
-    // Async-load How We Met stories and Our Photos, refresh sections once loaded
+  function profileCrewsPaneHTML(ctx, v) {
+    const { rid, sg, raverCrews } = v;
+    const shelfHead = (title, n, kind) => `<h3>${title}${n ? ` <span class="shelf-count">${n}</span>` : ''}${n ? `<button type="button" class="shelf-see-all" onclick="openProfileListSheet('${escJsAttr(kind)}','${rid}')">See all ›</button>` : ''}</h3>`;
+    const crewShelf = raverCrews.length
+      ? `<div class="shelf-row">${raverCrews.map(c => {
+          const isLead = c.isLead && String(c.leader_id) === String(ctx.r.id);
+          return `
+            <button type="button" class="shelf-crew" onclick="openDetail('${escJsAttr(c.id)}')" aria-label="Open ${escHtml(c.name)}">
+              <span class="shelf-crew-av" style="background:${safeGradient(c.gradient)};">${escHtml(initials(c.name).toUpperCase())}</span>
+              <span class="shelf-crew-name">${escHtml(c.name)}</span>
+              <span class="shelf-crew-role">${isLead ? '👑 Lead' : '🎧 Member'}</span>
+            </button>`;
+        }).join('')}</div>`
+      : '<div class="fest-empty">Flying solo for now. No crews yet</div>';
+    return `
+      <div class="profile-section" style="${sg(5)}">
+        ${shelfHead('🎪 Crews', raverCrews.length, 'crews')}
+        ${crewShelf}
+      </div>
+
+      `;
+  }
+
+  function profileUsPaneHTML(ctx, v) {
+    const { r, perms, seeAsCrew } = ctx;
+    const { sg } = v;
+    return `
+
+      ${!r.isYou && squad.find(x => x.isYou) ? `
+      <div class="profile-section" style="${sg(0)}">
+        <h3>🎉 You &amp; ${escHtml(displayName(r))}</h3>
+        ${ravesTogetherSectionHTML(squad.find(x => x.isYou), r)}
+      </div>` : ''}
+
+      ${!r.isYou ? `
+      <div class="profile-section" style="${sg(0)}">
+        <h3>🤝 How We Met</h3>
+        ${seeAsCrew ? '' : oneTimeHintHTML('how_we_met', `Only you and ${displayName(r).split(' ')[0]} see your story. Writing one earns +10 Love.`, GK_COLORS.ravers)}
+        <div id="how-we-met-section">
+          ${howWeMetSectionHTML(r.id, metStoriesCache[String(r.id)] || null, r)}
+        </div>
+      </div>` : ''}
+
+      ${(!r.isYou && currentUser) ? (() => {
+        // Contact section: owner's shared fields + your private phone
+        const theirInstagram = perms.editInstagram
+          ? `<div class="contact-row">
+               <div class="contact-their-label">Instagram</div>
+               <div class="contact-their-phone"><span id="ief-wrap-${r.id}-instagram" class="ief-wrap">${inlineEditDisplay(r.id, 'instagram', r.instagram || '')}</span></div>
+             </div>`
+          : '';
+        const theirRadiate = perms.editRadiate
+          ? `<div class="contact-row">
+               <div class="contact-their-label">Radiate</div>
+               <div class="contact-their-phone"><span id="ief-wrap-${r.id}-radiate" class="ief-wrap">${inlineEditDisplay(r.id, 'radiate', r.radiate || '')}</span></div>
+             </div>`
+          : '';
+        const theirPhone = (perms.editPhone && !perms.isClaimed)
+          ? `<div class="contact-row">
+               <div class="contact-their-label">Their phone (crew reference)</div>
+               <div class="contact-their-phone"><span id="ief-wrap-${r.id}-phone" class="ief-wrap">${inlineEditDisplay(r.id, 'phone', r.phone || '')}</span></div>
+             </div>`
+          : (perms.isClaimed
+              ? `<div class="contact-row">
+                   <div class="contact-their-label">Their phone</div>
+                   <div class="${r.phoneVisible ? 'contact-their-phone' : 'contact-phone-hidden'}">${r.phoneVisible ? (escHtml(r.phone) || '—') : '🔒 Hidden by owner'}</div>
+                 </div>`
+              : '');
+        const myPhone = `<div class="contact-row">
+            <div class="contact-your-label">Saved number (private)</div>
+            <div class="contact-their-phone"><span id="ief-wrap-${r.id}-private-phone" class="ief-wrap">${privatePhoneDisplay(r.id)}</span></div>
+          </div>`;
+        if (!theirInstagram && !theirRadiate && !theirPhone && !perms.isClaimed) return '';
+        return `<div class="profile-section" style="${sg(1)}">
+          <h3>📱 Contact</h3>
+          <div class="profile-contact-section">
+            ${theirInstagram}
+            ${theirRadiate}
+            ${theirPhone}
+            ${myPhone}
+          </div>
+        </div>`;
+      })() : ''}
+
+      <div class="profile-section" style="${sg(1)}">
+        <h3>📝 Notes</h3>
+        ${r.isYou ? `<div class="profile-note">${r.notes ? escHtml(r.notes) : '<span class="fest-empty">No notes yet. Only you can read these</span>'}</div>` : (() => {
+          const savedNotes = escHtml(viewerNotesCache[String(r.id)] || '');
+          return `<p style="font-size:0.72rem;color:var(--muted);margin-bottom:8px;line-height:1.4;">Private — only you can see this.</p>
+            <textarea id="viewer-notes-${r.id}" aria-label="Your private notes about this raver" class="inline-notes-area"
+              placeholder="Vibe check, inside jokes, things to remember…"
+              oninput="saveViewerNote('${escJsAttr(r.id)}',this.value);const s=document.getElementById('notes-saved-${r.id}');if(s){s.classList.add('show');clearTimeout(s._t);s._t=setTimeout(()=>s.classList.remove('show'),1400);}"
+            >${savedNotes}</textarea>
+            <div id="notes-saved-${r.id}" class="inline-notes-saved">Saved ✓</div>`;
+        })()}
+      </div>
+
+      <div class="profile-section" style="${sg(2)}">
+        <h3>
+          <button type="button" class="profile-section-toggle" aria-expanded="${raverHistoryExpanded}" aria-controls="raver-history-body" onclick="toggleRaverHistorySection()">
+            <span>📜 History</span>
+            <span id="raver-history-toggle-label" style="font-size:0.72rem;color:var(--muted);">${raverHistoryExpanded ? '▲ Hide' : '▼ Show'}</span>
+          </button>
+        </h3>
+        <div id="raver-history-body" style="${raverHistoryExpanded ? '' : 'display:none;'}">
+          ${buildHistoryListHTML(raverHistoryRows, { showReason: isModerator(), emptyMessage: 'Check back after the next edit 👀' })}
+        </div>
+      </div>
+      `;
+  }
+
+  function renderProfileView(ctx, profilePage, { avatarEl, connectBlock, photoCountdownBlock }) {
+    const { raw, r, perms, seeAsCrew, upcomingFests } = ctx;
+    profilePage.classList.remove('profile-edit-mode');
+    profilePage.oninput = null;
+    const rid = escJsAttr(r.id);
+    const raverCrews = crews.filter(c => (c.squadIds || []).some(sid => String(sid) === String(r.id)));
+    const soundCount = r.genres.length + r.favArtistIds.length;
+    const firstName = escHtml(displayName(r).split(' ')[0]);
+    const ravesVisible = r.isYou || perms.rsvpsVisible;
+    const vibeCount = (r.vibeTags || []).length + (r.customVibeTags || []).length + soundCount;
+    const activeTab = _profileTabs[String(r.id)] || profileDefaultTab(r);
+    const v = {
+      rid, firstName, ravesVisible, raverCrews, soundCount,
+      sg: (i) => `--section-glow:${PROFILE_STAGE_PAL[i % PROFILE_STAGE_PAL.length]};`,
+    };
+    const tabDefs = [
+      ['raves', 'Raves', ravesVisible ? upcomingFests.length : 0],
+      ['vibe', 'Vibe', vibeCount],
+      ['crews', 'Crews', raverCrews.length],
+      ['us', r.isYou ? 'Notes' : 'Us', 0],
+    ];
+    const tabBar = `<div class="profile-tabs" role="tablist" aria-label="Profile sections">${tabDefs.map(([k, label, n]) => `
+        <button type="button" role="tab" class="profile-tab${k === activeTab ? ' active' : ''}" data-tab="${k}" aria-selected="${k === activeTab}" onclick="setProfileTab('${rid}','${escJsAttr(k)}')">${label}${n ? `<sup>${n}</sup>` : ''}</button>`).join('')}
+      </div>`;
+    const pane = (k) => `class="profile-tab-pane" data-tab="${k}" role="tabpanel"${k === activeTab ? '' : ' hidden'}`;
+
+    // Less-used actions on someone else's profile live behind ⋯
+    const moreItems = [
+      perms.canDisconnect ? `<button type="button" class="pmm-item" data-raver-id="${r.id}" onclick="showDisconnectConfirm(this.dataset.raverId)">🔗 Disconnect account</button>` : '',
+      !r.isYou && currentUser ? `<button type="button" class="pmm-item" data-raver-id="${r.id}" onclick="showReportModal('raver', this.dataset.raverId)">🚩 Report</button>` : '',
+      currentUser && r.claimedBy && r.claimedBy !== currentUser.id ? `<button type="button" class="pmm-item" data-block-uid="${escHtml(r.claimedBy)}" onclick="toggleBlockFromProfile(this)" title="${isBlockedUser(r.claimedBy) ? 'Unblock' : 'Block'}" aria-label="${isBlockedUser(r.claimedBy) ? 'Unblock' : 'Block'}">${isBlockedUser(r.claimedBy) ? '✅ Unblock' : '🚫 Block'}</button>` : '',
+      perms.canDelete ? `<button type="button" class="pmm-item danger" data-raver-id="${r.id}" onclick="deleteUnclaimedProfile(this.dataset.raverId)">🗑️ Delete profile</button>` : '',
+      isModerator() ? `<button type="button" class="pmm-item danger" data-raver-id="${r.id}" onclick="showPurgeRaverDataConfirm(this.dataset.raverId)" title="Permanently delete this person's data (verified deletion request only)">☠️ Purge data</button>` : '',
+    ].filter(Boolean);
+    const moreMenu = moreItems.length ? `
+        <div class="profile-more">
+          <button type="button" class="btn btn-ghost" style="padding:11px 14px;" aria-label="More actions" aria-haspopup="true" aria-expanded="false" onclick="toggleProfileMoreMenu(this)">⋯</button>
+          <div class="profile-more-menu" role="menu" hidden onclick="if(event.target.closest('.pmm-item'))closeProfileMoreMenu()">${moreItems.join('')}</div>
+        </div>` : '';
+    // Own-profile icons stay visible
+    const ownIcons = r.isYou ? `
+        <button class="btn btn-ghost" style="padding:11px;" data-raver-id="${r.id}" onclick="openPrivacySettingsModal(this.dataset.raverId)" title="Privacy & Permissions">🔒</button>
+        <button class="btn btn-ghost" style="padding:11px;" data-raver-id="${r.id}" onclick="toggleSeeAsCrew(this.dataset.raverId)" title="See as your crew">👁</button>` : '';
+
+    // Unclaimed profile you manage — say so, with RSVPs + claim link one tap away
+    const manageBar = (currentUser && !r.isYou && !perms.isClaimed && perms.editFests) ? `
+      <div class="profile-manage-bar">
+        <div class="pmbar-text"><b>You manage this profile.</b> Edits save straight to ${firstName}'s page.</div>
+        <button type="button" onclick="openProfileListSheet('manage','${rid}')">🎟️ RSVPs</button>
+        ${perms.isLeaderOfRaver && r.qrToken ? `<button type="button" data-raver-id="${r.id}" onclick="showQRModal(this.dataset.raverId)">📲 Claim link</button>` : ''}
+      </div>` : '';
+
+    profilePage.innerHTML = `
+      <button class="profile-back" onclick="backFromProfile()">← Back to ${profileOrigin === 'crews' ? 'My Crews' : 'Squad'}</button>
+      <div class="profile-hero-banner" style="background:${safeGradient(r.gradient)}"></div>
+      <div class="profile-hero-body">
+        <div class="profile-avatar-ring" role="button" tabindex="0" aria-label="Pause or resume the spinning avatar ring" onclick="this.classList.toggle('paused')">
+          ${avatarEl}
+        </div>
+        <div class="profile-id">
+          <h2>${r.isYou ? '👑 ' : ''}${escHtml(displayName(r))}${r.isYou ? ' <span style="font-size:0.9rem;color:var(--muted)">(You)</span>' : ''}</h2>
+          ${nicknameCache[String(r.id)] ? `<div class="profile-real-name">Real name: ${escHtml(r.name)}</div>` : ''}
+          ${!r.isYou && currentUser ? `
+            <div class="profile-nickname-row">
+              <span style="font-size:0.7rem;color:var(--muted);">🏷️</span>
+              <span id="ief-wrap-${r.id}-nickname" class="ief-wrap" onclick="if(!event.target.closest('button,input'))startNicknameEdit('${escJsAttr(r.id)}')" style="cursor:pointer;">
+                ${inlineEditNicknameDisplay(r.id, nicknameCache[String(r.id)] || '')}
+              </span>
+            </div>` : ''}
+          <div class="profile-handle">${escHtml(r.handle)}</div>
+          ${perms.editLocation
+            ? `<div class="profile-base-line">📍 <span id="ief-wrap-${r.id}-base" class="ief-wrap">${inlineEditDisplay(r.id, 'base', r.base)}</span></div>`
+            : perms.baseVisible
+              ? `<div class="profile-base-line">📍 Based in ${escHtml(r.base)}</div>`
+              : `<div class="profile-base-line">📍 Location private</div>`}
+        </div>
+      </div>
+
+      <div id="plur-bar-wrap">${plurBarHTML(r.id)}</div>
+
+      ${photoCountdownBlock}
+
+      ${manageBar}
+
+      <div class="profile-actions" data-raver-id="${r.id}">
+        ${ currentUser && (r.isYou || (perms.isLeaderOfRaver && !perms.isClaimed)) ? `<button class="btn btn-primary" style="flex:1;padding:11px;" data-raver-id="${r.id}" onclick="enterProfileEditMode(this.dataset.raverId)">✏️ Edit Profile</button>` : ''}
+        ${ !perms.isClaimed && perms.isLeaderOfRaver && r.qrToken ? `<button class="btn btn-ghost" style="padding:11px;" data-raver-id="${r.id}" onclick="showQRModal(this.dataset.raverId)" title="Share invite QR">📲</button>` : ''}
+        ${ownIcons}
+        ${moreMenu}
+      </div>
+
+      ${connectBlock}
+
+      ${tabBar}
+
+      <div ${pane('raves')}>
+      ${profileRavesPaneHTML(ctx, v)}
+      </div>
+
+      <div ${pane('vibe')}>
+      ${profileVibePaneHTML(ctx, v)}
+      </div>
+
+      <div ${pane('crews')}>
+      ${profileCrewsPaneHTML(ctx, v)}
+      </div>
+
+      <div ${pane('us')}>
+      ${profileUsPaneHTML(ctx, v)}
+      </div>
+    `;
+    // Tabs stick just under the app header
+    profilePage.style.setProperty('--ptabs-top', `${document.querySelector('header')?.offsetHeight || 0}px`);
+    initProfileTabSwipe();
+    profilePage.classList.toggle('see-as-crew', seeAsCrew);
+    if (seeAsCrew) {
+      profilePage.insertAdjacentHTML('afterbegin', `<div class="see-as-crew-banner"><span>👁 Viewing as your crew — this is what they see.</span><button type="button" class="btn btn-ghost" onclick="toggleSeeAsCrew('${escJsAttr(raw.id)}')">Done</button></div>`);
+    }
+    // Keep an open "See all" sheet in sync (e.g. after ✕ removes a rave); close it if the profile changed
+    if (_profileListSheet) {
+      if (_profileListSheet.raverId === String(r.id)) renderProfileListSheet();
+      else closeProfileListSheet();
+    }
+  }
+
+  // Async-load How We Met stories, Our Photos, History and PLUR Points; each
+  // refreshes its own section in place once loaded.
+  function loadProfileAsync(ctx) {
+    const { r, editMode } = ctx;
     if (!editMode && !r.isYou && currentUser) {
       const _profileId = r.id;
       loadMetStories(_profileId).then(stories => {
@@ -29769,6 +29783,35 @@
         if (wrap) wrap.innerHTML = plurBarHTML(_plurProfileId, totals);
       }).catch(console.warn);
     }
+  }
+
+  function openProfile(id, editMode = false, origin = null) {
+    const raw = getRaver(id);
+    if (!raw) return;
+    const ctx = profileCtx(raw, editMode);
+    if (origin !== null) profileOrigin = origin;
+    if (_raverHistoryLoadedFor !== String(id)) {
+      raverHistoryRows = [];
+      _raverHistoryLoadedFor = String(id);
+    }
+
+    const profilePage = document.getElementById('page-profile');
+    const avatarEl = profileAvatarHTML(ctx);
+    if (editMode) {
+      renderProfileEdit(ctx, profilePage, avatarEl);
+    } else {
+      renderProfileView(ctx, profilePage, {
+        avatarEl,
+        connectBlock: profileConnectHTML(ctx),
+        photoCountdownBlock: profilePhotoCountdownHTML(ctx),
+      });
+    }
+    // Swap to profile page (hide nav active states; this is a sub-page)
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    profilePage.classList.add('active');
+    window.scrollTo(0,0);
+
+    loadProfileAsync(ctx);
   }
 
   function backFromProfile() {
