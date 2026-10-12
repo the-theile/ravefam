@@ -600,6 +600,8 @@ test.describe('Lineup Explorer 3a — most wanted', () => {
         { slug: 'seven-stars-2026', top: null, want: null, fans: 6 },
       ] } },
     }) });
+    // Pin "today" before Seven Stars (ends 2026-10-11) so all three cards are upcoming.
+    await page.clock.setFixedTime(new Date('2026-10-01T18:00:00Z'));
     await page.goto('/lineup-explorer/index.html');
     const edc = page.locator(`.event-card[href="/lineup-explorer/${SLUG}"]`);
     await expect(edc.locator('.lp-hub-mw')).toHaveText('🔥 Most wanted: Kaskade (12)');
