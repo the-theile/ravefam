@@ -3055,7 +3055,8 @@
   }
   .settings-nav-row + .settings-nav-row { border-top: 1px solid rgba(var(--white-rgb),0.08); }
   div.settings-nav-row { cursor: default; }
-  button.settings-nav-row:active { background: rgba(var(--white-rgb),0.04); }
+  button.settings-nav-row:active, a.settings-nav-row:active { background: rgba(var(--white-rgb),0.04); }
+  a.settings-nav-row { text-decoration: none; }
   .settings-nav-ico {
     width: 32px; height: 32px; border-radius: 10px; flex-shrink: 0;
     display: flex; align-items: center; justify-content: center; font-size: 1rem;
@@ -9595,6 +9596,16 @@
           <span class="settings-nav-text"><span class="poll-setting-label">Guide &amp; Help</span></span>
           <span class="settings-nav-chev">›</span>
         </button>
+        <a class="settings-nav-row" href="/privacy.html">
+          <span class="settings-nav-ico" style="background:rgba(var(--white-rgb),0.06);">📄</span>
+          <span class="settings-nav-text"><span class="poll-setting-label">Privacy Policy</span></span>
+          <span class="settings-nav-chev">›</span>
+        </a>
+        <a class="settings-nav-row" href="/terms.html">
+          <span class="settings-nav-ico" style="background:rgba(var(--white-rgb),0.06);">📜</span>
+          <span class="settings-nav-text"><span class="poll-setting-label">Terms of Service</span></span>
+          <span class="settings-nav-chev">›</span>
+        </a>
       </div>
       <!-- Kept on the hub (not under Account & login) while the iOS build is in
            App Store review: privacy.html, terms.html and the help FAQ give the
@@ -9990,16 +10001,6 @@
   </div>
 </div>
 
-<!-- Ko-fi prank modal -->
-<div id="sptPrankModal" class="spt-modal">
-  <div class="spt-modal-box" style="border-color:rgba(var(--danger-strong-rgb),0.6);">
-    <span style="font-size:4.5rem;display:block;margin-bottom:8px;">🚓</span>
-    <h3 style="color:#f87171;font-family:'Fraunces',sans-serif;">BUSTED!</h3>
-    <p style="font-size:0.88rem;color:rgba(var(--white-rgb),0.65);">❄️ Caught in the snow zone — better luck next time, raver! 😂</p>
-    <button onclick="closeSptPrank()" class="spt-donate-btn" style="background:var(--danger-strong);">Escape</button>
-  </div>
-</div>
-
 <!-- Photo Lightbox -->
 <div id="photo-lightbox" class="photo-lightbox" onclick="closePhotoLightbox()">
   <div class="photo-lightbox-card" onclick="event.stopPropagation()">
@@ -10284,7 +10285,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.15.2';
+  const APP_VERSION = '2.15.3';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -34758,7 +34759,7 @@
     { id: 'remove-unclaimed-profile', category: 'account', q: 'A crew leader added me before I signed up — how do I get removed?',
       a: 'Email <a href="mailto:bump@myravefam.com" style="color:var(--neon-cyan);">bump@myravefam.com</a> with subject "Remove my profile" and we\'ll delete it within 30 days, no questions asked.' },
     { id: 'is-free', category: 'account', q: 'Is RaveFAM free to use?',
-      a: "Yes, fully free to sign up and use, no card required. There's an optional Ko-fi tip jar in the App Guide if you want to support the build." },
+      a: "Yes, fully free to sign up and use, no card required.<span class=\"web-only\"> There's an optional Ko-fi tip jar in the App Guide if you want to support the build.</span>" },
     { id: 'security-report', category: 'account', q: 'I found a security vulnerability. Who do I tell?',
       a: 'Email <a href="mailto:bump@myravefam.com" style="color:var(--neon-cyan);">bump@myravefam.com</a> immediately with subject "Security Issue" — we take these seriously and respond fast.' },
     { id: 'tips-toggle', category: 'tips', q: 'How do I turn tips on/off or see them again?',
@@ -38977,7 +38978,6 @@
     { e:'🤖', l:'AI Time',      m:'🤖 More AI features',       u:'boosts',   msg:"Crank up the AI — let's build wilder vibes! 🤖⚡" },
     { e:'🎟️', l:'Festival',     m:'🎟️ Festival / show ticket', u:'tickets',  msg:'Stack those festival tickets — rave season incoming! 🎉' },
     { e:'🍭', l:'Kandi',        m:'🍭 Kandi candy',            u:'pieces',   msg:'Trade more kandi — spread the PLUR! 🍭✨' },
-    { e:'❄️', l:'Snow',         isPrank: true },
     { e:'🌿', l:'Flowers',      m:'🌿 Flowers / plants',       u:'bouquets', msg:'Grow the garden — more flowers for the festival! 🌸' },
     { e:'🕺', l:'Rave Fits',    m:'🕺 Rave Fits',             u:'fits',     msg:'Outfit the dancefloor — drop more rave fits! 🕺💃' },
     { e:'❤️', l:'Just Because', m:'❤️ Just because',          u:'hearts',   msg:'Pure love for the vibe — keep the good energy flowing! ❤️' },
@@ -38991,7 +38991,6 @@
   function mergeProgress(base) {
     const ls = loadLS();
     OPTS.forEach(o => {
-      if (o.isPrank) return;
       prog[o.e] = ls[o.e] || base[o.e] || { current: 0, goal: 10 };
     });
   }
@@ -39017,7 +39016,7 @@
       const card = document.createElement('div');
       card.className = 'spt-emoji-card';
       card.innerHTML = `<span class="e-ico">${o.e}</span><div class="e-lbl">${o.l}</div>`;
-      card.onclick = () => o.isPrank ? showSptPrank() : showSptModal(o);
+      card.onclick = () => showSptModal(o);
       grid.appendChild(card);
     });
   }
@@ -39039,9 +39038,7 @@
     };
     document.getElementById('sptProgressModal').style.display = 'flex';
   };
-  window.showSptPrank  = () => document.getElementById('sptPrankModal').style.display = 'flex';
   window.closeSptModal = () => document.getElementById('sptProgressModal').style.display = 'none';
-  window.closeSptPrank = () => document.getElementById('sptPrankModal').style.display = 'none';
 })();
 </script>
 <script defer src="/_vercel/insights/script.js"></script>
