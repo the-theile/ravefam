@@ -294,3 +294,50 @@ test.describe('huddle chat · crew detail entry', () => {
     await expect(page.locator('#huddle-screen')).toHaveCount(0);
   });
 });
+
+test.describe('huddle chat · activity lines', () => {
+  function seedWithActivity() {
+    const data = seedWithChat();
+    data.huddle_messages = data.huddle_messages.concat([
+      { id: 'sys-poll', room_id: 'room-main', crew_id: 'c1', sender_id: 'kai-uid', kind: 'system', body: '🗳️ Kai started a poll: “Camp or hotel?”', link: { k: 'tile', feature: 'poll', id: 'poll-x' }, reactions: {}, created_at: minsAgo(3), deleted_at: null, mentions: [] },
+      { id: 'sys-plain', room_id: 'room-main', crew_id: 'c1', sender_id: 'kai-uid', kind: 'system', body: '👋 Sam joined the crew', reactions: {}, created_at: minsAgo(2), deleted_at: null, mentions: [] },
+      // A chat message breaks the run so these two stay uncollapsed.
+      { id: 'm-after', room_id: 'room-main', crew_id: 'c1', sender_id: 'kai-uid', kind: 'text', body: 'nice', reactions: {}, created_at: minsAgo(1), deleted_at: null, mentions: [] },
+    ]);
+    return data;
+  }
+
+  test('a line with a link is tappable and lands on the crew tile it is about', async ({ page }) => {
+    await bootAuthedApp(page, { data: seedWithActivity(), sessionOver: { user_metadata: { guidance_dismissed: true, seen_tips: { beacon: true } } } });
+    await page.evaluate(async () => { await openDetail('c1'); await openHuddle('c1'); });
+    await expect(page.locator('#huddle-screen')).toHaveClass(/open/);
+
+    // Lines without a target stay static notes.
+    await expect(page.locator('.huddle-system-row', { hasText: 'joined the crew' })).not.toHaveClass(/is-link/);
+    const pollLine = page.locator('.huddle-system-row.is-link', { hasText: 'started a poll' });
+    await pollLine.click();
+
+    await expect(page.locator('#huddle-screen')).toHaveCount(0);
+    await expect(page.locator('#crew-feature-panel-poll')).toBeVisible();
+  });
+
+  test('three or more activity lines in a row collapse into one expandable card', async ({ page }) => {
+    const data = seedWithChat();
+    const sys = (id, body, m) => ({ id, room_id: 'room-main', crew_id: 'c1', sender_id: 'kai-uid', kind: 'system', body, reactions: {}, created_at: minsAgo(m), deleted_at: null, mentions: [] });
+    data.huddle_messages = data.huddle_messages.concat([
+      sys('s1', '🎪 Kai is going to Hulaween!', 4),
+      sys('s2', '🗳️ Kai started a poll: “Camp?”', 3),
+      sys('s3', '📌 Kai pinned Tomorrowland to the Dream Board', 2),
+    ]);
+    await openChat(page, data);
+
+    const head = page.locator('.hd-actrun-head');
+    await expect(head).toContainText('3 crew updates');
+    await expect(page.locator('.hd-actrun-list')).toBeHidden();
+    await head.click();
+    await expect(page.locator('.hd-actrun-list .huddle-system-row')).toHaveCount(3);
+    // Stays open when the stream re-renders on a new message.
+    await page.evaluate(() => renderHuddleUI());
+    await expect(page.locator('.hd-actrun-list')).toBeVisible();
+  });
+});
