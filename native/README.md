@@ -46,6 +46,9 @@ Each native PR adds a line here; **After release** holds web changes that wait o
 - Haptic taps as each rave pops in on the Radar Map, plus a success tap at the end (`@capacitor/haptics`)
   - Since 2.15.0 the web side also taps on RSVPs, votes, reactions, Huddle sends, tab switches,
     claims and errors, with a Settings → Haptics switch; all of it no-ops until this build ships
+- Privacy manifest (`PrivacyInfo.xcprivacy`) declares the data the app collects; App Store Connect's
+  App Privacy answers must match it
+- `UIRequiredDeviceCapabilities` is `arm64` (was the template's `armv7`)
 
 **After release**
 - Re-add `/lineup-explorer` and `/lineup-explorer/*` to `.well-known/apple-app-site-association`
