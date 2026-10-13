@@ -10285,7 +10285,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.15.3';
+  const APP_VERSION = '2.16.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -21200,7 +21200,7 @@
     const idx = huddleMessages.findIndex(m => m.id === tempId);
     if (error || !data) {
       if (idx >= 0) { huddleMessages[idx]._pending = false; huddleMessages[idx]._failed = true; }
-      hapticError();
+      if (isContentBlocked(error)) toastError('', error); else hapticError();
       renderHuddleUI();
       return;
     }
@@ -31737,15 +31737,20 @@
   }
 
   function requestUserLocation() {
+    const onPos = (pos) => {
+      saveUserGeo({ lat: pos.coords.latitude, lng: pos.coords.longitude, label: 'Current location', source: 'geo' });
+      onUserLocationSet();
+    };
+    const opts = { timeout: 8000, maximumAge: 300000 };
+    // iOS app: the native plugin asks once (the webview's own API adds a second
+    // "myravefam.com would like your location" prompt). Builds without the
+    // plugin fall through to the web API.
+    if (IS_NATIVE_APP && window.Capacitor.isPluginAvailable && window.Capacitor.isPluginAvailable('Geolocation')) {
+      window.Capacitor.Plugins.Geolocation.getCurrentPosition(opts).then(onPos, () => openNearbyLocModal());
+      return;
+    }
     if (!navigator.geolocation) { openNearbyLocModal(); return; }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        saveUserGeo({ lat: pos.coords.latitude, lng: pos.coords.longitude, label: 'Current location', source: 'geo' });
-        onUserLocationSet();
-      },
-      () => { openNearbyLocModal(); },
-      { timeout: 8000, maximumAge: 300000 }
-    );
+    navigator.geolocation.getCurrentPosition(onPos, () => { openNearbyLocModal(); }, opts);
   }
 
   // Shared "location successfully set" side effect, branched by whichever feature
@@ -34880,12 +34885,18 @@
   // Failures and permission refusals. When the caught error is passed in, a
   // network drop or an RLS/auth refusal gets its own message, since "try
   // again" doesn't help with either.
+  // The server-side word filter (moderation_blocked_terms trigger) rejects
+  // with 'content_not_allowed'.
+  function isContentBlocked(err) { return /content_not_allowed/.test(err?.message || ''); }
+
   function toastError(msg, err) {
     if (err) {
       if (!navigator.onLine || /failed to fetch|networkerror|load failed/i.test(err.message || '')) {
         msg = "You're offline. Try again once you're back online.";
       } else if (err.code === '42501' || err.status === 401 || err.status === 403) {
         msg = "You don't have permission to do that.";
+      } else if (isContentBlocked(err)) {
+        msg = "That includes language RaveFAM doesn't allow. Edit it and try again.";
       }
     }
     hapticError();

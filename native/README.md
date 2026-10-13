@@ -49,6 +49,9 @@ Each native PR adds a line here; **After release** holds web changes that wait o
 - Privacy manifest (`PrivacyInfo.xcprivacy`) declares the data the app collects; App Store Connect's
   App Privacy answers must match it
 - `UIRequiredDeviceCapabilities` is `arm64` (was the template's `armv7`)
+- Native location (`@capacitor/geolocation`): Nearby raves asks for location once instead of twice
+  (app prompt + webview's "myravefam.com would like your location"). Since 2.16.0 the web side
+  uses it when present and falls back to the browser API on older builds
 
 **After release**
 - Re-add `/lineup-explorer` and `/lineup-explorer/*` to `.well-known/apple-app-site-association`
