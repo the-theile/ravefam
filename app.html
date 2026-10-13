@@ -4593,6 +4593,11 @@
   .huddle-system-row.is-link { cursor: pointer; }
   .huddle-system-row.is-link:hover, .huddle-system-row.is-link:focus-visible { filter: brightness(1.08); outline: none; box-shadow: 0 0 0 1px var(--neon-pink), 0 3px 8px -2px rgba(var(--black-rgb),0.4); }
   .huddle-system-go { font-weight: 800; margin-left: 2px; }
+  /* A run of activity lines collapsed into one card (see huddleStreamHTML). */
+  .hd-actrun { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+  .hd-actrun-head { border: 0; font-family: inherit; }
+  .hd-actrun-list { display: flex; flex-direction: column; align-items: center; width: 100%; }
+  .hd-actrun-list[hidden] { display: none; }
 
   /* ── Message groups ──
      A run of consecutive messages from one sender shares a single avatar and
@@ -20709,6 +20714,30 @@
       </div>`;
   }
 
+  // One activity line; tappable when it carries a link (see openHuddleActivityLink).
+  function huddleSystemRowHTML(m) {
+    const link = m.link && typeof m.link === 'object' && m.link.k ? m.link : null;
+    return link
+      ? `<div class="huddle-system-row is-link" role="link" tabindex="0" data-link="${escHtml(JSON.stringify(link))}" onclick="openHuddleActivityLink(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openHuddleActivityLink(this);}">${escHtml(m.body || '')} <span class="huddle-system-go" aria-hidden="true">›</span></div>`
+      : `<div class="huddle-system-row">${escHtml(m.body || '')}</div>`;
+  }
+
+  // Collapsed activity runs the viewer has expanded, keyed by the run's first
+  // message id — kept across re-renders so a new message doesn't snap them shut.
+  const HUDDLE_ACTIVITY_RUN_MIN = 3;
+  const _huddleOpenActivityRuns = new Set();
+
+  function toggleHuddleActivityRun(btn) {
+    const key = btn.dataset.run;
+    const open = !_huddleOpenActivityRuns.has(key);
+    if (open) _huddleOpenActivityRuns.add(key); else _huddleOpenActivityRuns.delete(key);
+    btn.setAttribute('aria-expanded', String(open));
+    const go = btn.querySelector('.huddle-system-go');
+    if (go) go.textContent = open ? '▴' : '▾';
+    const list = btn.nextElementSibling;
+    if (list) list.hidden = !open;
+  }
+
   // Builds the whole stream: day separators, the unread divider, and sender
   // groups (one avatar + one name label per run, timestamp on the last row).
   function huddleStreamHTML(crew) {
@@ -20748,28 +20777,47 @@
       group = null;
     };
 
+    // Activity lines are standalone notes, never part of a sender group. A
+    // run of HUDDLE_ACTIVITY_RUN_MIN or more in a row collapses into one
+    // expandable card so crew updates don't bury the chat.
+    let sysRun = [];
+    const flushSys = () => {
+      if (!sysRun.length) return;
+      if (sysRun.length < HUDDLE_ACTIVITY_RUN_MIN) {
+        html += sysRun.map(huddleSystemRowHTML).join('');
+      } else {
+        const key = String(sysRun[0].id);
+        const open = _huddleOpenActivityRuns.has(key);
+        const icons = [...new Set(sysRun.map(m => String(m.body || '').split(' ')[0]).filter(Boolean))].slice(0, 4).join(' ');
+        html += `
+          <div class="hd-actrun">
+            <button type="button" class="huddle-system-row is-link hd-actrun-head" data-run="${escHtml(key)}" aria-expanded="${open}" onclick="toggleHuddleActivityRun(this)">${escHtml(icons)} ${sysRun.length} crew updates <span class="huddle-system-go" aria-hidden="true">${open ? '▴' : '▾'}</span></button>
+            <div class="hd-actrun-list"${open ? '' : ' hidden'}>${sysRun.map(huddleSystemRowHTML).join('')}</div>
+          </div>`;
+      }
+      sysRun = [];
+    };
+    const flushAll = () => { flushSys(); flush(); };
+
     msgs.forEach(m => {
       const at = huddleTimeOf(m);
       const day = huddleDayKey(at);
       if (day !== lastDay) {
-        flush();
+        flushAll();
         html += `<div class="hd-daysep"><span>${escHtml(huddleDayLabel(at))}</span></div>`;
         lastDay = day;
       }
       if (!unreadDrawn && m.sender_id !== me && at > new Date(_huddleUnreadAnchorAt).getTime()) {
-        flush();
+        flushAll();
         html += `<div class="hd-unread"><span>New messages</span></div>`;
         unreadDrawn = true;
       }
-      // Game Plan activity lines are standalone notes, never part of a group.
       if (m.kind === 'system') {
         flush();
-        const link = m.link && typeof m.link === 'object' && m.link.k ? m.link : null;
-        html += link
-          ? `<div class="huddle-system-row is-link" role="link" tabindex="0" data-link="${escHtml(JSON.stringify(link))}" onclick="openHuddleActivityLink(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openHuddleActivityLink(this);}">${escHtml(m.body || '')} <span class="huddle-system-go" aria-hidden="true">›</span></div>`
-          : `<div class="huddle-system-row">${escHtml(m.body || '')}</div>`;
+        sysRun.push(m);
         return;
       }
+      flushSys();
       const breaks = !group
         || group.senderId !== m.sender_id
         || (at - group.lastAt) > HUDDLE_GROUP_GAP_MS;
@@ -20779,7 +20827,7 @@
       group.lastAt = at;
       if (m._pending) group.pending = true;
     });
-    flush();
+    flushAll();
     if (_huddleHasNewer) {
       html += `<button type="button" class="hd-loadmore" id="hd-loadnewer" onclick="loadNewerHuddleMessages()">↓ LOAD NEWER</button>`;
     }
