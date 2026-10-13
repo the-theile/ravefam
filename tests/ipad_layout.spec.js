@@ -8,10 +8,11 @@
 // switches the tablet block on directly through the CSSOM. That is exactly
 // what a real iPad touchscreen renders.
 const { test, expect } = require('@playwright/test');
-const { bootAuthedApp } = require('./helpers');
+const { bootAuthedApp, installSupabaseStub } = require('./helpers');
 
 const TABS = ['crews', 'raves', 'ravers', 'stats', 'village'];
 
+// Switches on the tablet blocks (the general one and the portrait sign-in one).
 async function forceTabletBlock(page) {
   const found = await page.evaluate(() => {
     let n = 0;
@@ -27,7 +28,7 @@ async function forceTabletBlock(page) {
     }
     return n;
   });
-  expect(found).toBe(1);
+  expect(found).toBe(2);
 }
 
 // Visible, tappable controls under Apple's 44pt minimum.
@@ -65,6 +66,22 @@ for (const [name, viewport] of [['portrait', { width: 820, height: 1180 }], ['la
         expect(await page.evaluate(smallControls), `undersized controls on ${tab}`).toEqual([]);
       }
       expect(errors).toEqual([]);
+    });
+
+    test('the sign-in screen has no undersized controls or tappable-looking pills', async ({ page }) => {
+      await installSupabaseStub(page, { session: null });
+      await page.goto('/app.html');
+      await expect(page.locator('#login-btn')).toBeVisible();
+      await forceTabletBlock(page);
+      expect(await page.evaluate(smallControls)).toEqual([]);
+      if (name === 'portrait') {
+        await expect(page.locator('#auth-screen .landing-features')).toBeHidden();
+        const { hero, card } = await page.evaluate(() => {
+          const mid = el => { const r = document.querySelector(el).getBoundingClientRect(); return r.left + r.width / 2; };
+          return { hero: mid('.landing-hero'), card: mid('.auth-card') };
+        });
+        expect(Math.abs(hero - card)).toBeLessThanOrEqual(2);
+      }
     });
 
     test('tab bar is centered over the content', async ({ page }) => {
