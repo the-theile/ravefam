@@ -4727,6 +4727,10 @@
 
   /* ── Message bodies by kind ── */
   .huddle-bubble-photo { max-width: 100%; max-height: 240px; border-radius: 4px; display: block; object-fit: cover; cursor: zoom-in; }
+  .hd-gif { position: relative; width: 220px; max-width: 100%; max-height: 260px; border-radius: 6px; overflow: hidden; background: rgba(255,255,255,0.06); }
+  .hd-gif video, .hd-gif img { width: 100%; height: 100%; display: block; object-fit: cover; }
+  .hd-gif-via { position: absolute; right: 4px; bottom: 4px; font-size: 9px; letter-spacing: 0.04em; padding: 1px 5px; border-radius: 3px; background: rgba(0,0,0,0.55); color: rgba(255,255,255,0.8); pointer-events: none; }
+  .hd-gif-missing { opacity: 0.6; font-style: italic; }
   .hd-voice { display: flex; align-items: center; gap: 8px; }
   .hd-vplay {
     width: 27px; height: 27px; border-radius: 4px; border: none; flex-shrink: 0;
@@ -10294,7 +10298,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.16.0';
+  const APP_VERSION = '2.17.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -20550,7 +20554,28 @@
     if (m.kind === 'meetup') return `📍 ${m.body || 'Meetup pin'}`;
     if (m.kind === 'lineup') return m.body || '📋 Shared their lineup picks';
     if (m.kind === 'beacon') return `📣 ${m.body || 'Beacon'}`;
+    if (m.kind === 'gif') return '🎞️ GIF';
     return m.body || '';
+  }
+
+  // GIF messages only ever load from GIPHY's media CDN or our huddle-gifs
+  // bucket — same allowlist as the huddle_messages_gif_media_check constraint.
+  const HUDDLE_GIF_HOST = /^https:\/\/((media[0-9]?|i)\.giphy\.com|tvpgopciioqbqmjjjigh\.supabase\.co\/storage\/v1\/object\/public\/huddle-gifs)\//;
+
+  function huddleGifHTML(m) {
+    const meta = m.media_meta || {};
+    if (!HUDDLE_GIF_HOST.test(m.media_url || '')) return '<span class="hd-gif-missing">🎞️ GIF unavailable</span>';
+    const still = HUDDLE_GIF_HOST.test(meta.still || '') ? meta.still : '';
+    const w = Number(meta.w) || 1, h = Number(meta.h) || 1;
+    const alt = escHtml(meta.title || 'GIF');
+    const autoplay = !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const media = /\.mp4$/i.test(m.media_url)
+      ? `<video src="${escHtml(m.media_url)}" ${still ? `poster="${escHtml(still)}"` : ''} ${autoplay ? 'autoplay' : ''} loop muted playsinline preload="metadata" aria-label="${alt}" onclick="this.paused ? this.play() : this.pause()"></video>`
+      : `<img src="${escHtml(m.media_url)}" alt="${alt}" loading="lazy">`;
+    return `<div class="hd-gif" style="aspect-ratio:${w} / ${h}">
+        ${media}
+        ${meta.src === 'giphy' ? '<span class="hd-gif-via">via GIPHY</span>' : ''}
+      </div>`;
   }
 
   // A shared Lineup Explorer picks link ('lineup' messages, posted from the
@@ -20626,6 +20651,7 @@
     if (m.kind === 'beacon') {
       return `<div class="huddle-bubble-beacon-text">📣 ${escHtml(m.body || '')}</div>`;
     }
+    if (m.kind === 'gif') return huddleGifHTML(m);
     return highlightHuddleMentions(linkifyHuddleText(escHtml(m.body || '')));
   }
 
