@@ -294,3 +294,28 @@ test.describe('huddle chat · crew detail entry', () => {
     await expect(page.locator('#huddle-screen')).toHaveCount(0);
   });
 });
+
+test.describe('huddle chat · activity lines', () => {
+  function seedWithActivity() {
+    const data = seedWithChat();
+    data.huddle_messages = data.huddle_messages.concat([
+      { id: 'sys-poll', room_id: 'room-main', crew_id: 'c1', sender_id: 'kai-uid', kind: 'system', body: '🗳️ Kai started a poll: “Camp or hotel?”', link: { k: 'tile', feature: 'poll', id: 'poll-x' }, reactions: {}, created_at: minsAgo(3), deleted_at: null, mentions: [] },
+      { id: 'sys-plain', room_id: 'room-main', crew_id: 'c1', sender_id: 'kai-uid', kind: 'system', body: '👋 Sam joined the crew', reactions: {}, created_at: minsAgo(2), deleted_at: null, mentions: [] },
+    ]);
+    return data;
+  }
+
+  test('a line with a link is tappable and lands on the crew tile it is about', async ({ page }) => {
+    await bootAuthedApp(page, { data: seedWithActivity(), sessionOver: { user_metadata: { guidance_dismissed: true, seen_tips: { beacon: true } } } });
+    await page.evaluate(async () => { await openDetail('c1'); await openHuddle('c1'); });
+    await expect(page.locator('#huddle-screen')).toHaveClass(/open/);
+
+    // Lines without a target stay static notes.
+    await expect(page.locator('.huddle-system-row', { hasText: 'joined the crew' })).not.toHaveClass(/is-link/);
+    const pollLine = page.locator('.huddle-system-row.is-link', { hasText: 'started a poll' });
+    await pollLine.click();
+
+    await expect(page.locator('#huddle-screen')).toHaveCount(0);
+    await expect(page.locator('#crew-feature-panel-poll')).toBeVisible();
+  });
+});

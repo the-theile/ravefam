@@ -4589,6 +4589,10 @@
     transform: rotate(-0.8deg);
   }
   .huddle-system-row:nth-of-type(even) { transform: rotate(0.7deg); }
+  /* Activity lines with a tap target (rave, Rave Plan, poll, pin…). */
+  .huddle-system-row.is-link { cursor: pointer; }
+  .huddle-system-row.is-link:hover, .huddle-system-row.is-link:focus-visible { filter: brightness(1.08); outline: none; box-shadow: 0 0 0 1px var(--neon-pink), 0 3px 8px -2px rgba(var(--black-rgb),0.4); }
+  .huddle-system-go { font-weight: 800; margin-left: 2px; }
 
   /* ── Message groups ──
      A run of consecutive messages from one sender shares a single avatar and
@@ -10285,7 +10289,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.15.3';
+  const APP_VERSION = '2.16.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -12370,7 +12374,7 @@
     if (!targets.length && mine.length) targets.push(mine[0].crew);
     if (!targets.length) { closePicksHandoff(); return; }
     const who = displayName(me || {}).split(' ')[0] || 'Someone';
-    targets.forEach(c => postCrewActivity(c.id, `📋 ${who} picked ${count} ${count === 1 ? 'set' : 'sets'} for ${fest?.name || 'the rave'}. Open the rave to see where they’ll be`));
+    targets.forEach(c => postCrewActivity(c.id, `📋 ${who} picked ${count} ${count === 1 ? 'set' : 'sets'} for ${fest?.name || 'the rave'}. Tap to see where they’ll be`, fest ? { k: 'rave', id: fest.id } : null));
     closePicksHandoff();
     showToast(`Shared with ${targets.map(c => c.name).join(' & ')}`);
   }
@@ -20760,7 +20764,10 @@
       // Game Plan activity lines are standalone notes, never part of a group.
       if (m.kind === 'system') {
         flush();
-        html += `<div class="huddle-system-row">${escHtml(m.body || '')}</div>`;
+        const link = m.link && typeof m.link === 'object' && m.link.k ? m.link : null;
+        html += link
+          ? `<div class="huddle-system-row is-link" role="link" tabindex="0" data-link="${escHtml(JSON.stringify(link))}" onclick="openHuddleActivityLink(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openHuddleActivityLink(this);}">${escHtml(m.body || '')} <span class="huddle-system-go" aria-hidden="true">›</span></div>`
+          : `<div class="huddle-system-row">${escHtml(m.body || '')}</div>`;
         return;
       }
       const breaks = !group
@@ -20777,6 +20784,57 @@
       html += `<button type="button" class="hd-loadmore" id="hd-loadnewer" onclick="loadNewerHuddleMessages()">↓ LOAD NEWER</button>`;
     }
     return html;
+  }
+
+  // Tap target on an activity line (see postHuddleSystemMessage): closes the
+  // Huddle and lands on the rave, raver, Rave Plan or crew tile it's about.
+  async function openHuddleActivityLink(el) {
+    let link;
+    try { link = JSON.parse(el.dataset.link || ''); } catch (e) { return; }
+    const crewId = _huddleActiveCrewId;
+    if (!link || !link.k) return;
+    if (link.k === 'rave') {
+      if (!getFestival(link.id)) { showToast('That rave is no longer around'); return; }
+      closeHuddleScreen();
+      openRaveFocus(link.id);
+      return;
+    }
+    if (link.k === 'raver') { closeHuddleScreen(); openProfile(link.id); return; }
+    if (!crewId || !getCrew(crewId)) return;
+    closeHuddleScreen();
+    const onDetail = String(activeDetailId) === String(crewId)
+      && document.getElementById('page-crew-detail')?.classList.contains('active');
+    if (link.k === 'raveplan') {
+      if (!onDetail) { switchTab('crews'); await openDetail(crewId, { tab: 'gameplan', festivalId: link.festival }); return; }
+      const panel = document.getElementById('crew-feature-panel-raveplan');
+      if (!panel) return;
+      if (panel.style.display === 'none') {
+        _gamePlanActiveFestivalId = link.festival;
+        const tile = document.querySelector('.crew-feature-tile[data-feature="raveplan"]');
+        if (tile) toggleCrewFeatureTile('raveplan', tile);
+      } else {
+        await switchGamePlanFestival(crewId, link.festival);
+        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+      return;
+    }
+    if (link.k === 'tile') {
+      if (!onDetail) { switchTab('crews'); await openDetail(crewId); }
+      const panel = document.getElementById('crew-feature-panel-' + link.feature);
+      const tile = document.querySelector(`.crew-feature-tile[data-feature="${link.feature}"]`);
+      if (!panel || !tile) return;
+      if (panel.style.display === 'none') toggleCrewFeatureTile(link.feature, tile);
+      if (!link.id) return;
+      // Polls load async in openDetail, so the item may land a beat later.
+      const sel = link.feature === 'poll' ? `[data-poll-id="${CSS.escape(String(link.id))}"]` : `#dream-pin-${CSS.escape(String(link.id))}`;
+      const scrollToItem = () => {
+        const item = panel.querySelector(sel);
+        if (!item) return false;
+        (item.closest('.poll-card') || item).scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return true;
+      };
+      if (!scrollToItem()) setTimeout(scrollToItem, 700);
+    }
   }
 
   function huddleAtBottom() {
@@ -22015,15 +22073,18 @@
   // Game Plan activity feed and the crew-wide Main Huddle activity feed.
   // Mirrors ensureHuddleRooms' room-materialization exactly (upsert on
   // conflict do nothing, then look the room back up by its unique key).
-  async function postHuddleSystemMessage(crewId, roomKey, roomRow, summaryText) {
+  // `link` is the line's tap target (see openHuddleActivityLink) — optional.
+  async function postHuddleSystemMessage(crewId, roomKey, roomRow, summaryText, link = null) {
     if (!currentUser) return;
     await sb.from('huddle_rooms').upsert([roomRow], { onConflict: 'crew_id,room_key', ignoreDuplicates: true });
     const { data: rooms } = await sb.from('huddle_rooms').select('id').eq('crew_id', crewId).eq('room_key', roomKey).limit(1);
     const roomId = rooms && rooms[0] && rooms[0].id;
     if (!roomId) return;
-    const { data, error } = await sb.from('huddle_messages').insert({
-      room_id: roomId, crew_id: crewId, sender_id: currentUser.id, kind: 'system', body: summaryText
-    }).select().single();
+    const row = { room_id: roomId, crew_id: crewId, sender_id: currentUser.id, kind: 'system', body: summaryText };
+    let { data, error } = await sb.from('huddle_messages').insert(link ? { ...row, link } : row).select().single();
+    // Before the huddle_activity_links migration lands the column is unknown —
+    // still post the line, just without its tap target.
+    if (error && link) ({ data, error } = await sb.from('huddle_messages').insert(row).select().single());
     if (!error && data && _huddleActiveRoomId === roomId && !huddleMessages.some(m => m.id === data.id)) {
       huddleMessages.push(data);
       renderHuddleUI();
@@ -22033,20 +22094,31 @@
   // Per-rave: claiming a role, offering/joining a ride or stay, or
   // completing a task — ties the other Game Plan sections into that rave's
   // Huddle so it reads as the live pulse of the plan.
+  // Also mirrored into the Main Huddle (tagged with the rave's name) so Main
+  // reads as the crew's full activity feed, not just RSVPs.
   async function postGamePlanActivity(crewId, festivalId, summaryText) {
     if (!currentUser) return;
     const fest = festivals.find(f => String(f.id) === String(festivalId));
     const roomKey = `festival:${festivalId}`;
     const row = { crew_id: crewId, created_by: currentUser.id, room_key: roomKey, kind: 'festival', name: `${fest ? fest.name : 'Rave'} Huddle`, festival_id: festivalId };
-    await postHuddleSystemMessage(crewId, roomKey, row, summaryText);
+    const link = { k: 'raveplan', festival: festivalId };
+    await postHuddleSystemMessage(crewId, roomKey, row, summaryText, link);
+    const mainText = fest && !summaryText.includes(fest.name) ? `${summaryText} · ${fest.name} Rave Plan` : summaryText;
+    await postCrewActivity(crewId, mainText, link);
   }
 
-  // Crew-wide: new members, festival RSVPs, badge unlocks — posted into the
-  // crew's Main Huddle room (not tied to any one rave).
-  async function postCrewActivity(crewId, summaryText) {
+  // Crew-wide: new members, festival RSVPs, polls, dream pins, playlists,
+  // archive links, badge unlocks — posted into the crew's Main Huddle room
+  // (not tied to any one rave).
+  async function postCrewActivity(crewId, summaryText, link = null) {
     if (!currentUser) return;
     const row = { crew_id: crewId, created_by: currentUser.id, room_key: 'main', kind: 'main', name: 'Main Huddle', festival_id: null };
-    await postHuddleSystemMessage(crewId, 'main', row, summaryText);
+    await postHuddleSystemMessage(crewId, 'main', row, summaryText, link);
+  }
+
+  // Your first name for activity lines.
+  function activityWho() {
+    return (displayName(squad.find(r => r.isYou)) || '').split(' ')[0] || 'Someone';
   }
 
   // -- Checklist --
@@ -23222,6 +23294,7 @@
       .select().single();
     if (error) { toastError('Could not save pin. Try again', error); return null; }
     dreamPins.push(data);
+    postCrewActivity(crewId, `📌 ${activityWho()} pinned ${data.label} to the Dream Board`, { k: 'tile', feature: 'dreamboard', id: data.id });
     return data;
   }
 
@@ -23376,6 +23449,8 @@
       .select().single();
     if (error) { toastError('Could not save link. Try again', error); return null; }
     archiveLinks.unshift(data);
+    const archFest = festivalId ? getFestival(festivalId) : null;
+    postCrewActivity(crewId, `📸 ${activityWho()} added ${data.label ? `“${data.label}”` : 'a link'} to the Archive${archFest ? ` for ${archFest.name}` : ''}`, { k: 'tile', feature: 'archive' });
     return data;
   }
 
@@ -23751,6 +23826,7 @@
     if (error) { toastError('Could not launch poll. Try again', error); return null; }
     crewPolls.unshift(data);
     crewPollVotes[data.id] = [];
+    postCrewActivity(crewId, `🗳️ ${activityWho()} started a poll: “${data.question}”`, { k: 'tile', feature: 'poll', id: data.id });
     return data;
   }
 
@@ -24415,6 +24491,7 @@
     }).select().single();
     if (error) { toastError('Could not save playlist. Try again', error); return null; }
     crewJams.unshift(data);
+    postCrewActivity(crewId, `🎵 ${activityWho()} dropped a playlist${data.title ? `: “${data.title}”` : ''}`, { k: 'tile', feature: 'jams' });
     return data;
   }
 
@@ -27081,7 +27158,7 @@
       def.type === 'crew' ? null : nlRaver(earnerRaver, who),
       nlCrew(crew)
     ]);
-    postCrewActivity(crewId, `${def.emoji} ${who} just unlocked "${def.name}"!`);
+    postCrewActivity(crewId, `${def.emoji} ${who} just unlocked "${def.name}"!`, { k: 'tile', feature: 'pins' });
 
     rerenderFamPins(crewId);
     showToast(`${def.emoji} FAM Pin unlocked: ${def.name}!`);
@@ -27566,7 +27643,7 @@
       const addMsg = `🎉 ${raver.name.split(' ')[0]} has been added to ${crew.name}! Share their QR code or invite link so they can claim their spot.`;
       showToast(`✅ ${raver.name.split(' ')[0]} added to ${crew.name}`);
       addNotification(addMsg, [nlRaver(raver, raver.name.split(' ')[0]), nlCrew(crew)]);
-      if (currentUser) postCrewActivity(crew.id, `👋 ${raver.name.split(' ')[0]} joined the crew`);
+      if (currentUser) postCrewActivity(crew.id, `👋 ${raver.name.split(' ')[0]} joined the crew`, { k: 'raver', id: raver.id });
     }
     if (currentUser) dbAddCrewMember(crew.id, raver.id);
   }
@@ -27587,7 +27664,7 @@
     showToast(`🎉 You joined ${crew.name}!`);
     if (currentUser) {
       dbAddCrewMember(crew.id, me.id);
-      postCrewActivity(crew.id, `👋 ${displayName(me).split(' ')[0]} joined the crew`);
+      postCrewActivity(crew.id, `👋 ${displayName(me).split(' ')[0]} joined the crew`, { k: 'raver', id: me.id });
     }
   }
 
@@ -27995,7 +28072,7 @@
       addedTo.push(crew.name);
       if (currentUser) {
         dbAddCrewMember(crew.id, raverId);
-        if (crew.status !== 'secret' && raver) postCrewActivity(crew.id, `👋 ${raver.name.split(' ')[0]} joined the crew`);
+        if (crew.status !== 'secret' && raver) postCrewActivity(crew.id, `👋 ${raver.name.split(' ')[0]} joined the crew`, { k: 'raver', id: raver.id });
       }
     });
     closeCrewPick();
@@ -32024,8 +32101,7 @@
       question: `Who’s in for ${fest?.name || 'this rave'}?`, pollType: 'yes_no', options: null,
       isAnonymous: false, expiresAt: d ? d.toISOString() : null
     });
-    if (!poll) return;
-    postCrewActivity(crewId, `🗳️ ${displayName(squad.find(r => r.isYou) || {}).split(' ')[0] || 'Someone'} asked: who’s in for ${fest?.name || 'this rave'}? Vote in the crew Poll`);
+    if (!poll) return;  // dbCreatePoll posts the Main Huddle line
     showToast('Poll sent · waiting on the crew');
   }
 
@@ -33214,7 +33290,7 @@
         const who = displayName(you).split(' ')[0];
         const activityMsg = isPast ? `🎟️ ${who} sent it at ${fest.name}!` : `🎪 ${who} is going to ${fest.name}!`;
         crews.filter(c => c.status !== 'secret' && (c.squadIds || []).some(id => String(id) === String(you.id)))
-          .forEach(c => postCrewActivity(c.id, activityMsg));
+          .forEach(c => postCrewActivity(c.id, activityMsg, { k: 'rave', id: fest.id }));
         if (!isPast) maybeFirstRsvpMoment(fest);
       }
     }
