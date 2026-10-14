@@ -101,6 +101,15 @@ for (const [name, viewport] of [['portrait', { width: 820, height: 1180 }], ['la
       // The bigger hit areas must not push the header taller than its
       // phone-sized 53px (32px buttons + 10px padding top and bottom + border).
       expect(await page.locator('#hd-head').evaluate(h => h.getBoundingClientRect().height)).toBeLessThanOrEqual(54);
+
+      // The floating window (2.19.0) and its minimized bubble.
+      await page.evaluate(async () => { window.huddleFloatEligible = () => true; closeHuddleScreen(); await openHuddle('c1'); });
+      await expect(page.locator('#huddle-screen')).toHaveClass(/is-floating/);
+      await page.waitForTimeout(300);
+      expect(await page.evaluate(smallControls, '#huddle-screen')).toEqual([]);
+      await page.evaluate(() => minimizeHuddleFloat());
+      const bubble = await page.locator('#hd-bubble').boundingBox();
+      expect(Math.min(bubble.width, bubble.height)).toBeGreaterThanOrEqual(44);
       expect(errors).toEqual([]);
     });
 

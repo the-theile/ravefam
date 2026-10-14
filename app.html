@@ -8877,6 +8877,78 @@
       box-shadow: 0 0 80px rgba(var(--neon-cyan-rgb),0.06);
     }
   }
+  /* ===== TABLET (iPad): floating Huddle =====
+     On a touch iPad wide enough for it, the Huddle opens as a phone-sized
+     window over the app ("Floating Huddle (iPad)" in the script). The script
+     owns left/top/width/height and --hd-h; these rules make it a window. */
+  .huddle-screen.is-floating {
+    inset: auto; z-index: 150; /* over the nav, under every modal/sheet the page opens */
+    background: transparent; border-radius: 18px;
+    box-shadow: 0 0 0 1px rgba(var(--neon-cyan-rgb),0.35), 0 18px 60px rgba(var(--black-rgb),0.6), 0 0 40px rgba(var(--neon-cyan-rgb),0.12);
+  }
+  /* The transform makes the window the containing block for its fixed
+     children, so the GIF sheet rises inside it rather than over the app. */
+  .huddle-screen.is-floating.open { transform: translateZ(0); }
+  .huddle-screen.is-floating .huddle-screen-inner {
+    max-width: none; height: 100%; border: 0; border-radius: 18px; overflow: hidden;
+    background: var(--bg); box-shadow: none;
+  }
+  .huddle-screen.is-floating.is-settling { transition: opacity 0.2s, left 0.22s ease, top 0.22s ease, width 0.22s ease, height 0.22s ease; }
+  .huddle-screen.is-minimized { display: none; }
+  /* The grab bar is the window's sure drag handle (the room switcher fills
+     most of a 390px header); the header's empty space drags too. */
+  .hd-grab { display: none; }
+  .huddle-screen.is-floating .hd-grab {
+    display: flex; flex-shrink: 0; justify-content: center; align-items: center; height: 22px;
+    background: var(--surface); touch-action: none; cursor: grab;
+  }
+  .huddle-screen.is-floating .hd-grab::before {
+    content: ''; width: 40px; height: 5px; border-radius: 3px; background: rgba(var(--white-rgb),0.28);
+  }
+  .huddle-screen.is-floating .hd-head { padding-top: 6px; gap: 6px; touch-action: none; cursor: grab; }
+  .huddle-screen.is-floating .hd-presence { display: none; }
+  .huddle-screen.is-floating .hd-back { font-size: 1.05rem; }
+  .huddle-screen.is-floating .hd-composer { padding-bottom: 11px; }
+  .huddle-screen.is-floating #hd-gif-sheet-content { height: calc(var(--hd-h, 600px) * 0.72 - 24px); }
+  .huddle-screen.is-floating .huddle-room-menu { max-height: calc(var(--hd-h, 600px) - 120px); }
+  .hd-win-btn {
+    flex-shrink: 0; width: 44px; height: 44px; margin: -6px 0; border-radius: 50%;
+    border: 1px solid rgba(var(--white-rgb),0.14); background: rgba(var(--white-rgb),0.05);
+    color: var(--muted); font-size: 0.95rem; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  /* Resize grip: hangs off the inner bottom corner (the one away from the
+     screen edge the window is snapped to), mostly outside the window so it
+     doesn't sit on the + or send buttons. */
+  .hd-resize { display: none; }
+  .huddle-screen.is-floating .hd-resize {
+    display: block; position: absolute; bottom: -20px; width: 44px; height: 44px;
+    touch-action: none; z-index: 9;
+  }
+  .huddle-screen.is-floating[data-side="right"] .hd-resize { left: -20px; cursor: nesw-resize; }
+  .huddle-screen.is-floating[data-side="left"] .hd-resize { right: -20px; cursor: nwse-resize; }
+  .hd-resize::after {
+    content: ''; position: absolute; top: 6px; width: 14px; height: 14px;
+    border-bottom: 3px solid rgba(var(--neon-cyan-rgb),0.7);
+  }
+  [data-side="right"] > .hd-resize::after { right: 6px; border-left: 3px solid rgba(var(--neon-cyan-rgb),0.7); border-bottom-left-radius: 10px; }
+  [data-side="left"] > .hd-resize::after { left: 6px; border-right: 3px solid rgba(var(--neon-cyan-rgb),0.7); border-bottom-right-radius: 10px; }
+  .hd-bubble {
+    position: fixed; z-index: 150; width: 60px; height: 60px; padding: 0;
+    border-radius: 50%; border: 2px solid var(--neon-cyan); background: var(--surface);
+    box-shadow: 0 10px 30px rgba(var(--black-rgb),0.55), 0 0 18px rgba(var(--neon-cyan-rgb),0.35);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none;
+  }
+  .hd-bubble.is-settling { transition: left 0.22s ease, top 0.22s ease; }
+  .hd-bubble .crew-row-totem { width: 48px; height: 48px; border-radius: 50%; font-size: 1.3rem; }
+  .hd-bubble-badge {
+    position: absolute; top: -4px; right: -4px; min-width: 22px; height: 22px; padding: 0 6px;
+    border-radius: 11px; background: var(--neon-pink); color: var(--white);
+    font-size: 0.72rem; font-weight: 800; display: flex; align-items: center; justify-content: center;
+  }
+  .hd-bubble-badge:empty { display: none; }
+
   /* Narrow windows (iPad Slide Over, iPhone mini/SE): the wordmark ran into
      the header buttons at 28px gutters. */
   @media (max-width: 400px) {
@@ -10384,7 +10456,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.18.2';
+  const APP_VERSION = '2.19.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -12046,6 +12118,9 @@
   }
 
   function showAuthScreen() {
+    // Settings (and sign out) is reachable beside a floating Huddle, which
+    // lives outside #main-app and would otherwise stay over the sign-in screen.
+    if (_huddleScreenOpen) closeHuddleScreen();
     currentUser = null;
     // removeChannel, not unsubscribe: the latter closes the subscription but
     // leaves the channel in the client's registry, so they pile up over a
@@ -13645,9 +13720,10 @@
   // single eq(), not "crew_id in (...)".
   // "Actively open" means actually watching the live end of the room —
   // a stream parked on older history after a search jump (_huddleHasNewer)
-  // isn't showing the arriving message, so it must still count as unread.
+  // isn't showing the arriving message, so it must still count as unread;
+  // neither is a floating Huddle minimized to its bubble.
   function isHuddleRoomActivelyOpen(roomId) {
-    return !!(roomId && _huddleScreenOpen && _huddleActiveRoomId === roomId && !_huddleHasNewer);
+    return !!(roomId && _huddleScreenOpen && !_huddleMinimized && _huddleActiveRoomId === roomId && !_huddleHasNewer);
   }
 
   function handleHuddleMessageRealtimeInsert(payload) {
@@ -16627,7 +16703,8 @@
     if (so && so.classList.contains('open')) closeScanner();
     // The Huddle is a full-screen surface layered over the page — navigating
     // the bottom nav has to dismiss it, or it would hide the tab you picked.
-    if (_huddleScreenOpen) closeHuddleScreen();
+    // A floating Huddle (iPad) stays: browsing beside the chat is its point.
+    if (_huddleScreenOpen && !_huddleFloating) closeHuddleScreen();
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
     document.getElementById('page-' + page).classList.add('active');
@@ -18049,6 +18126,7 @@
       crewUnread[crewId] = (crewUnread[crewId] || 0) + count;
     });
     _huddleUnreadCache = crewUnread;
+    if (_huddleMinimized) renderHuddleBubble();
   }
 
   // Crew (or room, with roomId) has new activity that isn't counted — the
@@ -18295,7 +18373,8 @@
     document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
     document.querySelector('.nav-tab[onclick*="crews"]')?.classList.add('active');
     activeDetailId = null;
-    if (_huddleScreenOpen) closeHuddleScreen(); else teardownHuddleLive();
+    if (!_huddleScreenOpen) teardownHuddleLive();
+    else if (!_huddleFloating) closeHuddleScreen();
   }
   function closeDetailOutside(e) {
     if (e.target === document.getElementById('detail-overlay')) closeDetail();
@@ -20338,8 +20417,10 @@
   // Materializes (lazily, on conflict do nothing) every room this crew should
   // have and loads them into `huddleRooms`. Split out of openHuddle so Rave
   // Plan can guarantee its rave's room exists — for the jump-to-chat shortcut
-  // and the unread badge — without opening the chat UI.
-  async function ensureHuddleRooms(crewId) {
+  // and the unread badge — without opening the chat UI. `detached` leaves
+  // `huddleRooms` alone, for a crew other than the one a floating Huddle is
+  // showing.
+  async function ensureHuddleRooms(crewId, opts) {
     const crew = getCrew(crewId);
     if (!crew || !currentUser) return [];
     const wanted = [{ room_key: 'main', kind: 'main', name: 'Main Huddle', festival_id: null }];
@@ -20360,7 +20441,7 @@
     // Main first, then raves by soonest, then custom rooms, then past raves
     // (most recent first) — which is the order the switcher nests them in.
     const rank = r => (r.kind === 'main' ? 0 : huddleRoomIsPast(r) ? 3 : r.kind === 'festival' ? 1 : 2);
-    huddleRooms = rooms.slice().sort((a, b) => {
+    const sorted = rooms.slice().sort((a, b) => {
       if (rank(a) !== rank(b)) return rank(a) - rank(b);
       if (a.kind === 'festival' && b.kind === 'festival') {
         const fa = festivals.find(f => String(f.id) === String(a.festival_id));
@@ -20369,7 +20450,8 @@
       }
       return new Date(a.created_at) - new Date(b.created_at);
     });
-    return huddleRooms;
+    if (!(opts && opts.detached)) huddleRooms = sorted;
+    return sorted;
   }
 
   async function loadHuddleActiveBeacon() {
@@ -20498,7 +20580,9 @@
       screen.className = 'huddle-screen';
       document.body.appendChild(screen);
     }
-    screen.innerHTML = huddleScreenShellHTML();
+    // The resize grip sits outside the inner column, which clips to the
+    // floating window's rounded corners.
+    screen.innerHTML = huddleScreenShellHTML() + '<div class="hd-resize" aria-hidden="true"></div>';
     // rAF so the transition runs from the pre-open state rather than being
     // collapsed into the same frame as the insert.
     requestAnimationFrame(() => screen.classList.add('open'));
@@ -20508,12 +20592,23 @@
     // or sender from whichever crew was open last.
     _huddleSearchOpen = false;
     _huddleSearchState = null;
-    document.body.style.overflow = 'hidden';
+    // Re-opening (another crew, a notification) while minimized: the fresh
+    // shell is the window, so the bubble goes.
+    _huddleMinimized = false;
+    screen.classList.remove('is-minimized');
+    document.getElementById('hd-bubble')?.remove();
+    wireHuddleFloat();
+    applyHuddleFrame();
+    document.getElementById('hd-grab')?.addEventListener('pointerdown', onHuddleHeadPointerDown);
+    document.getElementById('hd-head')?.addEventListener('pointerdown', onHuddleHeadPointerDown);
+    screen.querySelector('.hd-resize')?.addEventListener('pointerdown', onHuddleResizePointerDown);
 
     const stream = document.getElementById('hd-stream');
     if (stream) stream.addEventListener('scroll', handleHuddleStreamScroll);
+    // A floating window opens without the keyboard: on an iPad it would
+    // cover half the screen just for looking at the chat.
     const input = document.getElementById('huddle-text-input');
-    if (input) setTimeout(() => input.focus(), 220);
+    if (input && !_huddleFloating) setTimeout(() => input.focus(), 220);
     _huddleTypingSweeper = setInterval(sweepHuddleTyping, 1500);
   }
 
@@ -20521,7 +20616,10 @@
     // Removed synchronously rather than faded out, so nothing below reads a
     // merely transparent Huddle screen as still visible.
     document.getElementById('huddle-screen')?.remove();
+    document.getElementById('hd-bubble')?.remove();
     _huddleScreenOpen = false;
+    _huddleFloating = false;
+    _huddleMinimized = false;
     document.body.style.overflow = '';
     if (_huddleTypingSweeper) { clearInterval(_huddleTypingSweeper); _huddleTypingSweeper = null; }
     _huddleReplyTo = null;
@@ -20540,6 +20638,7 @@
   function huddleScreenShellHTML() {
     return `
       <div class="huddle-screen-inner">
+        <div class="hd-grab" id="hd-grab" aria-hidden="true"></div>
         <div class="hd-head" id="hd-head"></div>
         <div id="hd-pinned-slot"></div>
         <div id="hd-beacon-slot"></div>
@@ -20608,6 +20707,328 @@
       </div>`;
   }
 
+  // ── Floating Huddle (iPad) ──
+  // On a touch iPad wide enough to hold it, the Huddle opens as a phone-sized
+  // window over the app instead of a full-screen surface: drag it by its
+  // header (it snaps to the nearer side), resize it from the grip on its inner
+  // bottom corner, minimize it to a bubble, or expand it to the framed column.
+  // It is still the one #huddle-screen with the same state; only its frame
+  // changes. Mode, side, height and position are remembered per device.
+  const HUDDLE_FLOAT_KEY = 'rf_hd_float';
+  const HUDDLE_FLOAT_QUERY = '(hover: none) and (pointer: coarse) and (min-width: 768px)';
+  const HUDDLE_FLOAT_MIN = { w: 360, h: 480 };
+  const HUDDLE_FLOAT_DEFAULT = { w: 390, h: 700 };
+  const HUDDLE_FLOAT_GAP = 16;
+  const HUDDLE_BUBBLE_SIZE = 60;
+  let _huddleFloating = false;
+  let _huddleMinimized = false;
+  let _huddleMinimizedAt = null;
+  let _huddleMinimizedScroll = null;   // { top, atBottom } of the stream when minimized
+  let _huddleFloatPrefs = null;        // { mode, side, y, w, h, bside, by }
+  let _huddleFloatShown = null;        // the rect currently on screen
+  let _huddleFloatDragging = false;
+  let _huddleFloatWired = false;
+  let _huddleSafeProbe = null;
+
+  function huddleFloatEligible() {
+    return !!(window.matchMedia && window.matchMedia(HUDDLE_FLOAT_QUERY).matches);
+  }
+
+  function huddleFloatPrefs() {
+    if (!_huddleFloatPrefs) {
+      try { _huddleFloatPrefs = JSON.parse(localStorage.getItem(HUDDLE_FLOAT_KEY) || 'null'); } catch (e) { _huddleFloatPrefs = null; }
+      if (!_huddleFloatPrefs || typeof _huddleFloatPrefs !== 'object') _huddleFloatPrefs = {};
+    }
+    return _huddleFloatPrefs;
+  }
+
+  function saveHuddleFloatPrefs(patch) {
+    Object.assign(huddleFloatPrefs(), patch);
+    try { localStorage.setItem(HUDDLE_FLOAT_KEY, JSON.stringify(_huddleFloatPrefs)); } catch (e) {}
+  }
+
+  function huddleWantsFloat() {
+    return huddleFloatEligible() && huddleFloatPrefs().mode !== 'full';
+  }
+
+  const huddleClamp = (v, lo, hi) => Math.min(Math.max(v, lo), Math.max(lo, hi));
+
+  // The area the window and bubble stay inside, in layout-viewport px. The
+  // visual viewport shrinks (and can scroll) while the iPad keyboard is up,
+  // which is what lifts the composer above it.
+  function huddleFloatBounds() {
+    if (!_huddleSafeProbe) {
+      _huddleSafeProbe = document.createElement('div');
+      _huddleSafeProbe.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)';
+      document.body.appendChild(_huddleSafeProbe);
+    }
+    const cs = getComputedStyle(_huddleSafeProbe);
+    const vv = window.visualViewport;
+    const vTop = vv ? vv.offsetTop : 0;
+    const vH = vv ? vv.height : window.innerHeight;
+    return {
+      left: HUDDLE_FLOAT_GAP,
+      right: window.innerWidth - HUDDLE_FLOAT_GAP,
+      top: vTop + Math.max(HUDDLE_FLOAT_GAP, (parseFloat(cs.paddingTop) || 0) + 8),
+      bottom: vTop + vH - Math.max(HUDDLE_FLOAT_GAP, (parseFloat(cs.paddingBottom) || 0) + 8),
+    };
+  }
+
+  function clampHuddleFloatRect(r) {
+    const b = huddleFloatBounds();
+    const w = huddleClamp(r.w, HUDDLE_FLOAT_MIN.w, b.right - b.left);
+    // Below the minimum only when the keyboard leaves no room for it.
+    const h = Math.min(Math.max(r.h, HUDDLE_FLOAT_MIN.h), b.bottom - b.top);
+    return { x: huddleClamp(r.x, b.left, b.right - w), y: huddleClamp(r.y, b.top, b.bottom - h), w, h };
+  }
+
+  function huddleFloatSide(r) {
+    return r.x + r.w / 2 < window.innerWidth / 2 ? 'left' : 'right';
+  }
+
+  function snapHuddleFloatRect(r) {
+    const b = huddleFloatBounds();
+    const c = clampHuddleFloatRect(r);
+    c.x = huddleFloatSide(c) === 'left' ? b.left : b.right - c.w;
+    return c;
+  }
+
+  // The remembered window, fitted to the screen as it is right now. The side
+  // is stored rather than x, so it survives rotation and Split View.
+  function huddleFloatRect() {
+    const p = huddleFloatPrefs();
+    const b = huddleFloatBounds();
+    const w = p.w || HUDDLE_FLOAT_DEFAULT.w;
+    let h = p.h || HUDDLE_FLOAT_DEFAULT.h;
+    let y = p.y;
+    if (typeof y !== 'number') {
+      // First open: bottom-aligned, but clear of the tab bar (a landscape
+      // iPad is too short for a 700px window under it).
+      const navBottom = document.querySelector('nav')?.getBoundingClientRect().bottom || 0;
+      h = Math.min(h, b.bottom - Math.max(b.top, navBottom + 8));
+      y = b.bottom - h;
+    }
+    const r = clampHuddleFloatRect({ x: 0, y, w, h });
+    r.x = p.side === 'left' ? b.left : b.right - r.w;
+    return r;
+  }
+
+  function applyHuddleFloatRect(screen, r, side) {
+    _huddleFloatShown = r;
+    screen.style.left = r.x + 'px';
+    screen.style.top = r.y + 'px';
+    screen.style.width = r.w + 'px';
+    screen.style.height = r.h + 'px';
+    screen.style.setProperty('--hd-h', r.h + 'px');
+    screen.dataset.side = side || huddleFloatSide(r);
+  }
+
+  function clearHuddleFloatFrame(screen) {
+    ['left', 'top', 'width', 'height'].forEach(k => { screen.style[k] = ''; });
+    screen.style.removeProperty('--hd-h');
+    delete screen.dataset.side;
+    _huddleFloatShown = null;
+  }
+
+  // Puts the open Huddle in the frame its mode calls for. Full screen owns
+  // the page scroll, as it always has; the window leaves the page usable.
+  function applyHuddleFrame() {
+    const screen = document.getElementById('huddle-screen');
+    if (!screen) return;
+    const floating = huddleWantsFloat();
+    if (!floating && _huddleMinimized) restoreHuddleFloat();
+    _huddleFloating = floating;
+    screen.classList.toggle('is-floating', floating);
+    if (floating) applyHuddleFloatRect(screen, huddleFloatRect());
+    else clearHuddleFloatFrame(screen);
+    document.body.style.overflow = floating ? '' : 'hidden';
+    // Skipped on a fresh shell: the room isn't loaded yet, so the header
+    // would flash the last crew's room name.
+    if (document.getElementById('hd-head')?.childElementCount) renderHuddleChrome();
+  }
+
+  function setHuddleFloatMode(mode) {
+    saveHuddleFloatPrefs({ mode });
+    applyHuddleFrame();
+  }
+
+  function placeHuddleFloat() {
+    const screen = document.getElementById('huddle-screen');
+    if (screen && _huddleFloating) applyHuddleFloatRect(screen, huddleFloatRect());
+    placeHuddleBubble();
+  }
+
+  // Rotation, Split View, and the keyboard coming and going. Dropping below
+  // the size that fits a window switches to full screen live, and back.
+  function wireHuddleFloat() {
+    if (_huddleFloatWired) return;
+    _huddleFloatWired = true;
+    const onViewport = () => {
+      if (!_huddleScreenOpen || _huddleFloatDragging) return;
+      if (huddleWantsFloat() !== _huddleFloating) applyHuddleFrame();
+      else if (_huddleFloating) placeHuddleFloat();
+    };
+    window.addEventListener('resize', onViewport);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', onViewport);
+      window.visualViewport.addEventListener('scroll', onViewport);
+    }
+    const mq = window.matchMedia && window.matchMedia(HUDDLE_FLOAT_QUERY);
+    if (mq && mq.addEventListener) mq.addEventListener('change', onViewport);
+  }
+
+  // Pointer tracking shared by the header, the resize grip and the bubble:
+  // captures the pointer, and a few px of slop keep a tap a tap.
+  function trackHuddlePointer(e, onMove, onEnd) {
+    const el = e.currentTarget, sx = e.clientX, sy = e.clientY, id = e.pointerId;
+    let moved = false;
+    try { el.setPointerCapture(id); } catch (err) {}
+    const move = ev => {
+      if (ev.pointerId !== id) return;
+      const dx = ev.clientX - sx, dy = ev.clientY - sy;
+      if (!moved && Math.hypot(dx, dy) < 5) return;
+      moved = true;
+      onMove(dx, dy);
+    };
+    const end = ev => {
+      if (ev.pointerId !== id) return;
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', end);
+      el.removeEventListener('pointercancel', end);
+      _huddleFloatDragging = false;
+      onEnd(moved);
+    };
+    _huddleFloatDragging = true;
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+  }
+
+  function settleHuddleFloat(screen) {
+    const r = snapHuddleFloatRect(_huddleFloatShown);
+    screen.classList.add('is-settling');
+    applyHuddleFloatRect(screen, r);
+    setTimeout(() => screen.classList.remove('is-settling'), 260);
+    saveHuddleFloatPrefs({ side: huddleFloatSide(r), y: r.y, w: r.w, h: r.h });
+  }
+
+  // The grab bar and the header's empty space drag: buttons and the room menu keep
+  // their taps, and the message stream keeps its scroll and swipe-to-reply.
+  function onHuddleHeadPointerDown(e) {
+    if (!_huddleFloating || e.button > 0 || e.target.closest('button, a, input, textarea, .huddle-room-menu')) return;
+    const screen = document.getElementById('huddle-screen');
+    const start = Object.assign({}, _huddleFloatShown);
+    trackHuddlePointer(e,
+      (dx, dy) => applyHuddleFloatRect(screen, clampHuddleFloatRect({ x: start.x + dx, y: start.y + dy, w: start.w, h: start.h })),
+      moved => { if (moved) settleHuddleFloat(screen); });
+  }
+
+  // The grip sits on the inner corner, so on a right-side window it is
+  // bottom-left: dragging it left widens the window and the right edge stays.
+  function onHuddleResizePointerDown(e) {
+    if (!_huddleFloating || e.button > 0) return;
+    e.preventDefault();
+    const screen = document.getElementById('huddle-screen');
+    const start = Object.assign({}, _huddleFloatShown);
+    const side = screen.dataset.side;
+    const fromLeft = side === 'right';
+    const rightEdge = start.x + start.w;
+    const b = huddleFloatBounds();
+    trackHuddlePointer(e, (dx, dy) => {
+      const w = huddleClamp(fromLeft ? start.w - dx : start.w + dx, HUDDLE_FLOAT_MIN.w, fromLeft ? rightEdge - b.left : b.right - start.x);
+      const h = huddleClamp(start.h + dy, HUDDLE_FLOAT_MIN.h, b.bottom - start.y);
+      applyHuddleFloatRect(screen, { x: fromLeft ? rightEdge - w : start.x, y: start.y, w, h }, side);
+    }, moved => { if (moved) settleHuddleFloat(screen); });
+  }
+
+  // ── Minimized: a bubble ──
+  // The window stays in the DOM (display:none) so the draft, scroll position
+  // and live channel survive. While minimized the room isn't "actively open"
+  // (isHuddleRoomActivelyOpen), so arrivals count as unread and badge it.
+  function minimizeHuddleFloat() {
+    if (!_huddleFloating || _huddleMinimized) return;
+    const screen = document.getElementById('huddle-screen');
+    const stream = document.getElementById('hd-stream');
+    _huddleMinimizedScroll = stream ? { top: stream.scrollTop, atBottom: huddleAtBottom() } : null;
+    _huddleMinimizedAt = new Date().toISOString();
+    _huddleMinimized = true;
+    if (screen.contains(document.activeElement)) document.activeElement.blur();
+    screen.classList.add('is-minimized');
+    renderHuddleBubble();
+  }
+
+  function restoreHuddleFloat() {
+    if (!_huddleMinimized) return;
+    _huddleMinimized = false;
+    document.getElementById('hd-bubble')?.remove();
+    document.getElementById('huddle-screen')?.classList.remove('is-minimized');
+    // What landed while minimized gets what opening the room gives it: the
+    // "New messages" divider and the catch-up pill.
+    const roomUnread = (_huddleRoomUnreadCache && _huddleRoomUnreadCache[_huddleActiveRoomId]) || 0;
+    if (roomUnread && !_huddleUnreadAnchorAt) {
+      _huddleUnreadAnchorAt = _huddleMinimizedAt;
+      _huddleCatchupDismissed = false;
+    }
+    renderHuddleUI();
+    const saved = _huddleMinimizedScroll;
+    const stream = document.getElementById('hd-stream');
+    if (roomUnread && document.getElementById('hd-unread-divider')) huddleScrollToFirstUnread();
+    else if (!saved || saved.atBottom) huddleScrollMessagesToBottom();
+    else if (stream) stream.scrollTop = saved.top;
+    if (!_huddleHasNewer && !_huddleHoldUnread) markHuddleRoomRead(_huddleActiveRoomId, _huddleActiveCrewId);
+  }
+
+  function renderHuddleBubble() {
+    let bubble = document.getElementById('hd-bubble');
+    if (!_huddleMinimized) { bubble?.remove(); return; }
+    const crew = getCrew(_huddleActiveCrewId);
+    if (!bubble) {
+      bubble = document.createElement('button');
+      bubble.type = 'button';
+      bubble.id = 'hd-bubble';
+      bubble.className = 'hd-bubble';
+      bubble.addEventListener('pointerdown', onHuddleBubblePointerDown);
+      bubble.addEventListener('click', () => { if (!bubble.dataset.dragged) restoreHuddleFloat(); });
+      document.body.appendChild(bubble);
+      placeHuddleBubble();
+    }
+    const unread = (_huddleUnreadCache && _huddleUnreadCache[_huddleActiveCrewId]) || 0;
+    bubble.setAttribute('aria-label', `Open the ${crew ? crew.name : ''} Huddle${unread ? `, ${unread} unread` : ''}`);
+    bubble.innerHTML = `${crew ? crewRowTotemHTML(crew) : '🕊️'}<span class="hd-bubble-badge">${unread ? (unread > 99 ? '99+' : unread) : ''}</span>`;
+  }
+
+  function placeHuddleBubble(raw) {
+    const bubble = document.getElementById('hd-bubble');
+    if (!bubble) return;
+    const p = huddleFloatPrefs();
+    const b = huddleFloatBounds();
+    const s = HUDDLE_BUBBLE_SIZE;
+    const pos = raw || {
+      x: (p.bside || p.side) === 'left' ? b.left : b.right - s,
+      y: typeof p.by === 'number' ? p.by : b.bottom - s - 80,
+    };
+    bubble.style.left = huddleClamp(pos.x, b.left, b.right - s) + 'px';
+    bubble.style.top = huddleClamp(pos.y, b.top, b.bottom - s) + 'px';
+  }
+
+  function onHuddleBubblePointerDown(e) {
+    if (e.button > 0) return;
+    const bubble = e.currentTarget;
+    const r = { x: parseFloat(bubble.style.left) || 0, y: parseFloat(bubble.style.top) || 0 };
+    delete bubble.dataset.dragged;
+    trackHuddlePointer(e, (dx, dy) => placeHuddleBubble({ x: r.x + dx, y: r.y + dy }), moved => {
+      if (!moved) return;
+      // A drag ends in a click on the bubble; the flag swallows it.
+      bubble.dataset.dragged = '1';
+      setTimeout(() => { delete bubble.dataset.dragged; }, 0);
+      const x = parseFloat(bubble.style.left) || 0;
+      saveHuddleFloatPrefs({ bside: x + HUDDLE_BUBBLE_SIZE / 2 < window.innerWidth / 2 ? 'left' : 'right', by: parseFloat(bubble.style.top) || 0 });
+      bubble.classList.add('is-settling');
+      placeHuddleBubble();
+      setTimeout(() => bubble.classList.remove('is-settling'), 260);
+    });
+  }
+
   // ── Chrome (header / pinned / beacon / typing / reply bar) ──
   function huddlePresenceAvatarsHTML() {
     const entries = Object.values(_huddlePresenceState || {}).flat();
@@ -20657,8 +21078,17 @@
     const openMenu = document.getElementById('huddle-room-menu');
     const menuWasOpen = !!openMenu && openMenu.style.display !== 'none';
 
+    // On an iPad the window controls: minimize + expand while floating, or
+    // float again from full screen.
+    const winBtns = !huddleFloatEligible() ? '' : _huddleFloating
+      ? `<button type="button" class="hd-win-btn" onclick="minimizeHuddleFloat()" aria-label="Minimize the Huddle" title="Minimize"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 12h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+         <button type="button" class="hd-win-btn" onclick="setHuddleFloatMode('full')" aria-label="Expand the Huddle to full screen" title="Expand"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9"/></svg></button>`
+      : `<button type="button" class="hd-win-btn" onclick="setHuddleFloatMode('float')" aria-label="Float the Huddle in a window" title="Float"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><rect x="8" y="7" width="5" height="5" rx="1" fill="currentColor" stroke="none"/></svg></button>`;
+
     head.innerHTML = `
-      <button type="button" class="hd-back" onclick="closeHuddleScreen()" aria-label="Back">‹</button>
+      ${_huddleFloating
+        ? `<button type="button" class="hd-back" onclick="closeHuddleScreen()" aria-label="Close the Huddle">✕</button>`
+        : `<button type="button" class="hd-back" onclick="closeHuddleScreen()" aria-label="Back">‹</button>`}
       <div class="hd-title">
         <div class="huddle-room-selector-wrap">
           <button type="button" class="hd-room" onclick="toggleHuddleRoomMenu()">
@@ -20674,7 +21104,8 @@
       </div>
       <div class="hd-presence">${huddlePresenceAvatarsHTML()}</div>
       <button type="button" class="hd-search-btn" title="Search the Huddle" aria-label="Search messages" onclick="openHuddleSearch()">🔍</button>
-      <button type="button" class="huddle-beacon-fab-inline${_guidance && _guidance.zones.beacon !== 'opened' ? ' gk-pulse' : ''}" title="Send an urgent Beacon to your crew" onclick="onHuddleBeaconTap()">📡</button>`;
+      <button type="button" class="huddle-beacon-fab-inline${_guidance && _guidance.zones.beacon !== 'opened' ? ' gk-pulse' : ''}" title="Send an urgent Beacon to your crew" onclick="onHuddleBeaconTap()">📡</button>
+      ${winBtns}`;
     if (menuWasOpen) {
       const menu = document.getElementById('huddle-room-menu');
       if (menu) menu.style.display = '';
@@ -21109,6 +21540,12 @@
 
   // Tap target on an activity line (see postHuddleSystemMessage): closes the
   // Huddle and lands on the rave, raver, Rave Plan or crew tile it's about.
+  // Full screen, the chat steps aside for the item; a floating window stays
+  // up beside it.
+  function leaveHuddleForLink() {
+    if (!_huddleFloating) closeHuddleScreen();
+  }
+
   async function openHuddleActivityLink(el) {
     let link;
     try { link = JSON.parse(el.dataset.link || ''); } catch (e) { return; }
@@ -21116,13 +21553,13 @@
     if (!link || !link.k) return;
     if (link.k === 'rave') {
       if (!getFestival(link.id)) { showToast('That rave is no longer around'); return; }
-      closeHuddleScreen();
+      leaveHuddleForLink();
       openRaveFocus(link.id);
       return;
     }
-    if (link.k === 'raver') { closeHuddleScreen(); openProfile(link.id); return; }
+    if (link.k === 'raver') { leaveHuddleForLink(); openProfile(link.id); return; }
     if (!crewId || !getCrew(crewId)) return;
-    closeHuddleScreen();
+    leaveHuddleForLink();
     const onDetail = String(activeDetailId) === String(crewId)
       && document.getElementById('page-crew-detail')?.classList.contains('active');
     if (link.k === 'raveplan') {
@@ -23114,9 +23551,12 @@
   // badge must be accurate before anyone has opened it.
   async function ensureHuddleRoomForFestival(crewId, festivalId) {
     if (!crewId || !festivalId || !currentUser) return null;
-    await ensureHuddleRooms(crewId);
-    const room = huddleRooms.find(r => String(r.festival_id) === String(festivalId));
-    if (room) {
+    // A floating Huddle stays open while you browse, possibly on another
+    // crew: materialize this crew's room without retargeting that chat.
+    const detached = _huddleScreenOpen && String(crewId) !== String(_huddleActiveCrewId);
+    const rooms = await ensureHuddleRooms(crewId, { detached });
+    const room = rooms.find(r => String(r.festival_id) === String(festivalId));
+    if (room && !detached) {
       _huddleActiveCrewId = crewId;
       // Selecting it here means the Huddle opens on this rave's room, and
       // pin/unpin actions triggered from Rave Plan resolve against it.
@@ -35418,7 +35858,8 @@
   const ZONE_LABELS = { huddle: 'Huddle', raveplan: 'Rave Plan', pins: 'Pins', dreamboard: 'Dream Board', poll: 'Poll', jams: 'Jams', archive: 'Archive', history: 'History', venues: 'Venues' };
 
   function guideContextKey() {
-    if (typeof _huddleScreenOpen !== 'undefined' && _huddleScreenOpen) return 'huddle';
+    // A floating Huddle sits beside the page, so help is about the page.
+    if (typeof _huddleScreenOpen !== 'undefined' && _huddleScreenOpen && !_huddleFloating) return 'huddle';
     const page = document.querySelector('.page.active')?.id?.replace('page-', '');
     return GUIDE_CONTEXT[page] ? page : 'crews';
   }
