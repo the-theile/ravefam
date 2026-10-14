@@ -237,4 +237,51 @@ test.describe('crews', () => {
     await bootAuthedApp(page, { data: seedTwoCrews() });
     await expect(page.locator('#crew-grid .crew-card[data-crew-id="c2"] .crew-row-avs')).toBeHidden();
   });
+
+  test('a crewmate in the Huddle makes their crew row throb with a here-now line', async ({ page }) => {
+    await bootAuthedApp(page, { data: seedTwoCrews() });
+    const c2 = page.locator('#crew-grid .crew-card[data-crew-id="c2"]');
+    const baseSub = await c2.locator('.crew-row-sub').textContent();
+    await page.evaluate(() => {
+      _crewPresenceState.c2 = [{ userId: 'kai-uid', name: 'Kai', where: 'huddle' }];
+      refreshCrewPresenceRow('c2');
+    });
+    await expect(c2).toHaveClass(/is-live/);
+    await expect(c2).toHaveClass(/is-live-huddle/);
+    await expect(c2.locator('.crew-row-sub')).toHaveText('💬 Kai is in the Huddle');
+    // A full list re-render keeps it lit.
+    await page.evaluate(() => renderCrews());
+    await expect(c2).toHaveClass(/is-live-huddle/);
+
+    await page.evaluate(() => {
+      _crewPresenceState.c2 = [
+        { userId: 'kai-uid', name: 'Kai', where: 'huddle' },
+        { userId: 'sam-uid', name: 'Sam', where: 'plan' },
+      ];
+      refreshCrewPresenceRow('c2');
+    });
+    await expect(c2).toHaveClass(/is-live-mixed/);
+    await expect(c2.locator('.crew-row-sub')).toHaveText('✨ Kai + 1 here now');
+
+    await page.evaluate(() => { _crewPresenceState.c2 = []; refreshCrewPresenceRow('c2'); });
+    await expect(c2).not.toHaveClass(/is-live/);
+    await expect(c2.locator('.crew-row-sub')).toHaveText(baseSub);
+  });
+
+  test('Crew activity privacy toggle stops you showing as active', async ({ page }) => {
+    await bootAuthedApp(page, { data: seedTwoCrews() });
+    const spot = () => page.evaluate(() => {
+      _huddleScreenOpen = true; _huddleActiveCrewId = 'c1';
+      const s = myCrewPresenceSpot();
+      _huddleScreenOpen = false;
+      return s;
+    });
+    expect(await spot()).toEqual({ crewId: 'c1', where: 'huddle' });
+    await page.evaluate(() => openPrivacySettingsModal('r-you', 'privacy'));
+    const toggle = page.locator('#crew-activity-settings-toggle');
+    await expect(toggle).toHaveClass(/\bon\b/);
+    await toggle.click();
+    await expect(toggle).not.toHaveClass(/\bon\b/);
+    expect(await spot()).toBeNull();
+  });
 });
