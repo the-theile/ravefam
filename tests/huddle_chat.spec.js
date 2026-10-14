@@ -288,6 +288,17 @@ test.describe('huddle chat · crew detail entry', () => {
     await expect(page.locator('#huddle-screen')).toHaveClass(/open/);
   });
 
+  test('tapping the Huddle tile opens the chat in one tap', async ({ page }) => {
+    await bootAuthedApp(page, {
+      data: seedWithChat(),
+      sessionOver: { user_metadata: { guidance_dismissed: true, seen_tips: { beacon: true } } },
+    });
+    await page.evaluate(async () => { await openDetail('c1'); });
+    await expect(page.locator('#huddle-screen')).toHaveCount(0);
+    await page.locator('.crew-feature-tile[data-feature="huddle"]').click();
+    await expect(page.locator('#huddle-screen')).toHaveClass(/open/);
+  });
+
   test('bottom-nav navigation dismisses the chat instead of leaving it stranded', async ({ page }) => {
     await openChat(page, seedWithChat());
     await page.evaluate(() => switchTab('events'));
