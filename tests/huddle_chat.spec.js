@@ -341,3 +341,79 @@ test.describe('huddle chat · activity lines', () => {
     await expect(page.locator('.hd-actrun-list')).toBeVisible();
   });
 });
+
+test.describe('huddle chat · catching up', () => {
+  // `total` crewmate messages a minute apart, the newest `unread` of them
+  // after your read watermark.
+  function seedBacklog(total, unread) {
+    const data = seedWithChat();
+    data.huddle_messages = Array.from({ length: total }, (_, i) => ({
+      id: `b${i}`, room_id: 'room-main', crew_id: 'c1', sender_id: i % 2 ? 'kai-uid' : 'sam-uid', kind: 'text',
+      body: `backlog ${i}`, reactions: {}, created_at: minsAgo(total - i), deleted_at: null, mentions: [],
+    }));
+    data.huddle_room_reads = [{ room_id: 'room-main', user_id: TEST_UID, last_read_at: minsAgo(unread + 0.5) }];
+    return data;
+  }
+
+  test('opens on the first unread message, not the live end', async ({ page }) => {
+    await openChat(page, seedBacklog(40, 25));
+    const divider = page.locator('#hd-unread-divider');
+    await expect(divider).toBeInViewport();
+    expect(await page.evaluate(() => huddleAtBottom())).toBe(false);
+    await expect(page.locator('#hd-jump')).toHaveClass(/show/);
+  });
+
+  test('pages back past one page so the divider sits at your last-read point', async ({ page }) => {
+    await openChat(page, seedBacklog(100, 70));
+    await expect(page.locator('#hd-unread-divider')).toHaveText('New messages');
+    expect(await page.evaluate(() => huddleMessages.length)).toBeGreaterThan(70);
+  });
+
+  test('the catch-up pill counts what is new, jumps back, and ✕ marks it read', async ({ page }) => {
+    await openChat(page, seedBacklog(80, 60));
+    const pill = page.locator('#hd-catchup');
+    // Divider in view on open → no pill. Scroll past it (not to the bottom).
+    await expect(pill).not.toHaveClass(/show/);
+    await page.evaluate(() => {
+      const s = document.getElementById('hd-stream');
+      const d = document.getElementById('hd-unread-divider');
+      s.scrollTop += d.getBoundingClientRect().bottom - s.getBoundingClientRect().top + 20;
+      s.dispatchEvent(new Event('scroll'));
+    });
+    await expect(pill).toHaveClass(/show/);
+    await expect(pill).toContainText('60 new since');
+    // Tapping it brings the divider back into view.
+    await pill.locator('.hd-catchup-jump').click();
+    await expect(page.locator('#hd-unread-divider')).toBeInViewport();
+    await page.evaluate(() => {
+      const s = document.getElementById('hd-stream');
+      s.scrollTop += 400;
+      s.dispatchEvent(new Event('scroll'));
+    });
+    await expect(pill).toHaveClass(/show/);
+
+    await pill.locator('.hd-catchup-x').click();
+    await expect(pill).not.toHaveClass(/show/);
+    await expect(page.locator('#hd-unread-divider')).toHaveCount(0);
+  });
+
+  test('"Mark unread" moves the watermark back and lights the badge again', async ({ page }) => {
+    await openChat(page, seedWithChat());
+    await page.evaluate(() => markHuddleUnreadFrom('m2'));
+    await expect(page.locator('#hd-unread-divider')).toHaveCount(1);
+    // m2 is just before the watermark-moved divider.
+    const order = await page.evaluate(() => {
+      const d = document.getElementById('hd-unread-divider');
+      const b = document.getElementById('hd-bub-m2');
+      return d.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING;
+    });
+    expect(order).toBeTruthy();
+    const held = await page.evaluate(() => {
+      const read = (window.__store.huddle_room_reads || []).find(r => r.room_id === 'room-main');
+      return new Date(read.last_read_at) < new Date(huddleMessages.find(m => m.id === 'm2').created_at);
+    });
+    expect(held).toBe(true);
+    // m2 and m4 are Kai's; m3 is yours and never counts.
+    expect(await page.evaluate(() => totalHuddleUnreadCount())).toBe(2);
+  });
+});

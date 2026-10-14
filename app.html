@@ -4829,6 +4829,24 @@
   }
   .hd-jump.show { display: flex; }
 
+  /* Catch-up pill: "12 new since 3:42 PM", shown while the New messages
+     divider is out of view. Tap to jump back to it, ✕ to mark read. */
+  .hd-catchup {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 2;
+    display: none; align-items: stretch; max-width: calc(100% - 32px);
+    border-radius: 20px; overflow: hidden;
+    border: 1px solid rgba(var(--neon-pink-rgb),0.5); background: rgba(var(--bg-rgb),0.94);
+    box-shadow: 0 6px 18px rgba(var(--black-rgb),0.5);
+  }
+  .hd-catchup.show { display: flex; }
+  .hd-catchup button {
+    border: 0; background: none; cursor: pointer; color: var(--neon-pink);
+    font-family: var(--hd-mono); font-size: 0.65rem; padding: 7px 12px;
+  }
+  .hd-catchup-jump { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .hd-catchup-x { border-left: 1px solid rgba(var(--neon-pink-rgb),0.3) !important; padding: 7px 10px !important; }
+  .hd-catchup button:hover { background: rgba(var(--neon-pink-rgb),0.1); }
+
   /* ── Search ──
      Finding "where someone said that thing" means looking across rooms, not
      just the one you happen to be in — so search is its own surface layered
@@ -13616,7 +13634,7 @@
     const row = payload && payload.new;
     if (!row || !currentUser || row.sender_id === currentUser.id || isBlockedUser(row.sender_id)) return;
     if (isHuddleRoomActivelyOpen(row.room_id)) {
-      markHuddleRoomRead(row.room_id, row.crew_id);
+      if (!_huddleHoldUnread) markHuddleRoomRead(row.room_id, row.crew_id);
       return;
     }
     if (!_huddleActivityCache) return; // crew grid hasn't prefetched unread state yet
@@ -19980,6 +19998,15 @@
   // Watermark captured when the room is opened, so the "New messages" divider
   // stays put while you read instead of racing ahead as markHuddleRoomRead runs.
   let _huddleUnreadAnchorAt = null;
+  // Catch-up pill (see renderHuddleCatchup): stays down once dismissed or
+  // once you've reached the bottom of the room.
+  let _huddleCatchupDismissed = false;
+  // Set by "Mark unread": holds the read watermark back until you leave the
+  // room, so arriving messages don't immediately mark it read again.
+  let _huddleHoldUnread = false;
+  // Opening a room pages back to your last-read point, up to this many
+  // messages, so the "New messages" divider sits where you actually left off.
+  const HUDDLE_CATCHUP_MAX = 200;
   let _huddleTypingUsers = {};      // uid -> { name, at }
   let _huddleTypingSweeper = null;
   let _huddleTypingSentAt = 0;
@@ -20319,6 +20346,8 @@
     // markHuddleRoomRead below moves the watermark to now.
     const priorRead = _huddleReadMap && _huddleReadMap[roomId];
     _huddleUnreadAnchorAt = priorRead || null;
+    _huddleCatchupDismissed = false;
+    _huddleHoldUnread = false;
     hideHuddleRoomMenu();
     renderHuddleUI();
 
@@ -20328,9 +20357,24 @@
     const page = error ? [] : (data || []);
     _huddleHasMore = page.length === HUDDLE_PAGE_SIZE;
     huddleMessages = page.slice().reverse();
+    // Keep paging back until the oldest loaded message is one you'd already
+    // read, so the divider marks where you left off rather than the top of
+    // whatever page happened to load.
+    const readAt = priorRead ? new Date(priorRead).getTime() : null;
+    while (readAt && _huddleHasMore && huddleMessages.length < HUDDLE_CATCHUP_MAX
+      && huddleMessages.length && huddleTimeOf(huddleMessages[0]) > readAt) {
+      const { data: older, error: olderErr } = await sb.from('huddle_messages')
+        .select('*').eq('room_id', roomId).is('deleted_at', null)
+        .lt('created_at', huddleMessages[0].created_at)
+        .order('created_at', { ascending: false }).limit(HUDDLE_PAGE_SIZE);
+      if (olderErr || _huddleActiveRoomId !== roomId) break;
+      _huddleHasMore = (older || []).length === HUDDLE_PAGE_SIZE;
+      huddleMessages = (older || []).slice().reverse().concat(huddleMessages);
+    }
+    if (_huddleActiveRoomId !== roomId) return;
     await loadHuddleActiveBeacon();
     renderHuddleUI();
-    huddleScrollMessagesToBottom();
+    huddleScrollToFirstUnread();
     subscribeHuddleRealtime(roomId);
     trackHuddlePresence(roomId);
     markHuddleRoomRead(roomId, _huddleActiveCrewId);
@@ -20385,7 +20429,7 @@
     huddleMessages = huddleMessages.concat(page.filter(m => !known.has(m.id)));
     _huddleLoadingNewer = false;
     renderHuddleUI();
-    if (!_huddleHasNewer) markHuddleRoomRead(_huddleActiveRoomId, _huddleActiveCrewId);
+    if (!_huddleHasNewer && !_huddleHoldUnread) markHuddleRoomRead(_huddleActiveRoomId, _huddleActiveCrewId);
   }
 
   // ↓ LATEST means "the live end of the room", which after a search jump is
@@ -20437,6 +20481,7 @@
     _huddleReplyTo = null;
     _huddleMentionState = null;
     resetHuddleGifState();
+    _huddleHoldUnread = false;
     clearTimeout(_huddleSearchDebounce);
     _huddleSearchOpen = false;
     _huddleSearchState = null;
@@ -20454,6 +20499,7 @@
         <div id="hd-beacon-slot"></div>
         <div class="hd-stream-wrap">
           <div class="hd-stream" id="hd-stream"></div>
+          <div class="hd-catchup" id="hd-catchup" role="status"></div>
           <button type="button" class="hd-jump" id="hd-jump" onclick="huddleJumpToLatest()">↓ LATEST</button>
         </div>
         <div id="hd-typing-slot"></div>
@@ -20856,6 +20902,7 @@
     const menuRows = `
         <button type="button" class="kebab-menu-row" onclick="toggleKebabMenu('huddle-bubble-menu-${m.id}'); setHuddleReplyTarget('${escJsAttr(m.id)}')">↩️ Reply</button>
         <button type="button" class="kebab-menu-row" onclick="toggleKebabMenu('huddle-bubble-menu-${m.id}'); openHuddleGifPicker('${escJsAttr(m.id)}')">🎞️ Reply with GIF</button>
+        ${!m._pending && !m._failed ? `<button type="button" class="kebab-menu-row" onclick="toggleKebabMenu('huddle-bubble-menu-${m.id}'); markHuddleUnreadFrom('${escJsAttr(m.id)}')">🔵 Mark unread</button>` : ''}
         ${canPin ? `<button type="button" class="kebab-menu-row" onclick="toggleKebabMenu('huddle-bubble-menu-${m.id}'); togglePinHuddleMessage('${escJsAttr(m.id)}', ${!!m.pinned_at})">${m.pinned_at ? '📌 Unpin' : '📌 Pin'}</button>` : ''}
         ${canEdit ? `<button type="button" class="kebab-menu-row" onclick="toggleKebabMenu('huddle-bubble-menu-${m.id}'); toggleHuddleMessageEditMode('${escJsAttr(m.id)}')">✏️ Edit</button>` : ''}
         ${canDelete ? `<button type="button" class="kebab-menu-row danger" onclick="toggleKebabMenu('huddle-bubble-menu-${m.id}'); deleteHuddleMessage('${escJsAttr(m.id)}')">🗑️ Delete</button>` : ''}
@@ -20987,7 +21034,8 @@
       }
       if (!unreadDrawn && m.sender_id !== me && at > new Date(_huddleUnreadAnchorAt).getTime()) {
         flushAll();
-        html += `<div class="hd-unread"><span>New messages</span></div>`;
+        const capped = _huddleHasMore && huddleTimeOf(msgs[0]) > new Date(_huddleUnreadAnchorAt).getTime();
+        html += `<div class="hd-unread" id="hd-unread-divider"><span>${capped ? 'New messages · more above' : 'New messages'}</span></div>`;
         unreadDrawn = true;
       }
       if (m.kind === 'system') {
@@ -21084,6 +21132,115 @@
     if (!el) return;
     if (el.scrollTop < 40) loadOlderHuddleMessages();
     if (_huddleHasNewer && huddleAtBottom()) loadNewerHuddleMessages();
+    // Reached the live end with the divider scrolled past: caught up. Only on
+    // a scroll — a render's own snap-to-bottom isn't you reading anything.
+    if (!_huddleCatchupDismissed && !_huddleHasNewer && huddleAtBottom()) {
+      const divider = document.getElementById('hd-unread-divider');
+      if (divider && divider.getBoundingClientRect().bottom < el.getBoundingClientRect().top) _huddleCatchupDismissed = true;
+    }
+    renderHuddleCatchup();
+  }
+
+  // ── Catching up (Slack-style) ──
+  // Counts what arrived since the frozen read watermark, split into chat and
+  // activity lines, from what's loaded. `capped` means older unread messages
+  // weren't paged in (see HUDDLE_CATCHUP_MAX).
+  function huddleUnreadStats() {
+    if (!_huddleUnreadAnchorAt) return null;
+    const since = new Date(_huddleUnreadAnchorAt).getTime();
+    const me = currentUser?.id;
+    let chat = 0, updates = 0, oldest = Infinity;
+    huddleMessages.forEach(m => {
+      oldest = Math.min(oldest, huddleTimeOf(m));
+      if (m.deleted_at || m._pending || m.sender_id === me || isBlockedUser(m.sender_id)) return;
+      if (huddleTimeOf(m) <= since) return;
+      if (m.kind === 'system') updates++; else chat++;
+    });
+    if (!chat && !updates) return null;
+    return { chat, updates, since, capped: _huddleHasMore && oldest > since };
+  }
+
+  // Opens a room on the "New messages" divider (with room above it for the
+  // catch-up pill) instead of the live end. Nothing unread → the bottom.
+  function huddleScrollToFirstUnread() {
+    const stream = document.getElementById('hd-stream');
+    const divider = document.getElementById('hd-unread-divider');
+    if (!stream || !divider) { huddleScrollMessagesToBottom(); renderHuddleCatchup(); return; }
+    stream.scrollTop += divider.getBoundingClientRect().top - stream.getBoundingClientRect().top - 44;
+    document.getElementById('hd-jump')?.classList.toggle('show', !huddleAtBottom());
+    renderHuddleCatchup();
+  }
+
+  // "12 new since 3:42 PM" — shown while the divider is out of view, until
+  // you reach the bottom (you've seen it all) or dismiss it.
+  function renderHuddleCatchup() {
+    const pill = document.getElementById('hd-catchup');
+    const stream = document.getElementById('hd-stream');
+    if (!pill || !stream) return;
+    const stats = _huddleCatchupDismissed ? null : huddleUnreadStats();
+    const divider = document.getElementById('hd-unread-divider');
+    let where = null;
+    if (stats && divider) {
+      const d = divider.getBoundingClientRect(), r = stream.getBoundingClientRect();
+      if (d.bottom < r.top) where = 'up';
+      else if (d.top > r.bottom) where = 'down';
+    }
+    if (!where) { pill.classList.remove('show'); pill.innerHTML = ''; return; }
+    const parts = [];
+    if (stats.updates && stats.chat) parts.push(`${stats.chat} message${stats.chat === 1 ? '' : 's'}`, `${stats.updates} update${stats.updates === 1 ? '' : 's'}`);
+    else parts.push(`${stats.chat + stats.updates}${stats.capped ? '+' : ''} new`);
+    const sinceDay = huddleDayKey(stats.since) === huddleDayKey(Date.now()) ? '' : `${huddleDayLabel(new Date(stats.since).toISOString())} `;
+    pill.innerHTML = `
+      <button type="button" class="hd-catchup-jump" onclick="huddleJumpToUnread()">${where === 'up' ? '↑' : '↓'} ${escHtml(parts.join(' · '))} since ${escHtml(sinceDay + huddleClockTime(stats.since))}</button>
+      <button type="button" class="hd-catchup-x" onclick="dismissHuddleCatchup()" aria-label="Mark as read" title="Mark as read">✕</button>`;
+    pill.classList.add('show');
+  }
+
+  function huddleJumpToUnread() {
+    const stream = document.getElementById('hd-stream');
+    const divider = document.getElementById('hd-unread-divider');
+    if (!stream || !divider) return;
+    stream.scrollTo({ top: stream.scrollTop + divider.getBoundingClientRect().top - stream.getBoundingClientRect().top - 44, behavior: 'smooth' });
+  }
+
+  // ✕ on the pill = "mark as read": drops the pill and the divider with it.
+  function dismissHuddleCatchup() {
+    _huddleCatchupDismissed = true;
+    _huddleUnreadAnchorAt = null;
+    renderHuddleUI();
+  }
+
+  // Long-press / ⋯ → "Mark unread": moves your read watermark back to just
+  // before this message so the room (and crew badge) reads as unread again,
+  // and the next open lands here.
+  async function markHuddleUnreadFrom(messageId) {
+    const m = huddleMessages.find(x => x.id === messageId);
+    const roomId = _huddleActiveRoomId;
+    if (!m || !currentUser || !roomId) return;
+    const from = huddleTimeOf(m);
+    const at = new Date(from - 1).toISOString();
+    const count = huddleMessages.filter(x => !x.deleted_at && !x._pending && x.sender_id !== currentUser.id
+      && !isBlockedUser(x.sender_id) && huddleTimeOf(x) >= from).length;
+    _huddleHoldUnread = true;
+    _huddleUnreadAnchorAt = at;
+    _huddleCatchupDismissed = true;  // you're looking right at it
+    if (_huddleReadMap) _huddleReadMap[roomId] = at;
+    _huddleRoomUnreadCache = _huddleRoomUnreadCache || {};
+    _huddleRoomCrewMap = _huddleRoomCrewMap || {};
+    _huddleRoomUnreadCache[roomId] = count;
+    _huddleRoomCrewMap[roomId] = _huddleActiveCrewId;
+    recomputeHuddleUnreadTotals();
+    renderCrews();
+    updateNotifBadge();
+    refreshHuddleDrawerIfOpen();
+    renderHuddleUI();
+    showToast('Marked unread. You’ll land here next time');
+    try {
+      await sb.from('huddle_room_reads').upsert(
+        { user_id: currentUser.id, room_id: roomId, last_read_at: at },
+        { onConflict: 'user_id,room_id' }
+      );
+    } catch (err) { console.warn('mark huddle unread failed', err); }
   }
 
   function scrollToHuddleMessage(messageId) {
@@ -21415,6 +21572,8 @@
     _huddleTypingUsers = {};
     const priorRead = _huddleReadMap && _huddleReadMap[roomId];
     _huddleUnreadAnchorAt = priorRead || null;
+    _huddleCatchupDismissed = true;  // you came for a specific message
+    _huddleHoldUnread = false;
     hideHuddleRoomMenu();
     renderHuddleUI();
 
@@ -21459,6 +21618,7 @@
     // Stick-to-bottom only means something when the bottom IS the live end.
     // Parked on older history after a search jump, it would fight the jump.
     if (wasAtBottom && !_huddleHasNewer) huddleScrollMessagesToBottom();
+    renderHuddleCatchup();
   }
 
   // ── Sending messages (optimistic UI: render immediately, reconcile on the DB round-trip) ──
