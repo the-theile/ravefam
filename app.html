@@ -512,6 +512,23 @@
   .crew-row-avs .avatar:first-child { margin-left: 0; }
   @media (max-width: 380px) { .crew-row-avs { display: none; } }
   .crew-card.is-open .crew-row-chev { transform: rotate(180deg); }
+  /* Live: a crewmate is in this crew's Huddle or Rave Plan right now
+     (see CREW PRESENCE). Throbs in the crew's own colour — quicker for chat,
+     slower for planning. */
+  .crew-card.is-live {
+    border-color: color-mix(in srgb, var(--accent-a, var(--neon-pink)) 75%, transparent);
+    animation: crewLiveThrob 2.6s ease-in-out infinite;
+  }
+  .crew-card.is-live-huddle { animation-duration: 1.7s; }
+  @keyframes crewLiveThrob {
+    0%, 100% { box-shadow: 0 0 6px 0 color-mix(in srgb, var(--accent-a, var(--neon-pink)) 25%, transparent); }
+    50%      { box-shadow: 0 0 22px 3px color-mix(in srgb, var(--accent-a, var(--neon-pink)) 60%, transparent),
+                           inset 0 0 14px color-mix(in srgb, var(--accent-a, var(--neon-pink)) 14%, transparent); }
+  }
+  .crew-row-live { color: var(--neon-green); font-weight: 700; }
+  @media (prefers-reduced-motion: reduce) {
+    .crew-card.is-live { animation: none; box-shadow: 0 0 16px color-mix(in srgb, var(--accent-a, var(--neon-pink)) 45%, transparent); }
+  }
 
   .crew-row-body {
     border-top: 2px dashed rgba(var(--white-rgb),0.08);
@@ -10383,7 +10400,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.19.1';
+  const APP_VERSION = '2.20.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -12050,6 +12067,7 @@
     // leaves the channel in the client's registry, so they pile up over a
     // session's worth of re-syncs and room switches.
     if (_realtimeChannel) { sb.removeChannel(_realtimeChannel); _realtimeChannel = null; }
+    teardownCrewPresence();
     clearTimeout(_reloadDebounce);
     squad.length = 0; crews.length = 0; festivals.length = 0; dreamPins = []; archiveLinks = [];
     crewPolls = []; crewJams = []; crewJamVibes = [];
@@ -16633,6 +16651,7 @@
     if (el) el.classList.add('active');
     else document.querySelector(`.nav-tab[onclick*="'${page}'"]`)?.classList.add('active');
     onPlaceEntered(page, !!el);  // 2.0 discovery: banner + intro the first time (see REALMS)
+    updateCrewPresence();
   }
 
   // Modal
@@ -17839,7 +17858,9 @@
     sortedCrews.forEach(crew => {
       const isOpen = openId != null && String(crew.id) === String(openId);
       const card = document.createElement('div');
-      card.className = 'crew-card' + (isOpen ? ' is-open' : '') + (crew.status === 'secret' ? ' is-secret' : '');
+      const live = crewPresenceLine(crew.id);
+      card.className = 'crew-card' + (isOpen ? ' is-open' : '') + (crew.status === 'secret' ? ' is-secret' : '')
+        + (live ? ` is-live is-live-${live.kind}` : '');
       card.dataset.crewId = crew.id;
       card.style.setProperty('--accent-a', safeColor(crew.color, '#FF2D78'));
       card.innerHTML = crewRowHTML(crew, isOpen);
@@ -17849,7 +17870,150 @@
     const countEl = document.getElementById('crews-count');
     if (countEl) countEl.textContent = crews.length ? crews.length + ' active' : '';
     if (_huddleActivityCache === null) loadHuddleActivityCache();
+    syncCrewPresenceChannels();
     } catch(err) { console.error('[renderCrews]', err); const el = document.getElementById('crew-grid'); if (el) el.innerHTML = sectionErrorHTML('crews'); }
+  }
+
+  // ===== CREW PRESENCE (Crews list "here now" glow) =====
+  // One presence channel per crew (crew-presence:<id>). Every member listens,
+  // so a crew row can throb while a crewmate is in that crew's Huddle or Rave
+  // Plan; you only track() yourself while you're actually in one, the app is
+  // in the foreground, and Settings → Privacy → "Crew activity" is on.
+  // Separate from huddle-presence:<room>, which is per-room and only exists
+  // while the Huddle screen is open.
+  let _crewPresenceChannels = {};  // crewId -> realtime channel
+  let _crewPresenceState = {};     // crewId -> [{ userId, name, where }], others only
+  let _crewPresenceTracked = null; // { crewId, where } I'm currently tracked at
+  let _crewPresenceTicker = null;
+  let _crewPresenceListening = false;
+
+  // Stored in auth user_metadata (like guidance) rather than a ravers column,
+  // so it follows the account without touching the masking RPCs.
+  function crewActivitySharingOn() {
+    return currentUser?.user_metadata?.show_crew_activity !== false;
+  }
+
+  // Where crewmates should see me right now, or null.
+  function myCrewPresenceSpot() {
+    if (!currentUser || document.hidden || !crewActivitySharingOn()) return null;
+    if (_huddleScreenOpen && _huddleActiveCrewId) return { crewId: String(_huddleActiveCrewId), where: 'huddle' };
+    const planPanel = document.getElementById('crew-feature-panel-raveplan');
+    if (activeDetailId && planPanel && planPanel.style.display !== 'none'
+        && document.getElementById('page-crew-detail')?.classList.contains('active')) {
+      return { crewId: String(activeDetailId), where: 'plan' };
+    }
+    return null;
+  }
+
+  // Keeps one listening channel per crew in `crews`. Called from renderCrews(),
+  // so joins, leaves and reloads reconcile on their own.
+  function syncCrewPresenceChannels() {
+    if (!currentUser) return;
+    const want = new Set(crews.map(c => String(c.id)));
+    Object.keys(_crewPresenceChannels).forEach(id => {
+      if (want.has(id)) return;
+      sb.removeChannel(_crewPresenceChannels[id]);
+      delete _crewPresenceChannels[id];
+      delete _crewPresenceState[id];
+      if (_crewPresenceTracked?.crewId === id) _crewPresenceTracked = null;
+    });
+    want.forEach(id => {
+      if (_crewPresenceChannels[id]) return;
+      const ch = sb.channel(`crew-presence:${id}`, { config: { presence: { key: currentUser.id } } });
+      ch.on('presence', { event: 'sync' }, () => {
+        const others = [];
+        Object.values(ch.presenceState()).forEach(metas => {
+          // Same raver on two devices: the newest meta wins.
+          const m = metas && metas[metas.length - 1];
+          if (!m || !m.userId || m.userId === currentUser?.id || isBlockedUser(m.userId)) return;
+          others.push({ userId: m.userId, name: m.name || 'A raver', where: m.where });
+        });
+        _crewPresenceState[id] = others;
+        refreshCrewPresenceRow(id);
+      });
+      ch.subscribe(status => { if (status === 'SUBSCRIBED') updateCrewPresence(true); });
+      _crewPresenceChannels[id] = ch;
+    });
+    // Safety net for navigation paths that don't call updateCrewPresence()
+    // themselves — it's a no-op unless where I am actually changed.
+    if (!_crewPresenceTicker) _crewPresenceTicker = setInterval(() => updateCrewPresence(), 15000);
+    if (!_crewPresenceListening) {
+      _crewPresenceListening = true;
+      document.addEventListener('visibilitychange', () => updateCrewPresence());
+    }
+  }
+
+  function updateCrewPresence(force) {
+    if (!currentUser) return;
+    const spot = myCrewPresenceSpot();
+    const cur = _crewPresenceTracked;
+    if (!force && spot?.crewId === cur?.crewId && spot?.where === cur?.where) return;
+    if (cur && cur.crewId !== spot?.crewId) {
+      try { _crewPresenceChannels[cur.crewId]?.untrack(); } catch { /* best-effort */ }
+    }
+    _crewPresenceTracked = null;
+    if (!spot) return;
+    const ch = _crewPresenceChannels[spot.crewId];
+    if (!ch || ch.state !== 'joined') return; // its SUBSCRIBED callback retries
+    const me = squad.find(r => r.isYou);
+    try {
+      ch.track({ userId: currentUser.id, name: displayName(me || {}).split(' ')[0] || 'A raver', where: spot.where });
+      _crewPresenceTracked = spot;
+    } catch { /* best-effort — never block navigation on presence */ }
+  }
+
+  function teardownCrewPresence() {
+    Object.values(_crewPresenceChannels).forEach(ch => sb.removeChannel(ch));
+    _crewPresenceChannels = {};
+    _crewPresenceState = {};
+    _crewPresenceTracked = null;
+    clearInterval(_crewPresenceTicker);
+    _crewPresenceTicker = null;
+  }
+
+  // Subtitle for a crew with someone in it right now — null when nobody is.
+  function crewPresenceLine(crewId) {
+    const here = _crewPresenceState[String(crewId)];
+    if (!here || !here.length) return null;
+    const many = here.length > 1;
+    const who = escHtml(here[0].name) + (many ? ` + ${here.length - 1}` : '');
+    const kind = new Set(here.map(p => p.where)).size > 1 ? 'mixed' : (here[0].where === 'plan' ? 'plan' : 'huddle');
+    const text = kind === 'mixed' ? `✨ ${who} here now`
+      : kind === 'plan' ? `📋 ${who} ${many ? 'are' : 'is'} on the Rave Plan`
+      : `💬 ${who} ${many ? 'are' : 'is'} in the Huddle`;
+    return { kind, html: `<span class="crew-row-live">${text}</span>` };
+  }
+
+  // The row's normal subtitle (next rave countdown, else member count).
+  function crewRowBaseSub(crew) {
+    const n = crewNextUp(crew, true);
+    if (n.kind === 'upcoming') return `${escHtml(n.name)} · ${countdownLabel(n.date)} · ${n.who.length} going`;
+    const count = crew.members.length;
+    return `${count} ${count !== 1 ? 'members' : 'member'}`;
+  }
+
+  // Patches just the one row in place: re-rendering the whole list on every
+  // join/leave would restart every other row's throb mid-pulse.
+  function refreshCrewPresenceRow(crewId) {
+    const card = document.querySelector(`#crew-grid .crew-card[data-crew-id="${CSS.escape(String(crewId))}"]`);
+    const crew = getCrew(crewId);
+    if (!card || !crew) return;
+    const live = crewPresenceLine(crewId);
+    card.classList.remove('is-live', 'is-live-huddle', 'is-live-plan', 'is-live-mixed');
+    if (live) card.classList.add('is-live', 'is-live-' + live.kind);
+    const sub = card.querySelector('.crew-row-sub');
+    if (sub) sub.innerHTML = live ? live.html : crewRowBaseSub(crew);
+  }
+
+  function toggleCrewActivitySharing(btn) {
+    const on = !btn.classList.contains('on');
+    btn.classList.toggle('on', on);
+    if (currentUser) {
+      currentUser.user_metadata = { ...(currentUser.user_metadata || {}), show_crew_activity: on };
+      sb.auth.updateUser({ data: { show_crew_activity: on } }).catch(() => {});
+    }
+    updateCrewPresence(true);
+    showToast(on ? 'Crewmates can see when you\'re active' : 'Your crew activity is hidden');
   }
 
   // ===== CREW LIST ROWS (Crews tab accordion) =====
@@ -17895,9 +18059,8 @@
     const upcoming = n.kind === 'upcoming';
     const count = crew.members.length;
     const membersLabel = `${count} ${count !== 1 ? 'members' : 'member'}`;
-    const sub = upcoming
-      ? `${escHtml(n.name)} · ${countdownLabel(n.date)} · ${n.who.length} going`
-      : membersLabel;
+    // A crewmate being here right now outranks the countdown line.
+    const sub = crewPresenceLine(crew.id)?.html || crewRowBaseSub(crew);
 
     // Collapsed rows carry the Huddle signal; the open row shows the full CTA instead.
     const badge = isOpen ? null : huddleActivityBadge(crew.id);
@@ -18263,6 +18426,7 @@
     document.getElementById('page-crew-detail').classList.add('active');
     window.scrollTo(0, 0);
     renderDetail(id);
+    updateCrewPresence();
     if (!(opts && opts.tab)) maybeShowCrewWelcome(id);
     loadCrewFeatureReadMap(id).then(() => refreshCrewFeatureGlow(id)).catch(console.warn);
     await dbLoadDreamPins(id);
@@ -18295,6 +18459,7 @@
     document.querySelector('.nav-tab[onclick*="crews"]')?.classList.add('active');
     activeDetailId = null;
     if (_huddleScreenOpen) closeHuddleScreen(); else teardownHuddleLive();
+    updateCrewPresence();
   }
   function closeDetailOutside(e) {
     if (e.target === document.getElementById('detail-overlay')) closeDetail();
@@ -19929,6 +20094,7 @@
         markCrewFeatureRead(activeDetailId, feature);
       }
     }
+    updateCrewPresence();
   }
 
   // Which of the Overview tiles carry their own "last read" watermark (see
@@ -20517,6 +20683,7 @@
     const input = document.getElementById('huddle-text-input');
     if (input) setTimeout(() => input.focus(), 220);
     _huddleTypingSweeper = setInterval(sweepHuddleTyping, 1500);
+    updateCrewPresence();
   }
 
   function closeHuddleScreen() {
@@ -20536,6 +20703,7 @@
     _huddleSearchRoomCache = {};
     _huddleHasNewer = false;
     teardownHuddleLive();
+    updateCrewPresence();
     if (_huddleActiveCrewId) rerenderHuddleTilePreview(_huddleActiveCrewId);
   }
 
@@ -35141,7 +35309,14 @@
         </div>
         <button class="poll-anon-toggle${r[row.key] ? ' on' : ''}" data-key="${row.key}" onclick="togglePrivacySetting('${escJsAttr(r.id)}', this)"></button>
       </div>`;
-    document.getElementById('privacy-see-rows').innerHTML = rows.filter(x => x.group === 'see').map(rowHTML).join('');
+    document.getElementById('privacy-see-rows').innerHTML = rows.filter(x => x.group === 'see').map(rowHTML).join('') + `
+      <div class="poll-setting-row">
+        <div>
+          <div class="poll-setting-label">Crew activity</div>
+          <div class="poll-setting-hint">Light up your crew's row while you're in its Huddle or Rave Plan</div>
+        </div>
+        <button class="poll-anon-toggle${crewActivitySharingOn() ? ' on' : ''}" id="crew-activity-settings-toggle" onclick="toggleCrewActivitySharing(this)"></button>
+      </div>`;
     document.getElementById('privacy-do-rows').innerHTML = rows.filter(x => x.group === 'do').map(rowHTML).join('');
     const pushToggle = document.getElementById('push-settings-toggle');
     const mentionToggle = document.getElementById('mention-push-settings-toggle');
