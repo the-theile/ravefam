@@ -104,21 +104,27 @@ begin
     returning * into p;
   if not found then return; end if;
 
-  insert into public.huddle_rooms (crew_id, created_by, room_key, kind, name, festival_id)
-    values (p.crew_id, p.created_by, 'main', 'main', 'Main Huddle', null)
-    on conflict (crew_id, room_key) do nothing;
-  select id into v_room from public.huddle_rooms where crew_id = p.crew_id and room_key = 'main';
-  if v_room is null then return; end if;
+  -- The claim stands even if posting fails (e.g. the content filter rejects
+  -- the question): one skipped line beats retrying it every sweep forever.
+  begin
+    insert into public.huddle_rooms (crew_id, created_by, room_key, kind, name, festival_id)
+      values (p.crew_id, p.created_by, 'main', 'main', 'Main Huddle', null)
+      on conflict (crew_id, room_key) do nothing;
+    select id into v_room from public.huddle_rooms where crew_id = p.crew_id and room_key = 'main';
+    if v_room is null then return; end if;
 
-  select coalesce(array_agg(distinct voter_user_id), '{}') into v_about
-    from public.crew_poll_votes where poll_id = p_poll_id and voter_user_id is distinct from p.created_by;
-  v_summary := public.poll_result_summary(p_poll_id);
+    select coalesce(array_agg(distinct voter_user_id), '{}') into v_about
+      from public.crew_poll_votes where poll_id = p_poll_id and voter_user_id is distinct from p.created_by;
+    v_summary := public.poll_result_summary(p_poll_id);
 
-  insert into public.huddle_messages (room_id, crew_id, sender_id, kind, body, link, about)
-    values (v_room, p.crew_id, p.created_by, 'system',
-      format('🗳️ Poll closed: “%s” · %s', left(p.question, 120), coalesce(v_summary, 'closed')),
-      jsonb_build_object('k', 'tile', 'feature', 'poll', 'id', p.id),
-      v_about);
+    insert into public.huddle_messages (room_id, crew_id, sender_id, kind, body, link, about)
+      values (v_room, p.crew_id, p.created_by, 'system',
+        format('🗳️ Poll closed: “%s” · %s', left(p.question, 120), coalesce(v_summary, 'closed')),
+        jsonb_build_object('k', 'tile', 'feature', 'poll', 'id', p.id),
+        v_about);
+  exception when others then
+    raise warning 'post_poll_result(%): skipped — %', p_poll_id, sqlerrm;
+  end;
 end;
 $$;
 
@@ -134,7 +140,12 @@ set search_path = public, pg_temp
 as $$
 begin
   if new.is_locked and not coalesce(old.is_locked, false) and new.result_posted_at is null then
-    perform public.post_poll_result(new.id);
+    -- Never let the activity line block the lock itself.
+    begin
+      perform public.post_poll_result(new.id);
+    exception when others then
+      raise warning 'crew_polls_result_after(%): %', new.id, sqlerrm;
+    end;
   end if;
   return new;
 end;
@@ -162,8 +173,13 @@ begin
     where result_posted_at is null and deleted_at is null
       and expires_at is not null and expires_at <= now()
   loop
-    perform public.post_poll_result(r.id);
-    n := n + 1;
+    -- One bad poll (e.g. a guard trigger rejecting the claim) mustn't stall the rest.
+    begin
+      perform public.post_poll_result(r.id);
+      n := n + 1;
+    exception when others then
+      raise warning 'post_due_poll_results(%): %', r.id, sqlerrm;
+    end;
   end loop;
   return n;
 end;
