@@ -8,7 +8,7 @@
 // switches the tablet block on directly through the CSSOM. That is exactly
 // what a real iPad touchscreen renders.
 const { test, expect } = require('@playwright/test');
-const { bootAuthedApp, installSupabaseStub } = require('./helpers');
+const { bootAuthedApp, installSupabaseStub, seedData, TEST_UID } = require('./helpers');
 
 const TABS = ['crews', 'raves', 'ravers', 'stats', 'village'];
 
@@ -31,10 +31,11 @@ async function forceTabletBlock(page) {
   expect(found).toBe(2);
 }
 
-// Visible, tappable controls under Apple's 44pt minimum.
-function smallControls() {
+// Visible, tappable controls under Apple's 44pt minimum, optionally only
+// those inside `root` (a selector).
+function smallControls(root) {
   const out = [];
-  for (const el of document.querySelectorAll('button, a[href], [onclick], [role=button], [role=tab], select, input')) {
+  for (const el of (root ? document.querySelector(root) : document).querySelectorAll('button, a[href], [onclick], [role=button], [role=tab], select, input')) {
     const r = el.getBoundingClientRect();
     if (!r.width || !r.height || r.bottom < 0 || r.top > innerHeight) continue;
     let hidden = false;
@@ -82,6 +83,25 @@ for (const [name, viewport] of [['portrait', { width: 820, height: 1180 }], ['la
         });
         expect(Math.abs(hero - card)).toBeLessThanOrEqual(2);
       }
+    });
+
+    test('the Huddle header and composer have no undersized controls', async ({ page }) => {
+      const data = seedData();
+      data.huddle_rooms = [{ id: 'room-main', crew_id: 'c1', room_key: 'main', kind: 'main', name: 'Main Huddle', festival_id: null, created_by: TEST_UID, created_at: '2024-01-01T00:00:00Z' }];
+      data.huddle_messages = [
+        { id: 'm1', room_id: 'room-main', crew_id: 'c1', sender_id: 'kai-uid', kind: 'text', body: 'who is driving', reactions: {}, created_at: new Date(Date.now() - 600000).toISOString(), deleted_at: null, mentions: [] },
+        { id: 'm2', room_id: 'room-main', crew_id: 'c1', sender_id: TEST_UID, kind: 'text', body: 'riding with you', reactions: {}, created_at: new Date(Date.now() - 300000).toISOString(), deleted_at: null, mentions: [] },
+      ];
+      const errors = await bootAuthedApp(page, { data, sessionOver: { user_metadata: { guidance_dismissed: true, seen_tips: { beacon: true } } } });
+      await forceTabletBlock(page);
+      await page.evaluate(async () => { await openHuddle('c1'); });
+      await expect(page.locator('#huddle-screen')).toHaveClass(/open/);
+      await page.waitForTimeout(300);
+      expect(await page.evaluate(smallControls, '#huddle-screen')).toEqual([]);
+      // The bigger hit areas must not push the header taller than its
+      // phone-sized 53px (32px buttons + 10px padding top and bottom + border).
+      expect(await page.locator('#hd-head').evaluate(h => h.getBoundingClientRect().height)).toBeLessThanOrEqual(54);
+      expect(errors).toEqual([]);
     });
 
     test('tab bar is centered over the content', async ({ page }) => {
