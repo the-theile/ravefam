@@ -4591,6 +4591,13 @@
   .huddle-system-row:nth-of-type(even) { transform: rotate(0.7deg); }
   /* Activity lines with a tap target (rave, Rave Plan, poll, pin…). */
   .huddle-system-row.is-link { cursor: pointer; }
+  /* Activity line as a row: note centered, reactions under it, ＋/⋯ beside. */
+  .hd-sys-row { justify-content: center; align-self: stretch; -webkit-touch-callout: none; }
+  .hd-sys { display: flex; flex-direction: column; align-items: center; min-width: 0; max-width: 86%; border-radius: 6px; }
+  .hd-sys .huddle-system-row { max-width: 100%; margin: 4px auto 10px; }
+  .hd-sys .hd-rx { justify-content: center; margin: -6px 0 10px; }
+  .hd-sys-row:nth-of-type(even) .huddle-system-row { transform: rotate(0.7deg); }
+  .hd-row { -webkit-touch-callout: none; }
   .huddle-system-row.is-link:hover, .huddle-system-row.is-link:focus-visible { filter: brightness(1.08); outline: none; box-shadow: 0 0 0 1px var(--neon-pink), 0 3px 8px -2px rgba(var(--black-rgb),0.4); }
   .huddle-system-go { font-weight: 800; margin-left: 2px; }
   /* A run of activity lines collapsed into one card (see huddleStreamHTML). */
@@ -10371,7 +10378,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.18.1';
+  const APP_VERSION = '2.19.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -20716,7 +20723,7 @@
     slot.innerHTML = `
       <div class="hd-replybar">
         <div class="hd-replybar-body">
-          <b>Replying to ${escHtml(huddleSenderName(_huddleReplyTo.sender_id))}</b>
+          <b>Replying to ${escHtml(_huddleReplyTo.kind === 'system' ? 'crew update' : huddleSenderName(_huddleReplyTo.sender_id))}</b>
           <span>${escHtml(huddleMessageSnippetText(_huddleReplyTo))}</span>
         </div>
         <button type="button" class="hd-replybar-close" onclick="clearHuddleReplyTarget()" aria-label="Cancel reply">✕</button>
@@ -20890,7 +20897,7 @@
     if (!m.reply_to_id) return '';
     const found = huddleMessages.find(x => String(x.id) === String(m.reply_to_id));
     const target = found && !isBlockedUser(found.sender_id) ? found : null;
-    const who = target ? huddleSenderName(target.sender_id) : 'a message';
+    const who = target ? (target.kind === 'system' ? 'Crew update' : huddleSenderName(target.sender_id)) : 'a message';
     const body = target ? huddleMessageSnippetText(target) : 'Original message unavailable';
     return `<div class="hd-quote" role="button" tabindex="0" aria-label="Jump to the quoted message" onclick="event.stopPropagation(); scrollToHuddleMessage('${escJsAttr(String(m.reply_to_id))}')">
         <b>${escHtml(who)}</b><span class="hd-quote-body">${escHtml(body)}</span>
@@ -20920,18 +20927,7 @@
     // Same posture as the enforce_huddle_pin_permission DB trigger: crew lead, moderator, or the sender.
     const canPin = !m.deleted_at && ownerOrManager(m.sender_id, currentUser?.id, (crew && crew.leader_id === currentUser?.id) || isModerator());
 
-    const reactions = m.reactions || {};
-    const uid = currentUser?.id;
-    const usedEmojis = HUDDLE_REACTION_EMOJIS.filter(emoji => (reactions[emoji] || []).length > 0);
-    const reactionRow = usedEmojis.map(emoji => {
-      const users = reactions[emoji] || [];
-      const reacted = uid && users.includes(uid);
-      return `<button type="button" class="hd-rx-btn${reacted ? ' reacted' : ''}" data-mid="${m.id}" data-emoji="${emoji}" onclick="toggleHuddleReaction(this.dataset.mid, this.dataset.emoji)">${emoji}<span>${users.length}</span></button>`;
-    }).join('');
-
-    const addPickerBtns = HUDDLE_REACTION_EMOJIS.map(emoji =>
-      `<button type="button" class="huddle-reaction-picker-btn" data-mid="${m.id}" data-emoji="${emoji}" onclick="toggleHuddleReaction(this.dataset.mid, this.dataset.emoji); toggleHuddleBubbleReactionPicker('${escJsAttr(m.id)}')">${emoji}</button>`
-    ).join('');
+    const reactionRow = huddleReactionChipsHTML(m);
 
     const menuRows = `
         <button type="button" class="kebab-menu-row" onclick="toggleKebabMenu('huddle-bubble-menu-${m.id}'); setHuddleReplyTarget('${escJsAttr(m.id)}')">↩️ Reply</button>
@@ -20945,10 +20941,7 @@
 
     const actionsHTML = `
       <div class="hd-actions">
-        <div class="hd-reaction-add-wrap">
-          <button type="button" class="hd-act-btn" onclick="toggleHuddleBubbleReactionPicker('${escJsAttr(m.id)}')" title="React">＋</button>
-          <div id="huddle-bubble-picker-${m.id}" class="huddle-reaction-picker hd-bubble-reaction-picker${isYou ? ' hd-bubble-reaction-picker-right' : ''}" style="display:none;">${addPickerBtns}</div>
-        </div>
+        ${huddleReactionAddHTML(m, isYou)}
         <div class="kebab-wrap">
           <button type="button" class="hd-act-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="huddle-bubble-menu-${m.id}" onclick="toggleKebabMenu('huddle-bubble-menu-${m.id}')" title="More">⋯</button>
           <div id="huddle-bubble-menu-${m.id}" class="kebab-menu${isYou ? ' kebab-menu-right' : ''}" style="display:none;">${menuRows}</div>
@@ -20961,7 +20954,7 @@
     const editedLabel = m.updated_at ? `<span class="huddle-bubble-edited" title="Edited ${escHtml(formatModDate(m.updated_at))}">edited</span>` : '';
 
     return `
-      <div class="hd-row" data-mid="${m.id}" ontouchstart="huddleRowTouchStart(this)" ontouchend="huddleRowTouchEnd(this)">
+      <div class="hd-row" data-mid="${m.id}" ontouchstart="huddleRowTouchStart(this)" ontouchmove="huddleRowTouchEnd()" ontouchend="huddleRowTouchEnd(this)">
         <div class="hd-bub${stateClass}${highlightClass}" id="hd-bub-${m.id}">
           ${huddleQuoteHTML(m)}
           <div class="hd-bub-body">${huddleMessageBodyHTML(m, senderRaver, senderName)}</div>
@@ -20973,12 +20966,57 @@
       </div>`;
   }
 
-  // One activity line; tappable when it carries a link (see openHuddleActivityLink).
+  // Reaction chips under a message or activity line.
+  function huddleReactionChipsHTML(m) {
+    const reactions = m.reactions || {};
+    const uid = currentUser?.id;
+    return HUDDLE_REACTION_EMOJIS.filter(emoji => (reactions[emoji] || []).length > 0).map(emoji => {
+      const users = reactions[emoji] || [];
+      const reacted = uid && users.includes(uid);
+      return `<button type="button" class="hd-rx-btn${reacted ? ' reacted' : ''}" data-mid="${m.id}" data-emoji="${emoji}" onclick="toggleHuddleReaction(this.dataset.mid, this.dataset.emoji)">${emoji}<span>${users.length}</span></button>`;
+    }).join('');
+  }
+
+  // The ＋ button and its emoji picker.
+  function huddleReactionAddHTML(m, alignRight) {
+    const pickerBtns = HUDDLE_REACTION_EMOJIS.map(emoji =>
+      `<button type="button" class="huddle-reaction-picker-btn" data-mid="${m.id}" data-emoji="${emoji}" onclick="toggleHuddleReaction(this.dataset.mid, this.dataset.emoji); toggleHuddleBubbleReactionPicker('${escJsAttr(m.id)}')">${emoji}</button>`
+    ).join('');
+    return `
+        <div class="hd-reaction-add-wrap">
+          <button type="button" class="hd-act-btn" onclick="toggleHuddleBubbleReactionPicker('${escJsAttr(m.id)}')" title="React">＋</button>
+          <div id="huddle-bubble-picker-${m.id}" class="huddle-reaction-picker hd-bubble-reaction-picker${alignRight ? ' hd-bubble-reaction-picker-right' : ''}" style="display:none;">${pickerBtns}</div>
+        </div>`;
+  }
+
+  // One activity line; tappable when it carries a link (see
+  // openHuddleActivityLink). Reacts and replies like a message: ＋ and ⋯
+  // (Reply / Mark unread) on hover or long-press, chips underneath.
   function huddleSystemRowHTML(m) {
     const link = m.link && typeof m.link === 'object' && m.link.k ? m.link : null;
-    return link
+    const note = link
       ? `<div class="huddle-system-row is-link" role="link" tabindex="0" data-link="${escHtml(JSON.stringify(link))}" onclick="openHuddleActivityLink(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openHuddleActivityLink(this);}">${escHtml(m.body || '')} <span class="huddle-system-go" aria-hidden="true">›</span></div>`
       : `<div class="huddle-system-row">${escHtml(m.body || '')}</div>`;
+    const chips = huddleReactionChipsHTML(m);
+    const highlightClass = _huddleHighlightId === m.id ? ' hd-bub-highlight' : '';
+    const menuId = `huddle-bubble-menu-${m.id}`;
+    return `
+      <div class="hd-row hd-sys-row" data-mid="${m.id}" ontouchstart="huddleRowTouchStart(this)" ontouchmove="huddleRowTouchEnd()" ontouchend="huddleRowTouchEnd()">
+        <div class="hd-sys${highlightClass}" id="hd-bub-${m.id}">
+          ${note}
+          ${chips ? `<div class="hd-rx">${chips}</div>` : ''}
+        </div>
+        <div class="hd-actions">
+          ${huddleReactionAddHTML(m, true)}
+          <div class="kebab-wrap">
+            <button type="button" class="hd-act-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="${menuId}" onclick="toggleKebabMenu('${escJsAttr(menuId)}')" title="More">⋯</button>
+            <div id="${menuId}" class="kebab-menu kebab-menu-right" style="display:none;">
+              <button type="button" class="kebab-menu-row" onclick="toggleKebabMenu('${escJsAttr(menuId)}'); setHuddleReplyTarget('${escJsAttr(m.id)}')">↩️ Reply</button>
+              <button type="button" class="kebab-menu-row" onclick="toggleKebabMenu('${escJsAttr(menuId)}'); markHuddleUnreadFrom('${escJsAttr(m.id)}')">🔵 Mark unread</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
   }
 
   // Collapsed activity runs the viewer has expanded, keyed by the run's first
@@ -21097,6 +21135,8 @@
   // Tap target on an activity line (see postHuddleSystemMessage): closes the
   // Huddle and lands on the rave, raver, Rave Plan or crew tile it's about.
   async function openHuddleActivityLink(el) {
+    // Lifting the finger after a long-press fires a click — that opened the menu, not the link.
+    if (Date.now() - _huddleLongPressAt < 700) return;
     let link;
     try { link = JSON.parse(el.dataset.link || ''); } catch (e) { return; }
     const crewId = _huddleActiveCrewId;
@@ -21282,6 +21322,8 @@
   function scrollToHuddleMessage(messageId) {
     const el = document.getElementById('hd-bub-' + messageId);
     if (!el) { showToast('That message is further back. Load earlier to find it'); return; }
+    const run = el.closest('.hd-actrun-list');
+    if (run && run.hidden && run.previousElementSibling) toggleHuddleActivityRun(run.previousElementSibling);
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     _huddleHighlightId = messageId;
     el.classList.add('hd-bub-highlight');
@@ -21688,6 +21730,7 @@
     else if (!huddleMessages.some(m => m.id === data.id)) huddleMessages.push(data);
     renderHuddleUI();
     if (fields.mentions && fields.mentions.length) notifyHuddleMentions(data, fields.mentions);
+    if (fields.reply_to_id) notifyHuddleActivityResponse(fields.reply_to_id, { replyId: data.id });
     markCrewQuest('hi', _huddleActiveCrewId);
     showHuddleHint('huddle_first_message', 'You’re in the chat — tell the fam what you’re most hyped for.');
   }
@@ -21706,6 +21749,21 @@
       .filter(uid => uid !== currentUser.id)
       .map(uid => dbAddNotification(uid, crew.id, `💬 ${who} mentioned you in ${crew.name}: "${snippet}"`,
         null, nlData([nlHuddle(crew, message.room_id, message.id)]))));
+  }
+
+  // Replies and reactions on an activity line ping the crewmate whose action
+  // posted it ("Kai is going to Hulaween!" → Kai hears that you hyped it).
+  async function notifyHuddleActivityResponse(targetId, { emoji = null, replyId = null } = {}) {
+    const target = huddleMessages.find(m => String(m.id) === String(targetId));
+    const crew = getCrew(_huddleActiveCrewId);
+    if (!target || target.kind !== 'system' || !crew || !currentUser || target.sender_id === currentUser.id) return;
+    const who = activityWho();
+    const snippet = String(target.body || '').slice(0, 80);
+    const message = emoji
+      ? `${emoji} ${who} reacted to your update in ${crew.name}: "${snippet}"`
+      : `💬 ${who} replied to your update in ${crew.name}: "${snippet}"`;
+    await dbAddNotification(target.sender_id, crew.id, message, null,
+      nlData([nlHuddle(crew, target.room_id, replyId || target.id)]));
   }
 
   async function retryHuddleMessage(tempId) {
@@ -22272,6 +22330,8 @@
     const uid = currentUser.id;
     const reactions = { ...(msg.reactions || {}) };
     const existing = reactions[emoji] || [];
+    // First reaction of yours on this line → worth a ping; toggling more emoji isn't.
+    const firstReaction = !Object.values(reactions).some(users => (users || []).includes(uid));
     if (existing.includes(uid)) {
       reactions[emoji] = existing.filter(id => id !== uid);
       if (!reactions[emoji].length) delete reactions[emoji];
@@ -22282,6 +22342,7 @@
     renderHuddleUI();
     const { error } = await sb.from('huddle_messages').update({ reactions }).eq('id', messageId);
     if (error) toastError('Could not save reaction', error);
+    else if (firstReaction && !existing.includes(uid)) notifyHuddleActivityResponse(messageId, { emoji });
   }
 
   async function dbTogglePinHuddleMessage(messageId, pin) {
@@ -22347,14 +22408,22 @@
   // Touch equivalent of hovering a row to reveal its actions: a long press
   // pins them open (and a second press closes them again).
   let _huddleRowPressTimer = null;
+  // Long-press (phones): reveal the row's ＋/⋯ and open its ⋯ menu straight
+  // away — React, Reply, Mark unread… A scroll (touchmove) cancels it.
   function huddleRowTouchStart(row) {
     clearTimeout(_huddleRowPressTimer);
     _huddleRowPressTimer = setTimeout(() => {
       document.querySelectorAll('.hd-row-open').forEach(r => { if (r !== row) r.classList.remove('hd-row-open'); });
-      row.classList.toggle('hd-row-open');
+      row.classList.add('hd-row-open');
+      _huddleLongPressAt = Date.now();
+      hapticImpact('MEDIUM');
+      const menuId = `huddle-bubble-menu-${row.dataset.mid}`;
+      const menu = document.getElementById(menuId);
+      if (menu && menu.style.display === 'none') toggleKebabMenu(menuId);
     }, 420);
   }
   function huddleRowTouchEnd() { clearTimeout(_huddleRowPressTimer); }
+  let _huddleLongPressAt = 0;
 
   // ── Inline composer forms (meetup / beacon / link-share) — mutually exclusive ──
   function huddleHideAllInlineForms() {
@@ -23423,6 +23492,7 @@
     if (ok) {
       if (inputEl) inputEl.value = '';
       rerenderGamePlanChecklist(crewId);
+      postGamePlanActivity(crewId, _gamePlanActiveFestivalId, `📝 ${activityWho()} added "${ok.text}" to the plan`);
     }
   }
 
@@ -23432,8 +23502,9 @@
     const existing = new Set(gamePlanItems.filter(it => it.kind === 'task').map(t => (t.text || '').toLowerCase()));
     const toAdd = GAME_PLAN_TASK_STARTER_PACK.filter(t => !existing.has(t.toLowerCase()));
     if (!toAdd.length) { showToast('Already on the list'); return; }
-    await Promise.all(toAdd.map(t => dbAddGamePlanTask(gp.id, crewId, t, null)));
+    const added = (await Promise.all(toAdd.map(t => dbAddGamePlanTask(gp.id, crewId, t, null)))).filter(Boolean);
     rerenderGamePlanChecklist(crewId);
+    if (added.length) postGamePlanActivity(crewId, _gamePlanActiveFestivalId, `📝 ${activityWho()} added ${added.length} task${added.length === 1 ? '' : 's'} to the plan`);
   }
 
   async function toggleGamePlanTask(itemId, done) {
@@ -34156,6 +34227,12 @@
       you.interestedFestIds.push(fest ? fest.id : festId);
       hapticImpact('MEDIUM');
       showToast(`👀 Watching ${fest?.name || 'that rave'}`);
+      // Same crews as a Going RSVP (non-Secret ones you're in).
+      if (currentUser && fest) {
+        const msg = `👀 ${displayName(you).split(' ')[0]} is interested in ${fest.name}`;
+        crews.filter(c => c.status !== 'secret' && (c.squadIds || []).some(id => String(id) === String(you.id)))
+          .forEach(c => postCrewActivity(c.id, msg, { k: 'rave', id: fest.id }));
+      }
     }
     renderSetupPill();
     renderEvents();

@@ -417,3 +417,68 @@ test.describe('huddle chat · catching up', () => {
     expect(await page.evaluate(() => totalHuddleUnreadCount())).toBe(2);
   });
 });
+
+test.describe('huddle chat · reacting and replying to activity', () => {
+  function seedWithKaiActivity() {
+    const data = seedWithChat();
+    data.huddle_messages = data.huddle_messages.concat([
+      { id: 'sys-rsvp', room_id: 'room-main', crew_id: 'c1', sender_id: 'kai-uid', kind: 'system', body: '🎪 Kai is going to Tomorrowland!', link: { k: 'rave', id: 'f1' }, reactions: {}, created_at: minsAgo(2), deleted_at: null, mentions: [] },
+    ]);
+    return data;
+  }
+
+  test('reacting to an activity line shows the chip and pings whoever posted it', async ({ page }) => {
+    await openChat(page, seedWithKaiActivity());
+    await page.evaluate(() => toggleHuddleReaction('sys-rsvp', '🔥'));
+    await expect(page.locator('#hd-bub-sys-rsvp .hd-rx-btn')).toContainText('🔥');
+    await page.waitForTimeout(200);
+    const notif = await page.evaluate(() =>
+      (window.__store.notifications || []).filter(n => String(n.user_id) === 'kai-uid' && (n.message || '').includes('reacted to your update')));
+    expect(notif).toHaveLength(1);
+    // Adding a second emoji is not another ping.
+    await page.evaluate(() => toggleHuddleReaction('sys-rsvp', '💜'));
+    await page.waitForTimeout(200);
+    const again = await page.evaluate(() =>
+      (window.__store.notifications || []).filter(n => (n.message || '').includes('reacted to your update')));
+    expect(again).toHaveLength(1);
+  });
+
+  test('replying quotes the activity line and pings whoever posted it', async ({ page }) => {
+    await openChat(page, seedWithKaiActivity());
+    await page.evaluate(() => setHuddleReplyTarget('sys-rsvp'));
+    await expect(page.locator('.hd-replybar')).toContainText('Replying to crew update');
+    await page.fill('#huddle-text-input', 'see you there');
+    await page.evaluate(() => submitHuddleTextMessage());
+    await page.waitForTimeout(300);
+
+    const sent = await page.evaluate(() => (window.__store.huddle_messages || []).find(m => m.body === 'see you there'));
+    expect(sent.reply_to_id).toBe('sys-rsvp');
+    await expect(page.locator('.hd-quote', { hasText: 'Crew update' })).toHaveCount(1);
+    const notif = await page.evaluate(() =>
+      (window.__store.notifications || []).find(n => String(n.user_id) === 'kai-uid' && (n.message || '').includes('replied to your update')));
+    expect(notif).toBeTruthy();
+  });
+
+  test('long-pressing a row opens its menu straight away', async ({ page }) => {
+    await openChat(page, seedWithKaiActivity());
+    await page.evaluate(() => huddleRowTouchStart(document.querySelector('.hd-sys-row[data-mid="sys-rsvp"]')));
+    await page.waitForTimeout(550);
+    await expect(page.locator('#huddle-bubble-menu-sys-rsvp')).toBeVisible();
+    await expect(page.locator('#huddle-bubble-menu-sys-rsvp')).toContainText('Reply');
+    // The click that follows lifting the finger doesn't follow the rave link.
+    await page.locator('.hd-sys-row[data-mid="sys-rsvp"] .huddle-system-row').click();
+    await expect(page.locator('#huddle-screen')).toHaveClass(/open/);
+  });
+
+  test('marking a rave Interested posts it to the crew', async ({ page }) => {
+    const data = seedWithChat();
+    data.festivals = data.festivals.concat([{ id: 'f9', name: 'Hulaween', date: '2099-10-30', location: 'Live Oak, FL', color: '#FFD93D', days: null, deleted_at: null }]);
+    await bootAuthedApp(page, { data, sessionOver: { user_metadata: { guidance_dismissed: true, seen_tips: { beacon: true } } } });
+    await page.evaluate(() => toggleInterestedInFest('f9'));
+    await page.waitForTimeout(400);
+    const line = await page.evaluate(() =>
+      (window.__store.huddle_messages || []).find(m => m.kind === 'system' && (m.body || '').includes('is interested in Hulaween')));
+    expect(line).toBeTruthy();
+    expect(line.link).toEqual({ k: 'rave', id: 'f9' });
+  });
+});
