@@ -146,3 +146,50 @@ test.describe('huddle unread entries in the notification drawer', () => {
     expect(read).toBeTruthy();
   });
 });
+
+test.describe('huddle unread · crew activity lines', () => {
+  function seedWithActivity(about) {
+    const data = seedWithHuddle();
+    data.huddle_messages = [
+      { id: 'sys1', room_id: 'room-main', crew_id: 'c1', sender_id: 'kai-uid', kind: 'system', body: '🎟️ Kai joined a ride', about, reactions: {}, created_at: '2099-01-01T00:00:00Z', deleted_at: null },
+    ];
+    return data;
+  }
+
+  test('activity not about you shows a quiet dot, never a count', async ({ page }) => {
+    await bootAuthedApp(page, { data: seedWithActivity([]) });
+    await page.evaluate(() => loadHuddleActivityCache());
+    await page.waitForTimeout(200);
+
+    const cta = page.locator('.huddle-cta-btn[data-crew-id="c1"]');
+    await expect(cta.locator('.huddle-quiet-dot')).toHaveCount(1);
+    await expect(cta.locator('.huddle-cta-count')).toHaveCount(0);
+    await expect(page.locator('#notif-huddle-badge')).not.toHaveClass(/has-count/);
+  });
+
+  test('activity about you counts like a message', async ({ page }) => {
+    await bootAuthedApp(page, { data: seedWithActivity(['test-user-id']) });
+    await page.evaluate(() => loadHuddleActivityCache());
+    await page.waitForTimeout(200);
+
+    await expect(page.locator('.huddle-cta-btn[data-crew-id="c1"] .huddle-cta-count')).toHaveText('1');
+    await expect(page.locator('#notif-huddle-badge')).toHaveText('1');
+  });
+
+  test('opening the room clears the quiet dot', async ({ page }) => {
+    await bootAuthedApp(page, { data: seedWithActivity([]) });
+    await page.evaluate(() => loadHuddleActivityCache());
+    await page.waitForTimeout(200);
+    await page.evaluate(async () => { await openDetail('c1', { tab: 'huddle' }); });
+    await page.waitForTimeout(300);
+    await page.evaluate(() => closeHuddleScreen());
+    await expect(page.locator('.huddle-cta-btn[data-crew-id="c1"]')).toHaveCount(0);
+  });
+
+  test('an activity line is about the people it names, never the actor', async ({ page }) => {
+    await bootAuthedApp(page, { data: seedWithHuddle() });
+    const about = await page.evaluate(() => activityAbout(
+      { claimedBy: 'kai-uid' }, { claimedBy: 'test-user-id' }, { claimedBy: null }, null, { claimedBy: 'kai-uid' }));
+    expect(about).toEqual(['kai-uid']);
+  });
+});
