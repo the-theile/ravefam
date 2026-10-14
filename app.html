@@ -5083,6 +5083,13 @@
     line-height: 1;
     vertical-align: middle;
   }
+  /* Quiet dot: new crew activity that isn't about you — something happened,
+     no count nagging you (see huddleCountsAsUnread). */
+  .huddle-quiet-dot {
+    display: inline-block; width: 7px; height: 7px; margin-left: 8px;
+    border-radius: 50%; background: var(--neon-cyan); vertical-align: middle;
+    box-shadow: 0 0 6px rgba(var(--neon-cyan-rgb),0.7);
+  }
 
   /* Kebab/overflow menu — a "⋯" trigger + floating popover of stacked text
      rows, for tucking away secondary actions (originally Huddle message
@@ -10364,7 +10371,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.18.0';
+  const APP_VERSION = '2.18.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -13640,8 +13647,10 @@
     if (!_huddleActivityCache) return; // crew grid hasn't prefetched unread state yet
     _huddleRoomCrewMap = _huddleRoomCrewMap || {};
     _huddleRoomUnreadCache = _huddleRoomUnreadCache || {};
+    _huddleRoomQuietCache = _huddleRoomQuietCache || {};
     _huddleRoomCrewMap[row.room_id] = row.crew_id;
-    _huddleRoomUnreadCache[row.room_id] = (_huddleRoomUnreadCache[row.room_id] || 0) + 1;
+    if (huddleCountsAsUnread(row)) _huddleRoomUnreadCache[row.room_id] = (_huddleRoomUnreadCache[row.room_id] || 0) + 1;
+    else _huddleRoomQuietCache[row.room_id] = true;
     recomputeHuddleUnreadTotals();
     const entry = _huddleActivityCache[row.crew_id];
     if (entry) {
@@ -17955,10 +17964,18 @@
   // localStorage boolean.
   let _huddleActivityCache = null; // crewId -> { lastMessageAt, hasBeacon }
   let _huddleRoomUnreadCache = null; // roomId -> unread count
+  let _huddleRoomQuietCache = null;  // roomId -> true when only uncounted activity is new (quiet dot)
   let _huddleRoomCrewMap = null; // roomId -> crewId
   let _huddleReadMap = null; // roomId -> last_read_at (ISO string)
   let _huddleUnreadCache = null; // crewId -> unread count
   let _huddleActivityLoading = false;
+  // Chat from crewmates counts; an activity line only counts for the people
+  // it's about (see activityAbout). Mirrors huddle_unread_count server-side.
+  function huddleCountsAsUnread(row) {
+    if (!row || !currentUser || row.sender_id === currentUser.id || isBlockedUser(row.sender_id)) return false;
+    return row.kind !== 'system' || (row.about || []).includes(currentUser.id);
+  }
+
   async function loadHuddleActivityCache() {
     if (_huddleActivityLoading || !currentUser || !crews.length) return;
     _huddleActivityLoading = true;
@@ -17973,13 +17990,14 @@
       _huddleReadMap = readMap;
 
       const { data } = await sb.from('huddle_messages')
-        .select('crew_id, room_id, sender_id, created_at, kind, expires_at, body')
+        .select('crew_id, room_id, sender_id, created_at, kind, expires_at, body, about')
         .in('crew_id', ids)
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
         .limit(500);
       const nowIso = new Date().toISOString();
       const roomUnread = {};
+      const roomQuiet = {};
       const roomCrewMap = {};
       (data || []).forEach(row => {
         const c = cache[row.crew_id];
@@ -17991,10 +18009,12 @@
         if (row.sender_id === currentUser.id || isBlockedUser(row.sender_id)) return;
         const lastRead = readMap[row.room_id];
         if (!lastRead || new Date(row.created_at) > new Date(lastRead)) {
-          roomUnread[row.room_id] = (roomUnread[row.room_id] || 0) + 1;
+          if (huddleCountsAsUnread(row)) roomUnread[row.room_id] = (roomUnread[row.room_id] || 0) + 1;
+          else roomQuiet[row.room_id] = true;
         }
       });
       _huddleRoomUnreadCache = roomUnread;
+      _huddleRoomQuietCache = roomQuiet;
       _huddleRoomCrewMap = roomCrewMap;
       recomputeHuddleUnreadTotals();
     } catch (err) { console.warn('huddle activity prefetch failed', err); }
@@ -18018,6 +18038,14 @@
     _huddleUnreadCache = crewUnread;
   }
 
+  // Crew (or room, with roomId) has new activity that isn't counted — the
+  // quiet dot. Only meaningful when the unread count itself is zero.
+  function huddleHasQuietActivity(crewId, roomId) {
+    const quiet = _huddleRoomQuietCache || {};
+    if (roomId) return !!quiet[roomId];
+    return Object.keys(quiet).some(id => quiet[id] && _huddleRoomCrewMap && String(_huddleRoomCrewMap[id]) === String(crewId));
+  }
+
   function totalHuddleUnreadCount() {
     if (!_huddleUnreadCache) return 0;
     return Object.values(_huddleUnreadCache).reduce((a, b) => a + b, 0);
@@ -18032,6 +18060,7 @@
     const nowIso = new Date().toISOString();
     if (_huddleReadMap) _huddleReadMap[roomId] = nowIso;
     if (_huddleRoomUnreadCache) _huddleRoomUnreadCache[roomId] = 0;
+    if (_huddleRoomQuietCache) delete _huddleRoomQuietCache[roomId];
     if (_huddleRoomCrewMap && crewId) _huddleRoomCrewMap[roomId] = crewId;
     recomputeHuddleUnreadTotals();
     renderCrews();
@@ -18049,15 +18078,17 @@
     const entry = _huddleActivityCache && _huddleActivityCache[crewId];
     if (!entry) return null;
     const unread = (_huddleUnreadCache && _huddleUnreadCache[crewId]) || 0;
-    if (!entry.hasBeacon && !unread) return null;
-    return { beacon: entry.hasBeacon, unread };
+    const quiet = !unread && huddleHasQuietActivity(crewId);
+    if (!entry.hasBeacon && !unread && !quiet) return null;
+    return { beacon: entry.hasBeacon, unread, quiet };
   }
 
   function huddleCtaHTML(crewId) {
     const badge = huddleActivityBadge(crewId);
     if (!badge) return '';
     const label = badge.beacon ? '📣 Beacon active — Join the Huddle' : '🕊️ Join the Huddle';
-    const countHTML = badge.unread ? `<span class="huddle-cta-count">${badge.unread > 99 ? '99+' : badge.unread}</span>` : '';
+    const countHTML = badge.unread ? `<span class="huddle-cta-count">${badge.unread > 99 ? '99+' : badge.unread}</span>`
+      : badge.quiet ? '<span class="huddle-quiet-dot" title="New crew activity" aria-label="New crew activity"></span>' : '';
     return `<button type="button" class="huddle-cta-btn" data-crew-id="${crewId}" onclick="event.stopPropagation(); openDetail(this.dataset.crewId, {tab:'huddle'})">${label}${countHTML}</button>`;
   }
 
@@ -20275,14 +20306,16 @@
     const entry = _huddleActivityCache && _huddleActivityCache[crewId];
     const unread = (_huddleUnreadCache && _huddleUnreadCache[crewId]) || 0;
     const when = entry?.lastMessageAt ? relativeTime(new Date(entry.lastMessageAt).getTime()) : '';
+    const quiet = !unread && huddleHasQuietActivity(crewId);
     const subtitle = unread
       ? `${unread} unread message${unread === 1 ? '' : 's'}`
+      : quiet ? 'New crew activity'
       : entry?.lastMessageAt ? 'Tap to open the crew chat' : 'No messages yet — start the conversation';
     root.innerHTML = `
       <button type="button" class="huddle-tile-preview" data-crew-id="${escHtml(String(crewId))}" onclick="openHuddle(this.dataset.crewId)">
         <span class="huddle-tile-preview-icon">🕊️</span>
         <span class="huddle-tile-preview-body">
-          <span class="huddle-tile-preview-title">Huddle${unread ? `<span class="huddle-cta-count">${unread > 99 ? '99+' : unread}</span>` : ''}</span>
+          <span class="huddle-tile-preview-title">Huddle${unread ? `<span class="huddle-cta-count">${unread > 99 ? '99+' : unread}</span>` : quiet ? '<span class="huddle-quiet-dot" aria-hidden="true"></span>' : ''}</span>
           <span class="huddle-tile-preview-snippet">${escHtml(subtitle)}</span>
         </span>
         ${when ? `<span class="huddle-tile-preview-time">${escHtml(when)}</span>` : ''}
@@ -20583,8 +20616,9 @@
     const online = huddleOnlineCount();
     const roomUnread = r => (r.id === _huddleActiveRoomId ? 0 : (_huddleRoomUnreadCache && _huddleRoomUnreadCache[r.id]) || 0);
     const unreadBadge = n => (n ? `<span class="huddle-cta-count">${n > 99 ? '99+' : n}</span>` : '');
+    const roomQuiet = r => r.id !== _huddleActiveRoomId && !roomUnread(r) && huddleHasQuietActivity(null, r.id);
     const roomPillHTML = r =>
-      `<button type="button" class="huddle-room-pill${r.id === _huddleActiveRoomId ? ' active' : ''}" data-room-id="${r.id}" onclick="switchHuddleRoom(this.dataset.roomId)">${huddleRoomLabel(r)}${unreadBadge(roomUnread(r))}</button>`;
+      `<button type="button" class="huddle-room-pill${r.id === _huddleActiveRoomId ? ' active' : ''}" data-room-id="${r.id}" onclick="switchHuddleRoom(this.dataset.roomId)">${huddleRoomLabel(r)}${roomQuiet(r) ? '<span class="huddle-quiet-dot" aria-label="New crew activity"></span>' : unreadBadge(roomUnread(r))}</button>`;
 
     // A crew that rages every weekend accumulates rooms fast, so past raves
     // fold into one row below the live ones. That row
@@ -21219,8 +21253,8 @@
     if (!m || !currentUser || !roomId) return;
     const from = huddleTimeOf(m);
     const at = new Date(from - 1).toISOString();
-    const count = huddleMessages.filter(x => !x.deleted_at && !x._pending && x.sender_id !== currentUser.id
-      && !isBlockedUser(x.sender_id) && huddleTimeOf(x) >= from).length;
+    const after = huddleMessages.filter(x => !x.deleted_at && !x._pending && huddleTimeOf(x) >= from);
+    const count = after.filter(huddleCountsAsUnread).length;
     _huddleHoldUnread = true;
     _huddleUnreadAnchorAt = at;
     _huddleCatchupDismissed = true;  // you're looking right at it
@@ -21228,6 +21262,8 @@
     _huddleRoomUnreadCache = _huddleRoomUnreadCache || {};
     _huddleRoomCrewMap = _huddleRoomCrewMap || {};
     _huddleRoomUnreadCache[roomId] = count;
+    _huddleRoomQuietCache = _huddleRoomQuietCache || {};
+    if (!count && after.some(x => x.sender_id !== currentUser.id)) _huddleRoomQuietCache[roomId] = true;
     _huddleRoomCrewMap[roomId] = _huddleActiveCrewId;
     recomputeHuddleUnreadTotals();
     renderCrews();
@@ -22777,13 +22813,15 @@
   // Mirrors ensureHuddleRooms' room-materialization exactly (upsert on
   // conflict do nothing, then look the room back up by its unique key).
   // `link` is the line's tap target (see openHuddleActivityLink) — optional.
-  async function postHuddleSystemMessage(crewId, roomKey, roomRow, summaryText, link = null) {
+  // `about` is the auth uids it concerns: only they get it counted as unread
+  // (see huddleCountsAsUnread); everyone else just sees a quiet dot.
+  async function postHuddleSystemMessage(crewId, roomKey, roomRow, summaryText, link = null, about = []) {
     if (!currentUser) return;
     await sb.from('huddle_rooms').upsert([roomRow], { onConflict: 'crew_id,room_key', ignoreDuplicates: true });
     const { data: rooms } = await sb.from('huddle_rooms').select('id').eq('crew_id', crewId).eq('room_key', roomKey).limit(1);
     const roomId = rooms && rooms[0] && rooms[0].id;
     if (!roomId) return;
-    const row = { room_id: roomId, crew_id: crewId, sender_id: currentUser.id, kind: 'system', body: summaryText };
+    const row = { room_id: roomId, crew_id: crewId, sender_id: currentUser.id, kind: 'system', body: summaryText, ...(about.length ? { about } : {}) };
     let { data, error } = await sb.from('huddle_messages').insert(link ? { ...row, link } : row).select().single();
     // Before the huddle_activity_links migration lands the column is unknown —
     // still post the line, just without its tap target.
@@ -22799,24 +22837,32 @@
   // Huddle so it reads as the live pulse of the plan.
   // Also mirrored into the Main Huddle (tagged with the rave's name) so Main
   // reads as the crew's full activity feed, not just RSVPs.
-  async function postGamePlanActivity(crewId, festivalId, summaryText) {
+  async function postGamePlanActivity(crewId, festivalId, summaryText, about = []) {
     if (!currentUser) return;
     const fest = festivals.find(f => String(f.id) === String(festivalId));
     const roomKey = `festival:${festivalId}`;
     const row = { crew_id: crewId, created_by: currentUser.id, room_key: roomKey, kind: 'festival', name: `${fest ? fest.name : 'Rave'} Huddle`, festival_id: festivalId };
     const link = { k: 'raveplan', festival: festivalId };
-    await postHuddleSystemMessage(crewId, roomKey, row, summaryText, link);
+    await postHuddleSystemMessage(crewId, roomKey, row, summaryText, link, about);
     const mainText = fest && !summaryText.includes(fest.name) ? `${summaryText} · ${fest.name} Rave Plan` : summaryText;
+    // The Main copy never counts — the rave room's line already does, once.
     await postCrewActivity(crewId, mainText, link);
   }
 
   // Crew-wide: new members, festival RSVPs, polls, dream pins, playlists,
   // archive links, badge unlocks — posted into the crew's Main Huddle room
   // (not tied to any one rave).
-  async function postCrewActivity(crewId, summaryText, link = null) {
+  async function postCrewActivity(crewId, summaryText, link = null, about = []) {
     if (!currentUser) return;
     const row = { crew_id: crewId, created_by: currentUser.id, room_key: 'main', kind: 'main', name: 'Main Huddle', festival_id: null };
-    await postHuddleSystemMessage(crewId, 'main', row, summaryText, link);
+    await postHuddleSystemMessage(crewId, 'main', row, summaryText, link, about);
+  }
+
+  // Auth uids of the ravers an activity line is about — never the actor, and
+  // unclaimed stubs drop out (nobody to badge).
+  function activityAbout(...ravers) {
+    const me = currentUser?.id;
+    return [...new Set(ravers.map(r => r && r.claimedBy).filter(uid => uid && uid !== me))];
   }
 
   // Your first name for activity lines.
@@ -23396,7 +23442,8 @@
     rerenderGamePlanChecklist(_gamePlanActiveCrewId);
     if (done) {
       const t = gamePlanItems.find(it => it.id === itemId);
-      if (t) postGamePlanActivity(_gamePlanActiveCrewId, _gamePlanActiveFestivalId, `✅ "${t.text}" got done`);
+      if (t) postGamePlanActivity(_gamePlanActiveCrewId, _gamePlanActiveFestivalId, `✅ "${t.text}" got done`,
+        activityAbout(squad.find(r => String(r.id) === String(t.assignee_raver_id))));
     }
   }
 
@@ -23551,7 +23598,7 @@
       rerenderGamePlanRoles(crewId);
       const assignee = crewSquad(getCrew(crewId)).find(p => String(p.id) === String(assigneeId));
       const who = assignee ? displayName(assignee).split(' ')[0] : 'Someone';
-      postGamePlanActivity(crewId, _gamePlanActiveFestivalId, `${gamePlanRoleIcon(roleName)} ${who} claimed ${roleName}`);
+      postGamePlanActivity(crewId, _gamePlanActiveFestivalId, `${gamePlanRoleIcon(roleName)} ${who} claimed ${roleName}`, activityAbout(assignee));
     }
   }
 
@@ -23722,7 +23769,9 @@
       rerenderGamePlanLogistics(crewId);
       const rider = crewSquad(getCrew(crewId)).find(p => String(p.id) === String(riderRaverId));
       const who = rider ? displayName(rider).split(' ')[0] : 'Someone';
-      postGamePlanActivity(crewId, _gamePlanActiveFestivalId, `🎟️ ${who} joined a ride`);
+      const driverItem = gamePlanItems.find(it => it.id === driverItemId);
+      const driver = driverItem ? crewSquad(getCrew(crewId)).find(p => String(p.id) === String(driverItem.assignee_raver_id)) : null;
+      postGamePlanActivity(crewId, _gamePlanActiveFestivalId, `🎟️ ${who} joined a ride`, activityAbout(rider, driver));
     }
   }
 
@@ -23855,7 +23904,7 @@
       const who = guest ? displayName(guest).split(' ')[0] : 'Someone';
       const hostItem = gamePlanItems.find(it => it.id === hostItemId);
       const host = hostItem ? squadNow.find(p => String(p.id) === String(hostItem.assignee_raver_id)) : null;
-      postGamePlanActivity(crewId, _gamePlanActiveFestivalId, `🔑 ${who} is staying with ${host ? displayName(host).split(' ')[0] : 'the crew'}`);
+      postGamePlanActivity(crewId, _gamePlanActiveFestivalId, `🔑 ${who} is staying with ${host ? displayName(host).split(' ')[0] : 'the crew'}`, activityAbout(guest, host));
     }
   }
 
