@@ -21831,7 +21831,7 @@
       if (seq !== _hdGifSeq) return;
       _hdGifLists.search = append ? _hdGifLists.search.concat(results) : results;
       _hdGifNext = next;
-    } catch (e) {
+    } catch {
       if (seq !== _hdGifSeq) return;
       _hdGifError = 'GIF search is taking a breather — try again in a sec.';
     }
@@ -21850,17 +21850,17 @@
     const fav = (_hdGifFavRows || []).find(r => r.src === g.src && r.gif_id === String(g.id));
     const starred = !!(fav && fav.starred);
     return `<div class="hd-gif-tile" style="aspect-ratio:${Number(g.w)} / ${Number(g.h)}">
-        <button type="button" class="hd-gif-tile-send" aria-label="Send ${escHtml(g.title || 'GIF')}" onclick="sendHuddleGif('${key}', ${i})">
+        <button type="button" class="hd-gif-tile-send" aria-label="Send ${escHtml(g.title || 'GIF')}" onclick="sendHuddleGif('${escJsAttr(key)}', ${i})">
           ${huddleGifMediaHTML(g.url, still, g.title || 'GIF', autoplay)}
         </button>
-        <button type="button" class="hd-gif-star${starred ? ' on' : ''}" aria-label="${starred ? 'Unstar' : 'Star'} GIF" aria-pressed="${starred}" onclick="toggleHuddleGifStar('${key}', ${i})">${starred ? '★' : '☆'}</button>
+        <button type="button" class="hd-gif-star${starred ? ' on' : ''}" aria-label="${starred ? 'Unstar' : 'Star'} GIF" aria-pressed="${starred}" onclick="toggleHuddleGifStar('${escJsAttr(key)}', ${i})">${starred ? '★' : '☆'}</button>
       </div>`;
   }
 
   function renderHuddleGifSheet() {
     const box = document.getElementById('hd-gif-sheet-content');
     if (!box) return;
-    const tabBtn = (t, label) => `<button type="button" class="hd-gif-tab${_hdGifTab === t ? ' active' : ''}" onclick="switchHuddleGifTab('${t}')">${label}</button>`;
+    const tabBtn = (t, label) => `<button type="button" class="hd-gif-tab${_hdGifTab === t ? ' active' : ''}" onclick="switchHuddleGifTab('${escJsAttr(t)}')">${label}</button>`;
     let grid = '';
     let footer = '';
     if (_hdGifTab === 'pack') {
@@ -21893,7 +21893,7 @@
       </div>
       ${_huddleReplyTo ? `<div class="hd-gif-replying">↩️ Replying to ${escHtml(huddleSenderName(_huddleReplyTo.sender_id))}</div>` : ''}
       <div class="hd-gif-tabs">${tabBtn('pack', '🪩 RaveFAM')}${tabBtn('search', '🔍 Search')}${tabBtn('favs', '★ Mine')}</div>
-      <div class="hd-gif-tags">${HUDDLE_GIF_QUICK_TAGS.map(t => `<button type="button" class="hd-gif-tag" onclick="pickHuddleGifTag('${t}')">#${t}</button>`).join('')}</div>
+      <div class="hd-gif-tags">${HUDDLE_GIF_QUICK_TAGS.map(t => `<button type="button" class="hd-gif-tag" onclick="pickHuddleGifTag('${escJsAttr(t)}')">#${t}</button>`).join('')}</div>
       <div class="hd-gif-grid" id="hd-gif-grid" onscroll="huddleGifMaybeLoadMore(this)">${grid}</div>
       ${footer}`;
     if (hadFocus) {
@@ -21974,7 +21974,7 @@
         if (seq !== _hdGifSeq || _hdGifInlineQuery !== q) return;
         _hdGifLists.inline = results.slice(0, 12);
         renderHuddleGifInline(results.length ? '' : 'No GIFs for that one.');
-      } catch (e) {
+      } catch {
         if (seq === _hdGifSeq) renderHuddleGifInline('GIF search is unavailable right now.');
       }
     }, 350);
