@@ -4789,6 +4789,8 @@
   .hd-gif-star.on { color: var(--neon-yellow); }
   .hd-gif-empty { column-span: all; text-align: center; color: var(--muted); font-size: 0.8rem; padding: 28px 12px; }
   .hd-gif-powered { text-align: center; font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); padding-top: 6px; }
+  .hd-gif-powered b { color: rgba(var(--white-rgb),0.92); font-weight: 800; letter-spacing: 0.04em; }
+  .hd-giphy-mark { height: 1.25em; width: auto; vertical-align: -0.28em; margin: 0 3px 0 4px; }
   .hd-gif-inline {
     position: absolute; bottom: calc(100% + 8px); left: 0; right: 0; z-index: 6;
     display: flex; gap: 6px; align-items: stretch; overflow-x: auto; height: 96px; padding: 5px;
@@ -4798,7 +4800,10 @@
   .hd-gif-inline-item { flex-shrink: 0; height: 100%; padding: 0; border: none; border-radius: 5px; overflow: hidden; cursor: pointer; background: rgba(var(--white-rgb),0.06); }
   .hd-gif-inline-item video, .hd-gif-inline-item img { height: 100%; width: 100%; display: block; object-fit: cover; }
   .hd-gif-inline-msg { align-self: center; padding: 0 8px; color: var(--muted); font-size: 0.78rem; }
-  .hd-gif-powered-inline { align-self: flex-end; padding: 0 4px; writing-mode: vertical-rl; }
+  .hd-gif-powered-inline { align-self: flex-end; padding: 0 4px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .hd-gif-powered-inline .hd-giphy-mark { margin: 0; }
+  .hd-gif-powered-inline b { writing-mode: vertical-rl; }
+  .hd-gif-via .hd-giphy-mark { margin: 0 2px 0 3px; }
   .hd-gif-admin-row { display: flex; gap: 10px; align-items: center; padding: 10px; border-radius: 10px; background: var(--surface); border: 1px solid rgba(var(--white-rgb),0.08); margin-bottom: 8px; }
   .hd-gif-admin-row.inactive { opacity: 0.5; }
   .hd-gif-admin-thumb { width: 64px; height: 64px; flex-shrink: 0; border-radius: 6px; overflow: hidden; background: rgba(var(--white-rgb),0.06); }
@@ -10395,7 +10400,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.20.0';
+  const APP_VERSION = '2.20.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -20973,6 +20978,8 @@
 
   // GIF messages only ever load from GIPHY's media CDN or our huddle-gifs
   // bucket — same allowlist as the huddle_messages_gif_media_check constraint.
+  // GIPHY's five-colour frame mark, inline so attribution needs no extra fetch.
+  const HUDDLE_GIPHY_MARK = '<svg class="hd-giphy-mark" viewBox="0 0 28 35" aria-hidden="true"><path d="M0 3h4v29H0z" fill="#04ff8e"/><path d="M24 11h4v21h-4z" fill="#8e2eff"/><path d="M0 31h28v4H0z" fill="#00c5ff"/><path d="M0 0h16v4H0z" fill="#fff152"/><path d="M24 8V4h-4V0h-4v12h12V8" fill="#ff5b5b"/><path d="M24 16v-4h4" fill="#551c99"/><path d="M16 0v4h-4" fill="#999131"/></svg>';
   const HUDDLE_GIF_HOST = /^https:\/\/((media[0-9]?|i)\.giphy\.com|tvpgopciioqbqmjjjigh\.supabase\.co\/storage\/v1\/object\/public\/huddle-gifs)\//;
 
   function huddleGifHTML(m) {
@@ -20983,7 +20990,7 @@
     const media = huddleGifMediaHTML(m.media_url, still, meta.title || 'GIF', !huddleGifReducedMotion());
     return `<div class="hd-gif" style="aspect-ratio:${w} / ${h}" onclick="const v = this.querySelector('video'); if (v) v.paused ? v.play() : v.pause()">
         ${media}
-        ${meta.src === 'giphy' ? '<span class="hd-gif-via">via GIPHY</span>' : ''}
+        ${meta.src === 'giphy' ? `<span class="hd-gif-via">via${HUDDLE_GIPHY_MARK}GIPHY</span>` : ''}
       </div>`;
   }
 
@@ -22306,7 +22313,7 @@
       if (_hdGifError) grid += `<div class="hd-gif-empty">${escHtml(_hdGifError)}</div>`;
       else if (_hdGifLoading) grid += '<div class="hd-gif-empty">Digging through the crates…</div>';
       else if (!_hdGifLists.search.length) grid += '<div class="hd-gif-empty">No GIFs for that one. Try another vibe.</div>';
-      footer = '<div class="hd-gif-powered">Powered by GIPHY</div>';
+      footer = `<div class="hd-gif-powered">Powered by${HUDDLE_GIPHY_MARK}<b>GIPHY</b></div>`;
     }
     const searchVal = document.getElementById('hd-gif-q')?.value ?? _hdGifQuery;
     const hadFocus = document.activeElement?.id === 'hd-gif-q';
@@ -22414,7 +22421,7 @@
       : _hdGifLists.inline.map((g, i) => `
           <button type="button" class="hd-gif-inline-item" style="aspect-ratio:${Number(g.w)} / ${Number(g.h)}" aria-label="Send ${escHtml(g.title || 'GIF')}" onclick="sendHuddleGif('inline', ${i})">
             ${huddleGifMediaHTML(g.url, HUDDLE_GIF_HOST.test(g.still || '') ? g.still : '', g.title || 'GIF', autoplay)}
-          </button>`).join('') + '<span class="hd-gif-powered hd-gif-powered-inline">GIPHY</span>';
+          </button>`).join('') + `<span class="hd-gif-powered hd-gif-powered-inline" aria-label="Powered by GIPHY">${HUDDLE_GIPHY_MARK}<b>GIPHY</b></span>`;
     strip.style.display = '';
   }
 

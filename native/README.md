@@ -54,6 +54,8 @@ Each native PR adds a line here; **After release** holds web changes that wait o
   uses it when present and falls back to the browser API on older builds
   - `NSLocationAlwaysAndWhenInUseUsageDescription` added to Info.plist (ITMS-90683 on 2.16.0 build 9:
     the plugin references the "Always" API even though the app only asks for When In Use)
+- Privacy manifest declares Search History (Huddle GIF search terms sent to GIPHY, not linked);
+  add the same to App Store Connect's App Privacy answers
 
 **After release**
 - Re-add `/lineup-explorer` and `/lineup-explorer/*` to `.well-known/apple-app-site-association`
