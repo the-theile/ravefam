@@ -10484,7 +10484,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.21.0';
+  const APP_VERSION = '2.21.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -10682,7 +10682,7 @@
       return false;
     }
     _blockedUids.add(uid);
-    showToast(`🚫 Blocked ${blockedRaverName(uid)}`);
+    showToast(`Blocked ${blockedRaverName(uid)}`);
     refreshBlockedViews();
     return true;
   }
@@ -10697,7 +10697,7 @@
       return false;
     }
     _blockedUids.delete(uid);
-    showToast(`✅ Unblocked ${blockedRaverName(uid)}`);
+    showToast(`Unblocked ${blockedRaverName(uid)}`);
     refreshBlockedViews();
     return true;
   }
@@ -10786,12 +10786,12 @@
       reason: reason || null, metadata: metadata || {}, status: 'open', category
     });
     if (error) {
-      if (error.code === '23505') { showToast('🚩 You already reported this'); return false; }
+      if (error.code === '23505') { showToast('You already reported this'); return false; }
       console.error('flag insert error', error);
       toastError('Could not submit report. Try again');
       return false;
     }
-    showToast(category === 'safety' ? '🛟 Reported. Moderators have been alerted' : '🚩 Reported. Moderators will take a look');
+    showToast(category === 'safety' ? 'Reported. Moderators have been alerted' : 'Reported. Moderators will take a look');
     return true;
   }
 
@@ -11228,7 +11228,7 @@
       if (NativeShare) { await NativeShare.share({ title: 'RaveFAM', text, url }); return; }
       if (navigator.share) { await navigator.share({ title: 'RaveFAM', text, url }); return; }
       await navigator.clipboard.writeText(`${text} ${url}`);
-      showToast('🔗 Link copied');
+      showToast('Link copied');
     } catch (e) {
       // Dismissing the share sheet rejects; nothing to report.
     }
@@ -11322,7 +11322,7 @@
     let { receive } = await NativePush.checkPermissions();
     if (receive === 'prompt' || receive === 'prompt-with-rationale') ({ receive } = await NativePush.requestPermissions());
     if (receive !== 'granted') {
-      showToast('🔕 Notifications are off for RaveFAM. Turn them on in iOS Settings → RaveFAM → Notifications.');
+      showToast('Notifications are off for RaveFAM. Turn them on in iOS Settings → RaveFAM → Notifications.');
       throw new Error('permission_denied');
     }
     try {
@@ -11367,7 +11367,7 @@
         try {
           await ensureNativePush();
           await enableAllNativePushTypes();
-          showToast('🔔 Notifications on');
+          showToast('Notifications on');
         } catch (e) { /* ensureNativePush already toasted why */ }
       }
     );
@@ -11924,7 +11924,7 @@
     if (!_link.value || _link.inFlight) return;
     const error = await linkRequest(_link.value);
     if (error) { linkError(linkErrorMessage(error, 'send')); return; }
-    showToast(_link.method === 'phone' ? '📱 New code on the way' : '✉️ New code sent. Check your inbox');
+    showToast(_link.method === 'phone' ? 'New code on the way' : 'New code sent. Check your inbox');
     startLinkCooldown();
   }
 
@@ -11953,7 +11953,7 @@
     const { method, onDone } = _link;
     clearPendingLink();
     closeLinkMethodModal();
-    showToast(method === 'phone' ? '📱 Phone added. Log in with either one now.' : '✉️ Email added. Log in with either one now.');
+    showToast(method === 'phone' ? 'Phone added. Log in with either one now.' : 'Email added. Log in with either one now.');
     if (onDone) onDone();
   }
 
@@ -12755,7 +12755,7 @@
     if (fromPreview && _pendingClaimToken) {
       sessionStorage.removeItem('pendingClaim');
       localStorage.removeItem('pendingClaimToken');
-      showToast('👍 No worries. Ask your crew leader for a fresh invite whenever you want in.');
+      showToast('No worries. Ask your crew leader for a fresh invite whenever you want in.');
     }
     stopCamera();
     document.getElementById('scanner-overlay').classList.remove('open');
@@ -13638,7 +13638,7 @@
   }
 
   function copyClaimLink(url) {
-    navigator.clipboard.writeText(url).then(() => { hapticSuccess(); showToast('📋 Link copied'); }).catch(() => toastError('Copy failed'));
+    navigator.clipboard.writeText(url).then(() => { hapticSuccess(); showToast('Link copied'); }).catch(() => toastError('Copy failed'));
   }
 
   let _reloadDebounce = null;
@@ -14729,14 +14729,14 @@
     await saveFestVibe(festId, _vibePickerEmoji, caption);
     closeVibePicker(festId);
     renderVibeRow(festId);
-    showToast('🔥 Vibe set');
+    showToast('Vibe set');
   }
 
   async function doVibeClear(festId) {
     await clearFestVibe(festId);
     closeVibePicker(festId);
     renderVibeRow(festId);
-    showToast('✓ Vibe cleared');
+    showToast('Vibe cleared');
   }
 
   function howWeMetSectionHTML(viewingRaverId, stories, raver) {
@@ -14865,7 +14865,7 @@
     const r = getRaver(raverId);
     const section = document.getElementById('how-we-met-section');
     if (section && r) section.innerHTML = howWeMetSectionHTML(raverId, metStoriesCache[String(raverId)] || {}, r);
-    showToast('✅ Memory saved');
+    showToast('Memory saved');
   }
 
   // ===== SUPABASE WRITE HELPERS =====
@@ -14892,7 +14892,7 @@
     const { error } = await sb.from('ravers').update(dbPatch).eq('id', raverId);
     if (error) { console.error('privacy save error', error); toastError('Could not save. Try again', error); return; }
     Object.assign(r, patch);
-    showToast('✅ Privacy settings saved');
+    showToast('Privacy settings saved');
     if ('phoneVisible' in patch) {
       // Keep the Edit Profile checkbox in sync if both surfaces are open at once.
       const cb = document.getElementById('pf-phone-visible');
@@ -15242,7 +15242,7 @@
       dbRestoreRow(t.table, t.match, row.entity_type, row.entity_id, { via: 'mod_dashboard', original_action: row.action, original_reason: row.reason })
     ))).every(Boolean);
     if (ok) {
-      showToast('↩️ Restored');
+      showToast('Restored');
       await loadAllData();
       renderCrews(); renderEvents();
       if (document.getElementById('page-mod-dashboard')?.classList.contains('active')) renderModDashboard();
@@ -15497,14 +15497,14 @@
   }
 
   async function doProfilePhotoUpload(file, raverId, r) {
-    showToast('📷 Uploading…');
+    showToast('Uploading…');
     try {
       const url = await uploadPhotoToStorage(file, `profiles/${raverId}.jpg`);
       r.avatarUrl = url;
       if (currentUser) await sb.from('ravers').update({ avatar_url: url }).eq('id', String(raverId));
       renderSquad();
       openProfile(r.id);
-      showToast('✅ Profile photo updated');
+      showToast('Profile photo updated');
     } catch(e) {
       console.error('Profile photo upload error', e);
       toastError('Upload failed. Try again');
@@ -15583,7 +15583,7 @@
       const { error } = await sb.from('ravers').update({ gradient }).eq('id', String(raverId));
       if (error) { console.error('raver color update error', error); toastError('Could not save color. Try again', error); return; }
     }
-    showToast('🎨 Avatar color updated');
+    showToast('Avatar color updated');
   }
 
   // ── Crew Totem (photo or icon) ──────────────────────────────────────────────
@@ -15601,7 +15601,7 @@
   async function editTotemPhoto(crewId) {
     const crew = getCrew(crewId);
     if (!crew || !crew.totemPhotoUrl) return;
-    showToast('📸 Loading photo…');
+    showToast('Loading photo…');
     try {
       const resp = await fetch(crew.totemPhotoUrl);
       const blob = await resp.blob();
@@ -15676,7 +15676,7 @@
   }
 
   async function doTotemPhotoUpload(file, crewId, crew) {
-    showToast('📸 Uploading totem…');
+    showToast('Uploading totem…');
     try {
       const url = await uploadPhotoToStorage(file, `crews/${crewId}.jpg`);
       crew.totemPhotoUrl = url;
@@ -15685,7 +15685,7 @@
       renderCrews();
       renderDetail(crewId);
       refreshCrewEditTotemSection(crewId);
-      showToast('✅ Totem photo set');
+      showToast('Totem photo set');
     } catch(e) {
       console.error('Totem upload error', e);
       toastError('Upload failed. Try again');
@@ -15723,7 +15723,7 @@
       renderCrews();
       renderDetail(crewId);
       refreshCrewEditTotemSection(crewId);
-      showToast('✅ Totem icon set');
+      showToast('Totem icon set');
     };
     if (crew.totemPhotoUrl) {
       showPhotoConfirm({
@@ -16108,7 +16108,7 @@
         return;
       }
     }
-    showToast('✅ Saved');
+    showToast('Saved');
   }
 
   // Single source for the saved-number row — the value comes from
@@ -16140,7 +16140,7 @@
     // Refresh the display
     const wrap = document.getElementById(`ief-wrap-${raverId}-private-phone`);
     if (wrap) wrap.innerHTML = privatePhoneDisplay(raverId);
-    showToast('✅ Saved');
+    showToast('Saved');
   }
 
   function cancelPrivatePhoneEdit(raverId) {
@@ -16199,7 +16199,7 @@
       delete metStoriesCache[String(raverId)];
       renderSquad();
       openProfile(raverId);
-      showToast('🔗 Account disconnected. Profile is now unclaimed');
+      showToast('Account disconnected. Profile is now unclaimed');
     } catch(e) {
       console.error('disconnectRaver error', e);
       toastError('Could not disconnect: ' + (e.message || 'try again'));
@@ -16262,7 +16262,7 @@
   }
 
   async function saveOurPhoto(blob, viewingRaverId, storagePath, pair) {
-    showToast('📸 Uploading…');
+    showToast('Uploading…');
     try {
       const url = await uploadPhotoToStorage(blob, storagePath);
       await sb.from('our_photos').upsert({
@@ -16276,7 +16276,7 @@
       renderSquad();
       const r = squad.find(x => String(x.id) === String(viewingRaverId));
       if (r) openProfile(r.id);
-      showToast('📸 Photo saved');
+      showToast('Photo saved');
     } catch(e) {
       console.error('Our photo upload error', e);
       toastError('Upload failed. Try again');
@@ -16696,7 +16696,7 @@
       await loadAllData();
       renderSquad(); renderCrews(); renderEvents();
       if (page === 'stats') loadStatsPage();
-      showToast('✓ Refreshed');
+      showToast('Refreshed');
     } catch (err) {
       console.error('[refreshTab]', err);
       toastError('Could not refresh. Try again');
@@ -17343,13 +17343,13 @@
     if (navigator.clipboard && navigator.clipboard.writeText) {
       try {
         await navigator.clipboard.writeText(text);
-        showToast('📋 Copied. Screenshot the card to share it too.');
+        showToast('Copied. Screenshot the card to share it too.');
         return;
       } catch (e) {
         console.error('crew share: clipboard.writeText failed', e);
       }
     }
-    showToast('📋 Screenshot this card to share');
+    showToast('Screenshot this card to share');
   }
 
   // Switching Full Crew/This Rave or the photo checkbox replaces the card's
@@ -17534,12 +17534,12 @@
       } else {
         const a = document.createElement('a');
         a.href = url; a.download = fileName; a.click();
-        showToast('📥 Crew card downloaded');
+        showToast('Crew card downloaded');
       }
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (e) {
       console.error('crew share: image path failed entirely', e);
-      showToast('📋 Screenshot this card to share');
+      showToast('Screenshot this card to share');
       await shareCrewTextFallback(crew);
     }
   }
@@ -17747,13 +17747,13 @@
     if (navigator.clipboard && navigator.clipboard.writeText) {
       try {
         await navigator.clipboard.writeText(text);
-        showToast(linkOnly ? '🔗 Link copied!' : '📋 Copied. Screenshot the card to share it too.');
+        showToast(linkOnly ? 'Link copied!' : 'Copied. Screenshot the card to share it too.');
         return;
       } catch (e) {
         console.error('rave share: clipboard.writeText failed', e);
       }
     }
-    showToast('📋 Screenshot this card to share');
+    showToast('Screenshot this card to share');
   }
 
   // See flattenAvatarImagesForCapture's note — html2canvas ignores
@@ -17862,12 +17862,12 @@
       } else {
         const a = document.createElement('a');
         a.href = url; a.download = fileName; a.click();
-        showToast('📥 Rave poster downloaded');
+        showToast('Rave poster downloaded');
       }
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (e) {
       console.error('rave share: image path failed entirely', e);
-      showToast('📋 Screenshot this card to share');
+      showToast('Screenshot this card to share');
       await shareRaveTextFallback(fest);
     }
   }
@@ -18693,7 +18693,7 @@
       const title = (document.getElementById('mod-gif-title')?.value || '').trim().slice(0, 80) || null;
       const { error } = await sb.from('huddle_gif_pack').insert({ url: pub.publicUrl, width: w, height: h, title, tags });
       if (error) throw error;
-      showToast('🪩 Added to the pack');
+      showToast('Added to the pack');
     } catch (err) {
       console.error('gif pack upload', err);
       toastError('Upload failed', err);
@@ -18791,7 +18791,7 @@
   async function reviewSetTimeReport(id, approve) {
     const { data, error } = await sb.rpc('review_set_time', { p_report_id: id, p_approve: approve });
     if (error || !data?.ok) { toastError('Could not update that report. Try again', error); return; }
-    showToast(approve ? '🕘 Set time is live' : 'Report rejected');
+    showToast(approve ? 'Set time is live' : 'Report rejected');
     modSetTimeReports = modSetTimeReports.filter(r => r.id !== id);
     renderModDashboard();
   }
@@ -18919,7 +18919,7 @@
     if (idx !== -1) artists[idx] = data; else artists.push(data);
     delete modGenreDrafts[artistId];
     await logAudit({ action: 'artist.genre_set', entityType: 'artist', entityId: artistId, metadata: { genres } });
-    showToast(`🎵 Tagged ${data.name}`);
+    showToast(`Tagged ${data.name}`);
     renderModDashboard();
   }
 
@@ -19192,7 +19192,7 @@
         metadata: { ...(f.metadata || {}), flag_id: f.id, via: 'mod_report', ...(f.target_type === 'photo' ? { photo_id: f.target_id } : {}) }
       });
       closeModSheet();
-      showToast(res.removed ? '🗑️ Removed & resolved' : '✅ Resolved. It was already gone');
+      showToast(res.removed ? 'Removed & resolved' : 'Resolved. It was already gone');
       _modDraft = null;
       renderModDashboard();
       return;
@@ -19212,7 +19212,7 @@
     });
     if (d.resolve) await dbModResolveFlag(f.id, 'actioned', note, ruleTitle);
     closeModSheet();
-    showToast(d.mode === 'warning' ? '⚠️ Warning sent' : d.mode === 'suspend' ? '⛔ Account suspended' : '⏸️ Restriction applied');
+    showToast(d.mode === 'warning' ? 'Warning sent' : d.mode === 'suspend' ? 'Account suspended' : 'Restriction applied');
     _modDraft = null;
     renderModDashboard();
   }
@@ -19222,7 +19222,7 @@
       const res = await dbRevokeSanction(sanctionId);
       if (!res) return;
       await logAudit({ action: 'user.sanction_lift', entityType: 'user', entityId: res.user_id, metadata: { sanction_id: sanctionId, kind: res.kind } });
-      showToast('✅ Lifted');
+      showToast('Lifted');
       renderModDashboard();
     });
   }
@@ -19419,7 +19419,7 @@
 
   async function handleResolveFlag(flagId) {
     showConfirmWithReason('Mark this report resolved?', "Use this when you've already handled it another way. Clears every open report on this and thanks the reporter.", '✅ Resolve',
-      async (note) => { if (await dbResolveFlag(flagId, note)) { showToast('✅ Resolved'); renderModDashboard(); } },
+      async (note) => { if (await dbResolveFlag(flagId, note)) { showToast('Resolved'); renderModDashboard(); } },
       { label: 'Note for the record (optional)', placeholder: 'Optional note for the record…', required: false });
   }
 
@@ -22060,7 +22060,7 @@
     if (error || !data) {
       console.error('huddle_messages edit error', error);
       const msg = error?.message || '';
-      if (msg.includes('edit window has expired')) showToast('⏱️ Edit window expired');
+      if (msg.includes('edit window has expired')) showToast('Edit window expired');
       else if (msg.includes('only text messages')) toastError('Only text messages can be edited');
       else toastError('Could not edit message. Try again');
       return false;
@@ -22892,7 +22892,7 @@
     if (blockedByRestriction('restrict_huddle') || blockedByRestriction('restrict_photos')) return;
     if (_huddleRecorder) return;
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      showToast('🎤 Voice notes need mic access. Not supported on this browser');
+      showToast('Voice notes need mic access. Not supported on this browser');
       return;
     }
     let stream;
@@ -22940,7 +22940,7 @@
     const bar = document.getElementById('huddle-recording-bar'); if (bar) bar.style.display = 'none';
 
     if (elapsedMs < 3000) {
-      showToast('🎤 Hold a bit longer. Voice notes need at least 3s');
+      showToast('Hold a bit longer. Voice notes need at least 3s');
       recorder.onstop = () => { recorder.stream?.getTracks?.().forEach(t => t.stop()); };
       try { recorder.stop(); } catch (e) {}
       _huddleRecorder = null;
@@ -23641,7 +23641,7 @@
     _crewPlanTemplates.unshift(data);
     saveGuidance({ quests: { ..._guidance.quests, [`tplsaved:${gamePlanId}`]: true } });
     rerenderGamePlanChecklist(crewId);
-    showToast(`📋 Saved · “${name}” is in your crew’s templates`);
+    showToast(`Saved · “${name}” is in your crew’s templates`);
   }
 
   // Lead-only: unclaimed tasks and open seats in one card, one nudge.
@@ -24071,7 +24071,7 @@
     const meetupAt = atEl?.value ? new Date(atEl.value).toISOString() : null;
     const meetupLocation = (locEl?.value || '').trim() || null;
     const ok = await dbUpdateGamePlanHeader(gp.id, { meetupAt, meetupLocation });
-    if (ok) { showToast('📍 Meetup saved'); rerenderGamePlanLogistics(crewId); }
+    if (ok) { showToast('Meetup saved'); rerenderGamePlanLogistics(crewId); }
   }
 
   async function addCarpoolDriver(crewId) {
@@ -24314,7 +24314,7 @@
     const gp = gamePlans.find(g => String(g.crew_id) === String(crewId) && String(g.festival_id) === String(_gamePlanActiveFestivalId));
     if (!gp) return;
     const ok = await dbUpdateGamePlanHeader(gp.id, { themeText: (themeEl?.value || '').trim() || null });
-    if (ok) showToast('✨ Theme saved');
+    if (ok) showToast('Theme saved');
   }
 
   function handleGamePlanOutfitImagePick(event) {
@@ -24411,8 +24411,8 @@
   async function addDreamPin(crewId) {
     const input = document.getElementById('dream-pin-input');
     const label = input?.value?.trim();
-    if (!label) { showToast('✏️ Enter something to pin first'); return; }
-    if (label.length > 120) { showToast('✏️ Keep it under 120 characters'); return; }
+    if (!label) { showToast('Enter something to pin first'); return; }
+    if (label.length > 120) { showToast('Keep it under 120 characters'); return; }
     input.disabled = true;
     const pin = await dbAddDreamPin(crewId, label);
     input.disabled = false;
@@ -24811,7 +24811,7 @@
       if (!ok) return;
       delete pickManyChanging[pollId];
       delete pickManyDraft[pollId];
-      showToast('🗳️ Vote updated');
+      showToast('Vote updated');
       rerenderPolls(crewId);
       return;
     }
@@ -25474,12 +25474,12 @@
   async function submitCreatePoll() {
     if (!_createPollType) { showToast('Pick a poll type first'); return; }
     const q = document.getElementById('poll-question-input')?.value?.trim();
-    if (!q) { showToast('✏️ Add a question first'); return; }
+    if (!q) { showToast('Add a question first'); return; }
     let options = null;
     if (_createPollType === 'choice') {
       const inputs = [...document.querySelectorAll('#poll-option-inputs .form-input')];
       options = inputs.map(i => i.value.trim()).filter(Boolean);
-      if (options.length < 2) { showToast('✏️ Add at least 2 options'); return; }
+      if (options.length < 2) { showToast('Add at least 2 options'); return; }
     }
     const expiryHours = document.getElementById('poll-expiry-select')?.value;
     const expiresAt = expiryHours
@@ -25923,7 +25923,7 @@
     if (!myRaver) return;
     const noteEl = document.getElementById(`jam-vibe-input-${jamId}`);
     const note = noteEl?.value?.trim() || '';
-    if (!note) { showToast('✏️ Write something first'); return; }
+    if (!note) { showToast('Write something first'); return; }
     const ok = await dbSaveJamVibe(jamId, note, myRaver.id);
     if (ok) rerenderJams(crewId);
   }
@@ -26071,7 +26071,7 @@
   async function submitAddJam() {
     if (!_addJamCrewId || !_addJamMeta) return;
     const title = document.getElementById('jam-title-input')?.value?.trim();
-    if (!title) { showToast('✏️ Give the playlist a name'); return; }
+    if (!title) { showToast('Give the playlist a name'); return; }
     const tag         = document.getElementById('jam-tag-select')?.value || null;
     const description = document.getElementById('jam-desc-input')?.value?.trim() || null;
     const festivalId  = document.getElementById('jam-fest-select')?.value || null;
@@ -26815,7 +26815,7 @@
     await dbToggleSaveVendor(vendorId);
     if (savedVendorIds.has(vendorId) && _guidance && !_guidance.quests.first_vendor_save) {
       saveGuidance({ quests: { ..._guidance.quests, first_vendor_save: true } });
-      showToast('💾 Saved. It’s waiting in Saved whenever you need it.');
+      showToast('Saved. It’s waiting in Saved whenever you need it.');
     }
     if (vendorVillageTab === 'browse') renderVendorBrowsePanel();
     else if (vendorVillageTab === 'saved') renderVendorSavedPanel();
@@ -26950,7 +26950,7 @@
       }
     }
     vendorReviewsCache[vendor.id] = [];
-    showToast('🏪 Vendor added');
+    showToast('Vendor added');
     await checkAndAwardVendorBadges();
     switchVendorTab('browse', document.querySelector('#vendor-village-root .stats-subtab'));
   }
@@ -27069,13 +27069,13 @@
       }
     }
     closeEditVendorModal();
-    showToast('✅ Listing updated');
+    showToast('Listing updated');
     openVendorDetail(vendorId);
     if (vendorVillageTab === 'browse') renderVendorBrowsePanel();
   }
 
   function copyDiscountCode(code) {
-    navigator.clipboard.writeText(code).then(() => { hapticSuccess(); showToast('📋 Code copied'); }).catch(() => toastError('Copy failed'));
+    navigator.clipboard.writeText(code).then(() => { hapticSuccess(); showToast('Code copied'); }).catch(() => toastError('Copy failed'));
   }
 
   // ===== VENDOR VILLAGE — Detail view + reviews =====
@@ -27269,7 +27269,7 @@
     const ok = await dbUpsertVendorReview(vendorId, { rating: _vendorDetailDraftRating, body, photoUrl, attributeTags });
     if (!ok) { if (btn) { btn.disabled = false; btn.textContent = originalLabel; } return; }
     if (!existingReview && _guidance && !_guidance.quests.first_vendor_review) showFirstReviewMoment(vendorId);
-    else showToast('⭐ Review saved');
+    else showToast('Review saved');
     openVendorDetail(vendorId);
     if (vendorVillageTab === 'browse') renderVendorBrowsePanel();
   }
@@ -27345,7 +27345,7 @@
       source: next ? 'official' : 'community'
     });
     if (ok) {
-      showToast(next ? '🛡️ Marked as sponsored' : 'Sponsorship removed');
+      showToast(next ? 'Marked as sponsored' : 'Sponsorship removed');
       openVendorDetail(vendorId);
       if (vendorVillageTab === 'browse') renderVendorBrowsePanel();
     }
@@ -27389,7 +27389,7 @@
     const caption = document.getElementById('vv-spot-caption').value;
     const spot = await dbAddVendorSpot(vendorId, _vendorSpotFestivalId, caption);
     if (!spot) return;
-    showToast('📍 Posted');
+    showToast('Posted');
     await checkAndAwardVendorBadges();
     openVendorDetail(vendorId);
     if (vendorVillageTab === 'browse') renderVendorBrowsePanel();
@@ -27437,7 +27437,7 @@
         if (!await dbDeleteVendor(vendorId, reason)) return;
         closeVendorDetail();
         renderVendorVillagePanel();
-        showToast(`🗑️ ${vendor.name} removed`);
+        showToast(`${vendor.name} removed`);
       },
       { label: 'Reason (logged for the mod team)', placeholder: 'e.g. reported as a scam' }
     );
@@ -27841,7 +27841,7 @@
       }
     }
     venueReviewsCache[venue.id] = [];
-    showToast('🏛️ Venue added');
+    showToast('Venue added');
     switchVenueTab('browse', document.querySelector('#venue-village-root .stats-subtab'));
   }
 
@@ -27945,7 +27945,7 @@
       }
     }
     closeEditVenueModal();
-    showToast('✅ Venue updated');
+    showToast('Venue updated');
     openVenueDetail(venueId);
     if (venueVillageTab === 'browse') renderVenueBrowsePanel();
   }
@@ -28065,7 +28065,7 @@
     const body = document.getElementById('vn-review-body').value;
     const ok = await dbUpsertVenueReview(venueId, { rating: _venueDetailDraftRating, body });
     if (!ok) { if (btn) { btn.disabled = false; btn.textContent = originalLabel; } return; }
-    showToast('⭐ Review saved');
+    showToast('Review saved');
     openVenueDetail(venueId);
     if (venueVillageTab === 'browse') renderVenueBrowsePanel();
   }
@@ -28117,7 +28117,7 @@
         if (!await dbDeleteVenue(venueId, reason)) return;
         closeVenueDetail();
         renderVenueVillagePanel();
-        showToast(`🗑️ ${venue.name} removed`);
+        showToast(`${venue.name} removed`);
       },
       { label: 'Reason (logged for the mod team)', placeholder: 'e.g. reported as unsafe' }
     );
@@ -28631,7 +28631,7 @@
     renderCrews();
     if (document.getElementById('page-crew-detail').classList.contains('active')) renderDetail(crew.id);
     if (status === 'secret') {
-      showToast(`🔴 ${crew.name} is now Secret. Private workspace only`);
+      showToast(`${crew.name} is now Secret. Private workspace only`);
     } else if (status === 'recruiting') {
       const wasSecret = prevStatus === 'secret';
       const msg = wasSecret
@@ -28723,10 +28723,10 @@
     renderCrews();
     renderDetail(crew.id);
     if (crew.status === 'secret') {
-      showToast(`✅ ${raver.name.split(' ')[0]} added. They won't be notified until you go Recruiting`);
+      showToast(`${raver.name.split(' ')[0]} added. They won't be notified until you go Recruiting`);
     } else {
       const addMsg = `🎉 ${raver.name.split(' ')[0]} has been added to ${crew.name}! Share their QR code or invite link so they can claim their spot.`;
-      showToast(`✅ ${raver.name.split(' ')[0]} added to ${crew.name}`);
+      showToast(`${raver.name.split(' ')[0]} added to ${crew.name}`);
       addNotification(addMsg, [nlRaver(raver, raver.name.split(' ')[0]), nlCrew(crew)]);
       if (currentUser) postCrewActivity(crew.id, `👋 ${raver.name.split(' ')[0]} joined the crew`, { k: 'raver', id: raver.id });
     }
@@ -28814,7 +28814,7 @@
           .map(r2 => ({ i: initials(r2.name), c: r2.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)', t: '#fff', url: r2.avatarUrl || null }));
         renderCrews();
         closeDetail();
-        showToast(`✌️ You left ${crew.name}`);
+        showToast(`You left ${crew.name}`);
       }
     );
   }
@@ -28851,7 +28851,7 @@
     if (keptIdx !== -1) squad.splice(keptIdx, 1);
     if (document.getElementById('page-profile')?.classList.contains('active')) backFromProfile();
     renderCrews();
-    showToast('☠️ Profile data permanently deleted');
+    showToast('Profile data permanently deleted');
   }
 
   function deleteUnclaimedProfile(raverId) {
@@ -28886,7 +28886,7 @@
         if (onProfilePage) backFromProfile();
         else renderDetail(activeDetailId);
         renderCrews();
-        showToast(`🗑️ ${firstName}'s profile deleted`);
+        showToast(`${firstName}'s profile deleted`);
         if (currentUser && !String(raverId).startsWith('temp_')) {
           (async () => {
             try {
@@ -28961,7 +28961,7 @@
     if (idx >= 0) crews.splice(idx, 1);
     closeDetail();
     renderCrews();
-    showToast(`🗑️ ${name} deleted`);
+    showToast(`${name} deleted`);
     addNotification(`🗑️ ${name} has been dissolved. The memories live on in the frequencies — the energy never dies.`);
     if (currentUser) {
       // Soft-delete the crew BEFORE bulk-soft-deleting crew_members — the
@@ -29165,7 +29165,7 @@
     maybeOfferInvite(raverId);
     if (addedTo.length) {
       const label = addedTo.length === 1 ? addedTo[0] : addedTo.slice(0,-1).join(', ') + ' & ' + addedTo[addedTo.length-1];
-      showToast(`🎉 ${raver?.name?.split(' ')[0] || 'Raver'} added to ${label}`);
+      showToast(`${raver?.name?.split(' ')[0] || 'Raver'} added to ${label}`);
     }
   }
 
@@ -29379,7 +29379,7 @@
     closeCrewEditModal();
     renderCrews();
     renderDetail(id);
-    showToast('✅ Crew updated');
+    showToast('Crew updated');
     if (currentUser) {
       dbSaveCrew({ name: newName, color: newColor, gradient: newGradient, status: crew.status, totemPhotoUrl: crew.totemPhotoUrl, totemIcon: crew.totemIcon, description: newDesc }, id);
       if (changedFields.length) {
@@ -29468,12 +29468,12 @@
     try {
       await navigator.clipboard.writeText(url);
       hapticSuccess();
-      showToast('🔗 Invite link copied. Send it to anyone you want in the crew.');
+      showToast('Invite link copied. Send it to anyone you want in the crew.');
     } catch {
       // No clipboard (insecure context / denied): leave the link selected.
       const input = document.getElementById('crew-invite-url');
       if (input) { input.focus(); input.select(); }
-      showToast('📋 Link selected. Copy it from the box.');
+      showToast('Link selected. Copy it from the box.');
     }
     crewInviteSent(crewId, 'crew_link');
   }
@@ -29546,7 +29546,7 @@
     // Guard: already a member of this crew (client-side check before hitting the RPC)
     if (you) {
       const alreadyIn = crews.some(c => (c.squadIds || []).some(id => String(id) === String(you.id)) && c.invite_token === token);
-      if (alreadyIn) { showToast('👋 You\'re already in this crew!'); closeCrewJoinModal(); return; }
+      if (alreadyIn) { showToast('You\'re already in this crew!'); closeCrewJoinModal(); return; }
     }
     const name   = you ? null : document.getElementById('crew-join-name')?.value.trim();
     const handle = you ? null : document.getElementById('crew-join-handle')?.value.trim();
@@ -29557,7 +29557,7 @@
     }
     const { data, error } = await sb.rpc('join_crew_via_invite', { p_token: token, p_name: name || null, p_handle: handle || null });
     if (error || !data) { toastError("Couldn't join the crew. Try again.", error); if (btn) { btn.disabled = false; btn.textContent = '🎉 Claim My Spot'; } return; }
-    if (data.error === 'already_member')  { showToast('👋 You\'re already in this crew!'); closeCrewJoinModal(); return; }
+    if (data.error === 'already_member')  { showToast('You\'re already in this crew!'); closeCrewJoinModal(); return; }
     if (data.error === 'not_recruiting')  { toastError(`This crew isn't recruiting right now.`); closeCrewJoinModal(); return; }
     if (data.error === 'invalid_token')   { toastError('This invite link has expired.'); closeCrewJoinModal(); return; }
     if (data.error === 'name_required')   { toastError('Enter your name to join.'); if (btn) { btn.disabled = false; btn.textContent = '🎉 Claim My Spot'; } return; }
@@ -32046,7 +32046,7 @@
     if (!fest) return;
     _nrpAddToContext(fest);
     closeNewRavePopup();
-    showToast(`✓ Added ${fest.name}`);
+    showToast(`Added ${fest.name}`);
   }
 
   async function saveNewRavePopup() {
@@ -32065,9 +32065,9 @@
       }
       fest = { id: festId, name, date, location };
       festivals.push(fest);
-      showToast(`🎉 Added ${name}`);
+      showToast(`Added ${name}`);
     } else {
-      showToast(`✓ ${fest.name} was already listed. Added it`);
+      showToast(`${fest.name} was already listed. Added it`);
     }
     _nrpAddToContext(fest);
     closeNewRavePopup();
@@ -32552,7 +32552,7 @@
         if (_fab) _fab.style.display = '';
         renderSquad(); renderCrews(); renderEvents();
         openProfile(r.id);
-        showToast(`✅ Updated ${r.name}`);
+        showToast(`Updated ${r.name}`);
         if (currentUser) {
           dbSaveRaver(data, r.id).then(() => {
             dbSaveRaverFestivals(r.id, data.festIds);
@@ -32587,7 +32587,7 @@
         r.festIds = [...(r.festIds || []), pendingFest];
         data.festIds = r.festIds;
         const fest = getFestival(pendingFest);
-        showToast(`✅ ${r.name.split(' ')[0]} added and linked to ${fest?.name || 'the rave'}`);
+        showToast(`${r.name.split(' ')[0]} added and linked to ${fest?.name || 'the rave'}`);
         openRaveFocus(pendingFest);
       } else if (isOnboarding) {
         maybeAdvanceOnboarding(r.name);
@@ -32602,7 +32602,7 @@
             .map(x => ({ i: initials(x.name), c: x.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)', t: '#fff' }));
           renderCrews();
           openDetail(crew.id);
-          showToast(`🎉 Created ${r.name} and added to ${crew.name}`);
+          showToast(`Created ${r.name} and added to ${crew.name}`);
         }
       } else {
         showToast(`🎉 ${r.name} is in the fam!`);
@@ -33201,7 +33201,7 @@
     if (!d) return;
     const last = new Date(d); last.setDate(last.getDate() + Math.max(1, Number(f.days) || 1) - 1);
     startRaveMode(festId, `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`);
-    showToast('🎪 Rave mode on. Tips are quiet till the morning after');
+    showToast('Rave mode on. Tips are quiet till the morning after');
     renderEvents();
   }
   function raveModeOff() {
@@ -33792,7 +33792,7 @@
     if (!isModerator()) { toastError('Moderators only'); return; }
     if (!file.type.startsWith('image/')) { toastError('Please select an image file'); return; }
     if (file.size > 10 * 1024 * 1024) { toastError('Map image must be under 10 MB'); return; }
-    showToast('🗺️ Uploading map…');
+    showToast('Uploading map…');
     try {
       const blob = await compressImageToBlob(file, 1600, 0.85);
       const path = `festivals/${festivalId}.jpg`;
@@ -33805,7 +33805,7 @@
       if (error) throw error;
       const f = getFestival(festivalId);
       if (f) f.mapUrl = data.publicUrl;
-      showToast('✅ Festival map updated');
+      showToast('Festival map updated');
       openRaveEditor(festivalId);
     } catch (e) {
       console.error('Festival map upload error', e);
@@ -33820,7 +33820,7 @@
       if (error) throw error;
       const f = getFestival(festivalId);
       if (f) f.mapUrl = null;
-      showToast('🗺️ Map removed');
+      showToast('Map removed');
       openRaveEditor(festivalId);
     } catch (e) {
       console.error('Festival map remove error', e);
@@ -34373,7 +34373,7 @@
       you.interestedFestIds = (you.interestedFestIds || []).filter(fid => String(fid) !== String(festId));
       you.festIds.push(fest ? fest.id : festId);
       hapticImpact('MEDIUM');
-      showToast(isPast ? `🎟️ Sent it at ${fest?.name || 'that rave'}!` : `✅ You're going to ${fest?.name || 'that rave'}!`);
+      showToast(isPast ? `🎟️ Sent it at ${fest?.name || 'that rave'}!` : `🎟️ You're going to ${fest?.name || 'that rave'}!`);
       addNotification(isPast ? `🎟️ Logged! You sent it at ${fest?.name || 'that rave'}.` : `🎪 You're locked in for ${fest?.name || 'that rave'}! Pack your kit, charge the glowsticks, and get ready for the frequencies.`, [nlRave(fest)]);
       // Let each of your crews know — skip Secret crews, same posture as notifyCrewMembers.
       if (currentUser && fest) {
@@ -34427,7 +34427,7 @@
     notifResolveFromBtn(btnEl);
     renderEvents(); renderSquad(); renderCrews();
     const fest = getFestival(festId);
-    showToast(`✅ You're back on the lineup for ${fest?.name || 'that rave'}!`);
+    showToast(`You're back on the lineup for ${fest?.name || 'that rave'}!`);
   }
 
   // "Don't add me to this again" — blocks anyone else from re-adding this
@@ -34440,7 +34440,7 @@
     if (error) { console.error('festival_rsvp_blocks insert error', error); toastError('Could not save that. Try again', error); return; }
     if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Blocked ✓'; }
     notifResolveFromBtn(btnEl);
-    showToast('🚫 No one can re-add you to this rave unless you RSVP yourself.');
+    showToast('No one can re-add you to this rave unless you RSVP yourself.');
   }
 
   // "Don't add me to this crew again" — same idea, scoped to one crew.
@@ -34452,7 +34452,7 @@
     if (error) { console.error('crew_membership_blocks insert error', error); toastError('Could not save that. Try again', error); return; }
     if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Blocked ✓'; }
     notifResolveFromBtn(btnEl);
-    showToast('🚫 No one can re-add you to this crew unless you join yourself.');
+    showToast('No one can re-add you to this crew unless you join yourself.');
   }
 
   // Leader resolving a "so-and-so left the crew" request from the
@@ -34469,7 +34469,7 @@
       btnEl.textContent = keepPlaceholder ? 'Kept ✓' : 'Removed ✓';
     }
     notifResolveFromBtn(btnEl);
-    showToast(keepPlaceholder ? '✅ Their spot stays in the crew' : '🗑️ Removed from the crew');
+    showToast(keepPlaceholder ? 'Their spot stays in the crew' : 'Removed from the crew');
   }
 
   function toggleInterestedInFest(festId) {
@@ -34488,7 +34488,7 @@
       you.festIds = (you.festIds || []).filter(fid => String(fid) !== String(festId));
       you.interestedFestIds.push(fest ? fest.id : festId);
       hapticImpact('MEDIUM');
-      showToast(`👀 Watching ${fest?.name || 'that rave'}`);
+      showToast(`Watching ${fest?.name || 'that rave'}`);
       // Same crews as a Going RSVP (non-Secret ones you're in).
       if (currentUser && fest) {
         const msg = `👀 ${displayName(you).split(' ')[0]} is interested in ${fest.name}`;
@@ -34674,7 +34674,7 @@
     renderSquad(); renderEvents(); renderCrews();
     // Re-render the popup in place (stays on the Crew tab) so the new row shows.
     if (document.getElementById('rave-focus-overlay')?.classList.contains('open')) openRaveFocus(editingFestivalId);
-    showToast(`✅ ${r.name.split(' ')[0]} linked`);
+    showToast(`${r.name.split(' ')[0]} linked`);
   }
 
   function reAddNew() {
@@ -34718,7 +34718,7 @@
       const after = { name, date, location, color, days };
       const changedFields = Object.keys(after).filter(k => String(before[k] ?? '') !== String(after[k] ?? ''));
       Object.assign(f, { name, date, location, color, days, lat, lng, venueId });
-      showToast(`✅ Updated ${name}`);
+      showToast(`Updated ${name}`);
       if (currentUser) {
         dbSaveFestival({ name, date, location, color, days, lat, lng, venueId }, editingFestivalId);
         if (changedFields.length) {
@@ -34731,7 +34731,7 @@
       const tempId = 'temp_' + Date.now();
       const newFest = { id: tempId, name, date, location, color, days, lat, lng, venueId, createdBy: currentUser?.id || null };
       festivals.push(newFest);
-      showToast(`🎉 Added ${name}`);
+      showToast(`Added ${name}`);
       const _isPastRave = date && new Date(date + 'T23:59:59') < new Date();
       const _raveOwnMsg = _isPastRave
         ? `🗓️ ${name} logged! The rave has been added to the archives — track who was there.`
@@ -34905,7 +34905,7 @@
     squad.forEach(p => { if (p.festIds) p.festIds = p.festIds.filter(fid => String(fid) !== String(id)); });
     closeRaveEditor();
     renderEvents(); renderCrews(); renderSquad();
-    showToast(`🗑️ Deleted ${f.name}`);
+    showToast(`Deleted ${f.name}`);
     addNotification(`🗑️ ${f.name} has been wiped from the calendar. Gone but not forgotten — the dancefloor was a state of mind anyway.`);
     if (currentUser) dbDeleteFestival(id, reason);
   }
@@ -34920,7 +34920,7 @@
     closeDeleteRaveSheet();
     closeRaveEditor();
     renderEvents(); renderCrews();
-    showToast(`🗄️ ${f.name} archived. Off the active list, nothing lost.`);
+    showToast(`${f.name} archived. Off the active list, nothing lost.`);
     if (currentUser) {
       const { error } = await sb.from('festivals')
         .update({ archived_at: new Date().toISOString(), archived_by: currentUser.id })
@@ -34940,7 +34940,7 @@
     f.archived = false;
     closeRaveEditor();
     renderEvents(); renderCrews();
-    showToast(`🗄️ ${f.name} unarchived. Back on the active list.`);
+    showToast(`${f.name} unarchived. Back on the active list.`);
     if (currentUser) {
       const { error } = await sb.from('festivals')
         .update({ archived_at: null, archived_by: null })
@@ -35039,7 +35039,7 @@
     if (currentUser) dbSaveRaver({ ...r }, r.id);
     renderSquad();
     renderSuggestVibeBody(raverId);
-    showToast('✅ Vibe tag added');
+    showToast('Vibe tag added');
     if (document.getElementById('page-profile')?.classList.contains('active')) openProfile(raverId);
   }
 
@@ -35057,7 +35057,7 @@
     if (currentUser) dbSaveRaver({ ...r }, r.id);
     renderSquad();
     closeSuggestVibeSheet();
-    showToast('✅ Vibe tag added');
+    showToast('Vibe tag added');
     if (document.getElementById('page-profile')?.classList.contains('active')) openProfile(raverId);
   }
 
@@ -35309,7 +35309,7 @@
     const until = r.expires_at
       ? ` until ${new Date(r.expires_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
       : '';
-    showToast(`⏸️ ${RESTRICTION_COPY[kind] || 'This'} is paused on your account${until}. See the PLUR Code in Settings`);
+    showToast(`${RESTRICTION_COPY[kind] || 'This'} is paused on your account${until}. See the PLUR Code in Settings`);
     return true;
   }
 
@@ -35538,7 +35538,7 @@
     btn.disabled = true;
     const { data, error } = await sb.rpc('turn_off_share_link', { p_festival_id: btn.dataset.festId });
     if (error || !data?.ok) { btn.disabled = false; toastError('Could not turn that link off. Try again', error); return; }
-    showToast("🔗 Link turned off. Old links won't open your picks.");
+    showToast("Link turned off. Old links won't open your picks.");
     renderShareLinkSettings();
   }
 
@@ -35564,7 +35564,7 @@
     btn.disabled = false;
     if (error) { console.warn('alert_preferences save failed', error); toastError('Could not save that. Try again', error); return; }
     btn.classList.toggle('on', enabling);
-    showToast(enabling ? '🔔 Alert on' : '🔕 Alert off');
+    showToast(enabling ? 'Alert on' : 'Alert off');
   }
 
   function closePrivacySettingsModal() {
@@ -35636,7 +35636,7 @@
         .update({ mention_push_opt_in: enabling }).eq('user_id', currentUser.id);
       if (error) throw error;
       btn.classList.toggle('on', enabling);
-      showToast(enabling ? '🔔 Mention push notifications on' : '🔕 Mention push notifications off');
+      showToast(enabling ? 'Mention push notifications on' : 'Mention push notifications off');
     } catch (err) {
       // ensurePushSubscription already toasts the specific reason it failed.
       if (!err?.message?.includes('unsupported') && !err?.message?.includes('permission_denied')) {
@@ -35660,7 +35660,7 @@
     if (!currentUser) return;
     await ensurePushSubscription();
     await sb.from('email_preferences').update({ beacon_push_opt_in: true }).eq('user_id', currentUser.id);
-    showToast('🔔 Beacon push notifications on');
+    showToast('Beacon push notifications on');
   }
 
   // Requests permission and registers this browser in push_subscriptions,
@@ -35707,7 +35707,7 @@
       }
     }
     await sb.from('email_preferences').update({ beacon_push_opt_in: false }).eq('user_id', currentUser.id);
-    showToast('🔕 Beacon push notifications off');
+    showToast('Beacon push notifications off');
   }
 
   // opts.category, when passed by a contextual "?" link (e.g. crew status
@@ -35842,7 +35842,7 @@
     renderRealmTwinkles();
     refreshZoneBadges();
     if (document.getElementById('app-guide-overlay')?.classList.contains('open')) renderGuideHub(guideContextKey());
-    showToast('✅ All tips back on');
+    showToast('All tips back on');
   }
 
   function closeAppGuide() {
@@ -36757,7 +36757,7 @@
     const alreadySetUp = !!existingRaver?.handle;
     if (alreadySetUp) {
       obGoToStep(3);
-      showToast('🎤 Good news: your tag carried over. One quick question left.');
+      showToast('Good news: your tag carried over. One quick question left.');
     } else {
       if (subEl) {
         subEl.textContent = _pendingPostClaimCrewName
@@ -36973,7 +36973,7 @@
       return;
     }
     addNotification(PROFILE_LOCKED_IN_MSG);
-    showToast('✅ Identity confirmed. The fam will find you.');
+    showToast('Identity confirmed. The fam will find you.');
     obAfterIdentity();
   }
 
@@ -38761,7 +38761,7 @@
             try {
               const a = document.createElement('a');
               a.href = url; a.download = 'my-rave-life.png'; a.click();
-              showToast('📥 Wrapped card downloaded');
+              showToast('Wrapped card downloaded');
             } finally {
               setTimeout(() => URL.revokeObjectURL(url), 1000);
             }
@@ -38769,11 +38769,11 @@
         }, 'image/png');
       } else {
         if (actions) actions.style.display = '';
-        showToast('📋 Screenshot this card to share');
+        showToast('Screenshot this card to share');
       }
     } catch {
       if (actions) actions.style.display = '';
-      showToast('📋 Screenshot this card to share');
+      showToast('Screenshot this card to share');
     }
   }
 
@@ -38795,7 +38795,7 @@
     const you = squad.find(r => r.isYou);
     if (!you) return;
     const upcoming = myUpcomingFests().filter(f => f.date).sort((a, b) => festDate(a) - festDate(b));
-    if (!upcoming.length) { showToast("📡 Nothing on your radar yet. RSVP to a rave first"); return; }
+    if (!upcoming.length) { showToast("Nothing on your radar yet. RSVP to a rave first"); return; }
     radarShareUpcoming = upcoming;
     radarShareOmitted = new Set();
     renderRadarShareCard(you, upcoming);
@@ -38810,7 +38810,7 @@
   // radar isn't worth sharing, and it'd leave no way back other than reopening.
   function omitRaveFromRadarCard(id) {
     if (radarShareUpcoming.filter(f => !radarShareOmitted.has(String(f.id))).length <= 1) {
-      showToast('📡 Keep at least one rave on the card');
+      showToast('Keep at least one rave on the card');
       return;
     }
     radarShareOmitted.add(String(id));
@@ -38907,7 +38907,7 @@
             try {
               const a = document.createElement('a');
               a.href = url; a.download = 'my-radar.png'; a.click();
-              showToast('📥 Radar card downloaded');
+              showToast('Radar card downloaded');
             } finally {
               setTimeout(() => URL.revokeObjectURL(url), 1000);
             }
@@ -38915,11 +38915,11 @@
         }, 'image/png');
       } else {
         showChrome();
-        showToast('📋 Screenshot this card to share');
+        showToast('Screenshot this card to share');
       }
     } catch {
       showChrome();
-      showToast('📋 Screenshot this card to share');
+      showToast('Screenshot this card to share');
     }
   }
 
@@ -39892,7 +39892,7 @@
       : [...(you.favArtistIds || []), String(artistId)];
     you.favArtistIds = newIds;
     await dbSaveRaverFavoriteArtists(you.id, newIds);
-    showToast(isFav ? `Removed ${artistName} from favorites` : `♡ Added ${artistName} to favorites`);
+    showToast(isFav ? `Removed ${artistName} from favorites` : `Added ${artistName} to favorites`);
     if (document.getElementById('artist-sightings-overlay').classList.contains('open')) renderArtistSightingsModalBody(artistId);
     if (document.getElementById('page-artists-seen').classList.contains('active')) renderArtistsSeenPage();
   }
