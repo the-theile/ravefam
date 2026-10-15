@@ -6254,14 +6254,73 @@
   .auth-btn:hover { transform: translateY(-2px); box-shadow: 0 0 44px rgba(var(--neon-pink-rgb),0.65); }
   .auth-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 
-  /* Loading spinner overlay */
+  /* Boot loader overlay — shown while the session is checked. Pure CSS plus a
+     tiny inline script right after its markup, so it still works (and offers
+     Retry) when the main script never runs, e.g. the Supabase CDN didn't load. */
   #app-loading {
     position: fixed; inset: 0; z-index: 999;
-    background: var(--bg);
+    background:
+      radial-gradient(60% 40% at 50% 42%, rgba(var(--neon-pink-rgb),0.10), transparent 70%),
+      radial-gradient(40% 30% at 50% 60%, rgba(var(--neon-cyan-rgb),0.07), transparent 70%),
+      var(--bg);
     display: flex; align-items: center; justify-content: center;
-    flex-direction: column; gap: 16px;
+    flex-direction: column; gap: 18px;
+    padding: 24px 16px;
   }
   #app-loading.hidden { display: none; }
+  .al-orb { position: relative; width: 112px; height: 112px; }
+  .al-orb span {
+    position: absolute; inset: 0; border-radius: 50%;
+    border: 2px solid var(--neon-pink);
+    opacity: 0; animation: alRipple 2.4s cubic-bezier(.2,.6,.3,1) infinite;
+  }
+  .al-orb span:nth-child(2) { border-color: var(--neon-cyan); animation-delay: .8s; }
+  .al-orb span:nth-child(3) { border-color: var(--neon-green); animation-delay: 1.6s; }
+  .al-orb b {
+    position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px;
+    border-radius: 50%; background: var(--neon-green);
+    box-shadow: 0 0 0 5px rgba(var(--white-rgb),0.9) inset, 0 0 18px var(--neon-green), 0 0 42px rgba(var(--neon-green-rgb),0.5);
+    animation: alBeat .6s ease-in-out infinite alternate;
+  }
+  @keyframes alRipple { 0% { transform: scale(.2); opacity: .9; } 100% { transform: scale(1); opacity: 0; } }
+  @keyframes alBeat { to { transform: scale(1.18); } }
+  .al-word { font-family: 'Urbanist', sans-serif; font-weight: 800; font-size: 2rem; letter-spacing: -0.5px; line-height: 1; }
+  .al-word span:first-child { color: var(--white); }
+  .al-word span:last-child { color: var(--neon-green); text-shadow: 0 0 18px rgba(var(--neon-green-rgb),0.45); }
+  .al-eq { display: flex; align-items: flex-end; gap: 4px; height: 18px; }
+  .al-eq i {
+    width: 4px; height: 100%; border-radius: 2px; background: var(--neon-pink);
+    transform-origin: bottom; animation: alEq .9s ease-in-out infinite alternate;
+  }
+  .al-eq i:nth-child(3n+2) { background: var(--neon-cyan); }
+  .al-eq i:nth-child(3n) { background: var(--neon-green); }
+  .al-eq i:nth-child(2) { animation-delay: -.45s; } .al-eq i:nth-child(3) { animation-delay: -.2s; }
+  .al-eq i:nth-child(4) { animation-delay: -.7s; }  .al-eq i:nth-child(5) { animation-delay: -.1s; }
+  .al-eq i:nth-child(6) { animation-delay: -.55s; } .al-eq i:nth-child(7) { animation-delay: -.3s; }
+  @keyframes alEq { from { transform: scaleY(.2); } to { transform: scaleY(1); } }
+  .al-line {
+    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.85rem;
+    color: var(--muted); min-height: 1.3em; text-align: center;
+    animation: alFade 1.6s ease-in-out infinite;
+  }
+  @keyframes alFade { 0%,100% { opacity: .35; } 20%,80% { opacity: 1; } }
+  .al-slow {
+    display: none; max-width: 300px; text-align: center;
+    font-family: 'Outfit', sans-serif; font-size: 0.8rem; line-height: 1.45; color: var(--muted);
+  }
+  .al-slow.show { display: block; }
+  .al-slow button {
+    display: block; margin: 12px auto 0; min-height: 44px; padding: 10px 26px;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.85rem; letter-spacing: 0.5px;
+    color: var(--white); background: transparent; cursor: pointer;
+    border: 1.5px solid var(--neon-pink); border-radius: 100px;
+    box-shadow: 0 0 16px rgba(var(--neon-pink-rgb),0.35);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .al-orb span, .al-orb b, .al-eq i, .al-line { animation: none; }
+    .al-orb span { opacity: .5; } .al-orb span:nth-child(2) { transform: scale(.66); } .al-orb span:nth-child(3) { transform: scale(.33); }
+    .al-eq i { transform: scaleY(.6); }
+  }
   .spinner {
     width: 40px; height: 40px;
     border: 3px solid rgba(var(--neon-pink-rgb),0.2);
@@ -8956,10 +9015,35 @@
 </div>
 
 <!-- Loading overlay (shown while checking session) -->
-<div id="app-loading">
-  <div class="spinner"></div>
-  <div style="font-family:'Outfit',sans-serif;font-weight:600;color:var(--muted);font-size:0.85rem;">Loading RaveFAM…</div>
+<div id="app-loading" role="status" aria-label="Loading RaveFAM">
+  <div class="al-orb" aria-hidden="true"><span></span><span></span><span></span><b></b></div>
+  <div class="al-word" aria-hidden="true"><span>Rave</span><span>FAM</span></div>
+  <div class="al-eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="al-line" id="app-loading-line" aria-hidden="true">Checking the guest list…</div>
+  <div class="al-slow" id="app-loading-slow" aria-live="polite">
+    Taking longer than usual. Festival signal can be rough. Find a better spot and hit Retry.
+    <button type="button" onclick="location.reload()">Retry</button>
+  </div>
 </div>
+<script>
+  // Boot loader: cycle a status line in time with the CSS fade, and offer Retry
+  // after 10s. Standalone on purpose — if the main script throws before it can
+  // hide the loader (e.g. the Supabase CDN failed), this still runs.
+  (function () {
+    var root = document.getElementById('app-loading');
+    var line = document.getElementById('app-loading-line');
+    var lines = ['Checking the guest list…', 'Finding your crew…', 'Syncing the lineup…', 'Warming up the Huddle…'];
+    var i = 0;
+    var tick = setInterval(function () {
+      if (root.classList.contains('hidden')) { clearInterval(tick); return; }
+      i = (i + 1) % lines.length;
+      line.textContent = lines[i];
+    }, 1600);
+    setTimeout(function () {
+      if (!root.classList.contains('hidden')) document.getElementById('app-loading-slow').classList.add('show');
+    }, 10000);
+  })();
+</script>
 
 <!-- Auth screen -->
 <div id="auth-screen" class="hidden">
@@ -10400,7 +10484,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.20.1';
+  const APP_VERSION = '2.21.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
