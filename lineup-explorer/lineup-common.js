@@ -32,7 +32,7 @@
   }
 
   var script = document.createElement("script");
-  script.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
+  script.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3";
   script.onload = function () {
     try {
       sbClient = window.supabase.createClient(

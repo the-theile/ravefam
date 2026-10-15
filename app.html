@@ -49,7 +49,8 @@
   // for native ones before first paint. The native bridge is injected at document start.
   if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) document.documentElement.classList.add('is-native-app');
 </script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Pinned: @2 floats to whatever shipped last. Bump on purpose and run the suite. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3"></script>
 <script defer src="qrcode.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
@@ -10362,7 +10363,6 @@
     <div class="blob blob-3"></div>
   </div>
 
-  <!-- Step 1: Genre Taste Test -->
   <!-- Step 2: Minimal Identity -->
   <div id="ob-step2" class="onboard-card" style="display:none;">
     <div class="ob-progress-wrap">
@@ -10382,7 +10382,7 @@
       <button class="auth-btn" type="button" onclick="obUseExistingAccount()">Log in with my email</button>
       <button class="btn btn-ghost btn-wide" type="button" onclick="obDismissExistingMatch()" style="margin-top:10px;padding:12px;font-size:0.85rem;">I'm new here →</button>
     </div>
-    <div class="onboard-title">Drop your identity 🪩</div>
+    <div class="onboard-title">What should the fam call you? 🪩</div>
     <div class="onboard-sub" id="ob-step2-sub">Your name and tag, so your crew can find you in the wild. Everything else you can fill in later.</div>
     <div class="ob-have-account" id="ob-have-account" style="display:none;">
       <span id="ob-have-account-text"></span>
@@ -10403,7 +10403,6 @@
     <button class="auth-btn" id="ob-step2-btn" disabled onclick="obStep2Next()">I'm Ready →</button>
   </div>
 
-  <!-- Step 3: Build Your Crew -->
   <!-- Between You and Crew: optional second login method (see obAfterIdentity) -->
   <div id="ob-step-link" class="onboard-card" style="display:none;">
     <div class="ob-progress-wrap">
@@ -10485,7 +10484,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.21.2';
+  const APP_VERSION = '2.21.3';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -14129,10 +14128,8 @@
     ['🔊', "The bass missed you."],
     ['🕺', "Your vibe is needed on the floor."],
     ['🌀', "The drop hits harder when you're here."],
-    ['🎪', "The crew was wondering where you went."],
     ['✨', "Home base is where the bass is."],
     ['🔥', "You're back. The party can start."],
-    ['💜', "Miss us? We missed you more."],
     ['🎵', "Back in the rave? Let's gooo."],
   ];
 
@@ -14158,7 +14155,7 @@
     const lastRave = raverPast(me)[0];
     const lastRaveText = lastRave
       ? `It's been ${Math.round((TODAY - lastRave._d) / 86400000)} days since ${escHtml(lastRave.name)}`
-      : "First time here — you found home base 🏠";
+      : "No past raves logged yet";
     document.getElementById('wbp-last-rave').innerHTML =
       `<div>${msg}</div><div style="font-size:0.7rem;margin-top:3px;opacity:0.6;">${lastRaveText}</div>`;
 
@@ -16951,7 +16948,9 @@
       const weeks = Math.round(n / 7);
       return weeks === 1 ? '1 week' : `${weeks} weeks`;
     }
-    return `${Math.round(n/30)} months`;
+    if (n < 730) return `${Math.round(n/30)} months`;
+    const years = Math.round(n / 365);
+    return years === 1 ? '1 year' : `${years} years`;
   }
 
   // Same thresholds as countdownLabel, split into a big-number/small-unit pair
@@ -16966,7 +16965,9 @@
       const weeks = Math.max(1, Math.round(n / 7));
       return { n: String(weeks), u: weeks === 1 ? 'wk' : 'wks' };
     }
-    return { n: String(Math.round(n / 30)), u: 'mos' };
+    if (n < 730) return { n: String(Math.round(n / 30)), u: 'mos' };
+    const years = Math.round(n / 365);
+    return { n: String(years), u: years === 1 ? 'yr' : 'yrs' };
   }
 
   // Date window for a quick-date chip. "This weekend" always means the
@@ -28297,8 +28298,8 @@
   const ZONE_COLORS = { huddle: '#00F5FF', pins: '#FF2D78', dreamboard: '#BF00FF', poll: '#00F5FF', jams: '#39FF14', archive: '#FFE600', history: '#5B6EFF', raveplan: '#D6284B' };
   const ZONE_INTROS = {
     pins: { title: 'Pins', body: 'Crew wins live here. Level-ups and badges get pinned so the fam can hype them up.', tryMember: 'Earn your first badge and you’ll be the first one up.', tryLead: 'Your crew’s first win lands here — nothing to do yet.' },
-    dreamboard: { title: 'Dream Board', body: 'Throw every wild idea up here — sets, camp spots, outfit themes. The best ones become the plan.', tryMember: 'Pin one idea. Silly ones count.', tryLead: 'Pin the first idea so the board isn’t empty.' },
-    poll: { title: 'Poll', body: 'Can’t agree? Let the crew decide. Majority rules, zero drama.', tryMember: 'There’s an open poll — cast your vote.', tryLead: 'Start the first one: camping or hotel?' },
+    dreamboard: { title: 'Dream Board', body: 'The festivals and shows the crew wants to hit next. Pin one and see who’s in.', tryMember: 'Pin a fest you’d go to in a heartbeat.', tryLead: 'Pin the first fest so the board isn’t empty.' },
+    poll: { title: 'Poll', body: 'Can’t agree? Let the crew decide. Majority rules, zero drama.', tryMember: 'Vote when one’s open, or start your own.', tryLead: 'Start the first one: camping or hotel?' },
     jams: { title: 'Jams', body: 'Pre-game playlists. Share what you’re hyped on before the drop hits.', tryMember: 'Drop a playlist link from your music app.', tryLead: 'Drop a pre-game playlist for the crew.' },
     archive: { title: 'Archive', body: 'Links to albums, videos and recaps, sorted by rave. Your crew’s memory bank.', tryMember: 'After the weekend, drop the shared photo album here.', tryLead: 'After the weekend, drop the shared photo album here.' },
     history: { title: 'History', body: 'Who did what, when. Fills in as the crew makes moves.', tryMember: 'Nothing to do — scroll back anytime.', tryLead: 'Nothing to do — scroll back anytime.' }
@@ -28427,7 +28428,7 @@
     gkSpend();
     openZoneSheet({
       color: GK_COLORS.crews, eyebrow: 'YOUR CREW', title: `Welcome to ${crew.name}`,
-      body: 'Welcome home, fam. The ticket up top is your next rave; the tiles are everything you get up to together.',
+      body: 'The ticket up top is your next rave. The tiles below are everything the crew does together.',
       tryIt: 'Pop into the Huddle and say hi so the crew knows you made it.',
       cta: 'Open the Huddle', onGo: () => openHuddle(crewId)
     });
