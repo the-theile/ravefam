@@ -1839,6 +1839,7 @@
   .fest-row:last-child { border-bottom: none; }
   .fest-row .fest-when { color: var(--muted); font-size: 0.78rem; }
   .fest-empty { color: var(--muted); font-size: 0.85rem; font-style: italic; }
+  .fest-empty.es-block { font-style: normal; }
   .profile-note { font-size: 0.9rem; line-height: 1.6; color: var(--text); white-space: pre-wrap; }
   .fav-chips { display: flex; flex-wrap: wrap; gap: 7px; }
   .fav-chip-row { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; min-height: 28px; }
@@ -10123,7 +10124,7 @@
       <div class="notif-empty es-block">
         <div class="es-icon">🔔</div>
         <div class="es-headline">All quiet on the dancefloor</div>
-        <div class="es-sub">Crew moves, RSVPs, and drops will light this up when things get going.</div>
+        <div class="es-sub">Crew activity, RSVPs, and mentions of you show up here.</div>
         <button class="notif-empty-cta" onclick="closeNotifDrawer();switchTab('events')">Find a rave</button>
       </div>
     </div>
@@ -10484,7 +10485,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.21.1';
+  const APP_VERSION = '2.21.2';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -17913,7 +17914,8 @@
           <div class="es-block" style="padding:40px 24px 20px">
             <div class="es-icon">👑</div>
             <div class="es-headline">Every rave needs a crew</div>
-            <div class="es-sub">Build your first crew and start rounding up your ravers.</div>
+            <div class="es-sub">Start one and add your people. Got an invite link from a friend? Open it to join theirs.</div>
+            <button type="button" class="notif-empty-cta" onclick="openModal()">Start a crew</button>
           </div>
         `;
         grid.insertBefore(emptyMsg, addCard);
@@ -20994,8 +20996,8 @@
     return `
       <div class="es-block">
         <div class="es-icon">🕊️</div>
-        <div class="es-headline">The frequency's open</div>
-        <div class="es-sub">Drop the first message and get the energy flowing.</div>
+        <div class="es-headline">No messages yet</div>
+        <div class="es-sub">Say hi and get the chat going.</div>
       </div>`;
   }
 
@@ -24489,13 +24491,13 @@
     }).join('');
 
     const emptyState = dreamPins.length === 0
-      ? `<div class="dream-empty es-block"><div class="es-icon">✨</div><div class="es-headline">The board is wide open</div><div class="es-sub">Pin the fests you're manifesting and get the crew hyped.</div></div>`
+      ? `<div class="dream-empty es-block"><div class="es-icon">✨</div><div class="es-headline">No pins yet</div><div class="es-sub">Add the first one above. Anyone in the crew can pin.</div></div>`
       : '';
 
     return `
       <div class="form-group dream-board-section" id="dream-board-section">
         <div class="section-banner"><span class="banner-inner">✨ Dream Board <span class="banner-subtitle">· crew wish list</span></span></div>
-        <p class="section-desc">Pin the festivals and shows your crew wants to hit next — a shared wish list anyone can add to, no invite required.</p>
+        <p class="section-desc">The crew's wish list. Pin the festivals and shows you want to hit next.</p>
         ${uid ? `
         <div class="dream-add-row">
           <input class="form-input dream-pin-input" id="dream-pin-input" aria-label="Show or festival"
@@ -24654,7 +24656,7 @@
     }).join('');
 
     const emptyState = archiveLinks.length === 0
-      ? `<div class="archive-empty es-block"><div class="es-icon">📸</div><div class="es-headline">No memories dropped yet</div><div class="es-sub">Be the first to archive the chaos. Link your album and let the crew relive it.</div></div>`
+      ? `<div class="archive-empty es-block"><div class="es-icon">📸</div><div class="es-headline">No albums yet</div><div class="es-sub">Shared photos after the last rave? Add the link above.</div></div>`
       : visible.length === 0
       ? `<div class="archive-empty text-hint-lg" style="text-align:center;padding:20px 0;">No links match this filter</div>`
       : '';
@@ -24716,7 +24718,7 @@
     return `
       <div class="form-group crew-history-section" id="crew-history-section">
         <div class="section-banner"><span class="banner-inner">📜 Crew History <span class="banner-subtitle">· who did what, when</span></span></div>
-        <p class="section-desc">A running log of joins, leaves, and status changes — the story of how your crew came together.</p>
+        <p class="section-desc">Who joined, who left, and when the crew's status changed.</p>
         ${buildHistoryListHTML(rows, { showReason: mod, emptyMessage: "It'll fill in as the crew makes moves." })}
         ${showMoreBtn}
       </div>`;
@@ -24982,13 +24984,13 @@
 
     const cards = crewPolls.map(poll => renderPollCard(poll, accentColor, uid)).join('');
     const emptyState = crewPolls.length === 0
-      ? `<div class="poll-empty es-block"><div class="es-icon">🗳️</div><div class="es-headline">No vibes put to a vote yet</div><div class="es-sub">Drop a poll and let the crew steer the ship.</div></div>`
+      ? `<div class="poll-empty es-block"><div class="es-icon">🗳️</div><div class="es-headline">No polls yet</div><div class="es-sub">Next time the group chat can't decide, start one here.</div></div>`
       : '';
 
     return `
       <div class="form-group fam-poll-section" id="fam-poll-section">
         <div class="section-banner"><span class="banner-inner">🗳️ FAM Poll <span class="banner-subtitle">· crew decisions</span></span></div>
-        <p class="section-desc">Put a decision to a vote — which stage, what time, camp or crash — and let the crew steer it.</p>
+        <p class="section-desc">Put a decision to a vote: which stage, what time, camp or crash.</p>
         ${uid ? `<button class="btn btn-ghost poll-drop-btn"
           data-crew-id="${escHtml(crewId)}"
           onclick="openCreatePollModal(this.dataset.crewId)">+ Drop a poll</button>` : ''}
@@ -25769,7 +25771,7 @@
 
     const cards = visible.map(jam => renderJamCard(jam, uid, canManage, crewId)).join('');
     const emptyMsg = crewJams.length === 0
-      ? `<div class="jam-empty es-block"><div class="es-icon">🎧</div><div class="es-headline">Dead air detected</div><div class="es-sub">Drop the first playlist and set the crew's sound.</div></div>`
+      ? `<div class="jam-empty es-block"><div class="es-icon">🎧</div><div class="es-headline">No playlists yet</div><div class="es-sub">Share what you're listening to before the next rave.</div></div>`
       : visible.length === 0
       ? `<div class="jam-empty text-hint-lg" style="text-align:center;padding:20px 0;">No playlists match these filters</div>`
       : '';
@@ -33554,7 +33556,7 @@
           ? `<div class="fest-empty" style="padding:20px;text-align:center;color:var(--muted);">📍 Finding nearby raves…</div>`
           : hasFilters
             ? `<div class="fest-empty" style="padding:20px;text-align:center;color:var(--muted);">No raves match these filters</div>`
-            : `<div class="fest-empty es-block" style="padding:32px 20px"><div class="es-icon">🎟️</div><div class="es-headline">Your calendar is looking too clean</div><div class="es-sub">Add a festival, club night, or that warehouse party on Saturday.</div></div>`;
+            : `<div class="fest-empty es-block" style="padding:32px 20px"><div class="es-icon">🎟️</div><div class="es-headline">Your calendar is looking too clean</div><div class="es-sub">Add a festival, club night, or that warehouse party on Saturday.</div><button type="button" class="notif-empty-cta" onclick="openRaveEditor()">+ Add a rave</button></div>`;
     }
     list.innerHTML = html;
     renderRaveViewToggle();
@@ -37548,7 +37550,7 @@
     const huddleEntries = (tab === 'all' || tab === 'mention') ? (_huddleDrawerEntries || []) : [];
     if (!list.length && !huddleEntries.length) {
       el.innerHTML = tab === 'all'
-        ? `<div class="notif-empty es-block"><div class="es-icon">🔔</div><div class="es-headline">All quiet on the dancefloor</div><div class="es-sub">Crew moves, RSVPs, and drops will light this up when things get going.</div><button class="notif-empty-cta" onclick="closeNotifDrawer();switchTab('events')">Find a rave</button></div>`
+        ? `<div class="notif-empty es-block"><div class="es-icon">🔔</div><div class="es-headline">All quiet on the dancefloor</div><div class="es-sub">Crew activity, RSVPs, and mentions of you show up here.</div><button class="notif-empty-cta" onclick="closeNotifDrawer();switchTab('events')">Find a rave</button></div>`
         : `<div class="notif-empty es-block"><div class="es-icon">${NOTIF_CATS[tab].icon}</div><div class="es-headline">Nothing in ${NOTIF_CATS[tab].label} yet</div></div>`;
       return;
     }
