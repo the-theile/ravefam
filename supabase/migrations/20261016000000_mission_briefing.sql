@@ -20,6 +20,10 @@
 -- Budget is opt-in per plan (game_plans.budget_enabled) with one currency per
 -- plan. Switching it off hides the card; nothing is deleted.
 
+-- Busy tables (huddle_messages, game_plan_items): fail fast on a lock wait
+-- instead of queueing behind live traffic; just re-run.
+set local lock_timeout = '10s';
+
 -- ── game_plans: budget switch + currency ──
 alter table public.game_plans
   add column if not exists budget_enabled boolean not null default false,
