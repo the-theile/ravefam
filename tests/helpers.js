@@ -8,7 +8,7 @@
 // real write flows (RSVP, create crew, add/remove member, edit profile) and
 // assert the data round-trips via a fresh loadAllData(), all with no backend.
 
-const SUPABASE_URL = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+const SUPABASE_URL = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3';
 
 const TEST_UID = 'test-user-id';
 
