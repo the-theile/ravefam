@@ -62,6 +62,7 @@ create unique index if not exists game_plan_items_ready_dedupe_idx
   on public.game_plan_items (game_plan_id, assignee_raver_id)
   where kind = 'ready' and deleted_at is null;
 
+drop trigger if exists game_plan_items_touch_updated_at on public.game_plan_items;
 create trigger game_plan_items_touch_updated_at before update on public.game_plan_items
   for each row execute function public.touch_game_plan_updated_at();
 
@@ -234,6 +235,7 @@ begin
 end;
 $$;
 
+drop trigger if exists game_plan_items_money_and_ready on public.game_plan_items;
 create trigger game_plan_items_money_and_ready before insert or update on public.game_plan_items
   for each row execute function public.enforce_game_plan_money_and_ready();
 
@@ -397,6 +399,7 @@ $$;
 
 revoke execute on function public.award_mission_ready_bonus() from public, anon, authenticated;
 
+drop trigger if exists game_plan_items_mission_ready_bonus on public.game_plan_items;
 create trigger game_plan_items_mission_ready_bonus after insert or update on public.game_plan_items
   for each row execute function public.award_mission_ready_bonus();
 
@@ -405,3 +408,17 @@ create trigger game_plan_items_mission_ready_bonus after insert or update on pub
 alter table public.huddle_messages drop constraint if exists huddle_messages_kind_check;
 alter table public.huddle_messages add constraint huddle_messages_kind_check
   check (kind in ('text','photo','voice','meetup','beacon','system','lineup','gif','briefing'));
+
+-- ── Realtime: the open deck listens to its own plan ──
+-- postgres_changes honours RLS, so private packing rows still reach only
+-- their owner. Guarded so a re-run (or a project that already publishes
+-- these) is a no-op.
+do $$
+begin
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'game_plan_items') then
+    alter publication supabase_realtime add table public.game_plan_items;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'game_plans') then
+    alter publication supabase_realtime add table public.game_plans;
+  end if;
+end $$;
