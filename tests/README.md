@@ -44,6 +44,10 @@ Per-domain flow coverage:
   renders & clears the badge, clear-all empties the list.
 - **`crew_detail.spec.js`** — dream-board pin, archive link (+ http validation),
   poll create/vote/delete, jam add; each shows in its section and persists.
+- **`set_plan.spec.js`** — My Set Plan on the rave (timed 📋 picks, clash,
+  Up next, untimed count, empty state before set times), Rave Plan → 🗓️ Sets
+  crew lanes (together/split counts, split box, whole crew), the 15-min in-app
+  nudge (once per set, opens the rave), and hidden-RSVP crewmates never showing.
 - **`invites.spec.js`** — QR invite modal renders the code from `qr_token`; crew
   invite-link generation persists a token and copies the join URL.
 - **`privacy_permissions.spec.js`** — festival adds and vibe-tag suggestions are
