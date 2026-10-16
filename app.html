@@ -3118,6 +3118,40 @@
   }
   .bottom-sheet-overlay.open .bottom-sheet { transform: translateY(0); }
 
+  /* Set Plan — 📋 picks with set times: my timeline + crew overlap lanes. 📋 = yellow, Now = cyan, splits = pink */
+  .setplan-card { background: var(--surface); border: 1px solid rgba(var(--neon-yellow-rgb),0.22); border-radius: 16px; padding: 12px 12px 10px; margin-bottom: 12px; }
+  .setplan-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-weight: 800; font-size: 0.9rem; margin-bottom: 4px; }
+  .setplan-head small { font-weight: 600; font-size: 0.68rem; color: var(--muted); }
+  .setplan-empty { font-size: 0.78rem; color: var(--muted); line-height: 1.45; }
+  .setplan-day { font-size: 0.66rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--neon-yellow); margin: 10px 0 2px; }
+  .setplan-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid rgba(var(--white-rgb),0.06); }
+  .setplan-day + .setplan-row, .setplan-split-head + .setplan-row { border-top: 0; }
+  .setplan-row.past { opacity: 0.45; }
+  .setplan-row.live .setplan-time { color: var(--neon-cyan); }
+  .setplan-time { flex: 0 0 54px; font-size: 0.78rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .setplan-time span { display: block; font-size: 0.66rem; font-weight: 600; color: var(--muted); }
+  .setplan-body { flex: 1; min-width: 0; }
+  .setplan-artist { font-weight: 700; font-size: 0.86rem; color: var(--chip-col, var(--text)); overflow-wrap: anywhere; }
+  .setplan-meta { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
+  .setplan-row.clash .setplan-meta { color: var(--neon-orange); }
+  .setplan-pill { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-size: 0.62rem; font-weight: 800; vertical-align: 1px; }
+  .setplan-pill.live { color: #000; background: var(--neon-cyan); box-shadow: 0 0 10px rgba(var(--neon-cyan-rgb),0.6); }
+  .setplan-pill.next { color: var(--neon-yellow); border: 1px solid rgba(var(--neon-yellow-rgb),0.5); }
+  .setplan-faces { display: flex; align-items: center; flex-shrink: 0; }
+  .setplan-av { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.55rem; font-weight: 800; color: #fff; border: 2px solid var(--surface); margin-left: -6px; }
+  .setplan-faces .setplan-av:first-child { margin-left: 0; }
+  .setplan-more { font-size: 0.62rem; color: var(--muted); margin-left: 3px; }
+  .setplan-split { margin: 6px 0; padding: 4px 10px; border-radius: 12px; border: 1px dashed rgba(var(--neon-pink-rgb),0.55); background: rgba(var(--neon-pink-rgb),0.06); }
+  .setplan-split-head { font-size: 0.7rem; font-weight: 800; color: var(--neon-pink); padding: 4px 0 2px; }
+  .setplan-sum { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 2px; }
+  .setplan-sum span { font-size: 0.7rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: rgba(var(--white-rgb),0.06); }
+  .setplan-foot { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .setplan-foot .btn { flex: 1; min-height: 38px; font-size: 0.76rem; }
+  .setplan-nudge { position: fixed; left: 16px; right: 16px; top: calc(env(safe-area-inset-top, 0px) + 12px); z-index: 9600; display: flex; max-width: 480px; margin: 0 auto; border-radius: 16px; background: var(--surface); border: 1px solid var(--neon-cyan); box-shadow: 0 0 18px rgba(var(--neon-cyan-rgb),0.45); transform: translateY(-180%); transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1); }
+  .setplan-nudge.show { transform: translateY(0); }
+  .setplan-nudge-main { flex: 1; min-width: 0; text-align: left; padding: 12px 14px; background: none; border: 0; color: var(--text); font: inherit; font-weight: 700; font-size: 0.86rem; cursor: pointer; }
+  .setplan-nudge-x { padding: 0 14px; background: none; border: 0; color: var(--muted); font-size: 1rem; cursor: pointer; }
+
   /* Lineup Explorer picks handoff — 📋 picks = neon yellow, Going = green, Interested = cyan */
   .ph-list { max-height: 52vh; overflow-y: auto; margin: 0 -4px 14px; padding: 0 4px; }
   .ph-card { background: var(--surface); border: 1px solid rgba(var(--white-rgb),0.08); border-radius: 16px; padding: 14px; margin-bottom: 10px; }
@@ -10484,7 +10518,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.21.4';
+  const APP_VERSION = '2.22.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -23483,7 +23517,8 @@
       { key: 'roles', emoji: '🎭', label: 'Roles' },
       { key: 'logistics', emoji: '🚗', label: 'Rides' },
       { key: 'stay', emoji: '🏠', label: 'Stay' },
-      { key: 'outfit', emoji: '✨', label: 'Outfit' }
+      { key: 'outfit', emoji: '✨', label: 'Outfit' },
+      { key: 'sets', emoji: '🗓️', label: 'Sets' }
     ];
     const activeSection = sections.some(s => s.key === _gamePlanActiveSection)
       ? _gamePlanActiveSection : 'checklist';
@@ -23507,6 +23542,7 @@
       <div id="game-plan-section-logistics" class="game-plan-section" style="${activeSection === 'logistics' ? '' : 'display:none;'}">${buildGamePlanLogisticsHTML(crew.id)}</div>
       <div id="game-plan-section-stay" class="game-plan-section" style="${activeSection === 'stay' ? '' : 'display:none;'}">${buildGamePlanStayHTML(crew.id)}</div>
       <div id="game-plan-section-outfit" class="game-plan-section" style="${activeSection === 'outfit' ? '' : 'display:none;'}">${buildGamePlanOutfitHTML(crew.id)}</div>
+      <div id="game-plan-section-sets" class="game-plan-section" style="${activeSection === 'sets' ? '' : 'display:none;'}">${buildCrewSetPlanHTML(crew.id, activeFestId)}</div>
     `;
   }
 
@@ -31132,7 +31168,7 @@
 
   async function dbLoadArtistAppearances() {
     const { data } = await sbSelectAll(() => sb.from('artist_festival_appearances')
-      .select('artist_id,festival_id,is_headliner,night,note').order('id'));
+      .select('artist_id,festival_id,is_headliner,night,note,start_at,end_at,stage').order('id'));
     if (data) artistAppearances = data;
   }
 
@@ -31360,11 +31396,226 @@
         ? `<div class="fest-empty" style="font-size:0.72rem;margin-top:6px;">📋 Tap an artist to mark who you're planning to see</div>`
         : (!canEdit && rows.length === 0 ? `<div class="fest-empty" style="font-size:0.72rem;margin-top:6px;">RSVP to this rave to tag its lineup</div>` : ''));
 
-    box.innerHTML = `${postfestCardHTML(festId)}<div class="fav-chip-row" id="lineup-chip-wrap">${chipsOrEmpty}</div>${addHtml}${sightingHint}`;
+    box.innerHTML = `${postfestCardHTML(festId)}${buildMySetPlanHTML(festId)}<div class="fav-chip-row" id="lineup-chip-wrap">${chipsOrEmpty}</div>${addHtml}${sightingHint}`;
     const countEl = document.getElementById('rf-lineup-count');
     if (countEl) countEl.textContent = rows.length;
     refreshRaveReadyChecklist(festId);
   }
+
+  // ===== SET PLAN (my timeline + crew overlap) =====
+  // Day-of view of 📋 picks that have mod-approved set times (start_at on the
+  // appearance). Rave card: your own timeline. Rave Plan → 🗓️ Sets: the crew's
+  // picks as time-slot lanes — who's together, where the crew splits. Times show
+  // in the festival's own zone. Push reminders stay with the Lineup Explorer
+  // (set_set_reminders); this only adds an in-app nudge 15 min out.
+  const SET_PLAN_NUDGE_MS = 15 * 60 * 1000;
+  const SET_PLAN_DAY_SHIFT_MS = 6 * 60 * 60 * 1000;  // a 1am set still belongs to the night before
+  let _setPlanNudged = null;
+  let _setPlanNudgeTimer = null;
+
+  // Same rule as artistCrewName: crewmates' picks only show when they share RSVPs.
+  function setPlanVisible(r) { return !!r && (r.isYou || raverPerms(r).rsvpsVisible); }
+
+  // Timed appearances at a rave picked by any of raverIds, earliest first.
+  // Each: { ap, artist, start, end, hasEnd, who: [raver, ...] }
+  function timedPicksFor(festId, raverIds) {
+    const ids = new Set(raverIds.map(String));
+    const byArtist = new Map();
+    raverArtistPlans.forEach(p => {
+      if (String(p.festival_id) !== String(festId) || !ids.has(String(p.raver_id))) return;
+      const k = String(p.artist_id);
+      if (!byArtist.has(k)) byArtist.set(k, []);
+      byArtist.get(k).push(p.raver_id);
+    });
+    const out = [];
+    lineupArtistsFor(festId).forEach(ap => {
+      const who = byArtist.get(String(ap.artist_id));
+      const artist = who && ap.start_at ? findArtistById(ap.artist_id) : null;
+      if (!artist) return;
+      const start = +new Date(ap.start_at);
+      if (isNaN(start)) return;
+      const end = ap.end_at ? +new Date(ap.end_at) : start + 60 * 60 * 1000;
+      out.push({ ap, artist, start, end, hasEnd: !!ap.end_at, who: who.map(getRaver).filter(Boolean) });
+    });
+    return out.sort((a, b) => a.start - b.start || a.artist.name.localeCompare(b.artist.name));
+  }
+
+  // Overlapping sets cluster into one time slot.
+  function setPlanSlots(sets) {
+    const slots = [];
+    sets.forEach(s => {
+      const last = slots[slots.length - 1];
+      if (last && s.start < last.end) { last.sets.push(s); last.end = Math.max(last.end, s.end); }
+      else slots.push({ start: s.start, end: s.end, sets: [s] });
+    });
+    return slots;
+  }
+
+  function setPlanFmt(ms, tz, opts) {
+    try { return new Intl.DateTimeFormat('en-US', { ...opts, timeZone: tz || undefined }).format(new Date(ms)); }
+    catch (e) { return new Intl.DateTimeFormat('en-US', opts).format(new Date(ms)); }
+  }
+  function setPlanTime(ms, tz) { return setPlanFmt(ms, tz, { hour: 'numeric', minute: '2-digit' }); }
+  function setPlanDay(ms, tz) { return setPlanFmt(ms - SET_PLAN_DAY_SHIFT_MS, tz, { weekday: 'long', month: 'short', day: 'numeric' }); }
+
+  function setPlanNames(names) {
+    if (names.length <= 1) return names.join('');
+    const shown = names.slice(0, 3);
+    const extra = names.length - shown.length;
+    return extra ? `${shown.join(', ')} +${extra}` : `${shown.slice(0, -1).join(', ')} & ${shown[shown.length - 1]}`;
+  }
+
+  function setPlanRowHTML(s, tz, now, opts = {}) {
+    const live = s.start <= now && now < s.end;
+    const past = now >= s.end;
+    const who = opts.who || s.who;
+    const pill = live ? '<span class="setplan-pill live">▶ Now</span>'
+      : (opts.next ? '<span class="setplan-pill next">Up next</span>' : '');
+    const faces = who.slice(0, 4).map(r => raverAvatarHTML(r.avatarUrl, r.gradient, r.name || '', 'setplan-av', '')).join('')
+      + (who.length > 4 ? `<span class="setplan-more">+${who.length - 4}</span>` : '');
+    const label = setPlanNames(who.map(r => r.isYou ? 'You' : displayName(r).split(' ')[0]));
+    const meta = [s.ap.stage ? '📍 ' + escHtml(s.ap.stage) : 'Stage TBA', opts.note].filter(Boolean).join(' · ');
+    return `<div class="setplan-row${live ? ' live' : ''}${past ? ' past' : ''}${opts.clash ? ' clash' : ''}">
+        <div class="setplan-time">${setPlanTime(s.start, tz)}${s.hasEnd ? `<span>${setPlanTime(s.end, tz)}</span>` : ''}</div>
+        <div class="setplan-body">
+          <div class="setplan-artist" style="--chip-col:${artistColor(s.artist.name)};">${escHtml(s.artist.name)}${s.ap.is_headliner ? ' 🌟' : ''}${pill}</div>
+          <div class="setplan-meta">${meta}</div>
+        </div>
+        ${who.length ? `<div class="setplan-faces" role="img" aria-label="${escHtml(label)} picked this">${faces}</div>` : ''}
+      </div>`;
+  }
+
+  // Rave card: your timed 📋 picks, with crewmates who picked the same set.
+  function buildMySetPlanHTML(festId) {
+    const f = getFestival(festId);
+    const you = squad.find(r => r.isYou);
+    if (!f || !you) return '';
+    const mine = myLineupPlanIds(festId);
+    if (!mine.size) return '';
+    const tz = f.timezone;
+    const lineupUrl = getLineupExplorerUrl(f);
+    const sets = timedPicksFor(festId, squad.filter(setPlanVisible).map(r => r.id))
+      .filter(s => s.who.some(r => r.isYou));
+    // Day 2+ of a multi-day rave already reads as achieved, so the card follows
+    // the sets themselves: it stays up until 12h after your last one ends.
+    const now = Date.now();
+    if (sets.length && now > Math.max(...sets.map(s => s.end)) + 12 * 60 * 60 * 1000) return '';
+    if (!sets.length) {
+      if (isFestAchieved(f)) return '';
+      return `<div class="setplan-card"><div class="setplan-head">🗓️ My Set Plan</div>
+        <div class="setplan-empty">Set times drop soon. Your ${mine.size} 📋 pick${mine.size === 1 ? '' : 's'} will line up here, crew and all.</div></div>`;
+    }
+    const next = sets.find(s => s.start > now);
+    const untimed = mine.size - new Set(sets.map(s => String(s.ap.artist_id))).size;
+    let body = '', lastDay = '';
+    setPlanSlots(sets).forEach(slot => {
+      const day = setPlanDay(slot.start, tz);
+      if (day !== lastDay) { body += `<div class="setplan-day">${escHtml(day)}</div>`; lastDay = day; }
+      const clash = slot.sets.length > 1;
+      slot.sets.forEach(s => {
+        body += setPlanRowHTML(s, tz, now, { next: s === next, clash, note: clash ? '⚡ Clash' : '', who: s.who.filter(r => !r.isYou) });
+      });
+    });
+    return `<div class="setplan-card">
+        <div class="setplan-head">🗓️ My Set Plan<small>${tz ? 'Festival time' : 'Your local time'}</small></div>
+        ${body}
+        ${untimed > 0 ? `<div class="setplan-empty" style="margin-top:6px;">+${untimed} pick${untimed === 1 ? '' : 's'} still waiting on a set time</div>` : ''}
+        ${lineupUrl ? `<div class="setplan-foot"><button type="button" class="btn btn-ghost" onclick="openLineupExplorer('${escJsAttr(lineupUrl + '?view=schedule')}')">🔔 Push me 15 min before</button></div>` : ''}
+      </div>`;
+  }
+
+  // Rave Plan → 🗓️ Sets: the crew's timed picks as time-slot lanes.
+  function buildCrewSetPlanHTML(crewId, festId) {
+    const crew = getCrew(crewId);
+    const f = festivals.find(x => String(x.id) === String(festId));
+    if (!crew || !f) return '';
+    const tz = f.timezone;
+    const goingIds = new Set(festivalGoers(festId).map(r => String(r.id)));
+    const goers = crewSquad(crew).filter(r => setPlanVisible(r) && goingIds.has(String(r.id)));
+    const sets = timedPicksFor(festId, goers.map(r => r.id));
+    const lineupUrl = getLineupExplorerUrl(f);
+    const pickBtn = lineupUrl
+      ? `<button type="button" class="btn btn-ghost" onclick="openLineupExplorer('${escJsAttr(lineupUrl)}')">🔭 Pick sets</button>` : '';
+    if (!sets.length) {
+      return `<div class="es-block"><div class="es-icon">🗓️</div><div class="es-headline">No set plan yet</div>
+        <div class="es-sub">Tap 📋 on the sets you can't miss. Once set times drop, the crew's picks line up here: who's together and where you split.</div>
+        ${pickBtn ? `<div class="setplan-foot">${pickBtn}</div>` : ''}</div>`;
+    }
+    const now = Date.now();
+    let together = 0, splits = 0, body = '', lastDay = '';
+    setPlanSlots(sets).forEach(slot => {
+      const day = setPlanDay(slot.start, tz);
+      if (day !== lastDay) { body += `<div class="setplan-day">${escHtml(day)}</div>`; lastDay = day; }
+      const people = new Set();
+      slot.sets.forEach(s => s.who.forEach(r => people.add(String(r.id))));
+      const split = slot.sets.length > 1 && people.size > 1;
+      if (split) {
+        splits++;
+        body += `<div class="setplan-split"><div class="setplan-split-head">⚡ Crew splits · ${setPlanTime(slot.start, tz)}–${setPlanTime(slot.end, tz)}</div>`;
+      }
+      slot.sets.forEach(s => {
+        const whole = goers.length > 1 && s.who.length === goers.length;
+        if (!split && s.who.length > 1) together++;
+        body += setPlanRowHTML(s, tz, now, { note: whole ? '🫶 Whole crew' : '' });
+      });
+      if (split) body += '</div>';
+    });
+    return `<div class="setplan-card">
+        <div class="setplan-head">🗓️ Crew Set Plan<small>${tz ? 'Festival time' : 'Your local time'}</small></div>
+        <div class="setplan-sum"><span>🫶 ${together} together</span><span>⚡ ${splits} split${splits === 1 ? '' : 's'}</span><span>👥 ${goers.length} going</span></div>
+        ${body}
+        ${pickBtn ? `<div class="setplan-foot">${pickBtn}<button type="button" class="btn btn-ghost" onclick="openLineupExplorer('${escJsAttr(lineupUrl + '?view=schedule')}')">🔔 Push reminders</button></div>` : ''}
+      </div>`;
+  }
+
+  // In-app nudge 15 min before a timed pick, once per set per session.
+  function showSetPlanNudge(festId, msg) {
+    let el = document.getElementById('setplan-nudge');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'setplan-nudge';
+      el.className = 'setplan-nudge';
+      el.setAttribute('role', 'status');
+      el.innerHTML = '<button type="button" class="setplan-nudge-main"></button><button type="button" class="setplan-nudge-x" aria-label="Dismiss">✕</button>';
+      el.querySelector('.setplan-nudge-x').onclick = () => el.classList.remove('show');
+      document.body.appendChild(el);
+    }
+    const main = el.querySelector('.setplan-nudge-main');
+    main.textContent = msg;
+    main.onclick = () => { el.classList.remove('show'); openRaveFocus(festId); };
+    el.classList.add('show');
+    clearTimeout(_setPlanNudgeTimer);
+    _setPlanNudgeTimer = setTimeout(() => el.classList.remove('show'), 20000);
+  }
+
+  function setPlanTick() {
+    if (!currentUser || document.hidden) return;
+    const you = squad.find(r => r.isYou);
+    if (!you) return;
+    if (!_setPlanNudged) {
+      try { _setPlanNudged = new Set(JSON.parse(sessionStorage.getItem('rf_setplan_nudged') || '[]')); }
+      catch (e) { _setPlanNudged = new Set(); }
+    }
+    const now = Date.now();
+    const visibleIds = squad.filter(setPlanVisible).map(r => r.id);
+    const festIds = new Set(raverArtistPlans.filter(p => String(p.raver_id) === String(you.id)).map(p => String(p.festival_id)));
+    festIds.forEach(fid => {
+      const f = festivals.find(x => String(x.id) === fid);
+      if (!f) return;
+      timedPicksFor(fid, visibleIds).forEach(s => {
+        const lead = s.start - now;
+        if (lead <= 0 || lead > SET_PLAN_NUDGE_MS || !s.who.some(r => r.isYou)) return;
+        const key = `${fid}|${s.ap.artist_id}|${s.start}`;
+        if (_setPlanNudged.has(key)) return;
+        _setPlanNudged.add(key);
+        try { sessionStorage.setItem('rf_setplan_nudged', JSON.stringify([..._setPlanNudged])); } catch (e) { /* private mode */ }
+        const mates = s.who.filter(r => !r.isYou).map(r => displayName(r).split(' ')[0]);
+        showSetPlanNudge(f.id, `🎧 On in ${Math.max(1, Math.round(lead / 60000))} min: ${s.artist.name}${s.ap.stage ? ' @ ' + s.ap.stage : ''}${mates.length ? ' · ' + setPlanNames(mates) + ' too' : ''}`);
+      });
+    });
+  }
+  setInterval(setPlanTick, 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) setPlanTick(); });
 
   // ===== Post-fest check-off ("Who'd you catch? 📼") =====
   // From the day after a rave's last day (for 60 days), someone who was Going
