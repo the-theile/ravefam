@@ -23107,6 +23107,8 @@
     if ('meetupAt' in fields) patch.meetup_at = fields.meetupAt;
     if ('meetupLocation' in fields) patch.meetup_location = fields.meetupLocation;
     if ('templateKey' in fields) patch.template_key = fields.templateKey;
+    if ('budgetEnabled' in fields) patch.budget_enabled = !!fields.budgetEnabled;
+    if ('currency' in fields) patch.currency = fields.currency;
     const { data, error } = await sb.from('game_plans').update(patch).eq('id', gamePlanId).select().single();
     if (error) { toastError('Could not save. Try again', error); return null; }
     const idx = gamePlans.findIndex(gp => gp.id === gamePlanId);
@@ -23336,6 +23338,174 @@
     const { data, error } = await sb.from('game_plan_items').update({ image_url: imageUrl }).eq('id', itemId).select().single();
     if (error) { toastError('Idea saved, but the photo upload failed', error); return null; }
     const idx = gamePlanItems.findIndex(it => it.id === itemId);
+    if (idx >= 0) gamePlanItems[idx] = data;
+    return data;
+  }
+
+  // -- Packing (Mission Briefing) — kind='pack'. scope 'personal' rows are
+  // owner-only at the RLS level, so gamePlanItems only ever holds the
+  // viewer's own; 'crew' rows are shared gear, claimed via
+  // dbClaimGamePlanTask exactly like an unassigned task.
+  async function dbAddPackItem(gamePlanId, crewId, text, scope) {
+    const { data, error } = await sb.from('game_plan_items').insert({
+      game_plan_id: gamePlanId, crew_id: crewId, kind: 'pack', added_by: currentUser.id,
+      text: text.trim(), scope: scope === 'crew' ? 'crew' : 'personal', is_done: false
+    }).select().single();
+    if (error) { toastError('Could not add that. Try again', error); return null; }
+    gamePlanItems.push(data);
+    return data;
+  }
+
+  async function dbTogglePackItem(itemId, done) {
+    const { data, error } = await sb.from('game_plan_items').update({ is_done: done }).eq('id', itemId).select().single();
+    if (error) { toastError('Could not update. Try again', error); return null; }
+    const idx = gamePlanItems.findIndex(it => it.id === itemId);
+    if (idx >= 0) gamePlanItems[idx] = data;
+    return data;
+  }
+
+  // A line on your own private list isn't crew content: no confirm, no audit
+  // row (the new-account rate limiter counts those), and the DB trigger
+  // skips the limiter for it too.
+  async function dbDeletePersonalPackItem(itemId) {
+    const { ok, rateLimited } = await softDeleteRow('game_plan_items', { id: itemId }, null);
+    if (!ok) { if (!rateLimited) toastError('Could not remove. Try again'); return false; }
+    gamePlanItems = gamePlanItems.filter(it => it.id !== itemId);
+    return true;
+  }
+
+  // -- Budget (Mission Briefing) — kind='expense' (assignee_raver_id = who
+  // paid, split_raver_ids null = everyone going) and kind='payment'
+  // (assignee_raver_id = from, to_raver_id = to). Balances are always
+  // recomputed from both, so a cost added after someone settled up stays
+  // correct. Removing either goes through dbDeleteGamePlanItem.
+  const BUDGET_CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'MXN'];
+
+  async function dbAddExpense(gamePlanId, crewId, text, amountCents, payerRaverId, splitRaverIds) {
+    const { data, error } = await sb.from('game_plan_items').insert({
+      game_plan_id: gamePlanId, crew_id: crewId, kind: 'expense', added_by: currentUser.id,
+      text: text.trim(), amount_cents: amountCents, assignee_raver_id: payerRaverId,
+      split_raver_ids: splitRaverIds && splitRaverIds.length ? splitRaverIds : null
+    }).select().single();
+    if (error) { toastError('Could not log that cost. Try again', error); return null; }
+    gamePlanItems.push(data);
+    return data;
+  }
+
+  async function dbUpdateExpense(itemId, fields) {
+    const patch = {};
+    if ('text' in fields) patch.text = fields.text.trim();
+    if ('amountCents' in fields) patch.amount_cents = fields.amountCents;
+    if ('payerRaverId' in fields) patch.assignee_raver_id = fields.payerRaverId;
+    if ('splitRaverIds' in fields) patch.split_raver_ids = fields.splitRaverIds && fields.splitRaverIds.length ? fields.splitRaverIds : null;
+    const { data, error } = await sb.from('game_plan_items').update(patch).eq('id', itemId).select().single();
+    if (error) {
+      toastError(error.message && error.message.includes('FORBIDDEN') ? 'Only whoever logged or paid this cost (or the crew lead) can edit it' : 'Could not save. Try again', error);
+      return null;
+    }
+    const idx = gamePlanItems.findIndex(it => it.id === itemId);
+    if (idx >= 0) gamePlanItems[idx] = data;
+    return data;
+  }
+
+  async function dbRecordPayment(gamePlanId, crewId, fromRaverId, toRaverId, amountCents) {
+    const { data, error } = await sb.from('game_plan_items').insert({
+      game_plan_id: gamePlanId, crew_id: crewId, kind: 'payment', added_by: currentUser.id,
+      assignee_raver_id: fromRaverId, to_raver_id: toRaverId, amount_cents: amountCents
+    }).select().single();
+    if (error) {
+      toastError(error.message && error.message.includes('FORBIDDEN') ? 'Only the two people settling up (or the crew lead) can mark this paid' : 'Could not mark paid. Try again', error);
+      return null;
+    }
+    gamePlanItems.push(data);
+    return data;
+  }
+
+  // "228", "228.5", "$1,140.00" → cents; null for anything that isn't a
+  // positive amount within the DB's 1¢–$100k check.
+  function parseMoneyToCents(input) {
+    const cleaned = String(input || '').replace(/[^0-9.]/g, '');
+    if (!/^\d+(\.\d{0,2})?$/.test(cleaned)) return null;
+    const cents = Math.round(parseFloat(cleaned) * 100);
+    return cents >= 1 && cents <= 10000000 ? cents : null;
+  }
+
+  function formatMoney(cents, currency) {
+    try {
+      return new Intl.NumberFormat(undefined, { style: 'currency', currency: currency || 'USD' }).format((cents || 0) / 100);
+    } catch (e) {
+      return `${((cents || 0) / 100).toFixed(2)} ${currency || 'USD'}`;
+    }
+  }
+
+  // Net position per raver id, in cents: > 0 is owed money, < 0 owes.
+  // goingRaverIds is the default split pool (every crew member going,
+  // unclaimed profiles included). Odd cents go to the first ravers in id
+  // order so every client computes the same split.
+  function computeBudgetBalances(items, goingRaverIds) {
+    const net = {};
+    const add = (id, cents) => { if (id) net[id] = (net[id] || 0) + cents; };
+    for (const it of items) {
+      if (it.deleted_at || !it.amount_cents) continue;
+      if (it.kind === 'expense') {
+        const pool = [...new Set((it.split_raver_ids && it.split_raver_ids.length ? it.split_raver_ids : goingRaverIds).map(String))].sort();
+        if (!pool.length) continue;
+        const base = Math.floor(it.amount_cents / pool.length);
+        const extra = it.amount_cents - base * pool.length;
+        add(String(it.assignee_raver_id), it.amount_cents);
+        pool.forEach((id, i) => add(id, -(base + (i < extra ? 1 : 0))));
+      } else if (it.kind === 'payment') {
+        add(String(it.assignee_raver_id), it.amount_cents);
+        add(String(it.to_raver_id), -it.amount_cents);
+      }
+    }
+    return net;
+  }
+
+  // Fewest who-pays-whom transfers that zero every balance: repeatedly match
+  // the biggest debtor with the biggest creditor.
+  function computeSettleUp(net) {
+    const debtors = [], creditors = [];
+    for (const [id, cents] of Object.entries(net)) {
+      if (cents < 0) debtors.push({ id, cents: -cents });
+      else if (cents > 0) creditors.push({ id, cents });
+    }
+    const byBiggest = (a, b) => b.cents - a.cents || (a.id < b.id ? -1 : 1);
+    const transfers = [];
+    while (debtors.length && creditors.length) {
+      debtors.sort(byBiggest); creditors.sort(byBiggest);
+      const d = debtors[0], c = creditors[0];
+      const cents = Math.min(d.cents, c.cents);
+      transfers.push({ fromRaverId: d.id, toRaverId: c.id, cents });
+      d.cents -= cents; c.cents -= cents;
+      if (!d.cents) debtors.shift();
+      if (!c.cents) creditors.shift();
+    }
+    return transfers;
+  }
+
+  // -- Ready check (Mission Briefing) — kind='ready', one row per raver per
+  // plan. Unlocking flips is_done rather than deleting, so updated_at always
+  // marks the last lock/unlock (what the "plan changed since" dot compares
+  // against). The DB only lets you lock in yourself.
+  async function dbSetReady(gamePlanId, crewId, raverId, ready) {
+    const findMine = () => gamePlanItems.find(it => it.kind === 'ready' && String(it.assignee_raver_id) === String(raverId));
+    let existing = findMine();
+    if (!existing) {
+      const { data, error } = await sb.from('game_plan_items').insert({
+        game_plan_id: gamePlanId, crew_id: crewId, kind: 'ready', added_by: currentUser.id,
+        assignee_raver_id: raverId, is_done: !!ready
+      }).select().single();
+      if (!error) { gamePlanItems.push(data); return data; }
+      // 23505: another tab locked in first. Pick up that row and update it.
+      if (error.code !== '23505') { toastError('Could not lock in. Try again', error); return null; }
+      await dbLoadGamePlanItems(gamePlanId);
+      existing = findMine();
+      if (!existing) { toastError('Could not lock in. Try again', error); return null; }
+    }
+    const { data, error } = await sb.from('game_plan_items').update({ is_done: !!ready }).eq('id', existing.id).select().single();
+    if (error) { toastError('Could not update your lock-in. Try again', error); return null; }
+    const idx = gamePlanItems.findIndex(it => it.id === existing.id);
     if (idx >= 0) gamePlanItems[idx] = data;
     return data;
   }
