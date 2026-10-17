@@ -251,6 +251,14 @@
   /* Destructive ghost variant — replaces one-off style="color:var(--neon-pink)" overrides. */
   .btn-danger { color: var(--danger); border-color: rgba(var(--danger-rgb),0.3); }
   .btn-danger:hover { background: rgba(var(--danger-rgb),0.12); }
+  /* Green "📡 Connect" — scan-to-connect entry point next to + Add Raver. */
+  .btn-connect {
+    background: rgba(var(--neon-green-rgb),0.14);
+    color: var(--neon-green);
+    border: 1px solid rgba(var(--neon-green-rgb),0.45);
+    box-shadow: 0 0 14px rgba(var(--neon-green-rgb),0.25);
+  }
+  .btn-connect:hover { background: rgba(var(--neon-green-rgb),0.22); box-shadow: 0 0 22px rgba(var(--neon-green-rgb),0.45); }
 
   /* Nav tabs — fixed per-item color language, shared by desktop + mobile */
   .c-crews  { --ic: var(--neon-pink); }
@@ -7126,6 +7134,42 @@
   }
   .scanner-tab.active { background: rgba(var(--neon-cyan-rgb),0.15); color: var(--neon-cyan); }
 
+  /* ── Connect mode: 🧿 My Code pane + kandi-trade moment ── */
+  .connect-code-pane { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 0 24px; }
+  .connect-qr-wrap {
+    min-width: 216px; min-height: 216px; display: flex; align-items: center; justify-content: center;
+    background: #fff; border-radius: 16px; padding: 8px;
+    box-shadow: 0 0 28px rgba(var(--neon-green-rgb),0.35);
+  }
+  .connect-code-text {
+    font-family: 'Fraunces', sans-serif; font-weight: 800; font-size: 2rem; letter-spacing: 0.14em;
+    color: var(--white); text-shadow: 0 0 20px rgba(var(--neon-green-rgb),0.6);
+  }
+  .connect-rotate-link { font-size: 0.72rem; color: var(--muted); background: none; border: none; text-decoration: underline; cursor: pointer; font-family: 'Outfit', sans-serif; }
+  .kandi-moment { text-align: center; }
+  .kandi-beads { display: flex; justify-content: center; gap: 6px; margin: 4px 0 14px; }
+  .kandi-beads span {
+    width: 18px; height: 18px; border-radius: 50%;
+    box-shadow: 0 0 10px currentColor; background: currentColor;
+    animation: kandiBead 0.9s ease-out both;
+  }
+  .kandi-beads span:nth-child(2) { animation-delay: .08s; } .kandi-beads span:nth-child(3) { animation-delay: .16s; }
+  .kandi-beads span:nth-child(4) { animation-delay: .24s; } .kandi-beads span:nth-child(5) { animation-delay: .32s; }
+  @keyframes kandiBead { 0% { transform: translateY(-30px) scale(0.3); opacity: 0; } 70% { transform: translateY(4px) scale(1.1); opacity: 1; } 100% { transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .kandi-beads span { animation: none; } }
+  .kandi-avatars { display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 1.4rem; }
+  .connect-met-chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px;
+    background: rgba(var(--neon-green-rgb),0.1); border: 1px solid rgba(var(--neon-green-rgb),0.35);
+    color: var(--neon-green); font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.78rem; cursor: pointer;
+  }
+  .connect-fest-list { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; margin: 12px 0; text-align: left; }
+  .connect-fest-opt { padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(var(--white-rgb),0.1); background: rgba(var(--white-rgb),0.04); color: var(--text); font-family: 'Outfit', sans-serif; font-size: 0.85rem; cursor: pointer; text-align: left; }
+  .connect-fest-opt.active { border-color: var(--neon-green); color: var(--neon-green); }
+  .member-met-tag { font-size: 0.66rem; color: var(--neon-green); font-family: 'Outfit', sans-serif; font-weight: 600; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .profile-connection-line { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 6px; font-size: 0.78rem; color: var(--muted); }
+  .kandi-count { color: var(--neon-green); font-family: 'Outfit', sans-serif; font-weight: 600; }
+
   /* ── Camera viewfinder ── */
   .viewfinder-wrap {
     position: relative;
@@ -9744,7 +9788,10 @@
     <div class="page" id="page-members">
       <div class="section-header">
         <div class="section-title">Your Ravers</div>
-        <button class="btn btn-ghost" style="font-size:0.78rem;" onclick="openProfileEditor()">+ Add Raver</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-connect" style="font-size:0.78rem;" onclick="openConnect()" title="Scan each other's code to connect, no crew needed">📡 Connect</button>
+          <button class="btn btn-ghost" style="font-size:0.78rem;" onclick="openProfileEditor()">+ Add Raver</button>
+        </div>
       </div>
       <div class="raver-search-wrap">
         <span class="raver-search-icon">🔍</span>
@@ -10002,6 +10049,13 @@
 <!-- QR Claim Modal -->
 <div class="modal-overlay" id="qr-overlay" onclick="if(event.target===this)closeQRModal()">
   <div class="modal" id="qr-modal" style="text-align:center;padding-bottom:24px;">
+    <!-- filled by JS -->
+  </div>
+</div>
+
+<!-- Connect: kandi-trade moment + "met at" picker -->
+<div class="modal-overlay" id="connect-overlay" role="dialog" aria-modal="true" aria-label="Connected" onclick="if(event.target===this)closeConnectModal()">
+  <div class="modal" id="connect-modal" style="text-align:center;padding-bottom:24px;">
     <!-- filled by JS -->
   </div>
 </div>
@@ -10686,14 +10740,23 @@
   <!-- ── SCAN VIEW (camera + code tabs) ── -->
   <div class="scanner-view active" id="sv-scan">
     <div class="scanner-header">
-      <div class="scanner-title">📲 Join a Crew</div>
+      <div class="scanner-title" id="scanner-title">📲 Join a Crew</div>
       <button class="scanner-close" onclick="closeScanner()" aria-label="Close scanner">✕</button>
     </div>
     <div class="scanner-tabs">
+      <button class="scanner-tab"        id="stab-mycode" onclick="switchScannerTab('mycode')" style="display:none;">🧿 My Code</button>
       <button class="scanner-tab active" id="stab-camera" onclick="switchScannerTab('camera')">📷 Scan QR</button>
       <button class="scanner-tab"        id="stab-code"   onclick="switchScannerTab('code')">🔢 Enter Code</button>
     </div>
     <div class="scanner-subtitle" id="scanner-subtitle">Point your camera at the QR your crew leader is showing you. See who you're joining, then finish signing up to claim your spot.</div>
+
+    <!-- My Code pane (connect mode only) -->
+    <div id="scanner-pane-mycode" class="connect-code-pane" style="display:none;">
+      <div class="connect-qr-wrap" id="connect-qr-wrap"><div class="text-hint">Generating…</div></div>
+      <div class="connect-code-text" id="connect-code-text">······</div>
+      <div class="text-hint-xs">Or they tap 🔢 Enter Code and type this in</div>
+      <button type="button" class="connect-rotate-link" onclick="rotateMyConnectCode()">🔄 New code (the old one stops working)</button>
+    </div>
 
     <!-- Camera pane -->
     <div id="scanner-pane-camera" style="width:100%;display:flex;flex-direction:column;align-items:center;">
@@ -10719,8 +10782,8 @@
 
     <!-- Code entry pane -->
     <div id="scanner-pane-code" class="code-input-wrap" style="display:none;">
-      <div class="code-input-label">Enter your invite code</div>
-      <div class="code-input-hint">Ask your crew leader for the 6-character code, then enter it below to see the crew and claim your spot</div>
+      <div class="code-input-label" id="code-input-label">Enter your invite code</div>
+      <div class="code-input-hint" id="code-input-hint">Ask your crew leader for the 6-character code, then enter it below to see the crew and claim your spot</div>
       <div class="otp-boxes" id="otp-boxes">
         <input class="otp-box" aria-label="Claim code digit 1 of 6" maxlength="1" data-idx="0" oninput="otpInput(this)" onkeydown="otpKeydown(event,this)" autocomplete="off" inputmode="text" spellcheck="false">
         <input class="otp-box" aria-label="Claim code digit 2 of 6" maxlength="1" data-idx="1" oninput="otpInput(this)" onkeydown="otpKeydown(event,this)" autocomplete="off" inputmode="text" spellcheck="false">
@@ -10904,7 +10967,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.25.1';
+  const APP_VERSION = '2.26.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -12446,6 +12509,7 @@
     localStorage.removeItem('pendingRaveSlug');
     localStorage.removeItem('pendingPicksHandoff');
     localStorage.removeItem('pendingInviteRaver');
+    localStorage.removeItem('pendingConnectCode');
     await forgetNativePushToken();
     syncNativeAppBadge(0);
     await sb.auth.signOut();
@@ -12741,6 +12805,10 @@
     }
     const joinToken = params.get('join');
     if (joinToken) sessionStorage.setItem('pendingCrewJoin', joinToken);
+    // ?connect=<code> from someone's 🧿 My Code QR, opened with the phone
+    // camera. Consumed by processPendingConnect() once logged in.
+    const connectCode = params.get('connect');
+    if (connectCode && /^[0-9a-f]{6}$/i.test(connectCode)) localStorage.setItem('pendingConnectCode', connectCode.toUpperCase());
     // ?rave=<slug> from the public /rave/:slug page. localStorage (not
     // session) so it survives the email-verification round trip, same as
     // pendingClaimToken. Consumed by processPendingRave().
@@ -12758,7 +12826,7 @@
     // on an unclaimed crewmate). Consumed by processPendingInvite().
     const inviteId = params.get('invite');
     if (inviteId && /^[0-9a-f-]{36}$/i.test(inviteId)) localStorage.setItem('pendingInviteRaver', inviteId);
-    if (token || joinToken || raveSlug || picks || inviteId) history.replaceState(null, '', window.location.pathname + window.location.hash);
+    if (token || joinToken || raveSlug || picks || inviteId || connectCode) history.replaceState(null, '', window.location.pathname + window.location.hash);
   })();
 
   // processPendingRave: opens the rave a /rave/:slug share link pointed at.
@@ -13161,10 +13229,13 @@
   let _pendingPostClaimCrewId = null;   // crew id to greet with on the next showOnboarding()
   let _obJoinedCrewId = null;           // wizard-scoped: crew joined via *this* claim pass
   let _obJoinedCrewName = null;         // wizard-scoped: crew name joined via *this* claim pass
+  let _scannerMode = 'claim';           // 'claim' (join a crew) | 'connect' (📡 Connect, see CONNECT section)
 
   // ── Open / Close ──────────────────────────────────────
   function openScanner() {
     _pendingClaimToken = null;
+    _scannerMode = 'claim';
+    applyScannerMode();
     showScannerView('scan');
     document.getElementById('scanner-overlay').classList.add('open');
     switchScannerTab('camera');
@@ -13192,6 +13263,10 @@
     if (errEl) errEl.textContent = '';
     const btn = document.getElementById('code-submit-btn');
     if (btn) btn.disabled = true;
+    // Claim flows can reopen this overlay without openScanner(); don't let
+    // them inherit 📡 Connect's labels or code routing.
+    _scannerMode = 'claim';
+    applyScannerMode();
     runDeferredFirstTimeSetup();
   }
 
@@ -13209,24 +13284,38 @@
 
     const cameraPane = document.getElementById('scanner-pane-camera');
     const codePane   = document.getElementById('scanner-pane-code');
+    const mycodePane = document.getElementById('scanner-pane-mycode');
     if (!cameraPane || !codePane) return;
+    const connecting = _scannerMode === 'connect';
+    if (mycodePane) mycodePane.style.display = 'none';
 
     // "Instantly" is true for a signed-in scanner and false for a signed-out
     // one — handleClaimToken() sends them to the pre-auth intercept first. The
     // scanner is reachable from both, so say what actually happens either way
     // rather than promising the shorter path to everyone.
     const subtitleEl = document.getElementById('scanner-subtitle');
-    if (tab === 'camera') {
+    if (tab === 'mycode' && connecting && mycodePane) {
+      cameraPane.style.display = 'none';
+      codePane.style.display   = 'none';
+      mycodePane.style.display = 'flex';
+      if (subtitleEl) subtitleEl.textContent = 'Have them scan this with their phone camera or in RaveFAM. You\'re connected the second they do.';
+      stopCamera();
+      renderMyConnectCode();
+    } else if (tab === 'camera') {
       cameraPane.style.display = 'flex';
       codePane.style.display   = 'none';
-      if (subtitleEl) subtitleEl.textContent = currentUser
+      if (subtitleEl) subtitleEl.textContent = connecting
+        ? 'Point your camera at their 🧿 My Code QR. You\'re connected instantly, no crew needed.'
+        : currentUser
         ? 'Point your camera at the QR your crew leader is showing you. You\'re added to the crew instantly.'
         : 'Point your camera at the QR your crew leader is showing you. See who you\'re joining, then finish signing up to claim your spot.';
       startCamera();
     } else {
       cameraPane.style.display = 'none';
       codePane.style.display   = 'flex';
-      if (subtitleEl) subtitleEl.textContent = currentUser
+      if (subtitleEl) subtitleEl.textContent = connecting
+        ? 'Type the 6-character code under their 🧿 My Code QR.'
+        : currentUser
         ? 'Got a code from your crew leader? Type it in and you\'re added to the crew instantly.'
         : 'Got a code from your crew leader? Type it in to see the crew, then finish signing up to claim your spot.';
       stopCamera();
@@ -13334,6 +13423,15 @@
     let token = null;
     let url = null;
     try { url = new URL(rawValue); token = url.searchParams.get('claim'); } catch { token = rawValue.trim(); }
+    // Someone's 🧿 My Code QR (?connect=) works from either scanner mode.
+    const connectCode = url?.searchParams.get('connect');
+    if (connectCode) {
+      _scanHandled = true;
+      stopCamera();
+      hapticImpact('HEAVY');
+      handleConnectCode(connectCode);
+      return;
+    }
     // A crew-wide ?join= link turned into a QR: hand it to the same flow the
     // link itself would take instead of scanning on silently forever.
     const joinToken = !token && url?.searchParams.get('join');
@@ -13414,7 +13512,9 @@
     if (!e.target.classList?.contains('otp-box')) return;
     const text = (e.clipboardData || window.clipboardData)?.getData('text') || '';
     let token = null;
-    try { token = new URL(text.trim()).searchParams.get('claim'); } catch {}
+    let connectCode = null;
+    try { const u = new URL(text.trim()); token = u.searchParams.get('claim'); connectCode = u.searchParams.get('connect'); } catch {}
+    if (connectCode) { e.preventDefault(); handleConnectCode(connectCode); return; }
     if (token) { e.preventDefault(); handleClaimToken(token, false); return; }
     const chars = [...text].map(normalizeInviteCodeChar).join('').slice(0, 6);
     if (chars.length < 2) return;
@@ -13438,6 +13538,7 @@
   async function submitInviteCode() {
     const code = [...document.querySelectorAll('.otp-box')].map(b => b.value.trim()).join('').toUpperCase();
     if (code.length < 6) return;
+    if (_scannerMode === 'connect') { handleConnectCode(code); return; }
     if (_codeSubmitting) return;
     _codeSubmitting = true;
     const btn = document.getElementById('code-submit-btn');
@@ -13467,6 +13568,258 @@
     await handleClaimToken(match.qr_token, false);
     if (btn) btn.disabled = false;
     _codeSubmitting = false;
+  }
+
+  // ===== CONNECT: scan-to-connect (1:1, no crew needed) =====
+  // 📡 Connect on the Ravers page reuses the scanner overlay in 'connect'
+  // mode: one raver shows 🧿 My Code, the other scans or types it, and
+  // connect_by_code() links them instantly (showing your code is the consent).
+  // A connection sees the other exactly like a crewmate does — loadAllData()
+  // pulls them through the same masked get_crewmate_ravers() RPC.
+  let raverConnections = {};   // other raver id → { userId, metAtFestId, createdAt }
+  let _myConnectCode = null;
+  let _connectSubmitting = false;
+
+  function connectionFor(raverId) {
+    return raverConnections[String(raverId)] || null;
+  }
+
+  function applyScannerMode() {
+    const connecting = _scannerMode === 'connect';
+    const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+    set('scanner-title', connecting ? '📡 Connect' : '📲 Join a Crew');
+    document.getElementById('scanner-overlay')?.setAttribute('aria-label', connecting ? 'Scan to connect with a raver' : 'Scan to join a crew');
+    const mycodeTab = document.getElementById('stab-mycode');
+    if (mycodeTab) mycodeTab.style.display = connecting ? '' : 'none';
+    set('code-input-label', connecting ? 'Enter their connect code' : 'Enter your invite code');
+    set('code-input-hint', connecting
+      ? 'It\'s the 6 characters under their 🧿 My Code QR'
+      : 'Ask your crew leader for the 6-character code, then enter it below to see the crew and claim your spot');
+    set('code-submit-btn', connecting ? 'Connect 🧿' : 'Look up code →');
+  }
+
+  function openConnect() {
+    if (!currentUser) { showAuthScreen(); return; }
+    _pendingClaimToken = null;
+    _scannerMode = 'connect';
+    applyScannerMode();
+    showScannerView('scan');
+    document.getElementById('scanner-overlay').classList.add('open');
+    switchScannerTab('mycode');
+  }
+
+  function connectUrl(code) {
+    const base = (window.location.origin && window.location.origin !== 'null')
+      ? window.location.origin + window.location.pathname
+      : window.location.href.split('?')[0];
+    return `${base}?connect=${code}`;
+  }
+
+  async function renderMyConnectCode(rotate = false) {
+    const wrap = document.getElementById('connect-qr-wrap');
+    const codeEl = document.getElementById('connect-code-text');
+    if (!wrap || !codeEl) return;
+    if (!_myConnectCode || rotate) {
+      wrap.innerHTML = '<div class="text-hint" style="color:#333;">Generating…</div>';
+      const { data, error } = await sb.rpc(rotate ? 'rotate_my_connect_code' : 'get_my_connect_code');
+      if (error || !data) {
+        console.error('connect code error', error);
+        wrap.innerHTML = '<div class="text-hint" style="padding:12px;color:#333;">Couldn\'t load your code. Try again in a sec.</div>';
+        return;
+      }
+      _myConnectCode = data;
+    }
+    codeEl.textContent = _myConnectCode;
+    wrap.innerHTML = '';
+    const canvas = document.createElement('canvas');
+    canvas.style.cssText = 'border-radius:4px;display:block;';
+    wrap.appendChild(canvas);
+    QRCode.toCanvas(canvas, connectUrl(_myConnectCode), { width: 200, margin: 1 }, (err) => {
+      if (err) wrap.innerHTML = '<div class="text-hint" style="padding:12px;color:#333;">QR unavailable. Share the code below.</div>';
+    });
+  }
+
+  function rotateMyConnectCode() {
+    showConfirm('New connect code?', 'Your current QR and code stop working. Anyone already connected stays connected.', 'New code', () => {
+      renderMyConnectCode(true).then(() => { if (_myConnectCode) showToast('🔄 Fresh code ready'); });
+    });
+  }
+
+  // Best guess for "met at": a rave you're going to that's on right now —
+  // counting the morning after its last day, for the after-midnight crowd.
+  function liveFestForConnect() {
+    const you = squad.find(r => r.isYou);
+    if (!you) return null;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    return raverFestivals(you).find(f => {
+      const end = new Date(f._d); end.setDate(end.getDate() + Math.max(1, Number(f.days) || 1));
+      return f._d <= today && today <= end;
+    }) || null;
+  }
+
+  function connectFail(msg, err) {
+    const codeVisible = document.getElementById('scanner-pane-code')?.style.display !== 'none';
+    const scannerOpen = document.getElementById('scanner-overlay')?.classList.contains('open');
+    const errEl = document.getElementById('code-error');
+    if (scannerOpen && codeVisible && errEl) { errEl.textContent = msg; return; }
+    toastError(msg, err);
+    // Scanned from the camera: keep scanning so they can try again.
+    if (scannerOpen && document.getElementById('scanner-pane-camera')?.style.display !== 'none') setTimeout(startCamera, 1200);
+  }
+
+  async function handleConnectCode(rawCode) {
+    const code = normalizeInviteCodeChar(String(rawCode || '')).slice(0, 6);
+    if (code.length !== 6) { connectFail('That connect code doesn\'t look right. It\'s 6 characters, 0–9 and A–F.'); return; }
+    // Signed out (e.g. opened someone's QR with the phone camera): connect
+    // right after login — processPendingConnect() picks it up.
+    if (!currentUser) {
+      try { localStorage.setItem('pendingConnectCode', code); } catch {}
+      closeScanner();
+      showAuthScreen();
+      return;
+    }
+    if (_connectSubmitting) return;
+    _connectSubmitting = true;
+    const errEl = document.getElementById('code-error');
+    if (errEl) errEl.textContent = '';
+    try {
+      const fest = liveFestForConnect();
+      const { data, error } = await sb.rpc('connect_by_code', { p_code: code, p_fest_id: fest?.id || null });
+      if (error) {
+        connectFail(/rate_limited/.test(error.message || '')
+          ? 'Too many tries. Take a breather and try again in a few minutes.'
+          : 'Couldn\'t connect. Check your signal and try again.', error);
+        return;
+      }
+      if (data?.error) {
+        connectFail({
+          invalid_code: 'Code not found. Ask them to reopen 🧿 My Code. They may have made a new one.',
+          self: 'That\'s your own code 😄 Have your new raver scan it instead.',
+          blocked: 'You can\'t connect with this raver.',
+        }[data.error] || 'Couldn\'t connect. Try again.');
+        return;
+      }
+      closeScanner();
+      await loadAllData();
+      renderSquad();
+      renderCrews();
+      showKandiMoment(data.raver_id, data.met_at_fest_id, data.status);
+    } catch (err) {
+      connectFail('Couldn\'t connect. Check your signal and try again.', err);
+    } finally {
+      _connectSubmitting = false;
+    }
+  }
+
+  async function processPendingConnect() {
+    if (!currentUser || isOnboarding) return;
+    let code = null;
+    try { code = localStorage.getItem('pendingConnectCode'); localStorage.removeItem('pendingConnectCode'); } catch {}
+    if (code) await handleConnectCode(code);
+  }
+
+  // The kandi-trade moment, shown to whoever scanned (the other side gets a
+  // 🧿 notification from connect_by_code()).
+  function showKandiMoment(raverId, metAtFestId, status) {
+    const r = raverId ? getRaver(raverId) : null;
+    const you = squad.find(x => x.isYou);
+    const first = r ? escHtml(displayName(r).split(' ')[0]) : 'your new raver';
+    const fest = metAtFestId ? getFestival(metAtFestId) : null;
+    const isNew = status !== 'already';
+    const beads = ['#FF2D78', '#00F5FF', '#39FF14', '#BF00FF', '#FFE600'].map(c => `<span style="color:${c}"></span>`).join('');
+    document.getElementById('connect-modal').innerHTML = `
+      <div class="kandi-moment">
+        <div class="kandi-beads" aria-hidden="true">${beads}</div>
+        <div class="kandi-avatars">
+          ${you ? raverAvatarHTML(you.avatarUrl, you.gradient, you.name, 'member-avatar', '') : ''}
+          <span aria-hidden="true">🤝</span>
+          ${r ? raverAvatarHTML(r.avatarUrl, r.gradient, r.name, 'member-avatar', '') : ''}
+        </div>
+        <div class="modal-title" style="margin-bottom:6px;">${isNew ? `Kandi traded with ${first}! 🧿` : `You and ${first} are already FAM 💜`}</div>
+        <div class="qr-hint">${isNew ? 'Peace, Love, Unity, Respect. You\'re connected: you\'ll see each other\'s raves and vibes like crewmates, no crew needed.' : 'You were already connected. Nothing changed.'}</div>
+        ${r ? `<button type="button" class="connect-met-chip" data-raver-id="${escHtml(r.id)}" onclick="openMetAtPicker(this.dataset.raverId)">📍 ${fest ? `Met at ${escHtml(fest.name)}` : 'Where\'d you meet?'} · change</button>` : ''}
+        <div style="display:flex;gap:10px;justify-content:center;margin-top:18px;flex-wrap:wrap;">
+          ${r ? `<button class="btn btn-primary" style="padding:9px 18px;font-size:0.82rem;" data-raver-id="${escHtml(r.id)}" onclick="closeConnectModal(); openProfile(this.dataset.raverId, false, 'members')">View ${first}'s profile</button>` : ''}
+          <button class="btn btn-ghost" style="padding:9px 18px;font-size:0.82rem;" onclick="closeConnectModal()">Done</button>
+        </div>
+      </div>`;
+    document.getElementById('connect-overlay').classList.add('open');
+    if (isNew) { launchConfetti(); hapticSuccess(); }
+  }
+
+  function closeConnectModal() {
+    document.getElementById('connect-overlay').classList.remove('open');
+  }
+
+  // Fix the auto-guessed "met at" rave: your raves nearest the day you
+  // connected first, plus "Not at a rave".
+  function openMetAtPicker(raverId) {
+    const conn = connectionFor(raverId);
+    const r = getRaver(raverId);
+    const you = squad.find(x => x.isYou);
+    if (!conn || !r) return;
+    const when = new Date(conn.createdAt || Date.now()).getTime();
+    const fests = (you ? raverFestivals(you) : [])
+      .sort((a, b) => Math.abs(a._d - when) - Math.abs(b._d - when))
+      .slice(0, 12);
+    const opt = (festId, label) => `<button type="button" class="connect-fest-opt${String(conn.metAtFestId || '') === String(festId || '') ? ' active' : ''}" data-raver-id="${escHtml(r.id)}" data-fest-id="${escHtml(festId || '')}" onclick="setConnectionMetAt(this.dataset.raverId, this.dataset.festId || null)">${label}</button>`;
+    document.getElementById('connect-modal').innerHTML = `
+      <div class="modal-title" style="margin-bottom:4px;">Where'd you meet ${escHtml(displayName(r).split(' ')[0])}?</div>
+      <div class="qr-hint">Only you two see this.</div>
+      <div class="connect-fest-list">
+        ${fests.map(f => opt(f.id, `🎟️ ${escHtml(f.name)}`)).join('')}
+        ${opt(null, '✨ Not at a rave')}
+      </div>
+      <button class="btn btn-ghost" style="padding:8px 18px;font-size:0.8rem;" onclick="closeConnectModal()">Cancel</button>`;
+    document.getElementById('connect-overlay').classList.add('open');
+  }
+
+  async function setConnectionMetAt(raverId, festId) {
+    const conn = connectionFor(raverId);
+    if (!conn) return;
+    const { data, error } = await sb.rpc('set_connection_met_at', { p_user_id: conn.userId, p_fest_id: festId || null });
+    if (error || !data) { toastError('Couldn\'t save that. Try again.', error); return; }
+    conn.metAtFestId = festId || null;
+    closeConnectModal();
+    showToast(festId ? `📍 Saved: met at ${getFestival(festId)?.name || 'that rave'}` : '📍 Saved');
+    renderSquad();
+    if (document.getElementById('page-profile')?.classList.contains('active')) openProfile(raverId);
+  }
+
+  // Silent: the other raver isn't told.
+  function confirmRemoveConnection(raverId) {
+    const conn = connectionFor(raverId);
+    const r = getRaver(raverId);
+    if (!conn || !r) return;
+    const first = displayName(r).split(' ')[0];
+    showConfirm(`Remove ${first}?`, `You'll stop seeing each other's raves and vibes, unless you share a crew. ${first} won't be told.`, 'Remove', async () => {
+      const { error } = await sb.rpc('remove_connection', { p_user_id: conn.userId });
+      if (error) { toastError('Couldn\'t remove that connection. Try again.', error); return; }
+      await loadAllData();
+      renderSquad();
+      renderCrews();
+      if (getRaver(raverId)) openProfile(raverId);
+      else backFromProfile();
+      showToast(`Removed ${first}`);
+    });
+  }
+
+  // "🤝 Met at EDC · 🧿 12 kandi traded" under a profile's name. The kandi
+  // count fills in from loadProfileAsync().
+  function profileConnectionLineHTML(r, perms) {
+    const conn = r.isYou ? null : connectionFor(r.id);
+    if (!conn && !r.isYou && !perms.isClaimed) return '';
+    const fest = conn?.metAtFestId ? getFestival(conn.metAtFestId) : null;
+    return `<div class="profile-connection-line">
+        ${conn ? `<button type="button" class="connect-met-chip" data-raver-id="${escHtml(r.id)}" onclick="openMetAtPicker(this.dataset.raverId)">🤝 ${fest ? `Met at ${escHtml(fest.name)}` : 'Connected'}</button>` : ''}
+        <span class="kandi-count" id="profile-kandi-count"></span>
+      </div>`;
+  }
+
+  async function loadKandiCount(raverId) {
+    const { data, error } = await sb.rpc('get_kandi_count', { p_raver_id: raverId });
+    if (error) { console.warn('get_kandi_count error', error); return null; }
+    return typeof data === 'number' ? data : null;
   }
 
   // ── Main claim handler ────────────────────────────────
@@ -14248,8 +14601,10 @@
       // opens the rave after).
       const pendingRave = !!localStorage.getItem('pendingRaveSlug');
       const pendingPicks = !!localStorage.getItem('pendingPicksHandoff') || !!localStorage.getItem('pendingInviteRaver');
-      const onboarding = runFirstTimeSetup({ allowWelcome: !deepLink && !pendingRave && !pendingPicks });
+      const pendingConnect = !!localStorage.getItem('pendingConnectCode');
+      const onboarding = runFirstTimeSetup({ allowWelcome: !deepLink && !pendingRave && !pendingPicks && !pendingConnect });
       if (!onboarding && !deepLink) {
+        processPendingConnect();
         processPendingRave();
         if (!pendingRave && !processPendingInvite()) processPendingPicks();
       }
@@ -14352,6 +14707,9 @@
     // The festivals/ravers/crews calls don't depend on each other's data
     // (only the processing below does), so fetch them together and process
     // in dependency order once all three land.
+    // 📡 Connections ride along; only needed once crews are processed below.
+    // A failure (or the RPC not existing yet) just means no connections.
+    const connectionsP = sb.rpc('get_my_connections').then(res => res, () => ({ data: null }));
     const [
       { data: dbFests, error: fErr },
       { data: dbRavers, error: rErr },
@@ -14481,6 +14839,15 @@
         const sid = String(cm.raver_id);
         if (!knownIds.has(sid)) { missingIds.push(cm.raver_id); knownIds.add(sid); }
       });
+    });
+    // 📡 Connections (no shared crew needed) load through the same masked RPC.
+    const { data: dbConnections } = await connectionsP;
+    raverConnections = {};
+    (dbConnections || []).forEach(c => {
+      if (!c.raver_id) return;
+      const sid = String(c.raver_id);
+      raverConnections[sid] = { userId: c.user_id, metAtFestId: c.met_at_fest_id || null, createdAt: c.created_at || null };
+      if (!knownIds.has(sid)) { missingIds.push(c.raver_id); knownIds.add(sid); }
     });
     if (missingIds.length) {
       const { data: crewRavers } = await sb
@@ -32331,6 +32698,10 @@
       // Use gradient for the divider accent
       const dividerBg = r.isYou ? 'var(--neon-pink)' : r.gradient || 'rgba(255,255,255,0.15)';
 
+      const conn = r.isYou ? null : connectionFor(r.id);
+      const metFest = conn?.metAtFestId ? getFestival(conn.metAtFestId) : null;
+      const metTag = conn ? `<div class="member-met-tag">🤝 ${metFest ? `Met at ${escHtml(metFest.name)}` : 'Connected'}</div>` : '';
+
       const isClaimed = raverPerms(r).isClaimed;
       const claimBadge = r.isYou ? '' : isClaimed
         ? `<span class="verified-badge" title="Claimed">✓</span>`
@@ -32342,6 +32713,7 @@
         <div class="member-info">
           <div class="member-name">${escHtml(displayName(r))}${r.isYou ? ' <span style="font-size:0.75rem;margin-right:2px;">👑</span><span style="font-size:0.7rem;color:var(--neon-pink);font-family:\'Outfit\',sans-serif;font-weight:700;">YOU</span>' : ` ${claimBadge}`}</div>
           <div class="member-handle">${escHtml(r.handle)}</div>
+          ${metTag}
           ${nextFestLine}
           ${raverPerms(r).baseVisible ? `<div class="member-base">📍 ${escHtml(r.base)}</div>` : ''}
           ${miniVibes ? `<div class="member-vibes">${miniVibes}</div>` : ''}
@@ -33183,6 +33555,7 @@
     // Less-used actions on someone else's profile live behind ⋯
     const moreItems = [
       perms.canDisconnect ? `<button type="button" class="pmm-item" data-raver-id="${r.id}" onclick="showDisconnectConfirm(this.dataset.raverId)">🔗 Disconnect account</button>` : '',
+      !r.isYou && connectionFor(r.id) ? `<button type="button" class="pmm-item" data-raver-id="${r.id}" onclick="confirmRemoveConnection(this.dataset.raverId)">🔌 Remove connection</button>` : '',
       !r.isYou && currentUser ? `<button type="button" class="pmm-item" data-raver-id="${r.id}" onclick="showReportModal('raver', this.dataset.raverId)">🚩 Report</button>` : '',
       currentUser && r.claimedBy && r.claimedBy !== currentUser.id ? `<button type="button" class="pmm-item" data-block-uid="${escHtml(r.claimedBy)}" onclick="toggleBlockFromProfile(this)" title="${isBlockedUser(r.claimedBy) ? 'Unblock' : 'Block'}" aria-label="${isBlockedUser(r.claimedBy) ? 'Unblock' : 'Block'}">${isBlockedUser(r.claimedBy) ? '✅ Unblock' : '🚫 Block'}</button>` : '',
       perms.canDelete ? `<button type="button" class="pmm-item danger" data-raver-id="${r.id}" onclick="deleteUnclaimedProfile(this.dataset.raverId)">🗑️ Delete profile</button>` : '',
@@ -33229,6 +33602,7 @@
             : perms.baseVisible
               ? `<div class="profile-base-line">📍 Based in ${escHtml(r.base)}</div>`
               : `<div class="profile-base-line">📍 Location private</div>`}
+          ${profileConnectionLineHTML(r, perms)}
         </div>
       </div>
 
@@ -33306,6 +33680,17 @@
         if (String(_raverHistoryLoadedFor) !== String(_historyProfileId)) return; // profile changed since
         raverHistoryRows = rows;
         rerenderRaverHistory(rows);
+      }).catch(console.warn);
+    }
+
+    // 🧿 Kandi traded (connection count) — own profile or any claimed raver.
+    if (!editMode && currentUser && document.getElementById('profile-kandi-count')) {
+      const _kandiProfileId = r.id;
+      loadKandiCount(_kandiProfileId).then(n => {
+        const el = document.getElementById('profile-kandi-count');
+        if (!el || n === null || !getRaver(_kandiProfileId)) return;
+        if (String(_raverHistoryLoadedFor) !== String(_kandiProfileId)) return; // profile changed since
+        el.textContent = n > 0 ? `🧿 ${n} kandi traded` : (r.isYou ? '🧿 No kandi traded yet. Tap 📡 Connect!' : '');
       }).catch(console.warn);
     }
 
@@ -39274,6 +39659,7 @@
     }
     const hadPendingRave = !!localStorage.getItem('pendingRaveSlug');
     processPendingRave(); // rave share link that brought this raver in
+    processPendingConnect(); // someone's 🧿 My Code QR that brought them in
     if (!hadPendingRave) processPendingPicks(); // Lineup Explorer 📋 picks that brought them in
   }
 
