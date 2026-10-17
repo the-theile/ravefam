@@ -164,6 +164,10 @@ test.describe('mission briefing', () => {
     expect(new URL(page.url()).search).toBe(''); // params dropped so a reload doesn't reopen it
 
     // A running tab gets the same target from the service worker by postMessage.
+    // Wait past switchTab's 400 ms double-tap window first: two code-driven
+    // switchTab('crews') calls inside it trigger a full data refresh, which
+    // briefly empties crews and drops any deep link (Huddle rooms included).
+    await page.waitForTimeout(500);
     await page.evaluate(() => { closeMissionBriefing(); openHuddleDeepLink({ crewId: 'c1', briefing: 'f1' }); });
     await expect(page.locator('#mission-briefing-overlay')).toHaveClass(/open/, { timeout: 15000 });
   });
