@@ -6623,30 +6623,34 @@
     display: flex; align-items: center; justify-content: center;
     flex-direction: column; gap: 18px;
     padding: 24px 16px;
+    --p: 0;
   }
-  #app-loading.hidden { display: none; }
-  .al-orb { position: relative; width: 112px; height: 112px; }
-  .al-orb span {
-    position: absolute; inset: 0; border-radius: 50%;
-    border: 2px solid var(--neon-pink);
-    opacity: 0; animation: alRipple 2.4s cubic-bezier(.2,.6,.3,1) infinite;
+  /* .hidden is the finish: every ray lights, the mark pulses once, then the
+     overlay fades out over whatever screen was revealed underneath. */
+  #app-loading.hidden {
+    --p: 1 !important; opacity: 0; visibility: hidden; pointer-events: none;
+    transition: opacity .35s ease .32s, visibility 0s linear .67s;
   }
-  .al-orb span:nth-child(2) { border-color: var(--neon-cyan); animation-delay: .8s; }
-  .al-orb span:nth-child(3) { border-color: var(--neon-green); animation-delay: 1.6s; }
-  .al-orb b {
-    position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px;
-    border-radius: 50%; background: var(--neon-green);
-    box-shadow: 0 0 0 5px rgba(var(--white-rgb),0.9) inset, 0 0 18px var(--neon-green), 0 0 42px rgba(var(--neon-green-rgb),0.5);
-    animation: alBeat .6s ease-in-out infinite alternate;
+  /* Logo mark warms up: the whole mark shows from the start and brightens
+     evenly as --p (0..1) rises, so a fast load just eases to full. */
+  .al-mark { width: 112px; height: 112px; overflow: visible; }
+  .al-ray {
+    opacity: calc(.3 + .7 * var(--p));
+    filter: drop-shadow(0 0 calc(3px * var(--p)) currentColor);
+    transition: opacity .4s ease, filter .4s ease;
   }
-  @keyframes alRipple { 0% { transform: scale(.2); opacity: .9; } 100% { transform: scale(1); opacity: 0; } }
-  @keyframes alBeat { to { transform: scale(1.18); } }
+  .al-ring { stroke: rgba(var(--neon-green-rgb), calc(.08 + .25 * var(--p))); }
+  .al-halo { opacity: calc(.04 + .2 * var(--p)); }
+  .al-core { opacity: calc(.25 + .7 * var(--p)); }
+  #app-loading.hidden .al-mark { animation: alDrop .45s ease-out; }
+  @keyframes alDrop { 40% { transform: scale(1.12); } }
   .al-word { font-family: 'Urbanist', sans-serif; font-weight: 800; font-size: 2rem; letter-spacing: -0.5px; line-height: 1; }
   .al-word span:first-child { color: var(--white); }
   .al-word span:last-child { color: var(--neon-green); text-shadow: 0 0 18px rgba(var(--neon-green-rgb),0.45); }
-  .al-eq { display: flex; align-items: flex-end; gap: 4px; height: 18px; }
+  .al-eq { display: flex; align-items: flex-end; gap: 4px; height: 22px; }
   .al-eq i {
-    width: 4px; height: 100%; border-radius: 2px; background: var(--neon-pink);
+    width: 4px; height: calc(4px + 18px * var(--p)); border-radius: 2px; background: var(--neon-pink);
+    transition: height .3s ease;
     transform-origin: bottom; animation: alEq .9s ease-in-out infinite alternate;
   }
   .al-eq i:nth-child(3n+2) { background: var(--neon-cyan); }
@@ -6654,7 +6658,7 @@
   .al-eq i:nth-child(2) { animation-delay: -.45s; } .al-eq i:nth-child(3) { animation-delay: -.2s; }
   .al-eq i:nth-child(4) { animation-delay: -.7s; }  .al-eq i:nth-child(5) { animation-delay: -.1s; }
   .al-eq i:nth-child(6) { animation-delay: -.55s; } .al-eq i:nth-child(7) { animation-delay: -.3s; }
-  @keyframes alEq { from { transform: scaleY(.2); } to { transform: scaleY(1); } }
+  @keyframes alEq { from { transform: scaleY(.35); } to { transform: scaleY(1); } }
   .al-line {
     font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.85rem;
     color: var(--muted); min-height: 1.3em; text-align: center;
@@ -6674,8 +6678,7 @@
     box-shadow: 0 0 16px rgba(var(--neon-pink-rgb),0.35);
   }
   @media (prefers-reduced-motion: reduce) {
-    .al-orb span, .al-orb b, .al-eq i, .al-line { animation: none; }
-    .al-orb span { opacity: .5; } .al-orb span:nth-child(2) { transform: scale(.66); } .al-orb span:nth-child(3) { transform: scale(.33); }
+    .al-eq i, .al-line, #app-loading.hidden .al-mark { animation: none; }
     .al-eq i { transform: scaleY(.6); }
   }
   .spinner {
@@ -9373,7 +9376,39 @@
 
 <!-- Loading overlay (shown while checking session) -->
 <div id="app-loading" role="status" aria-label="Loading RaveFAM">
-  <div class="al-orb" aria-hidden="true"><span></span><span></span><span></span><b></b></div>
+  <svg class="al-mark" viewBox="0 0 72 72" fill="none" aria-hidden="true">
+    <defs><filter id="fnc-al" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+    <g stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+      <line class="al-ray" x1="36" y1="22" x2="36" y2="9" color="#FF2D78" style="animation-delay:0.00s"/>
+      <line class="al-ray" x1="39.62" y1="22.48" x2="41.95" y2="13.78" color="#39FF14" style="animation-delay:0.06s"/>
+      <line class="al-ray" x1="43" y1="23.88" x2="51" y2="10.02" color="#00F5FF" style="animation-delay:0.11s"/>
+      <line class="al-ray" x1="45.9" y1="26.1" x2="52.97" y2="19.03" color="#39FF14" style="animation-delay:0.17s"/>
+      <line class="al-ray" x1="48.12" y1="29" x2="64.58" y2="19.5" color="#39FF14" style="animation-delay:0.22s"/>
+      <line class="al-ray" x1="49.52" y1="32.38" x2="60.15" y2="29.53" color="#39FF14" style="animation-delay:0.28s"/>
+      <line class="al-ray" x1="50" y1="36" x2="65" y2="36" color="#FF2D78" style="animation-delay:0.33s"/>
+      <line class="al-ray" x1="49.52" y1="39.62" x2="57.25" y2="41.69" color="#39FF14" style="animation-delay:0.39s"/>
+      <line class="al-ray" x1="48.12" y1="43" x2="63.71" y2="52" color="#39FF14" style="animation-delay:0.44s"/>
+      <line class="al-ray" x1="45.9" y1="45.9" x2="52.97" y2="52.97" color="#39FF14" style="animation-delay:0.49s"/>
+      <line class="al-ray" x1="43" y1="48.12" x2="50" y2="60.25" color="#00F5FF" style="animation-delay:0.55s"/>
+      <line class="al-ray" x1="39.62" y1="49.52" x2="42.99" y2="62.08" color="#39FF14" style="animation-delay:0.60s"/>
+      <line class="al-ray" x1="36" y1="50" x2="36" y2="61" color="#FF2D78" style="animation-delay:0.66s"/>
+      <line class="al-ray" x1="32.38" y1="49.52" x2="28.24" y2="64.98" color="#39FF14" style="animation-delay:0.71s"/>
+      <line class="al-ray" x1="29" y1="48.12" x2="24.5" y2="55.92" color="#00F5FF" style="animation-delay:0.77s"/>
+      <line class="al-ray" x1="26.1" y1="45.9" x2="12.67" y2="59.33" color="#39FF14" style="animation-delay:0.82s"/>
+      <line class="al-ray" x1="23.88" y1="43" x2="12.62" y2="49.5" color="#39FF14" style="animation-delay:0.88s"/>
+      <line class="al-ray" x1="22.48" y1="39.62" x2="7.99" y2="43.51" color="#39FF14" style="animation-delay:0.94s"/>
+      <line class="al-ray" x1="22" y1="36" x2="12" y2="36" color="#FF2D78" style="animation-delay:0.99s"/>
+      <line class="al-ray" x1="22.48" y1="32.38" x2="5.09" y2="27.72" color="#39FF14" style="animation-delay:1.04s"/>
+      <line class="al-ray" x1="23.88" y1="29" x2="11.75" y2="22" color="#39FF14" style="animation-delay:1.10s"/>
+      <line class="al-ray" x1="26.1" y1="26.1" x2="18.32" y2="18.32" color="#39FF14" style="animation-delay:1.16s"/>
+      <line class="al-ray" x1="29" y1="23.88" x2="25" y2="16.95" color="#00F5FF" style="animation-delay:1.21s"/>
+      <line class="al-ray" x1="32.38" y1="22.48" x2="28.75" y2="8.95" color="#39FF14" style="animation-delay:1.26s"/>
+    </g>
+    <circle class="al-halo" cx="36" cy="36" r="8" fill="#39FF14" filter="url(#fnc-al)"/>
+    <circle class="al-core" cx="36" cy="36" r="5" fill="#39FF14"/>
+    <circle cx="36" cy="36" r="2.5" fill="#fff"/>
+    <circle class="al-ring" cx="36" cy="36" r="34" stroke-width="0.8"/>
+  </svg>
   <div class="al-word" aria-hidden="true"><span>Rave</span><span>FAM</span></div>
   <div class="al-eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
   <div class="al-line" id="app-loading-line" aria-hidden="true">Checking the guest list…</div>
@@ -9383,19 +9418,26 @@
   </div>
 </div>
 <script>
-  // Boot loader: cycle a status line in time with the CSS fade, and offer Retry
-  // after 10s. Standalone on purpose — if the main script throws before it can
-  // hide the loader (e.g. the Supabase CDN failed), this still runs.
+  // Boot loader: warm up the logo, cycle a status line in time with the CSS
+  // fade, and offer Retry after 10s. Standalone on purpose — if the main
+  // script throws before it can hide the loader (e.g. the Supabase CDN
+  // failed), this still runs.
   (function () {
     var root = document.getElementById('app-loading');
     var line = document.getElementById('app-loading-line');
     var lines = ['Checking the guest list…', 'Finding your crew…', 'Syncing the lineup…', 'Warming up the Huddle…'];
-    var i = 0;
+    var t0 = Date.now(), i = 0;
     var tick = setInterval(function () {
       if (root.classList.contains('hidden')) { clearInterval(tick); return; }
       i = (i + 1) % lines.length;
       line.textContent = lines[i];
     }, 1600);
+    // No real progress signal during the session check, so ease toward 90%;
+    // .hidden snaps it to 100% when the app is actually ready.
+    var warm = setInterval(function () {
+      if (root.classList.contains('hidden')) { clearInterval(warm); return; }
+      root.style.setProperty('--p', 0.9 * (1 - Math.exp(-(Date.now() - t0) / 2500)));
+    }, 80);
     setTimeout(function () {
       if (!root.classList.contains('hidden')) document.getElementById('app-loading-slow').classList.add('show');
     }, 10000);
@@ -10862,7 +10904,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.25.0';
+  const APP_VERSION = '2.25.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
