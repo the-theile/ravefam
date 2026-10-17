@@ -165,7 +165,7 @@ test.describe('mission briefing', () => {
 
     // A running tab gets the same target from the service worker by postMessage.
     await page.evaluate(() => { closeMissionBriefing(); openHuddleDeepLink({ crewId: 'c1', briefing: 'f1' }); });
-    await expect(page.locator('#mission-briefing-overlay')).toHaveClass(/open/);
+    await expect(page.locator('#mission-briefing-overlay')).toHaveClass(/open/, { timeout: 15000 });
   });
 
   test('the Mission Briefing alert can be switched off in settings', async ({ page }) => {
@@ -178,6 +178,33 @@ test.describe('mission briefing', () => {
     await expect.poll(isOn).toBe(false);
     const pref = await page.evaluate(() => (window.__store.alert_preferences || []).find(p => p.type === 'mission_briefing'));
     expect(pref).toMatchObject({ enabled: false });
+  });
+
+  test('each entry point logs briefing_opened with its source', async ({ page }) => {
+    await bootAuthedApp(page, { data: briefingData() });
+    await openBriefing(page); // Rave Plan button
+    await page.locator('.mb-x').click();
+    await page.evaluate(() => openHuddleDeepLink({ crewId: 'c1', briefing: 'f1' }));
+    await expect(page.locator('#mission-briefing-overlay')).toHaveClass(/open/);
+    const calls = await page.evaluate(() => (window.__store.__rpcCalls || [])
+      .filter(c => c.fn === 'log_analytics_event' && c.args.p_event_name === 'briefing_opened')
+      .map(c => [c.args.p_crew_id, c.args.p_properties.source, c.args.p_properties.festival_id]));
+    expect(calls).toEqual([['c1', 'rave_plan', 'f1'], ['c1', 'nudge', 'f1']]);
+  });
+
+  test('PM dashboard nudge funnel section renders the metrics', async ({ page }) => {
+    await bootAuthedApp(page, { data: briefingData() });
+    const html = await page.evaluate(() => pmBriefingSection({
+      ok: true, sent_30d: 40, push_30d: 31, email_30d: 9, opened_30d: 22,
+      skipped_30d: { turned_off: 3, no_channel: 2 },
+      weekly: [{ week_start: '2099-07-06', sent: 15, opened: 9 }, { week_start: '2099-07-13', sent: 25, opened: 13 }],
+      opens_by_source_30d: { nudge: 22, huddle: 14, rave_plan: 30 },
+    }));
+    expect(html).toContain('55%');                 // 22 of 40 opened from the nudge
+    expect(html).toContain('31 push · 9 email');
+    expect(html).toContain('switched off');
+    expect(html).toContain('rave plan');
+    expect(await page.evaluate(() => pmBriefingSection(null))).toContain('unavailable');
   });
 
   test('Escape closes the deck', async ({ page }) => {

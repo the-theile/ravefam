@@ -19580,6 +19580,7 @@
   // ===== PM METRICS DASHBOARD (super-admin only) =====
   let pmDashData = null;
   let pmExplorerData = null;  // get_explorer_metrics() — Lineup Explorer → member funnel; null if it failed
+  let pmBriefingData = null;  // get_mission_briefing_metrics() — night-before nudge funnel; null if it failed
   let pmDashCharts = {};
   let _chartJsPromise = null;
   function loadChartJs() {
@@ -19621,11 +19622,13 @@
       <div class="text-hint-lg" style="margin-bottom:18px;">Live numbers straight from the database — visible to you only.</div>
       <div id="pm-dash-body" class="es-block" style="padding:40px 24px;"><div class="es-icon">⏳</div><div class="es-headline">Loading metrics…</div></div>
     `;
-    const [{ data, error }, explorerRes] = await Promise.all([
+    const [{ data, error }, explorerRes, briefingRes] = await Promise.all([
       sb.rpc('get_pm_dashboard_metrics'),
-      sb.rpc('get_explorer_metrics')
+      sb.rpc('get_explorer_metrics'),
+      sb.rpc('get_mission_briefing_metrics')
     ]);
     pmExplorerData = explorerRes && explorerRes.data && explorerRes.data.ok ? explorerRes.data : null;
+    pmBriefingData = briefingRes && briefingRes.data && briefingRes.data.ok ? briefingRes.data : null;
     if (error || !data || !data.ok) {
       const body = document.getElementById('pm-dash-body');
       if (body) body.innerHTML = `<div class="es-block" style="padding:40px 24px;"><div class="es-icon">⚠️</div><div class="es-headline">Couldn't load metrics</div><div class="es-sub">${escHtml(data?.error || error?.message || 'Unknown error')}</div></div>`;
@@ -19701,6 +19704,12 @@
         <div class="pm-section-title">🔭 Lineup Explorer → Members</div>
         <div class="pm-section-sub">Weekly cohorts of first-time explorer visitors, and how many signed up within 30 days (baseline before explorer member features)</div>
         ${pmExplorerSection(pmExplorerData)}
+      </div>
+
+      <div class="pm-section">
+        <div class="pm-section-title">🎯 Mission Briefing nudge</div>
+        <div class="pm-section-sub">6 PM the night before: nudges sent, and how many ravers opened their briefing from it within 24 h</div>
+        ${pmBriefingSection(pmBriefingData)}
       </div>
 
       <div class="pm-section">
@@ -19851,6 +19860,35 @@
       ${weeks || pmEmptyNote('No explorer visitors yet')}
       <div class="pm-section-sub" style="margin-top:12px;">Top lineups (7d)</div>
       ${top}`;
+  }
+
+  const PM_BRIEFING_SKIP_LABELS = {
+    turned_off: 'switched off', no_channel: 'no push or email', no_shared_crew: 'crew changed',
+    push_failed_no_email: 'push failed, no email'
+  };
+  function pmBriefingSection(x) {
+    if (!x) return pmEmptyNote('Mission Briefing metrics unavailable right now');
+    const rate = x.sent_30d ? `${Math.round((x.opened_30d / x.sent_30d) * 100)}%` : '—';
+    const kpis = `<div class="pm-kpi-grid">
+        ${pmKpiCard('Nudges sent (30d)', pmFmt(x.sent_30d), `${pmFmt(x.push_30d)} push · ${pmFmt(x.email_30d)} email`)}
+        ${pmKpiCard('Opened from nudge (30d)', rate, `${pmFmt(x.opened_30d)} of ${pmFmt(x.sent_30d)} within 24 h`)}
+      </div>`;
+    const weeks = (x.weekly || []).slice().reverse().map(w => `
+      <div class="pm-row">
+        <span class="pm-row-label">${pmWeekLabel(w.week_start)} <span class="pm-pill">n=${pmFmt(w.sent)}</span></span>
+        <span class="pm-row-value">${pmFmt(w.opened)} opened · ${w.sent ? Math.round((w.opened / w.sent) * 100) + '%' : '—'}</span>
+      </div>`).join('');
+    const skipped = Object.entries(x.skipped_30d || {}).map(([k, n]) => `
+      <div class="pm-row"><span class="pm-row-label">${escHtml(PM_BRIEFING_SKIP_LABELS[k] || k)}</span><span class="pm-row-value">${pmFmt(n)}</span></div>`).join('');
+    const sources = Object.entries(x.opens_by_source_30d || {}).sort((a, b) => b[1] - a[1]).map(([k, n]) => `
+      <div class="pm-row"><span class="pm-row-label">${escHtml(k.replace('_', ' '))}</span><span class="pm-row-value">${pmFmt(n)} open${n === 1 ? '' : 's'}</span></div>`).join('');
+    return `${kpis}
+      <div class="pm-section-sub" style="margin-top:12px;">Nudge → open by week (newest first)</div>
+      ${weeks || pmEmptyNote('No nudges sent yet')}
+      <div class="pm-section-sub" style="margin-top:12px;">Not delivered (30d)</div>
+      ${skipped || pmEmptyNote('Every nudge went out')}
+      <div class="pm-section-sub" style="margin-top:12px;">All briefing opens by entry point (30d)</div>
+      ${sources || pmEmptyNote('No briefings opened yet')}`;
   }
 
   function pmTopCrewsRows(crews) {
@@ -24788,7 +24826,9 @@
 
   // ── Open / close ──
 
-  async function openMissionBriefing(crewId, festivalId, startCard = 'cover') {
+  // source (rave_plan | rave_focus | huddle | nudge) feeds the PM
+  // dashboard's nudge funnel via briefing_opened.
+  async function openMissionBriefing(crewId, festivalId, startCard = 'cover', source = 'rave_plan') {
     if (!currentUser) { toastError('Sign in to open the Mission Briefing'); return; }
     if (!getCrew(crewId)) return;
     const overlay = document.getElementById('mission-briefing-overlay');
@@ -24807,6 +24847,7 @@
     if (!mbPlan()) { closeMissionBriefing({ quiet: true }); toastError('Could not open the briefing. Try again'); return; }
     mbRenderShell();
     mbSubscribe();
+    logAnalyticsEvent('briefing_opened', { crew_id: crewId, source, festival_id: festivalId });
     mbLoadMeetupPin(session);
     mbLoadWeather(session);
   }
@@ -25653,7 +25694,7 @@
     const days = d ? daysUntil(d) : null;
     const when = days == null ? '' : days > 1 ? `T-minus ${days} days` : days === 1 ? 'Tomorrow' : days === 0 ? 'Today' : 'Case closed';
     return `<div class="hd-briefing" data-mb-key="${escHtml(key)}" role="button" tabindex="0" aria-label="Open the ${escHtml(fest.name)} Mission Briefing"
-        onclick="openMissionBriefing('${escJsAttr(String(m.crew_id))}','${escJsAttr(festId)}','signoff')">
+        onclick="openMissionBriefing('${escJsAttr(String(m.crew_id))}','${escJsAttr(festId)}','signoff','huddle')">
         <span class="hd-briefing-tab">🎯 MISSION BRIEFING</span>
         <b class="hd-briefing-name">${escHtml(fest.name)}</b>
         ${when ? `<span class="hd-briefing-when">${escHtml(when)}</span>` : ''}
@@ -25687,7 +25728,7 @@
     if (!mine.length) return '';
     return `<div class="rf-card">${mine.map(c => `
       <div class="rf-recap-row"><span>🎯 Mission Briefing${mine.length > 1 ? ` · ${escHtml(c.name)}` : ''}</span>
-        <button type="button" class="rf-mini-btn" onclick="openMissionBriefing('${escJsAttr(String(c.id))}','${escJsAttr(String(f.id))}')">Open</button></div>`).join('')}</div>`;
+        <button type="button" class="rf-mini-btn" onclick="openMissionBriefing('${escJsAttr(String(c.id))}','${escJsAttr(String(f.id))}','cover','rave_focus')">Open</button></div>`).join('')}</div>`;
   }
 
   // ===== Dream Board =====
@@ -38629,7 +38670,7 @@
     switchTab('crews');
     await openDetail(link.crewId);
     // The night-before Mission Briefing nudge opens the deck, not a room.
-    if (link.briefing) { await openMissionBriefing(link.crewId, link.briefing, 'signoff'); return; }
+    if (link.briefing) { await openMissionBriefing(link.crewId, link.briefing, 'signoff', 'nudge'); return; }
     await openHuddle(link.crewId, link.roomId ? { roomId: link.roomId } : {});
     if (!link.roomId || !link.messageId) return;
     // The payload has no timestamp and switchHuddleRoomAtMessage pages around
