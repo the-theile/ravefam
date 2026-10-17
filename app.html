@@ -5495,6 +5495,7 @@
   /* Reaction chips on a pin row: only the used ones, or the full set while picking (long-press). */
   .crew-feed-pin-rxs { display: flex; gap: 4px; flex-shrink: 0; }
   .crew-feed-pin .crew-feed-act { padding: 4px 8px; }
+  .crew-feed-card.is-paper .crew-feed-pin-add { background: transparent; color: #8a8090; font-size: 0.8rem; }
   .crew-feed-pin.is-picking { box-shadow: 0 0 0 2px color-mix(in srgb, var(--neon-orange) 55%, transparent); }
   .crew-feed-pin.is-new::after { top: 6px; left: 30px; }
   .crew-feed-pin-emoji { font-size: 1.15rem; flex-shrink: 0; line-height: 1; }
@@ -21045,7 +21046,8 @@
       // Tap opens Pins; long-press (or right-click) shows the reaction set in
       // place of the chips. A <div> so the chips can be real buttons inside.
       const picking = _crewFeedPickerId === String(it.id);
-      const chips = uid ? crewFeedReactionBtnsHTML(it, crewId, !picking) : '';
+      const chips = uid ? crewFeedReactionBtnsHTML(it, crewId, !picking)
+        + (picking ? '' : `<button type="button" class="crew-feed-act crew-feed-pin-add" aria-label="React" onclick="event.stopPropagation(); openCrewFeedPicker(this.closest('.crew-feed-pin'))">＋</button>`) : '';
       return `
         <div role="button" tabindex="0" class="crew-feed-card crew-feed-pin is-paper${isNew ? ' is-new' : ''}${picking ? ' is-picking' : ''}" style="--ac:var(${k.ac})" data-kind="badge" data-id="${itemAttr}" data-crew-id="${crewAttr}" data-feature="pins"
           onclick="crewFeedPinTap(this)" onkeydown="if (event.key === 'Enter') crewFeedPinTap(this)" oncontextmenu="if (${uid ? 'true' : 'false'}) { event.preventDefault(); openCrewFeedPicker(this); }"
