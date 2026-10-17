@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crew Page — Access Directions</title>
+<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@800;900&family=Outfit:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --neon-pink: #FF2D78; --neon-cyan: #00F5FF; --neon-yellow: #FFE600;
+    --neon-purple: #BF00FF; --neon-green: #39FF14; --neon-indigo: #5B6EFF;
+    --bg: #050509; --surface: #0E0E16; --surface2: #16161F;
+    --text: #F0EEFF; --muted: #8585A5;
+    --paper: #F4F1E8; --paper-ink: #D6284B;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #08080D; color: var(--text); font-family: 'DM Sans', system-ui, sans-serif; padding: 32px 24px 64px; }
+  button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+  svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+
+  .page-head { max-width: 1280px; margin: 0 auto 32px; }
+  .page-head h1 { font-family: 'Urbanist', sans-serif; font-weight: 900; font-size: 1.9rem; margin: 0 0 8px; letter-spacing: -0.5px; }
+  .page-head p { color: var(--muted); margin: 0; font-size: 0.94rem; line-height: 1.5; max-width: 780px; }
+  .page-head .shared { margin-top: 16px; padding: 12px 16px; background: rgba(0,245,255,0.06); border: 1px solid rgba(0,245,255,0.2); border-radius: 12px; font-size: 0.84rem; line-height: 1.6; max-width: 900px; }
+  .page-head .shared strong { color: var(--neon-cyan); font-family: 'Outfit', sans-serif; }
+
+  .rail { display: flex; gap: 28px; overflow-x: auto; padding-bottom: 20px; }
+  .col { flex: 0 0 auto; width: 372px; }
+  .col-head { margin-bottom: 14px; min-height: 150px; }
+  .col-head .tag { display: inline-block; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.64rem; letter-spacing: 1.2px; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; margin-bottom: 8px; }
+  .col-head h2 { font-family: 'Urbanist', sans-serif; font-weight: 800; font-size: 1.16rem; margin: 0 0 6px; }
+  .col-head p { color: var(--muted); font-size: 0.82rem; margin: 0; line-height: 1.5; }
+  .col-foot { margin-top: 14px; font-size: 0.78rem; color: var(--muted); line-height: 1.55; }
+  .col-foot b { color: var(--text); font-family: 'Outfit', sans-serif; }
+
+  /* ── Phone frame ── */
+  .phone { position: relative; height: 780px; border-radius: 30px; overflow: hidden; border: 1px solid rgba(255,255,255,0.13); box-shadow: 0 18px 50px rgba(0,0,0,0.6); background: var(--bg); display: flex; flex-direction: column; }
+  .sbar { flex: 0 0 auto; height: 34px; display: flex; justify-content: space-between; align-items: center; padding: 0 22px; font-family: 'Outfit', sans-serif; font-size: 0.74rem; font-weight: 700; }
+  .scroll { flex: 1; overflow-y: auto; scrollbar-width: none; position: relative; }
+  .scroll::-webkit-scrollbar { display: none; }
+  .pad { padding: 0 16px; }
+  .back { font-family: 'Outfit', sans-serif; font-size: 0.78rem; color: var(--muted); padding: 4px 16px 10px; display: block; }
+
+  /* shared crew header bits */
+  .crew-top { display: flex; align-items: center; gap: 12px; padding: 0 16px 14px; }
+  .totem { width: 46px; height: 46px; border-radius: 14px; background: linear-gradient(135deg, var(--neon-pink), var(--neon-purple)); display: grid; place-items: center; font-size: 1.4rem; flex-shrink: 0; box-shadow: 0 0 22px -6px var(--neon-pink); }
+  .crew-name { font-family: 'Urbanist', sans-serif; font-weight: 900; font-size: 1.35rem; letter-spacing: -0.3px; line-height: 1.1; }
+  .crew-sub { font-size: 0.72rem; color: var(--muted); margin-top: 3px; display: flex; align-items: center; gap: 6px; }
+  .status { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.6rem; letter-spacing: 1px; text-transform: uppercase; padding: 2px 7px; border-radius: 20px; color: var(--neon-green); border: 1px solid rgba(57,255,20,0.35); }
+  .avs { display: flex; }
+  .av { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--bg); margin-left: -7px; display: grid; place-items: center; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.56rem; color: #000; }
+  .avs .av:first-child { margin-left: 0; }
+  .av.lg { width: 34px; height: 34px; font-size: 0.7rem; margin-left: 0; }
+  .g1 { background: linear-gradient(135deg,#FF2D78,#FFB800); } .g2 { background: linear-gradient(135deg,#00F5FF,#5B6EFF); }
+  .g3 { background: linear-gradient(135deg,#39FF14,#00F5FF); } .g4 { background: linear-gradient(135deg,#BF00FF,#FF2D78); }
+  .g5 { background: linear-gradient(135deg,#FFE600,#FF6B35); }
+  .online { position: relative; }
+  .online::after { content: ''; position: absolute; right: -1px; bottom: -1px; width: 8px; height: 8px; border-radius: 50%; background: var(--neon-green); border: 2px solid var(--bg); }
+
+  .eyebrow { font-family: var(--mono); font-size: 0.6rem; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); }
+  .badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--neon-pink); color: #fff; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.62rem; display: inline-grid; place-items: center; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ac, var(--neon-pink)); box-shadow: 0 0 8px var(--ac, var(--neon-pink)); display: inline-block; }
+
+  /* Rave Plan ticket — cream paper, matches the app's paper cards */
+  .ticket { background: var(--paper); color: #1a1420; border-radius: 16px; padding: 14px 16px; position: relative; overflow: hidden; }
+  .ticket::before, .ticket::after { content: ''; position: absolute; top: 50%; width: 18px; height: 18px; border-radius: 50%; background: var(--bg); transform: translateY(-50%); }
+  .ticket::before { left: -9px; } .ticket::after { right: -9px; }
+  .ticket .t-eye { font-family: var(--mono); font-size: 0.58rem; letter-spacing: 1.4px; text-transform: uppercase; color: var(--paper-ink); font-weight: 600; }
+  .ticket .t-name { font-family: 'Urbanist', sans-serif; font-weight: 900; font-size: 1.2rem; margin: 2px 0 2px; }
+  .ticket .t-meta { font-size: 0.74rem; color: #5a5060; }
+  .ticket .t-row { display: flex; justify-content: space-between; align-items: flex-end; }
+  .ticket .t-count { font-family: 'Urbanist', sans-serif; font-weight: 900; font-size: 1.9rem; line-height: 1; color: var(--paper-ink); text-align: right; }
+  .ticket .t-count small { display: block; font-family: var(--mono); font-size: 0.55rem; letter-spacing: 1px; color: #5a5060; font-weight: 400; }
+  .progress { height: 5px; border-radius: 3px; background: rgba(0,0,0,0.1); margin-top: 10px; overflow: hidden; }
+  .progress > i { display: block; height: 100%; background: var(--paper-ink); border-radius: 3px; }
+  .ticket .t-todo { display: flex; justify-content: space-between; font-size: 0.68rem; color: #5a5060; margin-top: 6px; }
+
+  /* chat bubbles (Huddle comms style: edge bar instead of filled bubble) */
+  .msg { display: flex; gap: 8px; margin-bottom: 10px; align-items: flex-start; }
+  .msg .av { margin-left: 0; width: 26px; height: 26px; }
+  .msg .b { border-left: 2px solid var(--ac); padding: 2px 0 2px 9px; font-size: 0.8rem; line-height: 1.4; }
+  .msg .who { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.7rem; color: var(--ac); }
+  .msg .who span { font-family: var(--mono); font-weight: 400; color: var(--muted); font-size: 0.58rem; margin-left: 5px; }
+  .composer { display: flex; align-items: center; gap: 8px; background: var(--surface2); border: 1px solid rgba(255,255,255,0.1); border-radius: 22px; padding: 9px 9px 9px 14px; font-size: 0.8rem; color: var(--muted); }
+  .composer .send { margin-left: auto; width: 28px; height: 28px; border-radius: 50%; background: var(--neon-cyan); color: #000; display: grid; place-items: center; }
+  .composer .send svg { width: 15px; height: 15px; }
+
+  .card { background: var(--surface); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 14px; }
+  .note { position: absolute; left: 12px; right: 12px; bottom: 12px; background: rgba(0,245,255,0.1); border: 1px dashed rgba(0,245,255,0.35); color: var(--neon-cyan); font-size: 0.7rem; border-radius: 10px; padding: 7px 10px; font-family: 'Outfit', sans-serif; display: none; }
+
+  /* =========================================================
+     A · HUDDLE STAGE
+     ========================================================= */
+  .a-stage { margin: 0 16px; border-radius: 20px; background: linear-gradient(180deg, rgba(0,245,255,0.08), rgba(0,245,255,0.02)); border: 1px solid rgba(0,245,255,0.25); padding: 14px; box-shadow: 0 0 40px -18px var(--neon-cyan); }
+  .a-stage-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .a-stage-title { display: flex; align-items: center; gap: 7px; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.92rem; color: var(--neon-cyan); }
+  .a-rooms { display: flex; gap: 6px; margin-bottom: 12px; }
+  .a-room { font-family: 'Outfit', sans-serif; font-size: 0.66rem; font-weight: 700; padding: 4px 9px; border-radius: 20px; background: rgba(255,255,255,0.06); color: var(--muted); }
+  .a-room.on { background: var(--neon-cyan); color: #000; }
+  .a-ticket { margin: 14px 16px 0; }
+  .a-stash-head { display: flex; justify-content: space-between; align-items: baseline; margin: 20px 16px 10px; }
+  .a-stash { display: flex; gap: 8px; overflow-x: auto; padding: 0 16px 4px; scrollbar-width: none; }
+  .a-stash::-webkit-scrollbar { display: none; }
+  .a-chip { flex: 0 0 auto; display: flex; align-items: center; gap: 7px; padding: 8px 12px 8px 9px; border-radius: 14px; background: var(--surface2); border: 1px solid rgba(255,255,255,0.08); font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.74rem; transition: .15s; }
+  .a-chip svg { color: var(--ac); width: 17px; height: 17px; }
+  .a-chip.on { border-color: var(--ac); box-shadow: 0 0 14px -4px var(--ac); }
+  .a-drawer { margin: 10px 16px 18px; min-height: 120px; }
+  .a-drawer .card { font-size: 0.8rem; }
+
+  /* =========================================================
+     B · CREW DOCK
+     ========================================================= */
+  .b-hdr { display: flex; align-items: center; gap: 10px; padding: 2px 16px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .b-hdr .crew-name { font-size: 1.05rem; }
+  .b-hdr .totem { width: 34px; height: 34px; border-radius: 10px; font-size: 1rem; }
+  .b-hdr .more { margin-left: auto; color: var(--muted); }
+  .b-pane { display: none; padding: 14px 16px 90px; }
+  .b-pane.on { display: block; }
+  .dock { position: absolute; left: 10px; right: 10px; bottom: 10px; height: 64px; border-radius: 22px; background: rgba(22,22,31,0.86); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: space-around; padding: 0 6px; }
+  .dock button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.6rem; color: var(--muted); position: relative; padding: 6px 0; border-radius: 14px; transition: .15s; }
+  .dock button.on { color: var(--ac); }
+  .dock button.on::before { content: ''; position: absolute; top: -11px; width: 22px; height: 3px; border-radius: 2px; background: var(--ac); box-shadow: 0 0 10px var(--ac); }
+  .dock .badge { position: absolute; top: 0; right: calc(50% - 20px); height: 15px; min-width: 15px; font-size: 0.55rem; }
+  .b-seg { display: flex; gap: 6px; margin-bottom: 14px; }
+  .b-seg span { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.7rem; padding: 6px 11px; border-radius: 20px; background: rgba(255,255,255,0.06); color: var(--muted); }
+  .b-seg span.on { background: rgba(191,0,255,0.18); color: var(--neon-purple); border: 1px solid rgba(191,0,255,0.4); }
+  .b-check { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 0.82rem; }
+  .b-check .box { width: 18px; height: 18px; border-radius: 6px; border: 1.5px solid rgba(255,255,255,0.25); display: grid; place-items: center; flex-shrink: 0; }
+  .b-check.done .box { background: var(--neon-pink); border-color: var(--neon-pink); }
+  .b-check.done { color: var(--muted); text-decoration: line-through; }
+  .b-check .av { margin-left: auto; width: 20px; height: 20px; }
+
+  /* =========================================================
+     C · COUNTDOWN TIMELINE
+     ========================================================= */
+  .c-scrub { position: sticky; top: 0; z-index: 3; display: flex; gap: 4px; padding: 8px 16px 10px; background: linear-gradient(180deg, var(--bg) 75%, transparent); }
+  .c-scrub button { flex: 1; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.66rem; letter-spacing: .6px; text-transform: uppercase; padding: 7px 0; border-radius: 10px; color: var(--muted); background: rgba(255,255,255,0.04); }
+  .c-scrub button.on { color: #000; background: var(--ac); }
+  .c-line { position: relative; padding: 4px 16px 60px 40px; }
+  .c-line::before { content: ''; position: absolute; left: 22px; top: 10px; bottom: 30px; width: 2px; background: linear-gradient(180deg, var(--neon-pink), var(--neon-cyan) 35%, var(--neon-purple) 65%, var(--neon-indigo)); opacity: .5; }
+  .c-sec { position: relative; margin-bottom: 22px; }
+  .c-sec > .eyebrow { display: block; margin-bottom: 8px; color: var(--ac); }
+  .c-sec::before { content: ''; position: absolute; left: -23px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--bg); border: 2px solid var(--ac); box-shadow: 0 0 10px var(--ac); }
+  .c-row { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 14px; background: var(--surface); border: 1px solid rgba(255,255,255,0.07); margin-bottom: 7px; font-size: 0.8rem; }
+  .c-row svg { color: var(--ac); }
+  .c-row .meta { margin-left: auto; font-family: var(--mono); font-size: 0.6rem; color: var(--muted); white-space: nowrap; }
+  .c-row b { font-family: 'Outfit', sans-serif; font-weight: 700; }
+  .c-huddle { border-color: rgba(0,245,255,0.3); background: rgba(0,245,255,0.05); }
+  .c-past { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .c-past div { aspect-ratio: 1; border-radius: 12px; background: var(--surface2); display: grid; place-items: center; font-size: 1.3rem; }
+
+  /* =========================================================
+     D · TWO BIG DOORS + SHEET
+     ========================================================= */
+  .d-pass { margin: 0 16px; border-radius: 22px; padding: 18px 16px; background: radial-gradient(120% 90% at 0% 0%, rgba(255,45,120,0.22), transparent 60%), radial-gradient(120% 90% at 100% 100%, rgba(191,0,255,0.2), transparent 60%), var(--surface); border: 1px solid rgba(255,255,255,0.1); }
+  .d-pass .crew-top { padding: 0 0 14px; }
+  .d-doors { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 16px 0; }
+  .d-door { border-radius: 20px; padding: 14px; text-align: left; min-height: 150px; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+  .d-door .lbl { font-family: 'Urbanist', sans-serif; font-weight: 900; font-size: 1.15rem; margin-top: auto; }
+  .d-door .sub { font-size: 0.7rem; opacity: .8; margin-top: 2px; }
+  .d-door svg.big { width: 30px; height: 30px; }
+  .d-door.huddle { background: linear-gradient(160deg, rgba(0,245,255,0.28), rgba(0,245,255,0.06)); border: 1px solid rgba(0,245,255,0.45); color: var(--text); box-shadow: 0 0 30px -12px var(--neon-cyan); }
+  .d-door.huddle svg.big { color: var(--neon-cyan); }
+  .d-door.plan { background: var(--paper); color: #1a1420; }
+  .d-door.plan svg.big { color: var(--paper-ink); }
+  .d-door .badge { position: absolute; top: 12px; right: 12px; }
+  .d-door .ring { position: absolute; top: 10px; right: 10px; width: 40px; height: 40px; }
+  .d-glance { margin: 16px 16px 0; }
+  .d-glance .row { display: flex; align-items: center; gap: 10px; font-size: 0.78rem; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .d-glance .row svg { color: var(--ac); width: 17px; height: 17px; }
+  .d-glance .row .meta { margin-left: auto; color: var(--muted); font-size: 0.68rem; }
+  .d-fab { position: absolute; right: 16px; bottom: 18px; height: 50px; padding: 0 18px 0 14px; border-radius: 25px; background: var(--neon-pink); color: #fff; display: flex; align-items: center; gap: 7px; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.82rem; box-shadow: 0 8px 28px -6px var(--neon-pink); z-index: 5; }
+  .d-scrim { position: absolute; inset: 0; background: rgba(0,0,0,0.6); opacity: 0; pointer-events: none; transition: .2s; z-index: 6; }
+  .d-sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--surface2); border-radius: 24px 24px 0 0; padding: 10px 16px 24px; transform: translateY(105%); transition: transform .25s cubic-bezier(.2,.8,.2,1); z-index: 7; border-top: 1px solid rgba(255,255,255,0.1); }
+  .phone.sheet-open .d-scrim { opacity: 1; pointer-events: auto; }
+  .phone.sheet-open .d-sheet { transform: none; }
+  .d-grab { width: 38px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.2); margin: 0 auto 14px; }
+  .d-sheet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .d-sheet-item { display: flex; gap: 10px; align-items: flex-start; text-align: left; padding: 12px; border-radius: 16px; background: var(--surface); border: 1px solid rgba(255,255,255,0.07); }
+  .d-sheet-item .ic { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; background: rgba(255,255,255,0.05); color: var(--ac); box-shadow: 0 0 16px -6px var(--ac); flex-shrink: 0; }
+  .d-sheet-item b { display: block; font-family: 'Outfit', sans-serif; font-size: 0.8rem; }
+  .d-sheet-item small { color: var(--muted); font-size: 0.66rem; line-height: 1.35; display: block; margin-top: 2px; }
+  .d-sheet-sec { margin: 16px 0 8px; }
+
+  /* =========================================================
+     E · CREW FEED
+     ========================================================= */
+  .e-live { margin: 0 16px; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 16px; background: rgba(0,245,255,0.07); border: 1px solid rgba(0,245,255,0.3); }
+  .e-live .txt { font-size: 0.76rem; line-height: 1.35; flex: 1; min-width: 0; }
+  .e-live .txt b { color: var(--neon-cyan); font-family: 'Outfit', sans-serif; }
+  .e-live .txt span { display: block; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .e-live .go { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.7rem; padding: 7px 12px; border-radius: 20px; background: var(--neon-cyan); color: #000; }
+  .e-plan { margin: 10px 16px 0; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 16px; background: var(--paper); color: #1a1420; font-size: 0.76rem; }
+  .e-plan b { font-family: 'Outfit', sans-serif; }
+  .e-plan .days { margin-left: auto; font-family: 'Urbanist', sans-serif; font-weight: 900; color: var(--paper-ink); font-size: 1.1rem; }
+  .e-filters { position: sticky; top: 0; z-index: 3; display: flex; gap: 6px; overflow-x: auto; padding: 14px 16px 10px; background: linear-gradient(180deg, var(--bg) 80%, transparent); scrollbar-width: none; }
+  .e-filters::-webkit-scrollbar { display: none; }
+  .e-filters button { flex: 0 0 auto; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.7rem; padding: 6px 11px; border-radius: 20px; background: rgba(255,255,255,0.05); color: var(--muted); border: 1px solid transparent; }
+  .e-filters button.on { color: var(--ac); border-color: var(--ac); background: rgba(255,255,255,0.03); }
+  .e-feed { padding: 0 16px 40px; }
+  .e-item { padding: 12px; border-radius: 16px; background: var(--surface); border: 1px solid rgba(255,255,255,0.07); margin-bottom: 8px; }
+  .e-item .h { display: flex; align-items: center; gap: 7px; font-size: 0.72rem; color: var(--muted); margin-bottom: 8px; }
+  .e-item .h .av { margin-left: 0; width: 20px; height: 20px; font-size: 0.5rem; }
+  .e-item .h b { color: var(--text); font-family: 'Outfit', sans-serif; }
+  .e-item .h .kind { margin-left: auto; color: var(--ac); display: flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 0.58rem; text-transform: uppercase; letter-spacing: 1px; }
+  .e-item .h .kind svg { width: 13px; height: 13px; }
+  .e-opt { display: flex; justify-content: space-between; font-size: 0.76rem; padding: 7px 10px; border-radius: 10px; background: rgba(255,255,255,0.04); margin-top: 5px; position: relative; overflow: hidden; }
+  .e-opt i { position: absolute; inset: 0 auto 0 0; background: rgba(0,245,255,0.14); }
+  .e-opt span { position: relative; }
+  .e-jam { display: flex; gap: 10px; align-items: center; }
+  .e-jam .art { width: 44px; height: 44px; border-radius: 10px; background: linear-gradient(135deg, #39FF14, #00F5FF); flex-shrink: 0; }
+  .e-item .acts { display: flex; gap: 14px; margin-top: 9px; font-size: 0.68rem; color: var(--muted); font-family: 'Outfit', sans-serif; font-weight: 600; }
+  .e-item[hidden] { display: none; }
+
+  .dashed-hint { font-size: 0.7rem; color: var(--muted); text-align: center; margin: 10px 16px 0; font-style: italic; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12z"/></symbol>
+    <symbol id="i-plan" viewBox="0 0 24 24"><path d="M9 4h6v3H9z"/><path d="M15 5h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h3"/><path d="m9 13 2 2 4-4"/></symbol>
+    <symbol id="i-poll" viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></symbol>
+    <symbol id="i-jam" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></symbol>
+    <symbol id="i-dream" viewBox="0 0 24 24"><path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.4 6.8 19.1l1-5.8L3.5 9.2l5.9-.9z"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><circle cx="12" cy="9" r="6"/><path d="M8.5 14 7 22l5-3 5 3-1.5-8"/></symbol>
+    <symbol id="i-archive" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="15" rx="2"/><circle cx="9" cy="11" r="2"/><path d="m21 17-5-5-9 8"/></symbol>
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M21.5 20a6.5 6.5 0 0 0-4-6"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 15V3M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/></symbol>
+  </defs>
+</svg>
+
+<div class="page-head">
+  <h1>Crew page — five ways in</h1>
+  <p>Today the crew page is an Overview / Roster switch, a Share button, and a 4×2 grid of equal-weight tiles (Huddle, Pins, Dream Board, Poll, Jams, Archive, History, Rave Plan) that open accordion panels. Each direction below gives <b>Huddle</b> and <b>Rave Plan</b> the most weight and reorganizes the other six. Each phone is lightly clickable.</p>
+  <div class="shared"><strong>All five use the same groupings:</strong> Polls + Jams + Dream Board become one <em>Vibes</em> / "what we're hyping" group, and Pins + Archive + History become one <em>Memories</em> group. Roster moves out of a tab and into the avatar stack in the header (tap → member sheet with Invite, Status, Edit/Leave). Rave Plan is still conditional: when there's no shared upcoming rave, its slot becomes an "Add your next rave" prompt and never leaves an empty space.</div>
+</div>
+
+<div class="rail">
+
+  <!-- ================= A ================= -->
+  <div class="col">
+    <div class="col-head">
+      <span class="tag" style="background:rgba(0,245,255,0.14);color:var(--neon-cyan)">A · Huddle Stage</span>
+      <h2>The chat <em>is</em> the crew page</h2>
+      <p>The top of the page is a live Huddle with the last few messages, room pills and a composer you can type into. Below it sits the Rave Plan ticket. The other six areas become a horizontal "stash" rail that opens one panel at a time.</p>
+    </div>
+    <div class="phone" id="pA">
+      <div class="sbar"><span>9:41</span><span>●●● 5G</span></div>
+      <div class="scroll">
+        <span class="back">← My Crews</span>
+        <div class="crew-top">
+          <div class="totem">🛸</div>
+          <div style="flex:1;min-width:0">
+            <div class="crew-name">Bass Cadets</div>
+            <div class="crew-sub"><span class="status">Recruiting</span> 5 ravers</div>
+          </div>
+          <button class="avs" title="Roster">
+            <span class="av g1 online">MA</span><span class="av g2 online">JO</span><span class="av g3">KA</span><span class="av g4">+2</span>
+          </button>
+        </div>
+
+        <div class="a-stage">
+          <div class="a-stage-head">
+            <span class="a-stage-title"><svg class="i"><use href="#i-chat"/></svg>Huddle <span class="badge">3</span></span>
+            <span class="eyebrow" style="color:var(--neon-green)">● 2 here now</span>
+          </div>
+          <div class="a-rooms"><span class="a-room on">Main</span><span class="a-room">EDC Orlando</span><span class="a-room">Beacons</span></div>
+          <div class="msg" style="--ac:var(--neon-pink)"><span class="av g1">MA</span><div class="b"><div class="who">Maya<span>9:12</span></div>who's driving friday 🚗</div></div>
+          <div class="msg" style="--ac:var(--neon-cyan)"><span class="av g2">JO</span><div class="b"><div class="who">Jordan<span>9:20</span></div>me! 3 seats left, leaving 2pm sharp</div></div>
+          <div class="msg" style="--ac:var(--neon-green)"><span class="av g3">KA</span><div class="b"><div class="who">Kai<span>9:38</span></div>dibs shotgun. also who has the totem??</div></div>
+          <div class="composer">Message the crew…<span class="send"><svg class="i"><use href="#i-send"/></svg></span></div>
+        </div>
+
+        <div class="a-ticket ticket">
+          <div class="t-row">
+            <div><div class="t-eye">Rave Plan · next up</div><div class="t-name">EDC Orlando</div><div class="t-meta">Tinker Field · Nov 6–8 · 4 going</div></div>
+            <div class="t-count">20<small>DAYS</small></div>
+          </div>
+          <div class="progress"><i style="width:58%"></i></div>
+          <div class="t-todo"><span>7 of 12 checklist done</span><span>Roles · Logistics · Outfits ›</span></div>
+        </div>
+
+        <div class="a-stash-head"><span class="eyebrow">Crew stash</span><span class="eyebrow" style="color:var(--neon-pink)">2 new</span></div>
+        <div class="a-stash" id="aStash">
+          <button class="a-chip" style="--ac:var(--neon-cyan)" data-k="poll"><svg class="i"><use href="#i-poll"/></svg>Poll <span class="dot"></span></button>
+          <button class="a-chip" style="--ac:var(--neon-green)" data-k="jams"><svg class="i"><use href="#i-jam"/></svg>Jams</button>
+          <button class="a-chip" style="--ac:var(--neon-purple)" data-k="dream"><svg class="i"><use href="#i-dream"/></svg>Dream Board <span class="dot"></span></button>
+          <button class="a-chip" style="--ac:var(--neon-yellow)" data-k="archive"><svg class="i"><use href="#i-archive"/></svg>Archive</button>
+          <button class="a-chip" style="--ac:var(--neon-pink)" data-k="pins"><svg class="i"><use href="#i-pin"/></svg>Pins</button>
+          <button class="a-chip" style="--ac:var(--neon-indigo)" data-k="history"><svg class="i"><use href="#i-history"/></svg>History</button>
+        </div>
+        <div class="a-drawer" id="aDrawer"><p class="dashed-hint">Tap a stash item: it opens here, one at a time</p></div>
+      </div>
+    </div>
+    <div class="col-foot"><b>Why:</b> you can start chatting from the crew page in one tap without opening another screen. <b>Trade-off:</b> the six stash items are less visible, so their unread dots matter more.</div>
+  </div>
+
+  <!-- ================= B ================= -->
+  <div class="col">
+    <div class="col-head">
+      <span class="tag" style="background:rgba(255,45,120,0.14);color:var(--neon-pink)">B · Crew Dock</span>
+      <h2>A crew gets its own tab bar</h2>
+      <p>Opening a crew swaps the app's bottom nav for a crew dock: <b>Huddle · Plan · Vibes · Memories · Fam</b>. Five destinations instead of eight tiles, each a full screen rather than an accordion. Tap the dock to switch.</p>
+    </div>
+    <div class="phone" id="pB">
+      <div class="sbar"><span>9:41</span><span>●●● 5G</span></div>
+      <div class="b-hdr">
+        <span style="color:var(--muted);font-size:1.1rem">‹</span>
+        <div class="totem">🛸</div>
+        <div><div class="crew-name">Bass Cadets</div><div class="crew-sub"><span class="status">Recruiting</span></div></div>
+        <svg class="i more"><use href="#i-more"/></svg>
+      </div>
+      <div class="scroll">
+        <div class="b-pane" data-p="plan">
+          <div class="b-seg"><span class="on">EDC Orlando</span><span>Lost Lands '27</span><span>Past ›</span></div>
+          <div class="ticket" style="margin-bottom:16px">
+            <div class="t-row">
+              <div><div class="t-eye">Rave Plan</div><div class="t-name">EDC Orlando</div><div class="t-meta">Nov 6–8 · Maya, Jordan, Kai, you</div></div>
+              <div class="t-count">20<small>DAYS</small></div>
+            </div>
+            <div class="progress"><i style="width:58%"></i></div>
+          </div>
+          <div class="b-seg"><span class="on" style="background:rgba(255,45,120,0.15);color:var(--neon-pink);border-color:rgba(255,45,120,0.4)">Checklist</span><span>Roles</span><span>Logistics</span><span>Outfits</span></div>
+          <div class="b-check done"><span class="box">✓</span>Buy GA+ tickets<span class="av g1">MA</span></div>
+          <div class="b-check done"><span class="box">✓</span>Book the Airbnb<span class="av g2">JO</span></div>
+          <div class="b-check"><span class="box"></span>Hydration packs × 4<span class="av g3">KA</span></div>
+          <div class="b-check"><span class="box"></span>Pick a meetup spot<span class="av g5">YO</span></div>
+          <div class="b-check"><span class="box"></span>Kandi for the whole crew<span class="av g4">RI</span></div>
+          <div class="composer" style="margin-top:12px;border-radius:12px">+ Add to checklist</div>
+        </div>
+        <div class="b-pane on" data-p="huddle">
+          <div class="b-seg"><span class="on" style="background:rgba(0,245,255,0.15);color:var(--neon-cyan);border-color:rgba(0,245,255,0.4)">Main</span><span>EDC Orlando</span><span>Beacons</span></div>
+          <div class="msg" style="--ac:var(--neon-pink)"><span class="av g1">MA</span><div class="b"><div class="who">Maya<span>9:12</span></div>who's driving friday 🚗</div></div>
+          <div class="msg" style="--ac:var(--neon-cyan)"><span class="av g2">JO</span><div class="b"><div class="who">Jordan<span>9:20</span></div>me! 3 seats left, leaving 2pm sharp</div></div>
+          <div class="msg" style="--ac:var(--neon-green)"><span class="av g3">KA</span><div class="b"><div class="who">Kai<span>9:38</span></div>dibs shotgun. also who has the totem??</div></div>
+          <div class="msg" style="--ac:var(--neon-purple)"><span class="av g4">RI</span><div class="b"><div class="who">Rio<span>9:40</span></div>totem is at my place, it got an LED upgrade 👀</div></div>
+          <div class="composer" style="margin-top:14px">Message the crew…<span class="send"><svg class="i"><use href="#i-send"/></svg></span></div>
+        </div>
+        <div class="b-pane" data-p="vibes">
+          <div class="b-seg"><span class="on">All</span><span>Polls</span><span>Jams</span><span>Dream Board</span></div>
+          <div class="card" style="margin-bottom:10px"><div class="eyebrow" style="color:var(--neon-cyan);margin-bottom:6px">Poll · 3 of 5 voted</div><div style="font-weight:600;font-size:.86rem;margin-bottom:6px">Saturday night: which stage first?</div>
+            <div class="e-opt"><i style="width:60%"></i><span>kineticFIELD</span><span>3</span></div><div class="e-opt"><i style="width:0%"></i><span>basspod</span><span>0</span></div></div>
+          <div class="card" style="margin-bottom:10px"><div class="eyebrow" style="color:var(--neon-green);margin-bottom:8px">Jam · added by Kai</div><div class="e-jam"><div class="art"></div><div style="font-size:.8rem"><b style="font-family:Outfit">Pre-game bangers</b><br><span style="color:var(--muted)">Spotify · 42 tracks · 🔥 4</span></div></div></div>
+          <div class="card"><div class="eyebrow" style="color:var(--neon-purple);margin-bottom:6px">Dream Board · 3 pins</div><div style="font-size:.8rem">Tomorrowland '27 · Sunset at Gorge · Boiler Room in Berlin</div></div>
+        </div>
+        <div class="b-pane" data-p="memories">
+          <div class="b-seg"><span class="on">Archive</span><span>Pins</span><span>History</span></div>
+          <div class="c-past" style="margin-bottom:12px"><div style="background:linear-gradient(135deg,#FF2D78,#5B6EFF)"></div><div style="background:linear-gradient(135deg,#00F5FF,#39FF14)"></div><div style="background:linear-gradient(135deg,#BF00FF,#FFE600)"></div><div style="background:linear-gradient(135deg,#FFB800,#FF2D78)"></div><div style="background:linear-gradient(135deg,#5B6EFF,#00F5FF)"></div><div style="background:linear-gradient(135deg,#39FF14,#BF00FF)"></div></div>
+          <div class="card" style="font-size:.8rem">🏆 <b style="font-family:Outfit">10 Raves Strong</b> unlocked · 2 weeks ago</div>
+        </div>
+        <div class="b-pane" data-p="fam">
+          <div class="eyebrow" style="margin-bottom:10px">5 on this pass</div>
+          <div class="c-row"><span class="av lg g1 online">MA</span><b>Maya</b><span class="meta">LEAD</span></div>
+          <div class="c-row"><span class="av lg g2 online">JO</span><b>Jordan</b></div>
+          <div class="c-row"><span class="av lg g3">KA</span><b>Kai</b></div>
+          <div class="c-row"><span class="av lg g4">RI</span><b>Rio</b></div>
+          <div class="c-row"><span class="av lg g5">YO</span><b>You</b></div>
+          <div style="display:flex;gap:8px;margin-top:10px"><div class="composer" style="flex:1;justify-content:center;border-radius:12px">🔗 Invite</div><div class="composer" style="flex:1;justify-content:center;border-radius:12px">📲 Crew Card</div></div>
+        </div>
+      </div>
+      <nav class="dock" id="bDock">
+        <button class="on" style="--ac:var(--neon-cyan)" data-p="huddle"><svg class="i"><use href="#i-chat"/></svg>Huddle<span class="badge">3</span></button>
+        <button style="--ac:var(--neon-pink)" data-p="plan"><svg class="i"><use href="#i-plan"/></svg>Plan</button>
+        <button style="--ac:var(--neon-purple)" data-p="vibes"><svg class="i"><use href="#i-spark"/></svg>Vibes</button>
+        <button style="--ac:var(--neon-yellow)" data-p="memories"><svg class="i"><use href="#i-archive"/></svg>Memories</button>
+        <button style="--ac:var(--neon-green)" data-p="fam"><svg class="i"><use href="#i-users"/></svg>Fam</button>
+      </nav>
+    </div>
+    <div class="col-foot"><b>Why:</b> it's the most app-like option. The crew feels like a space you enter, and Huddle and Plan stay one tap away from anywhere. <b>Trade-off:</b> the biggest structural change, since app nav is hidden while you're inside a crew.</div>
+  </div>
+
+  <!-- ================= C ================= -->
+  <div class="col">
+    <div class="col-head">
+      <span class="tag" style="background:rgba(255,230,0,0.12);color:var(--neon-yellow)">C · Countdown Timeline</span>
+      <h2>Organize by time, not by feature</h2>
+      <p>One scrolling timeline: <b>Next</b> (Rave Plan) → <b>Now</b> (Huddle) → <b>Someday</b> (polls, jams, dreams) → <b>Past</b> (archive, pins, history). A sticky scrubber jumps between sections. Features show up where they fit in time.</p>
+    </div>
+    <div class="phone" id="pC">
+      <div class="sbar"><span>9:41</span><span>●●● 5G</span></div>
+      <div class="scroll" id="cScroll">
+        <span class="back">← My Crews</span>
+        <div class="crew-top">
+          <div class="totem">🛸</div>
+          <div style="flex:1"><div class="crew-name">Bass Cadets</div><div class="crew-sub"><span class="status">Recruiting</span> since 2023</div></div>
+          <div class="avs"><span class="av g1 online">MA</span><span class="av g2 online">JO</span><span class="av g4">+3</span></div>
+        </div>
+        <div class="c-scrub" id="cScrub">
+          <button class="on" style="--ac:var(--neon-pink)" data-t="next">Next</button>
+          <button style="--ac:var(--neon-cyan)" data-t="now">Now</button>
+          <button style="--ac:var(--neon-purple)" data-t="someday">Someday</button>
+          <button style="--ac:var(--neon-indigo)" data-t="past">Past</button>
+        </div>
+        <div class="c-line">
+          <div class="c-sec" id="c-next" style="--ac:var(--neon-pink)">
+            <span class="eyebrow">Next · in 20 days</span>
+            <div class="ticket">
+              <div class="t-row"><div><div class="t-eye">Rave Plan</div><div class="t-name">EDC Orlando</div><div class="t-meta">Nov 6–8 · 4 going</div></div><div class="t-count">20<small>DAYS</small></div></div>
+              <div class="progress"><i style="width:58%"></i></div>
+              <div class="t-todo"><span>5 to-dos left · 1 is yours</span><span>Open ›</span></div>
+            </div>
+          </div>
+          <div class="c-sec" id="c-now" style="--ac:var(--neon-cyan)">
+            <span class="eyebrow">Now · 2 here</span>
+            <div class="c-row c-huddle"><svg class="i"><use href="#i-chat"/></svg><div><b>Huddle</b><br><span style="color:var(--muted);font-size:.74rem">Kai: dibs shotgun. also who has the…</span></div><span class="badge" style="margin-left:auto">3</span></div>
+            <div class="c-row" style="--ac:var(--neon-yellow)"><span style="font-size:1rem">📣</span><div><b>Beacon</b> · Jordan<br><span style="color:var(--muted);font-size:.74rem">"Leaving 2pm Friday, 3 seats"</span></div></div>
+          </div>
+          <div class="c-sec" id="c-someday" style="--ac:var(--neon-purple)">
+            <span class="eyebrow">Someday · what we're hyping</span>
+            <div class="c-row" style="--ac:var(--neon-cyan)"><svg class="i"><use href="#i-poll"/></svg><div><b>Which stage first?</b></div><span class="meta">3/5 VOTED</span></div>
+            <div class="c-row" style="--ac:var(--neon-green)"><svg class="i"><use href="#i-jam"/></svg><div><b>Pre-game bangers</b></div><span class="meta">42 TRACKS</span></div>
+            <div class="c-row" style="--ac:var(--neon-purple)"><svg class="i"><use href="#i-dream"/></svg><div><b>Tomorrowland '27</b></div><span class="meta">🔥 5</span></div>
+            <div class="c-row" style="--ac:var(--neon-purple);justify-content:center;color:var(--muted);font-size:.74rem;background:transparent;border-style:dashed">+ Poll · Jam · Dream</div>
+          </div>
+          <div class="c-sec" id="c-past" style="--ac:var(--neon-indigo)">
+            <span class="eyebrow">Past · 14 raves together</span>
+            <div class="c-past" style="margin-bottom:8px"><div>🎪</div><div>🌅</div><div>🔊</div></div>
+            <div class="c-row" style="--ac:var(--neon-pink)"><svg class="i"><use href="#i-pin"/></svg><div><b>10 Raves Strong</b> unlocked</div><span class="meta">2W AGO</span></div>
+            <div class="c-row" style="--ac:var(--neon-indigo)"><svg class="i"><use href="#i-history"/></svg><div><b>Crew history</b></div><span class="meta">VIEW ›</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-foot"><b>Why:</b> it fits how a crew thinks ("what's next, what's happening, what we did") and needs no labels to learn. <b>Trade-off:</b> it's a long page, and finding one specific feature depends on the scrubber.</div>
+  </div>
+
+  <!-- ================= D ================= -->
+  <div class="col">
+    <div class="col-head">
+      <span class="tag" style="background:rgba(191,0,255,0.16);color:var(--neon-purple)">D · Two Doors + Sheet</span>
+      <h2>Two big doors, everything else in one sheet</h2>
+      <p>A clean crew pass, then two large cards for <b>Huddle</b> and <b>Rave Plan</b>, then a quiet "at a glance" list. A floating <b>Crew</b> button opens a bottom sheet with the other areas, each showing a live one-line summary instead of a bare label.</p>
+    </div>
+    <div class="phone" id="pD">
+      <div class="sbar"><span>9:41</span><span>●●● 5G</span></div>
+      <div class="scroll">
+        <span class="back">← My Crews</span>
+        <div class="d-pass">
+          <div class="crew-top">
+            <div class="totem">🛸</div>
+            <div style="flex:1"><div class="crew-name">Bass Cadets</div><div class="crew-sub"><span class="status">Recruiting</span> 14 raves together</div></div>
+            <svg class="i" style="color:var(--muted)"><use href="#i-share"/></svg>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="avs"><span class="av g1 online">MA</span><span class="av g2 online">JO</span><span class="av g3">KA</span><span class="av g4">RI</span><span class="av g5">YO</span></div>
+            <span style="font-size:.72rem;color:var(--muted)">Maya &amp; Jordan here now</span>
+          </div>
+        </div>
+        <div class="d-doors">
+          <button class="d-door huddle"><span class="badge">3</span><svg class="i big"><use href="#i-chat"/></svg><span class="lbl">Huddle</span><span class="sub">Kai: dibs shotgun…</span></button>
+          <button class="d-door plan">
+            <svg class="ring" viewBox="0 0 40 40"><circle cx="20" cy="20" r="16" fill="none" stroke="rgba(0,0,0,.1)" stroke-width="4"/><circle cx="20" cy="20" r="16" fill="none" stroke="#D6284B" stroke-width="4" stroke-dasharray="58 100" stroke-linecap="round" transform="rotate(-90 20 20)"/></svg>
+            <svg class="i big"><use href="#i-plan"/></svg><span class="lbl">Rave Plan</span><span class="sub">EDC Orlando · 20 days</span></button>
+        </div>
+        <div class="d-glance">
+          <div class="eyebrow" style="margin-bottom:4px">At a glance</div>
+          <div class="row" style="--ac:var(--neon-cyan)"><svg class="i"><use href="#i-poll"/></svg>Poll needs your vote<span class="meta">3/5</span></div>
+          <div class="row" style="--ac:var(--neon-purple)"><svg class="i"><use href="#i-dream"/></svg>Rio pinned Tomorrowland '27<span class="meta">1h</span></div>
+          <div class="row" style="--ac:var(--neon-pink)"><svg class="i"><use href="#i-pin"/></svg>2 raves to <b style="margin-left:4px">Year One</b><span class="meta">pin</span></div>
+        </div>
+      </div>
+      <button class="d-fab" id="dFab"><svg class="i"><use href="#i-grid"/></svg>Crew</button>
+      <div class="d-scrim" id="dScrim"></div>
+      <div class="d-sheet">
+        <div class="d-grab"></div>
+        <div class="eyebrow d-sheet-sec" style="margin-top:0">Vibes</div>
+        <div class="d-sheet-grid">
+          <button class="d-sheet-item" style="--ac:var(--neon-cyan)"><span class="ic"><svg class="i"><use href="#i-poll"/></svg></span><span><b>Polls</b><small>1 open · vote now</small></span></button>
+          <button class="d-sheet-item" style="--ac:var(--neon-green)"><span class="ic"><svg class="i"><use href="#i-jam"/></svg></span><span><b>Jams</b><small>4 playlists</small></span></button>
+          <button class="d-sheet-item" style="--ac:var(--neon-purple)"><span class="ic"><svg class="i"><use href="#i-dream"/></svg></span><span><b>Dream Board</b><small>1 new pin</small></span></button>
+          <button class="d-sheet-item" style="--ac:var(--neon-green)"><span class="ic"><svg class="i"><use href="#i-users"/></svg></span><span><b>Roster</b><small>5 · invite more</small></span></button>
+        </div>
+        <div class="eyebrow d-sheet-sec">Memories</div>
+        <div class="d-sheet-grid">
+          <button class="d-sheet-item" style="--ac:var(--neon-yellow)"><span class="ic"><svg class="i"><use href="#i-archive"/></svg></span><span><b>Archive</b><small>38 links</small></span></button>
+          <button class="d-sheet-item" style="--ac:var(--neon-pink)"><span class="ic"><svg class="i"><use href="#i-pin"/></svg></span><span><b>Pins</b><small>4 of 6 earned</small></span></button>
+          <button class="d-sheet-item" style="--ac:var(--neon-indigo)"><span class="ic"><svg class="i"><use href="#i-history"/></svg></span><span><b>History</b><small>since Mar 2023</small></span></button>
+          <button class="d-sheet-item" style="--ac:var(--muted)"><span class="ic"><svg class="i"><use href="#i-more"/></svg></span><span><b>Settings</b><small>edit · status · leave</small></span></button>
+        </div>
+      </div>
+    </div>
+    <div class="col-foot"><b>Why:</b> the calmest page with a clear hierarchy. The live sub-lines tell you <em>why</em> to open something, not just that it exists. <b>Trade-off:</b> one extra tap to reach the secondary six.</div>
+  </div>
+
+  <!-- ================= E ================= -->
+  <div class="col">
+    <div class="col-head">
+      <span class="tag" style="background:rgba(57,255,20,0.12);color:var(--neon-green)">E · Crew Feed</span>
+      <h2>No buttons, just what's happening</h2>
+      <p>Huddle and Rave Plan are pinned as two live strips at the top. Below is one feed where polls, jams, dream pins, badges and archive drops show up as cards you act on in place. The filter chips act as the old buttons.</p>
+    </div>
+    <div class="phone" id="pE">
+      <div class="sbar"><span>9:41</span><span>●●● 5G</span></div>
+      <div class="scroll">
+        <span class="back">← My Crews</span>
+        <div class="crew-top">
+          <div class="totem">🛸</div>
+          <div style="flex:1"><div class="crew-name">Bass Cadets</div><div class="crew-sub"><span class="status">Recruiting</span></div></div>
+          <div class="avs"><span class="av g1 online">MA</span><span class="av g2 online">JO</span><span class="av g4">+3</span></div>
+        </div>
+        <div class="e-live">
+          <span class="av g3" style="margin-left:0;width:30px;height:30px">KA</span>
+          <div class="txt"><b>Huddle · 3 new</b><span>Kai: dibs shotgun. also who has the totem??</span></div>
+          <span class="go">Open</span>
+        </div>
+        <div class="e-plan"><svg class="i" style="color:var(--paper-ink)"><use href="#i-plan"/></svg><div><b>EDC Orlando plan</b><br><span style="color:#5a5060">1 to-do is yours: meetup spot</span></div><span class="days">20d</span></div>
+
+        <div class="e-filters" id="eFilters">
+          <button class="on" style="--ac:var(--text)" data-f="all">All</button>
+          <button style="--ac:var(--neon-cyan)" data-f="poll">Polls</button>
+          <button style="--ac:var(--neon-green)" data-f="jam">Jams</button>
+          <button style="--ac:var(--neon-purple)" data-f="dream">Dreams</button>
+          <button style="--ac:var(--neon-yellow)" data-f="mem">Memories</button>
+        </div>
+        <div class="e-feed" id="eFeed">
+          <div class="e-item" data-k="poll" style="--ac:var(--neon-cyan)">
+            <div class="h"><span class="av g1">MA</span><b>Maya</b> asked · 1h<span class="kind"><svg class="i"><use href="#i-poll"/></svg>Poll</span></div>
+            <div style="font-weight:600;font-size:.84rem">Saturday night: which stage first?</div>
+            <div class="e-opt"><i style="width:60%"></i><span>kineticFIELD</span><span>3</span></div>
+            <div class="e-opt"><i style="width:0"></i><span>basspod</span><span>0</span></div>
+          </div>
+          <div class="e-item" data-k="dream" style="--ac:var(--neon-purple)">
+            <div class="h"><span class="av g4">RI</span><b>Rio</b> pinned a dream · 1h<span class="kind"><svg class="i"><use href="#i-dream"/></svg>Dream</span></div>
+            <div style="font-size:.84rem">Tomorrowland 2027, full crew or nothing 🌍</div>
+            <div class="acts"><span>🔥 Hype · 5</span><span>💬 Talk in Huddle</span></div>
+          </div>
+          <div class="e-item" data-k="jam" style="--ac:var(--neon-green)">
+            <div class="h"><span class="av g3">KA</span><b>Kai</b> dropped a jam · 3h<span class="kind"><svg class="i"><use href="#i-jam"/></svg>Jam</span></div>
+            <div class="e-jam"><div class="art"></div><div style="font-size:.8rem"><b style="font-family:Outfit">Pre-game bangers</b><br><span style="color:var(--muted)">Spotify · 42 tracks</span></div></div>
+            <div class="acts"><span>▶ Play</span><span>✨ Vibe · 4</span></div>
+          </div>
+          <div class="e-item" data-k="mem" style="--ac:var(--neon-pink)">
+            <div class="h"><span style="font-size:1rem">🏆</span><b>The whole crew</b> · 2w<span class="kind"><svg class="i"><use href="#i-pin"/></svg>Pin</span></div>
+            <div style="font-size:.84rem">Unlocked <b>10 Raves Strong</b></div>
+          </div>
+          <div class="e-item" data-k="mem" style="--ac:var(--neon-yellow)">
+            <div class="h"><span class="av g2">JO</span><b>Jordan</b> added to Archive · 3w<span class="kind"><svg class="i"><use href="#i-archive"/></svg>Archive</span></div>
+            <div class="c-past"><div style="background:linear-gradient(135deg,#FF2D78,#5B6EFF)"></div><div style="background:linear-gradient(135deg,#00F5FF,#39FF14)"></div><div style="background:linear-gradient(135deg,#BF00FF,#FFE600)"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-foot"><b>Why:</b> features that are rarely opened (polls, dreams) get seen because they come to you. <b>Trade-off:</b> it needs a new merged feed query, and a quiet crew's feed looks sparse.</div>
+  </div>
+
+</div>
+
+<script>
+  // A — stash chips open one drawer at a time
+  const aDrawerContent = {
+    poll: '<div class="card"><div class="eyebrow" style="color:var(--neon-cyan);margin-bottom:6px">Poll · 3 of 5 voted</div><b style="font-family:Outfit">Saturday night: which stage first?</b><div class="e-opt"><i style="width:60%"></i><span>kineticFIELD</span><span>3</span></div><div class="e-opt"><i style="width:0"></i><span>basspod</span><span>0</span></div></div>',
+    jams: '<div class="card"><div class="e-jam"><div class="art"></div><div><b style="font-family:Outfit">Pre-game bangers</b><br><span style="color:var(--muted)">Kai · 42 tracks</span></div></div></div>',
+    dream: '<div class="card">📌 <b style="font-family:Outfit">Tomorrowland \'27</b> · Rio · 🔥 5<br><span style="color:var(--muted)">+2 more pins</span></div>',
+    archive: '<div class="c-past"><div style="background:linear-gradient(135deg,#FF2D78,#5B6EFF)"></div><div style="background:linear-gradient(135deg,#00F5FF,#39FF14)"></div><div style="background:linear-gradient(135deg,#BF00FF,#FFE600)"></div></div>',
+    pins: '<div class="card">🏆 <b style="font-family:Outfit">10 Raves Strong</b> · 🎂 Year One in 2 raves</div>',
+    history: '<div class="card">Crew formed Mar 2023 · 14 raves · 5 members</div>'
+  };
+  document.getElementById('aStash').addEventListener('click', e => {
+    const chip = e.target.closest('.a-chip'); if (!chip) return;
+    const was = chip.classList.contains('on');
+    document.querySelectorAll('#aStash .a-chip').forEach(c => c.classList.remove('on'));
+    const d = document.getElementById('aDrawer');
+    if (was) { d.innerHTML = '<p class="dashed-hint">Tap a stash item: it opens here, one at a time</p>'; return; }
+    chip.classList.add('on');
+    const dot = chip.querySelector('.dot'); if (dot) dot.remove();
+    d.innerHTML = aDrawerContent[chip.dataset.k];
+  });
+
+  // B — dock switches panes
+  document.getElementById('bDock').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    document.querySelectorAll('#bDock button').forEach(x => x.classList.toggle('on', x === b));
+    document.querySelectorAll('#pB .b-pane').forEach(p => p.classList.toggle('on', p.dataset.p === b.dataset.p));
+    document.querySelector('#pB .scroll').scrollTop = 0;
+  });
+
+  // C — scrubber jumps within the phone scroller; highlights on scroll
+  const cScroll = document.getElementById('cScroll');
+  document.getElementById('cScrub').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const sec = document.getElementById('c-' + b.dataset.t);
+    cScroll.scrollTo({ top: sec.offsetTop + sec.offsetParent.offsetTop - 60, behavior: 'smooth' });
+  });
+  cScroll.addEventListener('scroll', () => {
+    let cur = 'next';
+    ['next', 'now', 'someday', 'past'].forEach(t => {
+      const sec = document.getElementById('c-' + t);
+      if (sec.offsetTop + sec.offsetParent.offsetTop - 80 <= cScroll.scrollTop) cur = t;
+    });
+    document.querySelectorAll('#cScrub button').forEach(b => b.classList.toggle('on', b.dataset.t === cur));
+  });
+
+  // D — FAB opens the sheet; scrim closes it
+  const pD = document.getElementById('pD');
+  document.getElementById('dFab').onclick = () => pD.classList.add('sheet-open');
+  document.getElementById('dScrim').onclick = () => pD.classList.remove('sheet-open');
+
+  // E — filter chips filter the feed
+  document.getElementById('eFilters').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    document.querySelectorAll('#eFilters button').forEach(x => x.classList.toggle('on', x === b));
+    document.querySelectorAll('#eFeed .e-item').forEach(it => { it.hidden = b.dataset.f !== 'all' && it.dataset.k !== b.dataset.f; });
+  });
+</script>
+</body>
+</html>
