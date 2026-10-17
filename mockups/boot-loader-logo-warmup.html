@@ -50,10 +50,13 @@
   }
   #app-loading.done { opacity: 0; pointer-events: none; }
 
-  /* Logo mark: rays start cold, ignite clockwise as --p rises */
+  /* Logo mark: whole mark visible from the start, brightens evenly as --p rises */
   .al-mark { width: 112px; height: 112px; overflow: visible; }
-  .al-mark .ray { opacity: .12; transition: opacity .25s ease, filter .25s ease; }
-  .al-mark .ray.lit { opacity: 1; filter: drop-shadow(0 0 3px currentColor); }
+  .al-mark .ray {
+    opacity: calc(.3 + .7 * var(--p));
+    filter: drop-shadow(0 0 calc(3px * var(--p)) currentColor);
+    transition: opacity .4s ease, filter .4s ease;
+  }
   .al-mark .ring { stroke: rgba(var(--neon-green-rgb), calc(.08 + .25 * var(--p))); }
   .al-mark .halo { opacity: calc(.04 + .2 * var(--p)); }
   .al-mark .core { opacity: calc(.25 + .7 * var(--p)); }
@@ -101,7 +104,7 @@
 <body>
 <div class="wrap">
   <h1>Boot loader: logo warm-up</h1>
-  <p class="sub">The ripple orb is gone. The RaveFAM frequency mark (same SVG as the header) starts cold, and its rays light up clockwise as loading goes on. The EQ bars get taller as it finishes. The status lines stay as they are.</p>
+  <p class="sub">The ripple orb is gone. The RaveFAM frequency mark (same SVG as the header) shows in full from the start, dim, and gets brighter as loading goes on. The EQ bars get taller as it finishes. The status lines stay as they are.</p>
   <div class="controls">
     <button onclick="run(900)">▶ Fast load (0.9s)</button>
     <button class="cyan" onclick="run(4500)">▶ Typical festival load (4.5s)</button>
@@ -130,7 +133,7 @@
   </div>
 
   <div class="notes">
-    <p><b>How "progress" works:</b> there's no real percentage during the session check, so the bar eases toward ~90% over time and never quite gets there. When the app is actually ready it jumps to 100%: every ray lights, the mark pulses once, the EQ hits full height, and the overlay fades out (about 0.3s added at the end).</p>
+    <p><b>How "progress" works:</b> there's no real percentage during the session check, so the bar eases toward ~90% over time and never quite gets there. When the app is actually ready it eases to 100% over 0.4s: the mark reaches full brightness and pulses once, the EQ hits full height, and the overlay fades out (about 0.3s added at the end).</p>
     <p><b>Unchanged:</b> the RaveFAM wordmark, the status lines, the Retry after 10s, and the standalone inline script, so the loader still works if the main script fails.</p>
   </div>
 </div>
@@ -153,7 +156,6 @@
     l.style.color = r[4]; l.style.animationDelay = (k * 0.055) + 's';
     g.appendChild(l);
   });
-  var rays = g.querySelectorAll('.ray');
 
   var root = document.getElementById('app-loading');
   var line = document.getElementById('app-loading-line');
@@ -162,8 +164,6 @@
 
   function setP(p) {
     root.style.setProperty('--p', p);
-    var n = Math.round(p * rays.length);
-    rays.forEach(function (r, k) { r.classList.toggle('lit', k < n); });
   }
 
   function run(loadMs) {
