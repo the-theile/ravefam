@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boot Loader Warmup</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Urbanist:wght@800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a12; --white: #fff; --muted: #8a8aa3;
+    --neon-pink: #FF2D78; --neon-cyan: #00F5FF; --neon-green: #39FF14;
+    --neon-pink-rgb: 255,45,120; --neon-cyan-rgb: 0,245,255; --neon-green-rgb: 57,255,20;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #05050a; color: var(--white); font-family: 'Outfit', sans-serif; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-family: 'Urbanist', sans-serif; font-size: 1.4rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: .9rem; margin: 0 0 20px; line-height: 1.45; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+  .controls button {
+    min-height: 40px; padding: 8px 16px; border-radius: 100px; cursor: pointer;
+    font: 700 .82rem 'Outfit', sans-serif; color: var(--white); background: transparent;
+    border: 1.5px solid var(--neon-pink); box-shadow: 0 0 12px rgba(var(--neon-pink-rgb),.3);
+  }
+  .controls button.cyan { border-color: var(--neon-cyan); box-shadow: 0 0 12px rgba(var(--neon-cyan-rgb),.3); }
+  .controls button.green { border-color: var(--neon-green); box-shadow: 0 0 12px rgba(var(--neon-green-rgb),.3); }
+  .phone {
+    position: relative; width: 100%; max-width: 360px; height: 640px; margin: 0 auto;
+    border-radius: 36px; overflow: hidden; border: 1px solid #22223a;
+    box-shadow: 0 20px 60px rgba(0,0,0,.6);
+  }
+  .app-behind {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: var(--bg); color: var(--muted); font-size: .9rem;
+  }
+  .notes { margin-top: 24px; color: var(--muted); font-size: .88rem; line-height: 1.55; }
+  .notes b { color: var(--white); }
+
+  /* ===== Proposed loader (mirrors #app-loading in app.html) ===== */
+  #app-loading {
+    position: absolute; inset: 0; z-index: 2;
+    background:
+      radial-gradient(60% 40% at 50% 42%, rgba(var(--neon-pink-rgb),0.10), transparent 70%),
+      radial-gradient(40% 30% at 50% 60%, rgba(var(--neon-cyan-rgb),0.07), transparent 70%),
+      var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 18px; padding: 24px 16px;
+    transition: opacity .35s ease;
+    --p: 0; /* 0..1 boot progress */
+  }
+  #app-loading.done { opacity: 0; pointer-events: none; }
+
+  /* Logo mark: rays start cold, ignite clockwise as --p rises */
+  .al-mark { width: 112px; height: 112px; overflow: visible; }
+  .al-mark .ray { opacity: .12; transition: opacity .25s ease, filter .25s ease; }
+  .al-mark .ray.lit { opacity: 1; filter: drop-shadow(0 0 3px currentColor); }
+  .al-mark .ring { stroke: rgba(var(--neon-green-rgb), calc(.08 + .25 * var(--p))); }
+  .al-mark .halo { opacity: calc(.04 + .2 * var(--p)); }
+  .al-mark .core { opacity: calc(.25 + .7 * var(--p)); }
+  #app-loading.ready .al-mark { animation: alDrop .45s ease-out; }
+  #app-loading.ready .al-mark .ray { animation: alRayBeat 1.4s ease-in-out infinite; }
+  @keyframes alDrop { 0% { transform: scale(1); } 40% { transform: scale(1.12); } 100% { transform: scale(1); } }
+  @keyframes alRayBeat { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+
+  .al-word { font-family: 'Urbanist', sans-serif; font-weight: 800; font-size: 2rem; letter-spacing: -0.5px; line-height: 1; }
+  .al-word span:first-child { color: var(--white); }
+  .al-word span:last-child { color: var(--neon-green); text-shadow: 0 0 18px rgba(var(--neon-green-rgb),0.45); }
+
+  /* EQ: bars keep bouncing, but their ceiling grows with --p (4px → 22px) */
+  .al-eq { display: flex; align-items: flex-end; gap: 4px; height: 22px; }
+  .al-eq i {
+    width: 4px; border-radius: 2px; background: var(--neon-pink);
+    height: calc(4px + 18px * var(--p)); transition: height .3s ease;
+    transform-origin: bottom; animation: alEq .9s ease-in-out infinite alternate;
+  }
+  .al-eq i:nth-child(3n+2) { background: var(--neon-cyan); }
+  .al-eq i:nth-child(3n) { background: var(--neon-green); }
+  .al-eq i:nth-child(2) { animation-delay: -.45s; } .al-eq i:nth-child(3) { animation-delay: -.2s; }
+  .al-eq i:nth-child(4) { animation-delay: -.7s; }  .al-eq i:nth-child(5) { animation-delay: -.1s; }
+  .al-eq i:nth-child(6) { animation-delay: -.55s; } .al-eq i:nth-child(7) { animation-delay: -.3s; }
+  @keyframes alEq { from { transform: scaleY(.35); } to { transform: scaleY(1); } }
+
+  .al-line {
+    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.85rem;
+    color: var(--muted); min-height: 1.3em; text-align: center;
+    animation: alFade 1.6s ease-in-out infinite;
+  }
+  @keyframes alFade { 0%,100% { opacity: .35; } 20%,80% { opacity: 1; } }
+  .al-slow { display: none; max-width: 300px; text-align: center; font-size: 0.8rem; line-height: 1.45; color: var(--muted); }
+  .al-slow.show { display: block; }
+  .al-slow button {
+    display: block; margin: 12px auto 0; min-height: 44px; padding: 10px 26px;
+    font: 700 0.85rem 'Outfit', sans-serif; letter-spacing: .5px; color: var(--white); background: transparent; cursor: pointer;
+    border: 1.5px solid var(--neon-pink); border-radius: 100px; box-shadow: 0 0 16px rgba(var(--neon-pink-rgb),0.35);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .al-eq i, .al-line, #app-loading.ready .al-mark, #app-loading.ready .al-mark .ray { animation: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Boot loader: logo warm-up</h1>
+  <p class="sub">The ripple orb is gone. The RaveFAM frequency mark (same SVG as the header) starts cold, and its rays light up clockwise as loading goes on. The EQ bars get taller as it finishes. The status lines stay as they are.</p>
+  <div class="controls">
+    <button onclick="run(900)">▶ Fast load (0.9s)</button>
+    <button class="cyan" onclick="run(4500)">▶ Typical festival load (4.5s)</button>
+    <button class="green" onclick="run(null)">▶ Never finishes (Retry at 10s)</button>
+  </div>
+
+  <div class="phone">
+    <div class="app-behind">(app loads here)</div>
+    <div id="app-loading" role="status" aria-label="Loading RaveFAM">
+      <svg class="al-mark" viewBox="0 0 72 72" fill="none" aria-hidden="true">
+        <defs><filter id="fnc-al" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+        <g id="al-rays" stroke-width="2.2" stroke-linecap="round"></g>
+        <circle class="halo" cx="36" cy="36" r="8" fill="#39FF14" filter="url(#fnc-al)"/>
+        <circle class="core" cx="36" cy="36" r="5" fill="#39FF14"/>
+        <circle cx="36" cy="36" r="2.5" fill="#fff"/>
+        <circle class="ring" cx="36" cy="36" r="34" stroke-width="0.8"/>
+      </svg>
+      <div class="al-word" aria-hidden="true"><span>Rave</span><span>FAM</span></div>
+      <div class="al-eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="al-line" id="app-loading-line" aria-hidden="true">Checking the guest list…</div>
+      <div class="al-slow" id="app-loading-slow" aria-live="polite">
+        Taking longer than usual. Festival signal can be rough. Find a better spot and hit Retry.
+        <button type="button" onclick="run(null)">Retry</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <p><b>How "progress" works:</b> there's no real percentage during the session check, so the bar eases toward ~90% over time and never quite gets there. When the app is actually ready it jumps to 100%: every ray lights, the mark pulses once, the EQ hits full height, and the overlay fades out (about 0.3s added at the end).</p>
+    <p><b>Unchanged:</b> the RaveFAM wordmark, the status lines, the Retry after 10s, and the standalone inline script, so the loader still works if the main script fails.</p>
+  </div>
+</div>
+
+<script>
+  // Ray geometry copied from the header .logo-mark (clockwise from 12 o'clock).
+  var RAYS = [
+    [36,22,36,9,'#FF2D78'],[39.62,22.48,41.95,13.78,'#39FF14'],[43,23.88,51,10.02,'#00F5FF'],[45.9,26.1,52.97,19.03,'#39FF14'],
+    [48.12,29,64.58,19.5,'#39FF14'],[49.52,32.38,60.15,29.53,'#39FF14'],[50,36,65,36,'#FF2D78'],[49.52,39.62,57.25,41.69,'#39FF14'],
+    [48.12,43,63.71,52,'#39FF14'],[45.9,45.9,52.97,52.97,'#39FF14'],[43,48.12,50,60.25,'#00F5FF'],[39.62,49.52,42.99,62.08,'#39FF14'],
+    [36,50,36,61,'#FF2D78'],[32.38,49.52,28.24,64.98,'#39FF14'],[29,48.12,24.5,55.92,'#00F5FF'],[26.1,45.9,12.67,59.33,'#39FF14'],
+    [23.88,43,12.62,49.5,'#39FF14'],[22.48,39.62,7.99,43.51,'#39FF14'],[22,36,12,36,'#FF2D78'],[22.48,32.38,5.09,27.72,'#39FF14'],
+    [23.88,29,11.75,22,'#39FF14'],[26.1,26.1,18.32,18.32,'#39FF14'],[29,23.88,25,16.95,'#00F5FF'],[32.38,22.48,28.75,8.95,'#39FF14']
+  ];
+  var g = document.getElementById('al-rays');
+  RAYS.forEach(function (r, k) {
+    var l = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    l.setAttribute('x1', r[0]); l.setAttribute('y1', r[1]); l.setAttribute('x2', r[2]); l.setAttribute('y2', r[3]);
+    l.setAttribute('stroke', r[4]); l.setAttribute('class', 'ray');
+    l.style.color = r[4]; l.style.animationDelay = (k * 0.055) + 's';
+    g.appendChild(l);
+  });
+  var rays = g.querySelectorAll('.ray');
+
+  var root = document.getElementById('app-loading');
+  var line = document.getElementById('app-loading-line');
+  var lines = ['Checking the guest list…', 'Finding your crew…', 'Syncing the lineup…', 'Warming up the Huddle…'];
+  var timers = [];
+
+  function setP(p) {
+    root.style.setProperty('--p', p);
+    var n = Math.round(p * rays.length);
+    rays.forEach(function (r, k) { r.classList.toggle('lit', k < n); });
+  }
+
+  function run(loadMs) {
+    timers.forEach(clearInterval); timers = [];
+    root.className = ''; document.getElementById('app-loading-slow').classList.remove('show');
+    var t0 = Date.now(), i = 0;
+    line.textContent = lines[0]; setP(0);
+    // Asymptotic fake progress: ~63% of the way to 0.9 every 2.5s
+    timers.push(setInterval(function () {
+      setP(0.9 * (1 - Math.exp(-(Date.now() - t0) / 2500)));
+    }, 80));
+    timers.push(setInterval(function () { i = (i + 1) % lines.length; line.textContent = lines[i]; }, 1600));
+    timers.push(setTimeout(function () {
+      if (!root.classList.contains('done')) document.getElementById('app-loading-slow').classList.add('show');
+    }, 10000));
+    if (loadMs != null) timers.push(setTimeout(finish, loadMs));
+  }
+
+  function finish() {
+    timers.forEach(clearInterval); timers = [];
+    setP(1); root.classList.add('ready');
+    setTimeout(function () { root.classList.add('done'); }, 320);
+  }
+
+  run(4500);
+</script>
+</body>
+</html>
