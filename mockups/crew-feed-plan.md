@@ -38,10 +38,10 @@ already tested.
 | Area | Where | Change |
 |---|---|---|
 | `APP_VERSION` | ~10634 + `package.json` | 2.22.1 → **2.23.0** in PR 1 (minor: new feature behind a flag) |
-| Flag | new, near `// ===== PM METRICS DASHBOARD: super-admin gate =====` (~10755) | `crewFeedEnabled()`: `localStorage rf_crew_feed === '1'`, or super admin. Settings modal gets a "Try the new crew page (beta)" toggle. |
+| Flag | next to the Haptics setting (~11348) | `crewFeedEnabled()`: `localStorage ravefam_crew_feed === '1'`, per device. Settings hub gets a "New crew page (beta)" toggle. |
 | `openDetail` | `// ===== Crew detail view =====` (~18648) | Deep links: `tab:'roster'` → `openCrewManifestSheet()`; `tab:'gameplan'` → `openCrewFeature('raveplan', {festivalId})`. Loader `.then`s also call `rerenderCrewFeed(id)`. |
-| `renderDetail` | ~20112 | First line: `if (crewFeedEnabled()) return renderCrewFeedDetail(id);` The old body is untouched. |
-| Roster markup | inside `renderDetail` (`rosterPanelHTML`) | Extract unchanged into `buildCrewRosterHTML(crew)`, used by both the old tab and the new sheet |
+| `renderDetail` | ~20112 | Just before the classic `innerHTML`: `if (crewFeedEnabled()) return renderCrewFeedPage(...)`. Overview HTML isn't built in feed mode. |
+| Roster markup | inside `renderDetail` (`rosterPanelHTML`) | Reused as-is: the feed branch passes it into the sheet, so no extraction was needed |
 | `toggleCrewFeatureTile` | ~20352 | Becomes the compatibility shim: in feed mode, forwards to `openCrewFeature(feature)` |
 | Callers that look up `.crew-feature-tile[...]` and bail if it's missing | `openDetail` ~18690, Huddle activity links ~21618 / ~21629, jam tile ~23882, `crewQuestDefs` stamps | Switch to `openCrewFeature(feature, opts)`, which works in both modes |
 | Unseen glow | `refreshCrewFeatureGlow` / `markCrewFeatureRead` (~20404) | Reused for "new since you looked" (see below). The glow is a no-op when there are no tiles, which is already safe. |
@@ -51,7 +51,7 @@ already tested.
 
 ### New functions (CREW FEED section)
 
-- `renderCrewFeedDetail(id)`: page shell; branches to `crewFeedPreviewHTML` for non-members
+- `renderCrewFeedPage(crew, …)`: page shell, called from the end of `renderDetail` so it reuses the roster markup `renderDetail` already builds (PR 3 adds the non-member preview)
 - `crewFeedHeaderHTML(crew)`: ‹ back, totem, name, one-line description, status chip, avatar button "N ›", share icon (`openCrewShareCard`)
 - `crewFeedHuddlePillHTML(crew)`: same data as `rerenderHuddleTilePreview` (last message, unread, here-now); taps `openHuddle`
 - `crewTicketStackHTML(crew)`: one paper ticket per `deriveCrewFestivalPlans(crew).live`, horizontal scroll-snap, with the who's-going data from `crewNextFestBlock`. Empty state: "Where are we raving next?" → `switchTab('events')`
@@ -84,8 +84,8 @@ Each PR ships independently behind the flag.
 
 **PR 1: Shell + roster sheet (flag, 2.23.0)**
 - Flag + Settings toggle
-- `renderCrewFeedDetail`: header, Huddle pill, ticket stack, filters → existing panels (no merged feed yet; "All" shows the newest 3 of each type, stacked)
-- `buildCrewRosterHTML` extraction, Manifest sheet, deep links, the `openCrewFeature` shim and its call sites
+- `renderCrewFeedPage`: header, Huddle pill, ticket stack, filters → existing panels (no merged feed yet; "All" shows the Polls, Dream Board and Jams panels stacked)
+- Manifest sheet (reusing `rosterPanelHTML`), deep links, the `openCrewFeature` shim and its call sites
 - Glass/aurora CSS with an `@supports not (backdrop-filter: blur(1px))` solid fallback, and `prefers-reduced-motion`
 
 **PR 2: Merged feed (2.23.x)**

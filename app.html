@@ -5291,6 +5291,143 @@
   .kebab-menu-row.danger { color: var(--danger); }
   .kebab-menu-right { left: auto; right: 0; }
 
+  /* ===== CREW FEED (beta crew page) =====
+     Aurora glow behind frosted-glass panels; the Rave Plan stays a paper
+     ticket. Everything is scoped under #page-crew-detail.crew-feed (plus the
+     Manifest sheet) so the classic crew page is untouched. */
+  #page-crew-detail.crew-feed {
+    --cf-glass: rgba(var(--white-rgb),0.065);
+    --cf-glass-line: rgba(var(--white-rgb),0.12);
+    --cf-soft: rgba(240,238,255,0.62);
+  }
+  .crew-feed-wrap {
+    max-width: 520px; margin: 0 auto; position: relative; isolation: isolate;
+    padding: 4px 0 24px;
+  }
+  .crew-feed-wrap::before {
+    content: ''; position: absolute; inset: -40px 0 0; z-index: -1; pointer-events: none;
+    /* Fades out toward the sides so it has no hard edge (it can't run past
+       them without widening the page). */
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+            mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+    background:
+      radial-gradient(60% 22% at 12% 6%, rgba(var(--neon-pink-rgb),0.30), transparent 70%),
+      radial-gradient(55% 20% at 92% 18%, rgba(var(--neon-cyan-rgb),0.20), transparent 70%),
+      radial-gradient(70% 25% at 40% 55%, rgba(var(--neon-purple-rgb),0.20), transparent 70%),
+      radial-gradient(60% 22% at 80% 92%, rgba(91,110,255,0.20), transparent 70%);
+  }
+  .crew-feed .crew-feature-panel,
+  .crew-feed-huddle .huddle-tile-preview,
+  .crew-feed-filters,
+  .crew-feed-faces,
+  .crew-feed-share {
+    background: var(--cf-glass);
+    border: 1px solid var(--cf-glass-line);
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    box-shadow: inset 0 1px 0 rgba(var(--white-rgb),0.1), 0 10px 30px -14px rgba(var(--black-rgb),0.7);
+  }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .crew-feed .crew-feature-panel,
+    .crew-feed-huddle .huddle-tile-preview,
+    .crew-feed-filters,
+    .crew-feed-faces,
+    .crew-feed-share { background: var(--surface2); }
+  }
+
+  /* Header */
+  .crew-feed-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .crew-feed-back { background: none; border: none; color: var(--muted); font-size: 1.6rem; line-height: 1; padding: 4px 4px 6px 0; cursor: pointer; }
+  .crew-feed-totem { width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0; object-fit: cover; }
+  .crew-totem-icon-mark.crew-feed-totem { display: grid; place-items: center; font-size: 1.3rem; }
+  .crew-feed-title { flex: 1; min-width: 0; }
+  .crew-feed-name { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.25rem; letter-spacing: -0.3px; line-height: 1.15; overflow-wrap: anywhere; }
+  .crew-feed-sub { display: flex; align-items: center; gap: 7px; margin-top: 4px; min-width: 0; }
+  .crew-feed-sub .crew-status { flex-shrink: 0; }
+  .crew-feed-desc { font-size: 0.72rem; color: var(--cf-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .crew-feed-faces {
+    display: flex; align-items: center; gap: 5px; flex-shrink: 0; cursor: pointer;
+    padding: 4px 9px 4px 4px; border-radius: 100px; color: var(--text);
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.72rem;
+  }
+  .crew-feed-face-stack { display: flex; }
+  .crew-feed-face { width: 26px; height: 26px; min-width: 26px; font-size: 0.56rem; margin: 0 0 0 -8px; border: 2px solid var(--bg); }
+  .crew-feed-face:first-child { margin-left: 0; }
+  .crew-feed-chev { color: var(--cf-soft); }
+  .crew-feed-share { width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0; cursor: pointer; font-size: 0.95rem; display: grid; place-items: center; }
+
+  /* Huddle pill (rerenderHuddleTilePreview fills it) */
+  .crew-feed-huddle { margin-bottom: 12px; }
+  .crew-feed-huddle .huddle-tile-preview { border-radius: 100px; padding: 9px 16px 9px 12px; }
+  .crew-feed-huddle .huddle-tile-preview:hover { background: rgba(var(--neon-cyan-rgb),0.08); }
+
+  /* Rave Plan tickets — paper, with notches cut by a mask so the glow shows
+     through them. Several tickets swipe sideways with the next one peeking. */
+  .crew-feed .cnf-block { transform: none; margin-bottom: 14px; }
+  .crew-ticket-stack { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin-bottom: 6px; padding-bottom: 8px; }
+  .crew-ticket-stack::-webkit-scrollbar { display: none; }
+  .crew-ticket-stack.is-multi .crew-ticket { flex-basis: calc(100% - 28px); }
+  .crew-ticket {
+    --notch: 92px;
+    flex: 0 0 100%; scroll-snap-align: start; display: block; width: 100%; text-align: left; cursor: pointer;
+    background: var(--paper); color: var(--surface2); border: none; border-radius: 18px; padding: 14px 16px 12px;
+    filter: drop-shadow(0 10px 22px rgba(var(--neon-pink-rgb),0.22));
+    -webkit-mask: radial-gradient(circle at 0 var(--notch), transparent 9px, #000 9.5px) left / 51% 100% no-repeat,
+                  radial-gradient(circle at 100% var(--notch), transparent 9px, #000 9.5px) right / 51% 100% no-repeat;
+            mask: radial-gradient(circle at 0 var(--notch), transparent 9px, #000 9.5px) left / 51% 100% no-repeat,
+                  radial-gradient(circle at 100% var(--notch), transparent 9px, #000 9.5px) right / 51% 100% no-repeat;
+  }
+  .crew-ticket > span { display: block; }
+  .crew-ticket-top { display: flex !important; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .crew-ticket-top > span:first-child { min-width: 0; }
+  .crew-ticket-eyebrow { display: block; font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; font-size: 0.56rem; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; color: var(--paper-ink); }
+  .crew-ticket-name { display: block; font-family: 'Urbanist', 'Outfit', sans-serif; font-weight: 900; font-size: 1.3rem; margin-top: 2px; overflow-wrap: anywhere; }
+  .crew-ticket-meta { display: block; font-size: 0.7rem; color: #5a5060; margin-top: 1px; }
+  .crew-ticket-count { font-family: 'Urbanist', 'Outfit', sans-serif; font-weight: 900; font-size: 2.2rem; line-height: 0.9; color: var(--paper-ink); text-align: right; flex-shrink: 0; }
+  .crew-ticket-count small { display: block; font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; font-size: 0.5rem; font-weight: 400; letter-spacing: 1.4px; color: #5a5060; margin-top: 4px; }
+  .crew-ticket-perf { border-top: 1.5px dashed rgba(var(--black-rgb),0.18); margin: 13px -16px 10px; }
+  .crew-ticket-going { display: flex !important; align-items: center; gap: 8px; font-size: 0.7rem; color: #5a5060; }
+  .crew-ticket-faces { display: flex; align-items: center; }
+  .crew-ticket-face { width: 24px; height: 24px; min-width: 24px; font-size: 0.52rem; margin: 0 0 0 -7px; border: 2px solid var(--paper); }
+  .crew-ticket-face:first-child { margin-left: 0; }
+  .crew-ticket-more { margin-left: 4px; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.62rem; color: var(--surface2); }
+  .crew-ticket-foot { display: flex !important; align-items: center; gap: 10px; margin-top: 10px; }
+  .crew-ticket-barcode { flex: 1; height: 18px; opacity: 0.8; background: repeating-linear-gradient(90deg, var(--surface2) 0 2px, transparent 2px 4px, var(--surface2) 4px 5px, transparent 5px 8px, var(--surface2) 8px 11px, transparent 11px 12px); }
+  .crew-ticket-open { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.7rem; color: var(--paper-ink); }
+  .crew-ticket-blank { --notch: 86px; background: rgba(244,241,232,0.94); }
+  .crew-ticket-cta { display: inline-block !important; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.72rem; padding: 6px 11px; border-radius: 100px; background: var(--paper-ink); color: var(--white); }
+  .crew-ticket-dots { display: flex; justify-content: center; gap: 6px; margin: 0 0 12px; }
+  .crew-ticket-dots span { width: 6px; height: 6px; border-radius: 50%; background: rgba(var(--white-rgb),0.25); transition: width 0.2s, background 0.2s; }
+  .crew-ticket-dots span.on { width: 16px; border-radius: 3px; background: var(--neon-pink); }
+
+  /* Filter chips */
+  .crew-feed-filters { display: flex; gap: 2px; padding: 4px; border-radius: 100px; margin: 8px 0 14px; overflow-x: auto; scrollbar-width: none; }
+  .crew-feed-filters::-webkit-scrollbar { display: none; }
+  .crew-feed-filter { flex: 0 0 auto; background: none; border: none; cursor: pointer; font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.76rem; padding: 8px 13px; border-radius: 100px; color: var(--cf-soft); }
+  .crew-feed-filter.active { background: rgba(var(--white-rgb),0.92); color: #0b0a12; font-weight: 700; }
+
+  /* The existing feature panels, as glass cards */
+  .crew-feed .crew-feature-panel { border-radius: 24px; padding: 16px; margin-bottom: 12px; }
+
+  /* Crew Manifest sheet: a bottom sheet over the crew page */
+  .crew-manifest-overlay { align-items: flex-end; padding: 0; }
+  .modal.crew-manifest-sheet {
+    box-sizing: border-box; width: 100%; min-width: 0; max-width: 560px; max-height: 86vh; overflow-y: auto; overflow-x: hidden; text-align: left;
+    border-radius: 28px 28px 0 0; padding: 10px 22px calc(22px + env(safe-area-inset-bottom, 0px));
+    background: rgba(26,17,38,0.94); border: 1px solid rgba(var(--white-rgb),0.14); border-bottom: none;
+    transform: translateY(100%); transition: transform 0.28s cubic-bezier(.2,.8,.2,1);
+  }
+  .crew-manifest-overlay.open .modal.crew-manifest-sheet { transform: none; }
+  .crew-manifest-sheet::before { content: ''; display: block; width: 40px; height: 4px; border-radius: 2px; background: rgba(var(--white-rgb),0.25); margin: 0 auto 12px; }
+  .crew-manifest-sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+  .crew-manifest-sheet-head .modal-title { margin: 0; }
+  .crew-manifest-sheet-x { width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0; border: none; cursor: pointer; background: rgba(var(--white-rgb),0.08); color: var(--text); font-size: 0.9rem; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .modal.crew-manifest-sheet, .crew-ticket-dots span { transition: none; }
+    .crew-ticket-stack { scroll-behavior: auto; }
+  }
+
   /* ===== PHOTO FEATURES ===== */
 
   /* Profile Photo — avatar wrapper with upload overlay */
@@ -9681,6 +9818,14 @@
 </div>
 
 <!-- Crew Edit Modal (rename, recolour + totem) -->
+<!-- Crew Manifest sheet (new crew page): roster, invites, status and crew
+     actions. Sits before the other modals so Edit Crew / QR open on top. -->
+<div class="modal-overlay crew-manifest-overlay" id="crew-manifest-overlay" onclick="if(event.target===this)closeCrewManifestSheet()">
+  <div class="modal crew-manifest-sheet" id="crew-manifest-content" role="dialog" aria-modal="true" aria-label="Crew roster">
+    <!-- filled by renderCrewFeedPage -->
+  </div>
+</div>
+
 <div class="modal-overlay" id="crew-edit-overlay" onclick="if(event.target===this)closeCrewEditModal()">
   <div class="modal modal-scroll" id="crew-edit-modal-content">
     <!-- filled by JS -->
@@ -9928,6 +10073,11 @@
           <span class="settings-nav-ico" style="background:rgba(var(--neon-cyan-rgb),0.12);">📳</span>
           <span class="settings-nav-text"><span class="poll-setting-label">Haptics</span><span class="poll-setting-hint">Taps when you RSVP, vote, react and more</span></span>
           <button class="poll-anon-toggle" id="haptics-settings-toggle" onclick="toggleHapticsEnabled(this)"></button>
+        </div>
+        <div class="settings-nav-row">
+          <span class="settings-nav-ico" style="background:rgba(var(--neon-purple-rgb),0.14);">🧪</span>
+          <span class="settings-nav-text"><span class="poll-setting-label">New crew page <span class="text-hint" style="font-weight:400;">beta</span></span><span class="poll-setting-hint">Huddle up top, your next rave as a ticket, roster in one tap</span></span>
+          <button class="poll-anon-toggle" id="crew-feed-settings-toggle" aria-label="New crew page" onclick="toggleCrewFeedEnabled(this)"></button>
         </div>
         <button type="button" class="settings-nav-row" onclick="closePrivacySettingsModal();openAppGuide()">
           <span class="settings-nav-ico" style="background:rgba(var(--white-rgb),0.06);">❔</span>
@@ -10631,7 +10781,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.22.1';
+  const APP_VERSION = '2.23.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -11347,6 +11497,12 @@
   const HAPTICS_OFF_KEY = 'ravefam_haptics_off';
   function hapticsEnabled() {
     try { return localStorage.getItem(HAPTICS_OFF_KEY) !== '1'; } catch { return true; }
+  }
+  // Beta: the redesigned crew page (see CREW FEED). Off unless this device
+  // opted in via Settings → New crew page.
+  const CREW_FEED_KEY = 'ravefam_crew_feed';
+  function crewFeedEnabled() {
+    try { return localStorage.getItem(CREW_FEED_KEY) === '1'; } catch { return false; }
   }
   function nativeHaptics() {
     if (!IS_NATIVE_APP || !hapticsEnabled()) return null;
@@ -18586,6 +18742,9 @@
   // Overview tiles (pins/dreamboard/poll/jams/archive — huddle tracks reads
   // per-room separately, see huddle_room_reads). null until loaded.
   let _crewFeatureReadMap = null;
+  // Which filter chip is on in the new crew page (see CREW FEED); survives
+  // re-renders of the same crew, reset by openDetail.
+  let _crewFeedFilter = 'all';
   // Game Plan: per-(crew, rave) hub folding in the per-rave Huddle plus
   // Checklist/Roles/Logistics/Outfit. gamePlans holds every game_plans row
   // seen for the active crew (one per eligible rave); gamePlanItems holds
@@ -18661,6 +18820,8 @@
     crewHistoryRows = [];
     crewHistoryExpanded = false;
     _crewFeatureReadMap = null;
+    _crewFeedFilter = 'all';
+    closeCrewManifestSheet();
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById('page-crew-detail').classList.add('active');
     window.scrollTo(0, 0);
@@ -18681,14 +18842,17 @@
       // detail rather than expanded inside it.
       openHuddle(id, opts);
     } else if (opts && opts.tab === 'roster') {
-      const rosterTabBtn = document.querySelector('#page-crew-detail .stats-subtab:nth-child(2)');
-      if (rosterTabBtn) switchCrewDetailTab('roster', rosterTabBtn);
+      if (isCrewFeedPage()) {
+        openCrewManifestSheet();
+      } else {
+        const rosterTabBtn = document.querySelector('#page-crew-detail .stats-subtab:nth-child(2)');
+        if (rosterTabBtn) switchCrewDetailTab('roster', rosterTabBtn);
+      }
     } else if (opts && opts.tab === 'gameplan') {
       // Rave Plan lives as a tile under Overview now, not its own tab —
       // open it the same way any other collapsed tile gets opened.
       if (opts.festivalId) _gamePlanActiveFestivalId = opts.festivalId;  // openGamePlanTab prefers it when it's a live plan
-      const ravePlanTile = document.querySelector('.crew-feature-tile[data-feature="raveplan"]');
-      if (ravePlanTile) toggleCrewFeatureTile('raveplan', ravePlanTile);
+      openCrewFeature('raveplan');
     }
   }
   function closeDetail() {
@@ -18697,6 +18861,7 @@
     document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
     document.querySelector('.nav-tab[onclick*="crews"]')?.classList.add('active');
     activeDetailId = null;
+    closeCrewManifestSheet();
     if (_huddleScreenOpen) closeHuddleScreen(); else teardownHuddleLive();
     updateCrewPresence();
   }
@@ -19579,6 +19744,7 @@
   }
 
   function goToProfileFromDetail(raverId) {
+    closeCrewManifestSheet();
     openProfile(raverId, false, 'crews');
   }
 
@@ -20246,8 +20412,9 @@
     // doesn't vanish the morning after a rave while its plan is still open.
     const hasGamePlan = deriveCrewFestivalPlans(crew).live.length > 0;
 
-    // Everything except the roster + Huddle — the Overview tab.
-    const overviewPanelHTML = `
+    // Everything except the roster + Huddle — the Overview tab. Not built on
+    // the new crew page, which lays the same panels out itself.
+    const overviewPanelHTML = crewFeedEnabled() ? '' : `
       ${crew.description ? `<div style="font-size:0.85rem;color:var(--muted);margin:-4px 0 14px;line-height:1.5;">${escHtml(crew.description)}</div>` : ''}
       ${crewNextFestBlock(crew)}
       ${crewQuestRowHTML(crew)}
@@ -20301,6 +20468,14 @@
           return (leaveBtn || reportBtn) ? `<div class="danger-zone">${leaveBtn}${reportBtn}</div>` : '';
         })()}`;
 
+    if (crewFeedEnabled()) {
+      renderCrewFeedPage(crew, { s, people, isSecret, hasGamePlan, rosterPanelHTML });
+      return;
+    }
+    // Leaving the sheet's copy of the roster around would duplicate its ids
+    // (add-member-input etc.) once the classic page renders its own.
+    document.getElementById('crew-manifest-content').innerHTML = '';
+    document.getElementById('page-crew-detail').classList.remove('crew-feed');
     document.getElementById('page-crew-detail').innerHTML = `
       <button class="profile-back" onclick="closeDetail()">← My Crews</button>
       <div class="crew-detail-page-wrap">
@@ -20346,6 +20521,199 @@
     if (tab === 'overview') rerenderHuddleTilePreview(activeDetailId);
   }
 
+  // ===== CREW FEED (beta crew page) =====
+  // The redesigned crew page, on when crewFeedEnabled(). Same data and the
+  // same feature panels as the tile page (renderDetail still builds them),
+  // laid out as: crew header whose avatars open the Crew Manifest sheet,
+  // the Huddle pill, a swipeable stack of Rave Plan tickets, filter chips,
+  // then the panels the chosen chip covers. Panels stay in the DOM while
+  // hidden, so every rerender* that patches ids inside them keeps working.
+  const CREW_FEED_FILTERS = [
+    { key: 'all',        label: 'All',      panels: ['poll', 'dreamboard', 'jams'] },
+    { key: 'poll',       label: 'Polls',    panels: ['poll'] },
+    { key: 'jams',       label: 'Jams',     panels: ['jams'] },
+    { key: 'dreamboard', label: 'Dreams',   panels: ['dreamboard'] },
+    { key: 'raveplan',   label: 'Plan',     panels: ['raveplan'] },
+    { key: 'memories',   label: 'Memories', panels: ['pins', 'archive', 'history'] }
+  ];
+
+  function isCrewFeedPage() {
+    return !!document.getElementById('page-crew-detail')?.classList.contains('crew-feed');
+  }
+
+  function renderCrewFeedPage(crew, { s, people, isSecret, hasGamePlan, rosterPanelHTML }) {
+    const page = document.getElementById('page-crew-detail');
+    // Same gates as the tiles: Secret crews have no Poll or Jams, and Plan
+    // needs a live Rave Plan.
+    const filters = CREW_FEED_FILTERS.filter(f =>
+      !(isSecret && (f.key === 'poll' || f.key === 'jams')) && (hasGamePlan || f.key !== 'raveplan'));
+    if (!filters.some(f => f.key === _crewFeedFilter)) _crewFeedFilter = 'all';
+    page.classList.add('crew-feed');
+    page.innerHTML = `
+      <div class="crew-feed-wrap">
+        ${crewFeedHeaderHTML(crew, s, people)}
+        <div id="huddle-tile-preview-root" class="crew-feed-huddle"></div>
+        ${crewTicketStackHTML(crew)}
+        <div class="crew-feed-filters" role="group" aria-label="Crew sections">
+          ${filters.map(f => `<button type="button" class="crew-feed-filter" data-filter="${f.key}" aria-pressed="false" onclick="selectCrewFeedFilter(this.dataset.filter)">${f.label}</button>`).join('')}
+        </div>
+        <div class="crew-feed-panels">${buildCrewFeaturePanelsHTML(crew, isSecret, hasGamePlan)}</div>
+      </div>`;
+    document.getElementById('crew-manifest-content').innerHTML = `
+      <div class="crew-manifest-sheet-head">
+        <div>
+          <div class="modal-title">${escHtml(crew.name)}</div>
+          <div class="text-hint">Roster, invites and crew settings</div>
+        </div>
+        <button type="button" class="crew-manifest-sheet-x" onclick="closeCrewManifestSheet()" aria-label="Close">✕</button>
+      </div>
+      ${rosterPanelHTML}`;
+    rerenderHuddleTilePreview(crew.id);
+    selectCrewFeedFilter(_crewFeedFilter, { quiet: true });
+  }
+
+  // Back, totem, name + status, then the avatar stack (opens the roster)
+  // and Share. Replaces the classic page's Overview/Roster tabs and its
+  // full-width Share and Back buttons.
+  function crewFeedHeaderHTML(crew, s, people) {
+    const faces = people.slice(0, 3).map(p => raverAvatarHTML(p.avatarUrl, p.gradient, p.name, 'avatar crew-feed-face', '')).join('');
+    const totem = crewTotemMarkHTML(crew, 'crew-feed-totem')
+      || `<div class="crew-feed-totem crew-feed-totem-blank" style="background:${safeGradient(crew.gradient)}" aria-hidden="true"></div>`;
+    const status = crew.isLead
+      ? `<button type="button" class="crew-status ${s.cls} tappable-lead" onclick="toggleStatus('${escJsAttr(crew.id)}')" title="Tap to change status">${s.label}</button>`
+      : `<span class="crew-status ${s.cls}">${s.label}</span>`;
+    return `
+      <div class="crew-feed-head">
+        <button type="button" class="crew-feed-back" onclick="closeDetail()" aria-label="Back to My Crews">‹</button>
+        ${totem}
+        <div class="crew-feed-title">
+          <div class="crew-feed-name">${escHtml(crew.name)}</div>
+          <div class="crew-feed-sub">${status}${crew.description ? `<span class="crew-feed-desc">${escHtml(crew.description)}</span>` : ''}</div>
+        </div>
+        <button type="button" class="crew-feed-faces" onclick="openCrewManifestSheet()" aria-label="Crew roster, ${people.length} raver${people.length === 1 ? '' : 's'}">
+          <span class="crew-feed-face-stack">${faces}</span>
+          <span class="crew-feed-count">${people.length}</span><span class="crew-feed-chev" aria-hidden="true">›</span>
+        </button>
+        <button type="button" class="crew-feed-share" onclick="openCrewShareCard('${escJsAttr(crew.id)}')" aria-label="Share Crew Card" title="Share Crew Card">📲</button>
+      </div>`;
+  }
+
+  // One paper ticket per live Rave Plan (you + a crewmate going), soonest
+  // first; more than one swipes sideways. With no shared rave yet it falls
+  // back to the Next Rave Up card, then to a blank stub, so there's never a gap.
+  function crewTicketStackHTML(crew) {
+    const live = deriveCrewFestivalPlans(crew).live;
+    if (!live.length) {
+      return crewNextFestBlock(crew) || `
+        <button type="button" class="crew-ticket crew-ticket-blank" onclick="switchTab('events')">
+          <span class="crew-ticket-eyebrow">Next up · ???</span>
+          <span class="crew-ticket-name">Where are we raving next?</span>
+          <span class="crew-ticket-meta">RSVP to a rave with a crewmate and its Rave Plan opens here</span>
+          <span class="crew-ticket-perf" aria-hidden="true"></span>
+          <span class="crew-ticket-cta">+ Find a rave</span>
+        </button>`;
+    }
+    const tickets = live.map(({ festival: f, who }) => {
+      const d = festDate(f);
+      const n = daysUntil(d);
+      const count = n === null ? '' : n > 0 ? `${n}<small>DAY${n === 1 ? '' : 'S'}</small>` : n === 0 ? `🔥<small>TODAY</small>` : `🎉<small>JUST WRAPPED</small>`;
+      const when = d ? `${d.getDate()} ${MON_SHORT[d.getMonth()]}` : '';
+      const faces = who.slice(0, 6).map(p => raverAvatarHTML(p.avatarUrl, p.gradient, p.name, 'avatar crew-ticket-face', '')).join('');
+      const more = who.length > 6 ? `<span class="crew-ticket-more">+${who.length - 6}</span>` : '';
+      return `
+        <button type="button" class="crew-ticket" data-fest="${escHtml(String(f.id))}" onclick="openCrewFeedPlan(this.dataset.fest)" aria-label="Open the Rave Plan for ${escHtml(f.name)}">
+          <span class="crew-ticket-top">
+            <span>
+              <span class="crew-ticket-eyebrow">Next up · Rave Plan</span>
+              <span class="crew-ticket-name">${escHtml(f.name)}</span>
+              <span class="crew-ticket-meta">${escHtml([f.location, when].filter(Boolean).join(' · '))}</span>
+            </span>
+            <span class="crew-ticket-count">${count}</span>
+          </span>
+          <span class="crew-ticket-perf" aria-hidden="true"></span>
+          <span class="crew-ticket-going"><span class="crew-ticket-faces">${faces}${more}</span>${who.length} going</span>
+          <span class="crew-ticket-foot"><span class="crew-ticket-barcode" aria-hidden="true"></span><span class="crew-ticket-open">Open plan ›</span></span>
+        </button>`;
+    }).join('');
+    const dots = live.length > 1
+      ? `<div class="crew-ticket-dots" aria-hidden="true">${live.map((_, i) => `<span${i ? '' : ' class="on"'}></span>`).join('')}</div>` : '';
+    return `<div class="crew-ticket-stack${live.length > 1 ? ' is-multi' : ''}" onscroll="onCrewTicketScroll(this)">${tickets}</div>${dots}`;
+  }
+
+  // Swiping the ticket stack moves the dots and, when Plan is showing,
+  // switches the Plan to the ticket now in view.
+  let _crewTicketScrollTimer = null;
+  function onCrewTicketScroll(el) {
+    clearTimeout(_crewTicketScrollTimer);
+    _crewTicketScrollTimer = setTimeout(() => {
+      const first = el.children[0];
+      if (!first) return;
+      const i = Math.round(el.scrollLeft / (first.offsetWidth + 10));
+      const ticket = el.children[i];
+      if (!ticket) return;
+      document.querySelectorAll('#page-crew-detail .crew-ticket-dots span').forEach((dot, j) => dot.classList.toggle('on', j === i));
+      if (_crewFeedFilter === 'raveplan' && String(_gamePlanActiveFestivalId) !== String(ticket.dataset.fest)) {
+        switchGamePlanFestival(activeDetailId, ticket.dataset.fest);
+      }
+    }, 150);
+  }
+
+  function openCrewFeedPlan(festivalId) {
+    if (_crewFeedFilter === 'raveplan' && String(_gamePlanActiveFestivalId) !== String(festivalId)) {
+      switchGamePlanFestival(activeDetailId, festivalId);
+    } else {
+      _gamePlanActiveFestivalId = festivalId;  // openGamePlanTab opens on it
+    }
+    openCrewFeature('raveplan');
+  }
+
+  // Shows the panels a chip covers and hides the rest. `quiet` is for
+  // re-renders: it restores the view without marking anything read.
+  function selectCrewFeedFilter(key, opts = {}) {
+    const filter = CREW_FEED_FILTERS.find(f => f.key === key) || CREW_FEED_FILTERS[0];
+    _crewFeedFilter = filter.key;
+    document.querySelectorAll('#page-crew-detail .crew-feed-filter').forEach(b => {
+      const on = b.dataset.filter === filter.key;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-pressed', String(on));
+    });
+    document.querySelectorAll('#page-crew-detail .crew-feature-panel').forEach(p => {
+      p.style.display = filter.panels.includes(p.id.replace('crew-feature-panel-', '')) ? '' : 'none';
+    });
+    if (filter.panels.includes('raveplan')) openGamePlanTab(activeDetailId);
+    if (!opts.quiet) {
+      filter.panels.filter(f => CREW_FEATURE_READ_KEYS.includes(f)).forEach(f => markCrewFeatureRead(activeDetailId, f));
+    }
+    updateCrewPresence();
+  }
+
+  // Opens one feature panel and leaves it open (the tile toggle closes an
+  // open one). Works on both crew pages, so deep links, Huddle activity
+  // links and Rave Plan shortcuts don't need to know which one is showing.
+  function openCrewFeature(feature) {
+    if (feature === 'huddle') { openHuddle(activeDetailId); return; }
+    const panel = document.getElementById('crew-feature-panel-' + feature);
+    if (!panel) return;
+    if (isCrewFeedPage()) {
+      const filter = CREW_FEED_FILTERS.find(f => f.key === feature)
+        || CREW_FEED_FILTERS.find(f => f.key !== 'all' && f.panels.includes(feature));
+      if (filter && _crewFeedFilter !== filter.key) selectCrewFeedFilter(filter.key);
+      panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      return;
+    }
+    const tile = document.querySelector(`.crew-feature-tile[data-feature="${feature}"]`);
+    if (tile && panel.style.display === 'none') toggleCrewFeatureTile(feature, tile);
+  }
+
+  function openCrewManifestSheet() {
+    if (!activeDetailId || !isCrewFeedPage()) return;
+    document.getElementById('crew-manifest-overlay').classList.add('open');
+  }
+
+  function closeCrewManifestSheet() {
+    document.getElementById('crew-manifest-overlay')?.classList.remove('open');
+  }
+
   // Accordion toggle for the Overview tab's crew feature tiles (Pins, Dream
   // Board, Poll, Jams, Archive, History, Rave Plan) — only one panel open
   // at a time.
@@ -20353,6 +20721,8 @@
     // Huddle tile goes straight to the full-screen chat — no preview step.
     // openHuddle runs its own first-visit intro.
     if (feature === 'huddle') { openHuddle(activeDetailId); return; }
+    // The new crew page has no tiles; its filter chips show the panels.
+    if (isCrewFeedPage()) { openCrewFeature(feature); return; }
     const panel = document.getElementById('crew-feature-panel-' + feature);
     if (!panel) return;
     const wasOpen = panel.style.display !== 'none';
@@ -21615,8 +21985,7 @@
       if (!panel) return;
       if (panel.style.display === 'none') {
         _gamePlanActiveFestivalId = link.festival;
-        const tile = document.querySelector('.crew-feature-tile[data-feature="raveplan"]');
-        if (tile) toggleCrewFeatureTile('raveplan', tile);
+        openCrewFeature('raveplan');
       } else {
         await switchGamePlanFestival(crewId, link.festival);
         panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -21626,9 +21995,8 @@
     if (link.k === 'tile') {
       if (!onDetail) { switchTab('crews'); await openDetail(crewId); }
       const panel = document.getElementById('crew-feature-panel-' + link.feature);
-      const tile = document.querySelector(`.crew-feature-tile[data-feature="${link.feature}"]`);
-      if (!panel || !tile) return;
-      if (panel.style.display === 'none') toggleCrewFeatureTile(link.feature, tile);
+      if (!panel) return;
+      if (panel.style.display === 'none') openCrewFeature(link.feature);
       if (!link.id) return;
       // Polls load async in openDetail, so the item may land a beat later.
       const sel = link.feature === 'poll' ? `[data-poll-id="${CSS.escape(String(link.id))}"]` : `#dream-pin-${CSS.escape(String(link.id))}`;
@@ -23879,16 +24247,14 @@
   function jumpToGamePlanJams(crewId, festivalId) {
     _jamFilters = { tag: null, festivalId: String(festivalId) };
     rerenderJams(crewId);
-    const jamsTile = document.querySelector('.crew-feature-tile[data-feature="jams"]');
-    if (jamsTile) toggleCrewFeatureTile('jams', jamsTile);
+    openCrewFeature('jams');
     document.getElementById('crew-feature-panel-jams')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   function jumpToGamePlanArchive(crewId, festivalId) {
     _archiveFilters = { festivalId: String(festivalId) };
     rerenderArchive(crewId);
-    const archiveTile = document.querySelector('.crew-feature-tile[data-feature="archive"]');
-    if (archiveTile) toggleCrewFeatureTile('archive', archiveTile);
+    openCrewFeature('archive');
     document.getElementById('crew-feature-panel-archive')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
@@ -29833,6 +30199,13 @@
     return `
       <div class="crew-feature-tile-grid">${tileGrid}</div>
       <div class="crew-feature-panel" id="crew-feature-panel-huddle"><div id="huddle-tile-preview-root"></div></div>
+      ${buildCrewFeaturePanelsHTML(crew, isSecret, hasGamePlan)}`;
+  }
+
+  // Every feature panel except Huddle, all collapsed. Shared by the tile page
+  // and the new crew page, so the rerender* functions find the same ids in both.
+  function buildCrewFeaturePanelsHTML(crew, isSecret, hasGamePlan) {
+    return `
       <div class="crew-feature-panel" id="crew-feature-panel-pins" style="display:none;">${buildFamPinsHTML(crew.id)}</div>
       <div class="crew-feature-panel" id="crew-feature-panel-dreamboard" style="display:none;">${buildDreamBoardHTML(crew.id)}</div>
       ${!isSecret ? `<div class="crew-feature-panel" id="crew-feature-panel-poll" style="display:none;">${buildPollsHTML(crew.id)}</div>` : ''}
@@ -36786,6 +37159,7 @@
     // Builds without the plugin (App Store build before the haptics release) can't buzz.
     document.getElementById('haptics-settings-row').style.display = window.Capacitor?.Plugins?.Haptics ? '' : 'none';
     document.getElementById('haptics-settings-toggle').classList.toggle('on', hapticsEnabled());
+    document.getElementById('crew-feed-settings-toggle').classList.toggle('on', crewFeedEnabled());
     const loads = [renderShareLinkSettings(), renderLineupAlertSettings()];
     renderBlockedRaversSettings();
     showSettingsPage(page);
@@ -37213,6 +37587,15 @@
     try { on ? localStorage.removeItem(HAPTICS_OFF_KEY) : localStorage.setItem(HAPTICS_OFF_KEY, '1'); } catch {}
     hapticImpact('MEDIUM');
     showToast(on ? 'Haptics turned on' : 'Haptics turned off');
+  }
+
+  function toggleCrewFeedEnabled(btn) {
+    const on = !btn.classList.contains('on');
+    btn.classList.toggle('on', on);
+    try { on ? localStorage.setItem(CREW_FEED_KEY, '1') : localStorage.removeItem(CREW_FEED_KEY); } catch {}
+    showToast(on ? 'New crew page on' : 'Classic crew page back');
+    // An open crew page swaps layouts on the spot.
+    if (activeDetailId) openDetail(activeDetailId);
   }
 
   // Intros, tips and one-time hints come back; places stay found.
