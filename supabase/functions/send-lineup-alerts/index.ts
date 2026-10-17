@@ -9,6 +9,10 @@
 // reminders share), otherwise by email. alert_preferences switches a type off
 // per user (no row = on); email also honours the hard unsubscribe.
 //
+// 'mission_briefing' (20261017000000): the night-before Mission Briefing
+// nudge. Its text is built at send time from mission_briefing_digest(), and
+// its payload carries crewId + briefing so a tap opens that crew's deck.
+//
 // web-push via `npm:` and lazy VAPID setup for the same reasons as
 // send-mention-push (see its header).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -49,14 +53,41 @@ function ensureVapid(): string | null {
 type Alert = {
   id: number;
   user_id: string;
-  type: "artist_added" | "set_times" | "postfest";
+  type: "artist_added" | "set_times" | "postfest" | "mission_briefing";
   festival_id: string;
   festival: string | null;
   slug: string | null;
   artist: string | null;
 };
 
-type Message = { title: string; body: string; path: string; cta: string };
+// path is where the email button and a native tap go; deepLink rides in the
+// push payload so an open tab (service worker) or the iOS app can route
+// straight to the right screen without a page load.
+type Message = { title: string; body: string; path: string; cta: string; deepLink?: { crewId: string; briefing: string } };
+
+// One row per crew the user shares this rave with (mission_briefing_digest),
+// crews they haven't locked in with first.
+type DigestRow = { crew_id: string; name: string; ready: number; total: number; me_locked: boolean };
+
+// Mission Briefing nudge, the evening before day 1. One per person per rave
+// even across several crews: the tap opens the first crew they haven't
+// locked in with.
+function briefingMessage(a: Alert, digest: DigestRow[]): Message | null {
+  if (!digest.length) return null;
+  const fest = a.festival ?? "your rave";
+  const target = digest[0];
+  const tallies = digest.map((d) => `${d.name} ${d.ready}/${d.total}`).join(" · ");
+  const allMine = digest.every((d) => d.me_locked);
+  return {
+    title: `🎯 ${fest} is tomorrow`,
+    body: allMine
+      ? `You're locked in. Run the Mission Briefing one last time: ${tallies} locked in.`
+      : `Run the Mission Briefing and lock in: ${tallies} so far.`,
+    path: `/app.html?crew=${encodeURIComponent(target.crew_id)}&briefing=${encodeURIComponent(a.festival_id)}`,
+    cta: "Open the briefing",
+    deepLink: { crewId: target.crew_id, briefing: a.festival_id },
+  };
+}
 
 // Artist and festival names come from the lineup data; escape them for email.
 function escapeHtml(s: string): string {
@@ -164,17 +195,27 @@ Deno.serve(async () => {
     const { user_id: uid, type } = group[0];
     try {
       if (off.has(`${uid}|${type}`)) { await setStatus(ids, "skipped", null, "turned_off"); skipped++; continue; }
-      const m = messageFor(group);
+      let m: Message;
+      if (type === "mission_briefing") {
+        const { data: digest, error: dErr } = await sb.rpc("mission_briefing_digest", { p_user_id: uid, p_festival_id: group[0].festival_id });
+        if (dErr) throw dErr;
+        const bm = briefingMessage(group[0], (digest ?? []) as DigestRow[]);
+        // They left the crew or dropped the RSVP since it was queued.
+        if (!bm) { await setStatus(ids, "skipped", null, "no_shared_crew"); skipped++; continue; }
+        m = bm;
+      } else {
+        m = messageFor(group);
+      }
 
       // Push first, when the member has a live subscription and VAPID works.
       const subs = subsByUser.get(uid) ?? [];
       // iOS app devices (APNs) count as push, same as a web subscription.
       const native = await sendToUserDevices(sb, uid, {
-        title: m.title, body: m.body, data: { url: m.path }, collapseId: `${type}-${group[0].festival_id}`, ttlSeconds: 86400,
+        title: m.title, body: m.body, data: { url: m.path, ...(m.deepLink ?? {}) }, collapseId: `${type}-${group[0].festival_id}`, ttlSeconds: 86400,
       });
       let pushed = native.sent > 0;
       if (subs.length && !ensureVapid()) {
-        const payload = JSON.stringify({ title: m.title, body: m.body, url: m.path, tag: `${type}-${group[0].festival_id}` });
+        const payload = JSON.stringify({ title: m.title, body: m.body, url: m.path, ...(m.deepLink ?? {}), tag: `${type}-${group[0].festival_id}` });
         for (const sub of subs) {
           try {
             await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload, { TTL: 86400 });

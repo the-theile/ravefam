@@ -133,7 +133,7 @@ self.addEventListener('push', e => {
     icon: '/icon-192.png',
     badge: '/icon-192.png',
     tag: data.tag,
-    data: { crewId: data.crewId, roomId: data.roomId, messageId: data.messageId, url: data.url }
+    data: { crewId: data.crewId, roomId: data.roomId, messageId: data.messageId, briefing: data.briefing, url: data.url }
   }));
 });
 
@@ -152,7 +152,7 @@ function logPushClick(messageId, crewId) {
 
 self.addEventListener('notificationclick', e => {
   e.notification.close();
-  const { messageId, crewId, roomId, url: target } = e.notification.data || {};
+  const { messageId, crewId, roomId, briefing, url: target } = e.notification.data || {};
 
   // Set reminders (send-set-reminders) carry their own page: the explorer's
   // On deck view. Reuse a tab already on that lineup, else open one.
@@ -175,6 +175,7 @@ self.addEventListener('notificationclick', e => {
   if (crewId)    params.set('crew', crewId);
   if (roomId)    params.set('room', roomId);
   if (messageId) params.set('msg', messageId);
+  if (briefing)  params.set('briefing', briefing);  // Mission Briefing nudge (send-lineup-alerts)
   const qs = params.toString();
   const url = qs ? `/app.html?${qs}` : '/app.html';
 
@@ -183,7 +184,7 @@ self.addEventListener('notificationclick', e => {
     clients.matchAll({ type: 'window' }).then(list => {
       for (const c of list) {
         if ('focus' in c) {
-          if (crewId) c.postMessage({ type: 'rf-huddle-deeplink', crewId, roomId, messageId });
+          if (crewId) c.postMessage({ type: 'rf-huddle-deeplink', crewId, roomId, messageId, briefing });
           return c.focus();
         }
       }

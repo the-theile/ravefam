@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { bootAuthedApp, seedData, TEST_UID } = require('./helpers');
+const { bootAuthedApp, seedData, TEST_UID, installSupabaseStub, makeSession } = require('./helpers');
 
 // Mission Briefing: the swipeable dossier deck over a crew's Rave Plan.
 // Seed: Bass Syndicate (c1) going to Tomorrowland (f1) — you + Kai (claimed)
@@ -153,6 +153,31 @@ test.describe('mission briefing', () => {
     await expect(page.locator('#mission-briefing-overlay')).toHaveClass(/open/);
     // Opens on the sign-off page.
     await expect.poll(() => page.evaluate(() => _mb && _mb.card)).toBe(7);
+  });
+
+  test('the night-before push deep link opens the deck on the sign-off page', async ({ page }) => {
+    await installSupabaseStub(page, { session: makeSession(), data: briefingData() });
+    await page.goto('/app.html?crew=c1&briefing=f1');
+    await expect(page.locator('#mission-briefing-overlay')).toHaveClass(/open/, { timeout: 15000 });
+    await expect.poll(() => page.evaluate(() => _mb && _mb.card)).toBe(7);
+    await expect(page.locator('#mb-card-signoff')).toContainText('Are we locked in?');
+    expect(new URL(page.url()).search).toBe(''); // params dropped so a reload doesn't reopen it
+
+    // A running tab gets the same target from the service worker by postMessage.
+    await page.evaluate(() => { closeMissionBriefing(); openHuddleDeepLink({ crewId: 'c1', briefing: 'f1' }); });
+    await expect(page.locator('#mission-briefing-overlay')).toHaveClass(/open/);
+  });
+
+  test('the Mission Briefing alert can be switched off in settings', async ({ page }) => {
+    await bootAuthedApp(page, { data: briefingData() });
+    await page.evaluate(() => renderLineupAlertSettings());
+    // "on" as a whole class: the base class poll-anon-toggle contains the letters too.
+    const isOn = () => page.evaluate(() => document.getElementById('alert-toggle-mission_briefing').classList.contains('on'));
+    await expect.poll(isOn).toBe(true); // no row = on
+    await page.evaluate(() => toggleLineupAlert('mission_briefing', document.getElementById('alert-toggle-mission_briefing')));
+    await expect.poll(isOn).toBe(false);
+    const pref = await page.evaluate(() => (window.__store.alert_preferences || []).find(p => p.type === 'mission_briefing'));
+    expect(pref).toMatchObject({ enabled: false });
   });
 
   test('Escape closes the deck', async ({ page }) => {

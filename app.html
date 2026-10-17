@@ -10009,6 +10009,13 @@
           </div>
           <button class="poll-anon-toggle" id="alert-toggle-postfest" onclick="toggleLineupAlert('postfest', this)"></button>
         </div>
+        <div class="poll-setting-row">
+          <div>
+            <div class="poll-setting-label">🎯 Mission Briefing</div>
+            <div class="poll-setting-hint">6 PM the night before: lock in with your crew</div>
+          </div>
+          <button class="poll-anon-toggle" id="alert-toggle-mission_briefing" onclick="toggleLineupAlert('mission_briefing', this)"></button>
+        </div>
       </div>
       <p class="settings-note">Lineup alerts come as a push on this device when it's allowed, otherwise by email.</p>
     </div>
@@ -11423,7 +11430,7 @@
   // pushes carry a site path in url.
   function openFromNativePush(data) {
     if (!data) return;
-    if (data.crewId) { openHuddleDeepLink({ crewId: data.crewId, roomId: data.roomId, messageId: data.messageId }); return; }
+    if (data.crewId) { openHuddleDeepLink({ crewId: data.crewId, roomId: data.roomId, messageId: data.messageId, briefing: data.briefing }); return; }
     if (data.url) openNativeAppUrl(new URL(data.url, window.location.origin).href);
   }
 
@@ -36866,9 +36873,13 @@
   // Lineup alerts (send-lineup-alerts): one row per type in alert_preferences,
   // no row = on. Delivery picks push or email on the server.
   const LINEUP_ALERT_TYPES = ['artist_added', 'set_times', 'postfest'];
+  // Every switch on this page. mission_briefing rides the same sender but
+  // stays out of LINEUP_ALERT_TYPES, so enableAllNativePushTypes' batch upsert
+  // never depends on the 20261017000000 migration (no row = on anyway).
+  const ALERT_TOGGLE_TYPES = LINEUP_ALERT_TYPES.concat(['mission_briefing']);
 
   async function renderLineupAlertSettings() {
-    LINEUP_ALERT_TYPES.forEach(t => document.getElementById('alert-toggle-' + t)?.classList.add('on'));
+    ALERT_TOGGLE_TYPES.forEach(t => document.getElementById('alert-toggle-' + t)?.classList.add('on'));
     if (!currentUser) return;
     const { data, error } = await sb.from('alert_preferences').select('type, enabled').eq('user_id', currentUser.id);
     if (error) { console.warn('alert_preferences load failed', error); return; }
@@ -36876,7 +36887,7 @@
   }
 
   async function toggleLineupAlert(type, btn) {
-    if (!currentUser || !LINEUP_ALERT_TYPES.includes(type)) return;
+    if (!currentUser || !ALERT_TOGGLE_TYPES.includes(type)) return;
     const enabling = !btn.classList.contains('on');
     btn.disabled = true;
     const { error } = await sb.from('alert_preferences').upsert(
@@ -38602,9 +38613,9 @@
     const p = new URLSearchParams(location.search);
     const crewId = p.get('crew');
     if (!crewId) return null;
-    const link = { crewId, roomId: p.get('room'), messageId: p.get('msg') };
+    const link = { crewId, roomId: p.get('room'), messageId: p.get('msg'), briefing: p.get('briefing') };
     // Drop them from the address bar so a later reload doesn't reopen the room.
-    ['crew', 'room', 'msg'].forEach(k => p.delete(k));
+    ['crew', 'room', 'msg', 'briefing'].forEach(k => p.delete(k));
     const qs = p.toString();
     history.replaceState(null, '', location.pathname + (qs ? `?${qs}` : '') + location.hash);
     return link;
@@ -38617,6 +38628,8 @@
     if (!getCrew(link.crewId)) return;
     switchTab('crews');
     await openDetail(link.crewId);
+    // The night-before Mission Briefing nudge opens the deck, not a room.
+    if (link.briefing) { await openMissionBriefing(link.crewId, link.briefing, 'signoff'); return; }
     await openHuddle(link.crewId, link.roomId ? { roomId: link.roomId } : {});
     if (!link.roomId || !link.messageId) return;
     // The payload has no timestamp and switchHuddleRoomAtMessage pages around
