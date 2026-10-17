@@ -88,11 +88,11 @@ Each PR ships independently behind the flag.
 - Manifest sheet (reusing `rosterPanelHTML`), deep links, the `openCrewFeature` shim and its call sites
 - Glass/aurora CSS with an `@supports not (backdrop-filter: blur(1px))` solid fallback, and `prefers-reduced-motion`
 
-**PR 2: Merged feed (2.23.x)**
+**PR 2: Merged feed (2.24.0)**
 - `buildCrewFeedItems`, compact cards, "new since" divider, per-filter empty states, + menu
 - Realtime: existing handlers (e.g. `handleCrewFeedRealtimeInsert`, poll/jam updates) call `rerenderCrewFeed` when on the feed page
 
-**PR 3: Check-offs, Reply in Huddle, non-member preview (2.24.0)**
+**PR 3: Check-offs, Reply in Huddle, non-member preview (2.25.0)**
 - Migration + check-off cards
 - Reply in Huddle: open the Huddle with a quote chip in the composer (same slot `_huddleReplyTo` uses). The sent message carries a `link` (`{k:'tile', feature, id}`), so tapping it in the Huddle jumps back via `openHuddleActivityLink`.
 - Non-member preview: skip the feature loaders in `openDetail` for non-members (RLS blocks them anyway; this saves the calls)
