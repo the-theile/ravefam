@@ -5466,6 +5466,18 @@
   .crew-feed-history b { font-family: 'Outfit', sans-serif; font-size: 0.86rem; }
   .crew-feed-empty { margin-bottom: 10px; }
 
+  /* Non-member preview: blurred stand-in cards behind the way in */
+  .crew-feed-preview { position: relative; margin-top: 4px; }
+  .crew-feed-preview-blur { filter: blur(6px); opacity: 0.55; pointer-events: none; user-select: none; }
+  .crew-feed-ghost { height: 108px; }
+  .crew-feed-ghost span { display: block; width: 32px; height: 32px; border-radius: 50%; background: rgba(var(--white-rgb),0.18); margin-bottom: 12px; }
+  .crew-feed-ghost i { display: block; height: 10px; border-radius: 5px; background: rgba(var(--white-rgb),0.14); margin-bottom: 8px; }
+  .crew-feed-preview-cta {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; gap: 6px; padding: 24px;
+  }
+  .crew-feed-preview-cta .btn { margin-top: 10px; max-width: 280px; }
+
   /* The existing feature panels, as glass cards. Memories reads Archive,
      then Pins, then History, though Pins comes first in the markup. */
   .crew-feed .crew-feature-panel { border-radius: 24px; padding: 16px; margin-bottom: 12px; }
@@ -10844,7 +10856,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.24.0';
+  const APP_VERSION = '2.25.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -18812,6 +18824,9 @@
   // marks everything read: the feed's "new since you looked" divider reads
   // this, so it stays put for the whole visit. null until the map loads.
   let _crewFeedSeen = null;
+  // Recent Rave Plan check-offs for the open crew (new crew page only), each
+  // with its rave's festival_id; see dbLoadCrewPlanCheckoffs.
+  let crewPlanCheckoffs = [];
   // Game Plan: per-(crew, rave) hub folding in the per-rave Huddle plus
   // Checklist/Roles/Logistics/Outfit. gamePlans holds every game_plans row
   // seen for the active crew (one per eligible rave); gamePlanItems holds
@@ -18889,6 +18904,7 @@
     _crewFeatureReadMap = null;
     _crewFeedFilter = 'all';
     _crewFeedSeen = null;
+    crewPlanCheckoffs = [];
     closeCrewManifestSheet();
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById('page-crew-detail').classList.add('active');
@@ -18896,15 +18912,20 @@
     renderDetail(id);
     updateCrewPresence();
     if (!(opts && opts.tab)) maybeShowCrewWelcome(id);
-    loadCrewFeatureReadMap(id).then(() => { refreshCrewFeatureGlow(id); markCrewFeedSeen(id); }).catch(console.warn);
-    await dbLoadDreamPins(id);
-    rerenderDreamBoard(id);
-    refreshCrewFeatureGlow(id);
-    dbLoadArchiveLinks(id).then(() => { rerenderArchive(id); refreshCrewFeatureGlow(id); }).catch(console.warn);
-    dbLoadPolls(id).then(() => { rerenderPolls(id); refreshCrewFeatureGlow(id); }).catch(console.warn);
-    dbLoadJams(id).then(() => { rerenderJams(id); refreshCrewFeatureGlow(id); }).catch(console.warn);
-    dbLoadAchievements(id).then(() => { rerenderFamPins(id); checkAndAwardBadges(id); refreshCrewFeatureGlow(id); }).catch(console.warn);
-    dbLoadCrewHistory(id).then(rows => { crewHistoryRows = rows; rerenderCrewHistory(id); }).catch(console.warn);
+    // The new crew page shows non-members a preview only, so skip loading
+    // what they can't see (RLS would refuse most of it anyway).
+    if (!isCrewFeedPage() || crewFeedIsMember(getCrew(id))) {
+      loadCrewFeatureReadMap(id).then(() => { refreshCrewFeatureGlow(id); markCrewFeedSeen(id); }).catch(console.warn);
+      if (isCrewFeedPage()) dbLoadCrewPlanCheckoffs(id).then(() => scheduleCrewFeedRender(id)).catch(console.warn);
+      await dbLoadDreamPins(id);
+      rerenderDreamBoard(id);
+      refreshCrewFeatureGlow(id);
+      dbLoadArchiveLinks(id).then(() => { rerenderArchive(id); refreshCrewFeatureGlow(id); }).catch(console.warn);
+      dbLoadPolls(id).then(() => { rerenderPolls(id); refreshCrewFeatureGlow(id); }).catch(console.warn);
+      dbLoadJams(id).then(() => { rerenderJams(id); refreshCrewFeatureGlow(id); }).catch(console.warn);
+      dbLoadAchievements(id).then(() => { rerenderFamPins(id); checkAndAwardBadges(id); refreshCrewFeatureGlow(id); }).catch(console.warn);
+      dbLoadCrewHistory(id).then(rows => { crewHistoryRows = rows; rerenderCrewHistory(id); }).catch(console.warn);
+    }
     if (opts && opts.tab === 'huddle') {
       // The Huddle is its own full-screen surface now, launched over crew
       // detail rather than expanded inside it.
@@ -20617,6 +20638,20 @@
       !(isSecret && (f.key === 'poll' || f.key === 'jams')) && (hasGamePlan || f.key !== 'raveplan'));
     if (!filters.some(f => f.key === _crewFeedFilter)) _crewFeedFilter = 'all';
     page.classList.add('crew-feed');
+    const roster = `
+      <div class="crew-manifest-sheet-head">
+        <div>
+          <div class="modal-title">${escHtml(crew.name)}</div>
+          <div class="text-hint">Roster, invites and crew settings</div>
+        </div>
+        <button type="button" class="crew-manifest-sheet-x" onclick="closeCrewManifestSheet()" aria-label="Close">✕</button>
+      </div>
+      ${rosterPanelHTML}`;
+    if (!crewFeedIsMember(crew)) {
+      page.innerHTML = `<div class="crew-feed-wrap">${crewFeedHeaderHTML(crew, s, people)}${crewFeedPreviewHTML(crew)}</div>`;
+      document.getElementById('crew-manifest-content').innerHTML = roster;
+      return;
+    }
     page.innerHTML = `
       <div class="crew-feed-wrap">
         ${crewFeedHeaderHTML(crew, s, people)}
@@ -20631,15 +20666,7 @@
         <div class="crew-feed-list" id="crew-feed-list"></div>
         <div class="crew-feed-panels">${buildCrewFeaturePanelsHTML(crew, isSecret, hasGamePlan)}</div>
       </div>`;
-    document.getElementById('crew-manifest-content').innerHTML = `
-      <div class="crew-manifest-sheet-head">
-        <div>
-          <div class="modal-title">${escHtml(crew.name)}</div>
-          <div class="text-hint">Roster, invites and crew settings</div>
-        </div>
-        <button type="button" class="crew-manifest-sheet-x" onclick="closeCrewManifestSheet()" aria-label="Close">✕</button>
-      </div>
-      ${rosterPanelHTML}`;
+    document.getElementById('crew-manifest-content').innerHTML = roster;
     rerenderHuddleTilePreview(crew.id);
     rerenderCrewFeed(crew.id);
     selectCrewFeedFilter(_crewFeedFilter, { quiet: true });
@@ -20796,7 +20823,8 @@
     dream:   { readKey: 'dreamboard', feature: 'dreamboard', ac: '--neon-purple', icon: '✨' },
     jam:     { readKey: 'jams',       feature: 'jams',       ac: '--neon-green',  icon: '🎧' },
     archive: { readKey: 'archive',    feature: 'archive',    ac: '--neon-yellow', icon: '📸' },
-    badge:   { readKey: 'pins',       feature: 'pins',       ac: '--neon-orange', icon: '🏆' }
+    badge:   { readKey: 'pins',       feature: 'pins',       ac: '--neon-orange', icon: '🏆' },
+    checkoff:{ readKey: 'raveplan',   feature: 'raveplan',   ac: '--neon-pink',   icon: '✅' }
   };
 
   function buildCrewFeedItems() {
@@ -20808,7 +20836,8 @@
       ...dreamPins.map(p => item('dream', p, p.added_by)),
       ...crewJams.map(j => item('jam', j, j.added_by)),
       ...archiveLinks.map(l => item('archive', l, l.added_by)),
-      ...crewFeedEvents.map(ev => item('badge', ev, null))
+      ...crewFeedEvents.map(ev => item('badge', ev, null)),
+      ...crewPlanCheckoffs.map(r => ({ kind: 'checkoff', id: r.id, at: r.done_at || now, actor: r.done_by, row: r }))
     ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
   }
 
@@ -20828,7 +20857,7 @@
     if (!isCrewFeedPage() || String(activeDetailId) !== String(crewId) || !_crewFeatureReadMap) return;
     _crewFeedSeen = { ..._crewFeatureReadMap };
     rerenderCrewFeed(crewId);
-    CREW_FEATURE_READ_KEYS.forEach(f => markCrewFeatureRead(crewId, f));
+    [...CREW_FEATURE_READ_KEYS, 'raveplan'].forEach(f => markCrewFeatureRead(crewId, f));
   }
 
   let _crewFeedRenderQueued = false;
@@ -20882,6 +20911,18 @@
       verb = row.event_type === 'plur_tier_unlocked' ? 'reached a PLUR tier' : 'unlocked a FAM Pin';
       body = `<div class="crew-feed-card-title">${escHtml(row.badge_name || '')}</div>`;
       acts = open('See all pins ›');
+    } else if (it.kind === 'checkoff') {
+      const r = it.actor ? raverByAuthUid(it.actor) : null;
+      const fest = row.festival_id ? festivals.find(f => String(f.id) === String(row.festival_id)) : null;
+      who = huddleSenderName(it.actor);
+      avatar = r ? raverAvatarHTML(r.avatarUrl, r.gradient, r.name, 'avatar crew-feed-card-av', '')
+                 : `<span class="avatar crew-feed-card-av" aria-hidden="true">${k.icon}</span>`;
+      verb = 'checked off';
+      body = `<div class="crew-feed-card-title">✓ ${escHtml(row.text || 'A task')}</div>
+        ${fest ? `<div class="crew-feed-card-sub">${escHtml(fest.name)} Rave Plan</div>` : ''}`;
+      acts = row.festival_id
+        ? `<button type="button" class="crew-feed-act" data-fest="${escHtml(String(row.festival_id))}" onclick="openCrewFeedPlan(this.dataset.fest)">Open plan ›</button>`
+        : open('Open plan ›');
     } else {
       const r = it.actor ? raverByAuthUid(it.actor) : null;
       who = huddleSenderName(it.actor);
@@ -20927,8 +20968,20 @@
         acts = (href ? `<a class="crew-feed-act is-hot" href="${href}" target="_blank" rel="noopener noreferrer">↗ Open</a>` : '') + open('Archive ›');
       }
     }
+    // Reply in Huddle: the quote carries the card's headline, and its link
+    // points back here (a Rave Plan for check-offs, the item otherwise).
+    const quote = it.kind === 'badge' ? (row.badge_name || '')
+      : it.kind === 'checkoff' ? (row.text || '')
+      : it.kind === 'poll' ? (row.question || '')
+      : it.kind === 'jam' ? (row.title || 'Playlist')
+      : (row.label || '');
+    const replyTarget = it.kind === 'checkoff' ? (row.festival_id ? `raveplan:${row.festival_id}` : '') : `${k.feature}:${it.id}`;
+    if (uid && replyTarget) {
+      acts += `<button type="button" class="crew-feed-act" data-target="${escHtml(replyTarget)}" data-quote="${escHtml(quote.slice(0, 80))}" onclick="replyInHuddleFromCard(this.dataset.target, this.dataset.quote)">💬 Reply</button>`;
+    }
+    const paper = it.kind === 'badge' || it.kind === 'checkoff';
     return `
-      <article class="crew-feed-card${it.kind === 'badge' ? ' is-paper' : ''}${isNew ? ' is-new' : ''}" style="--ac:var(${k.ac})" data-kind="${it.kind}" data-id="${itemAttr}">
+      <article class="crew-feed-card${paper ? ' is-paper' : ''}${isNew ? ' is-new' : ''}" style="--ac:var(${k.ac})" data-kind="${it.kind}" data-id="${itemAttr}">
         <div class="crew-feed-card-head">${avatar}<span class="crew-feed-card-who"><b>${escHtml(who)}</b> ${verb} · ${escHtml(when)}</span><span class="crew-feed-card-icon" aria-hidden="true">${k.icon}</span></div>
         ${body}
         <div class="crew-feed-card-acts">${acts}</div>
@@ -20945,6 +20998,89 @@
     const sel = { poll: `[data-poll-id="${esc}"]`, dreamboard: `#dream-pin-${esc}`, jams: `#jam-card-${esc}`, archive: `#archive-link-${esc}` }[feature];
     const target = sel && panel.querySelector(sel);
     (target ? (target.closest('.poll-card') || target) : panel).scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  function crewFeedIsMember(crew) {
+    if (!crew) return false;
+    const me = squad.find(r => r.isYou);
+    return !!(crew.isLead || (me && crew.squadIds.some(sid => String(sid) === String(me.id))));
+  }
+
+  // What someone outside the crew sees under the header: a blurred stand-in
+  // for the feed and the way in (Join while Recruiting, invite-only when
+  // Locked In). The Huddle, Rave Plans and crew content stay hidden.
+  function crewFeedPreviewHTML(crew) {
+    const canJoin = crew.status === 'recruiting';
+    const cta = !currentUser
+      ? `<button type="button" class="btn btn-primary btn-wide" onclick="closeDetail(); showAuthScreen()">Sign in to join</button>`
+      : canJoin
+        ? `<button type="button" class="btn btn-primary btn-wide" onclick="joinCrew('${escJsAttr(crew.id)}')">➕ Join this crew</button>`
+        : `<button type="button" class="btn btn-ghost btn-wide" onclick="toastError('This crew is Locked In. Ask the Lead for an invite')">🔒 Locked · invite only</button>`;
+    const ghost = (w) => `<div class="crew-feed-card crew-feed-ghost" aria-hidden="true"><span></span><i style="width:${w}%"></i><i style="width:${w - 25}%"></i></div>`;
+    return `
+      <div class="crew-feed-preview">
+        <div class="crew-feed-preview-blur">${ghost(80)}${ghost(65)}${ghost(90)}</div>
+        <div class="crew-feed-preview-cta">
+          <div class="es-icon">🎟️</div>
+          <div class="es-headline">You're not on this pass yet</div>
+          <div class="es-sub">Join to see the crew's Huddle, Rave Plans, polls, jams and memories.</div>
+          ${cta}
+        </div>
+      </div>`;
+  }
+
+  // The crew's Rave Plan tasks ticked in the last 30 days, newest first, each
+  // with its rave. done_at/done_by come from 20261018000000_game_plan_item_
+  // done_meta; until that's applied the filter errors and the feed just
+  // shows no check-offs.
+  async function dbLoadCrewPlanCheckoffs(crewId) {
+    if (!currentUser) return;
+    const since = new Date(Date.now() - 30 * 86400000).toISOString();
+    const [items, plans] = await Promise.all([
+      sb.from('game_plan_items').select('*').eq('crew_id', crewId).eq('kind', 'task').eq('is_done', true)
+        .is('deleted_at', null).gte('done_at', since).order('done_at', { ascending: false }).limit(30),
+      sb.from('game_plans').select('id, festival_id').eq('crew_id', crewId)
+    ]);
+    if (items.error || plans.error || String(activeDetailId) !== String(crewId)) return;
+    const festOf = Object.fromEntries((plans.data || []).map(p => [p.id, p.festival_id]));
+    crewPlanCheckoffs = (items.data || []).filter(r => r.done_at)
+      .map(r => ({ ...r, festival_id: festOf[r.game_plan_id] || null }));
+  }
+
+  // A task you just ticked (or unticked) in the Rave Plan updates the feed
+  // without a reload.
+  function noteCrewPlanCheckoff(row) {
+    if (!row || row.kind !== 'task' || String(row.crew_id) !== String(activeDetailId)) return;
+    crewPlanCheckoffs = crewPlanCheckoffs.filter(r => r.id !== row.id);
+    if (row.is_done) {
+      const plan = gamePlans.find(gp => gp.id === row.game_plan_id);
+      crewPlanCheckoffs.unshift({
+        ...row,
+        done_at: row.done_at || new Date().toISOString(),
+        done_by: row.done_by || currentUser?.id,
+        festival_id: plan ? plan.festival_id : _gamePlanActiveFestivalId
+      });
+    }
+    scheduleCrewFeedRender(row.crew_id);
+  }
+
+  // 💬 Reply on a feed card: opens the crew's Huddle with the card quoted in
+  // the composer. The message carries a link back to the card (see
+  // huddleQuoteHTML / openHuddleActivityLink). target is "<feature>:<id>",
+  // or "raveplan:<festival id>" for a check-off.
+  async function replyInHuddleFromCard(target, quote) {
+    const crewId = activeDetailId;
+    const sep = String(target || '').indexOf(':');
+    if (!crewId || sep < 0) return;
+    const feature = target.slice(0, sep);
+    const id = target.slice(sep + 1);
+    const q = String(quote || '').slice(0, 80);
+    const link = feature === 'raveplan' ? { k: 'raveplan', festival: id, q } : { k: 'tile', feature, id, q };
+    await openHuddle(crewId);
+    _huddleReplyTo = null;
+    _huddleCardQuote = link;
+    renderHuddleReplyBar();
+    document.getElementById('huddle-text-input')?.focus();
   }
 
   // ── + menu: start a poll, jam, dream or archive link ──
@@ -21145,6 +21281,9 @@
   // ── Full-screen chat state ──
   let _huddleScreenOpen = false;
   let _huddleReplyTo = null;        // message row being replied to, or null
+  // A Crew Feed card being replied to (replyInHuddleFromCard): the link the
+  // next message carries, with its quote text in .q. null when not replying.
+  let _huddleCardQuote = null;
   let _huddleHasMore = true;        // false once the oldest page has been reached
   let _huddleLoadingMore = false;
   // Watermark captured when the room is opened, so the "New messages" divider
@@ -21495,6 +21634,7 @@
     _huddleHasMore = true;
     _huddleHasNewer = false;
     _huddleReplyTo = null;
+    _huddleCardQuote = null;
     _huddleTypingUsers = {};
     // Freeze the unread divider at wherever this room was last read, before
     // markHuddleRoomRead below moves the watermark to now.
@@ -21634,6 +21774,7 @@
     document.body.style.overflow = '';
     if (_huddleTypingSweeper) { clearInterval(_huddleTypingSweeper); _huddleTypingSweeper = null; }
     _huddleReplyTo = null;
+    _huddleCardQuote = null;
     _huddleMentionState = null;
     resetHuddleGifState();
     _huddleHoldUnread = false;
@@ -21835,6 +21976,17 @@
   function renderHuddleReplyBar() {
     const slot = document.getElementById('hd-replybar-slot');
     if (!slot) return;
+    if (!_huddleReplyTo && _huddleCardQuote) {
+      slot.innerHTML = `
+      <div class="hd-replybar">
+        <div class="hd-replybar-body">
+          <b>Replying to ${escHtml(huddleCardQuoteLabel(_huddleCardQuote))}</b>
+          <span>${escHtml(_huddleCardQuote.q || '')}</span>
+        </div>
+        <button type="button" class="hd-replybar-close" onclick="clearHuddleReplyTarget()" aria-label="Cancel reply">✕</button>
+      </div>`;
+      return;
+    }
     if (!_huddleReplyTo) { slot.innerHTML = ''; return; }
     slot.innerHTML = `
       <div class="hd-replybar">
@@ -22013,7 +22165,19 @@
     return highlightHuddleMentions(linkifyHuddleText(escHtml(m.body || '')));
   }
 
+  // "Replying to Kai's poll" etc. for a Crew Feed card quote.
+  function huddleCardQuoteLabel(link) {
+    if (link.k === 'raveplan') return 'a Rave Plan check-off';
+    return ({ poll: 'a poll', dreamboard: 'a dream', jams: 'a jam', archive: 'an Archive drop', pins: 'a FAM Pin' })[link.feature] || 'a crew post';
+  }
+
   function huddleQuoteHTML(m) {
+    // A reply to a Crew Feed card: quote it, and tap through to the card.
+    if (!m.reply_to_id && m.kind !== 'system' && m.link && typeof m.link === 'object') {
+      return `<div class="hd-quote" role="link" tabindex="0" aria-label="Open what this replies to" data-link="${escHtml(JSON.stringify(m.link))}" onclick="event.stopPropagation(); openHuddleActivityLink(this)" onkeydown="if(event.key==='Enter'){event.stopPropagation();openHuddleActivityLink(this);}">
+          <b>${escHtml(huddleCardQuoteLabel(m.link))}</b><span class="hd-quote-body">${escHtml(m.link.q || '')}</span>
+        </div>`;
+    }
     if (!m.reply_to_id) return '';
     const found = huddleMessages.find(x => String(x.id) === String(m.reply_to_id));
     const target = found && !isBlockedUser(found.sender_id) ? found : null;
@@ -22765,6 +22929,7 @@
     _huddleHasMore = true;
     _huddleHasNewer = false;
     _huddleReplyTo = null;
+    _huddleCardQuote = null;
     _huddleTypingUsers = {};
     const priorRead = _huddleReadMap && _huddleReadMap[roomId];
     _huddleUnreadAnchorAt = priorRead || null;
@@ -22951,6 +23116,7 @@
     const mentions = huddleExtractMentions(text);
     if (mentions.length) fields.mentions = mentions;
     if (_huddleReplyTo) fields.reply_to_id = _huddleReplyTo.id;
+    else if (_huddleCardQuote) fields.link = _huddleCardQuote;
     clearHuddleReplyTarget();
     sendHuddleMessage(fields);
   }
@@ -23066,6 +23232,7 @@
 
   function clearHuddleReplyTarget() {
     _huddleReplyTo = null;
+    _huddleCardQuote = null;
     renderHuddleReplyBar();
   }
 
@@ -24078,6 +24245,7 @@
     if (error) { toastError('Could not update task', error); return; }
     const idx = gamePlanItems.findIndex(it => it.id === itemId);
     if (idx >= 0) gamePlanItems[idx] = data;
+    noteCrewPlanCheckoff(data);
   }
 
   async function dbClaimGamePlanTask(itemId, raverId) {
@@ -30794,8 +30962,11 @@
     hapticSuccess();
     showToast(`🎉 You joined ${crew.name}!`);
     if (currentUser) {
-      dbAddCrewMember(crew.id, me.id);
+      const added = dbAddCrewMember(crew.id, me.id);
       postCrewActivity(crew.id, `👋 ${displayName(me).split(' ')[0]} joined the crew`, { k: 'raver', id: me.id });
+      // The new crew page held the crew's content back while you weren't in
+      // it; load it now that you are.
+      if (isCrewFeedPage()) Promise.resolve(added).then(() => { if (String(activeDetailId) === String(id)) openDetail(id); });
     }
   }
 

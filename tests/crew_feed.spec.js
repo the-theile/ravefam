@@ -331,3 +331,123 @@ test.describe('new crew page · + menu', () => {
     await expect(page.locator('.crew-feed-add-menu [data-kind="poll"]')).toHaveCount(0);
   });
 });
+
+// ── PR 3: check-offs, Reply in Huddle, non-member preview ──
+
+function seedCheckoffs() {
+  const data = seedFeed();
+  data.game_plans = [{ id: 'gp1', crew_id: 'c1', festival_id: 'f1', created_at: new Date().toISOString() }];
+  data.game_plan_items = [
+    { id: 't1', game_plan_id: 'gp1', crew_id: 'c1', kind: 'task', added_by: 'kai-uid', text: 'Book the Airbnb',
+      is_done: true, done_at: new Date(Date.now() - 1800e3).toISOString(), done_by: 'kai-uid',
+      created_at: new Date(Date.now() - 86400e3).toISOString(), deleted_at: null },
+    // Ticked before done_at existed: no stamp, so it never shows.
+    { id: 't0', game_plan_id: 'gp1', crew_id: 'c1', kind: 'task', added_by: 'kai-uid', text: 'Old task',
+      is_done: true, done_at: null, done_by: null, created_at: new Date(Date.now() - 86400e3).toISOString(), deleted_at: null },
+  ];
+  return data;
+}
+
+test.describe('new crew page · plan check-offs', () => {
+  test('a crewmate\'s check-off shows as a paper card that opens its Rave Plan', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedCheckoffs() });
+    await openC1(page);
+    const card = page.locator('#crew-feed-list .crew-feed-card[data-kind="checkoff"]');
+    await expect(card).toHaveCount(1);
+    await expect(card).toHaveClass(/is-paper/);
+    await expect(card).toHaveClass(/is-new/);
+    await expect(card).toContainText('checked off');
+    await expect(card).toContainText('Book the Airbnb');
+    await expect(card).toContainText('Tomorrowland Rave Plan');
+    await card.locator('.crew-feed-act', { hasText: 'Open plan' }).click();
+    await expect(page.locator('.crew-feed-filter[data-filter="raveplan"]')).toHaveClass(/active/);
+    expect(await page.evaluate(() => String(_gamePlanActiveFestivalId))).toBe('f1');
+  });
+
+  test('ticking a task in the Rave Plan adds a check-off card without a reload', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedFeed() });
+    await openC1(page);
+    await page.locator('.crew-ticket[data-fest="f1"]').click();
+    await expect(page.locator('#game-plan-task-input')).toBeAttached();
+    await page.evaluate(async () => {
+      document.getElementById('game-plan-task-input').value = 'Buy tickets';
+      await addGamePlanTask('c1');
+    });
+    const id = await page.evaluate(() => window.__store.game_plan_items.find(it => it.text === 'Buy tickets').id);
+    await page.evaluate(async (tid) => { await toggleGamePlanTask(tid, true); }, id);
+    await page.locator('.crew-feed-filter[data-filter="all"]').click();
+    await expect(page.locator('#crew-feed-list .crew-feed-card[data-kind="checkoff"]')).toContainText('Buy tickets');
+
+    await page.evaluate(async (tid) => { await toggleGamePlanTask(tid, false); }, id);
+    await expect(page.locator('#crew-feed-list .crew-feed-card[data-kind="checkoff"]')).toHaveCount(0);
+  });
+});
+
+test.describe('new crew page · reply in Huddle', () => {
+  test('Reply quotes the card in the Huddle, and the sent message links back to it', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedFeed() });
+    await openC1(page);
+    await page.locator('#crew-feed-list .crew-feed-card[data-id="dp1"] .crew-feed-act', { hasText: 'Reply' }).click();
+    await expect(page.locator('#huddle-screen')).toBeVisible();
+    await expect(page.locator('#hd-replybar-slot')).toContainText('Replying to a dream');
+    await expect(page.locator('#hd-replybar-slot')).toContainText('Tomorrowland 2027');
+
+    await page.locator('#huddle-text-input').fill('who is in??');
+    await page.evaluate(() => submitHuddleTextMessage());
+    await expect.poll(() => page.evaluate(() =>
+      (window.__store.huddle_messages || []).find(m => m.body === 'who is in??')?.link)).toEqual(
+      { k: 'tile', feature: 'dreamboard', id: 'dp1', q: 'Tomorrowland 2027' });
+    await expect(page.locator('#hd-replybar-slot')).toBeEmpty();
+    await expect(page.locator('#hd-stream .hd-quote', { hasText: 'Tomorrowland 2027' })).toBeVisible();
+  });
+
+  test('cancelling the quote sends a plain message', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedFeed() });
+    await openC1(page);
+    await page.locator('#crew-feed-list .crew-feed-card[data-id="p1"] .crew-feed-act', { hasText: 'Reply' }).click();
+    await expect(page.locator('#hd-replybar-slot')).toContainText('Replying to a poll');
+    await page.locator('#hd-replybar-slot .hd-replybar-close').click();
+    await page.locator('#huddle-text-input').fill('plain');
+    await page.evaluate(() => submitHuddleTextMessage());
+    await expect.poll(() => page.evaluate(() =>
+      (window.__store.huddle_messages || []).some(m => m.body === 'plain'))).toBe(true);
+    expect(await page.evaluate(() => (window.__store.huddle_messages || []).find(m => m.body === 'plain').link ?? null)).toBeNull();
+  });
+});
+
+function seedOtherCrew(status) {
+  const data = seedData();
+  data.crews.push({
+    id: 'c2', name: 'Warehouse Kids', color: '#00F5FF', gradient: 'linear-gradient(90deg,#00F5FF,#5B6EFF)',
+    status, leader_id: 'kai-uid', totem_photo_url: null, totem_icon: null, invite_token: 'inv-c2',
+    created_at: new Date(Date.now() - 30 * 86400e3).toISOString(), deleted_at: null,
+  });
+  data.crew_members.push({ crew_id: 'c2', raver_id: 'r-kai', added_at: '2024-01-01T00:00:00Z', added_by: 'kai-uid', deleted_at: null });
+  return data;
+}
+
+test.describe('new crew page · non-member preview', () => {
+  test('outsiders get the header and a way in, not the crew\'s content', async ({ page }) => {
+    const errors = await bootWithCrewFeed(page, { data: seedOtherCrew('recruiting') });
+    await page.evaluate(async () => { await openDetail('c2'); });
+    const detail = page.locator('#page-crew-detail');
+    await expect(detail.locator('.crew-feed-name')).toHaveText('Warehouse Kids');
+    await expect(detail.locator('.crew-feed-preview')).toBeVisible();
+    for (const sel of ['#huddle-tile-preview-root', '.crew-feed-filters', '.crew-ticket', '.crew-feature-panel']) {
+      await expect(detail.locator(sel)).toHaveCount(0);
+    }
+    expect(errors).toEqual([]);
+
+    await detail.locator('.crew-feed-preview-cta .btn', { hasText: 'Join this crew' }).click();
+    await expect(detail.locator('.crew-feed-filters')).toBeVisible();
+    await expect(detail.locator('.crew-feed-preview')).toHaveCount(0);
+    const joined = await page.evaluate(() => (window.__store.crew_members || []).some(m => m.crew_id === 'c2' && m.raver_id === 'r-you'));
+    expect(joined).toBe(true);
+  });
+
+  test('a Locked In crew is invite-only', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedOtherCrew('locked-in') });
+    await page.evaluate(async () => { await openDetail('c2'); });
+    await expect(page.locator('.crew-feed-preview-cta .btn')).toContainText('Locked');
+  });
+});
