@@ -549,3 +549,72 @@ test.describe('crew description', () => {
     await expect(page.locator('#page-crew-detail')).toContainText('Bass in the face, love in the heart');
   });
 });
+
+// ── 2.26: live Rave Plan ──
+// The stub's channel doesn't dispatch, so these feed handleCrewPlanItemRealtime
+// the payloads Supabase would send.
+test.describe('new crew page · live plan', () => {
+  const kaiTicks = (extra = {}) => ({
+    id: 't2', game_plan_id: 'gp1', crew_id: 'c1', kind: 'task', added_by: 'kai-uid', text: 'Pack glowsticks',
+    is_done: true, done_at: new Date().toISOString(), done_by: 'kai-uid',
+    created_at: new Date(Date.now() - 3600e3).toISOString(), deleted_at: null, ...extra,
+  });
+
+  test('a crewmate ticking a task shows in the feed and the open plan without a reload', async ({ page }) => {
+    const errors = await bootWithCrewFeed(page, { data: seedCheckoffs() });
+    await openC1(page);
+    await page.locator('.crew-ticket[data-fest="f1"]').click();
+    await expect(page.locator('#game-plan-section-checklist')).toContainText('Book the Airbnb');
+    const progress = page.locator('.crew-ticket[data-fest="f1"] .crew-ticket-progress');
+    await expect(progress).toContainText('2/2 done');
+    // Kai adds a task, then ticks it.
+    await page.evaluate((row) => handleCrewPlanItemRealtime({ eventType: 'INSERT', new: row, old: {} }), kaiTicks({ is_done: false, done_at: null, done_by: null }));
+    await expect(page.locator('#game-plan-section-checklist')).toContainText('Pack glowsticks');
+    await expect(progress).toContainText('2/3 done');
+    await page.evaluate((row) => handleCrewPlanItemRealtime({ eventType: 'UPDATE', new: row, old: { id: row.id } }), kaiTicks());
+    await expect(progress).toContainText('3/3 done');
+    await page.locator('.crew-feed-filter[data-filter="all"]').click();
+    await expect(page.locator('#crew-feed-list .crew-feed-card[data-kind="checkoff"]', { hasText: 'Pack glowsticks' })).toHaveCount(1);
+    // Kai unticks it: the card goes.
+    await page.evaluate((row) => handleCrewPlanItemRealtime({ eventType: 'UPDATE', new: row, old: { id: row.id } }), kaiTicks({ is_done: false, done_at: null, done_by: null }));
+    await expect(page.locator('#crew-feed-list .crew-feed-card[data-kind="checkoff"]', { hasText: 'Pack glowsticks' })).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('a deleted task leaves the plan and the feed', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedCheckoffs() });
+    await openC1(page);
+    await page.locator('.crew-ticket[data-fest="f1"]').click();
+    await expect(page.locator('#game-plan-section-checklist')).toContainText('Book the Airbnb');
+    const t1 = await page.evaluate(() => window.__store.game_plan_items.find(it => it.id === 't1'));
+    await page.evaluate((row) => handleCrewPlanItemRealtime({ eventType: 'UPDATE', new: { ...row, deleted_at: new Date().toISOString() }, old: { id: row.id } }), t1);
+    await expect(page.locator('#game-plan-section-checklist')).not.toContainText('Book the Airbnb');
+    await page.locator('.crew-feed-filter[data-filter="all"]').click();
+    await expect(page.locator('#crew-feed-list .crew-feed-card[data-kind="checkoff"]')).toHaveCount(0);
+  });
+
+  test('a live change waits while you type in the plan, so your draft survives', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedCheckoffs() });
+    await openC1(page);
+    await page.locator('.crew-ticket[data-fest="f1"]').click();
+    const input = page.locator('#game-plan-task-input');
+    await input.fill('Earpl');
+    await input.focus();
+    await page.evaluate((row) => handleCrewPlanItemRealtime({ eventType: 'INSERT', new: row, old: {} }), kaiTicks({ is_done: false, done_at: null, done_by: null }));
+    await page.waitForTimeout(600);
+    await expect(input).toHaveValue('Earpl');
+    await expect(page.locator('#game-plan-section-checklist')).not.toContainText('Pack glowsticks');
+    await input.blur();
+    await expect(page.locator('#game-plan-section-checklist')).toContainText('Pack glowsticks');
+  });
+
+  test('another crew\'s rows are ignored, and leaving the crew drops the channel', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedCheckoffs() });
+    await openC1(page);
+    expect(await page.evaluate(() => !!_crewPlanChannel)).toBe(true);
+    await page.evaluate((row) => handleCrewPlanItemRealtime({ eventType: 'UPDATE', new: row, old: { id: row.id } }), kaiTicks({ crew_id: 'c2', game_plan_id: 'gpX' }));
+    await expect(page.locator('#crew-feed-list .crew-feed-card[data-kind="checkoff"]', { hasText: 'Pack glowsticks' })).toHaveCount(0);
+    await page.evaluate(() => closeDetail());
+    expect(await page.evaluate(() => _crewPlanChannel)).toBeNull();
+  });
+});
