@@ -10939,7 +10939,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.26.0';
+  const APP_VERSION = '2.27.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -14131,7 +14131,6 @@
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'crew_feed_events' }, handleCrewFeedRealtimeInsert)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'crew_feed_events' }, p => handleCrewFeedReactionUpdate('badge', p))
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'crew_archive_links' }, p => handleCrewFeedReactionUpdate('archive', p))
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_plan_items' }, p => handleCrewFeedReactionUpdate('checkoff', p))
       .subscribe();
   }
 
@@ -21251,8 +21250,9 @@
   }
   function crewFeedPinTouchEnd() { clearTimeout(_crewFeedPressTimer); }
 
-  // Crewmates' reactions land live: UPDATEs on the three tables (RLS scopes
-  // delivery). Anything else that changed on the row is ignored here.
+  // Crewmates' reactions on pins and Archive drops land live (RLS scopes
+  // delivery); check-offs already refresh through the crew-plan channel
+  // (handleCrewPlanItemRealtime). Anything else on the row is ignored here.
   function handleCrewFeedReactionUpdate(kind, payload) {
     const next = payload.new;
     if (!next || !next.reactions) return;

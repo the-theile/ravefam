@@ -527,6 +527,16 @@ test.describe('new crew page · feed reactions', () => {
     await page.evaluate(() => handleCrewFeedReactionUpdate('archive', { new: { id: 'al1', reactions: { '🔥': ['kai-uid'] } } }));
     await expect(page.locator('#crew-feed-list .crew-feed-card[data-kind="archive"] .crew-feed-act[data-emoji="🔥"]')).toHaveText('🔥 1');
   });
+
+  test('a crewmate\'s reaction on a check-off lands live through the crew-plan channel', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedCheckoffs() });
+    await openC1(page);
+    await page.evaluate(() => {
+      const row = { ...crewPlanCheckoffs.find(r => r.id === 't1'), reactions: { '💪': ['kai-uid'] } };
+      handleCrewPlanItemRealtime({ eventType: 'UPDATE', new: row, old: { id: 't1' } });
+    });
+    await expect(page.locator('#crew-feed-list .crew-feed-card[data-kind="checkoff"] .crew-feed-act[data-emoji="💪"]')).toHaveText('💪 1');
+  });
 });
 
 // ── 2.25.1: flat Plan view, ticket as plan header ──
