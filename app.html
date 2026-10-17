@@ -5460,8 +5460,13 @@
   }
   .crew-feed-act.is-hot { background: color-mix(in srgb, var(--ac, var(--neon-pink)) 22%, transparent); color: var(--ac, var(--neon-pink)); }
   .crew-feed-card.is-paper .crew-feed-act { background: var(--paper-edge); color: var(--surface2); }
+  .crew-feed-card.is-paper .crew-feed-act.is-hot { background: color-mix(in srgb, var(--ac, var(--neon-pink)) 28%, var(--paper-edge)); }
   .crew-feed-jam { display: flex; align-items: center; gap: 12px; }
-  .crew-feed-pin { display: flex; align-items: center; gap: 10px; padding: 9px 14px; margin-bottom: 8px; border-radius: 16px; cursor: pointer; font-family: inherit; }
+  .crew-feed-pin { display: flex; align-items: center; gap: 10px; padding: 9px 14px; margin-bottom: 8px; border-radius: 16px; cursor: pointer; font-family: inherit; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+  /* Reaction chips on a pin row: only the used ones, or the full set while picking (long-press). */
+  .crew-feed-pin-rxs { display: flex; gap: 4px; flex-shrink: 0; }
+  .crew-feed-pin .crew-feed-act { padding: 4px 8px; }
+  .crew-feed-pin.is-picking { box-shadow: 0 0 0 2px color-mix(in srgb, var(--neon-orange) 55%, transparent); }
   .crew-feed-pin.is-new::after { top: 6px; left: 30px; }
   .crew-feed-pin-emoji { font-size: 1.15rem; flex-shrink: 0; line-height: 1; }
   .crew-feed-pin-text { flex: 1; min-width: 0; font-size: 0.78rem; line-height: 1.3; color: #6a6070; }
@@ -10904,7 +10909,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.25.1';
+  const APP_VERSION = '2.26.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -14094,6 +14099,9 @@
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'huddle_messages' }, handleHuddleMessageRealtimeInsert)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'point_events' }, handlePointEventRealtimeInsert)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'crew_feed_events' }, handleCrewFeedRealtimeInsert)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'crew_feed_events' }, p => handleCrewFeedReactionUpdate('badge', p))
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'crew_archive_links' }, p => handleCrewFeedReactionUpdate('archive', p))
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_plan_items' }, p => handleCrewFeedReactionUpdate('checkoff', p))
       .subscribe();
   }
 
@@ -20957,12 +20965,19 @@
       const earner = row.raver_id ? squad.find(r => String(r.id) === String(row.raver_id)) : null;
       const earnerName = row.is_crew_level ? 'The whole crew' : earner ? displayName(earner).split(' ')[0] : 'The crew';
       const did = row.event_type === 'plur_tier_unlocked' ? 'reached' : 'unlocked';
+      // Tap opens Pins; long-press (or right-click) shows the reaction set in
+      // place of the chips. A <div> so the chips can be real buttons inside.
+      const picking = _crewFeedPickerId === String(it.id);
+      const chips = uid ? crewFeedReactionBtnsHTML(it, crewId, !picking) : '';
       return `
-        <button type="button" class="crew-feed-card crew-feed-pin is-paper${isNew ? ' is-new' : ''}" data-kind="badge" data-id="${itemAttr}" data-feature="pins" onclick="openCrewFeedItem(this.dataset.feature)">
+        <div role="button" tabindex="0" class="crew-feed-card crew-feed-pin is-paper${isNew ? ' is-new' : ''}${picking ? ' is-picking' : ''}" style="--ac:var(${k.ac})" data-kind="badge" data-id="${itemAttr}" data-crew-id="${crewAttr}" data-feature="pins"
+          onclick="crewFeedPinTap(this)" onkeydown="if (event.key === 'Enter') crewFeedPinTap(this)" oncontextmenu="if (${uid ? 'true' : 'false'}) { event.preventDefault(); openCrewFeedPicker(this); }"
+          ontouchstart="crewFeedPinTouchStart(this)" ontouchmove="crewFeedPinTouchEnd()" ontouchend="crewFeedPinTouchEnd()">
           <span class="crew-feed-pin-emoji" aria-hidden="true">${escHtml(row.badge_emoji || '🏆')}</span>
           <span class="crew-feed-pin-text"><b>${escHtml(earnerName)}</b> ${did} <b>${escHtml(row.badge_name || 'a FAM Pin')}</b></span>
-          <span class="crew-feed-pin-when">${escHtml(when)}</span>
-        </button>`;
+          ${chips ? `<span class="crew-feed-pin-rxs">${chips}</span>` : ''}
+          ${picking ? '' : `<span class="crew-feed-pin-when">${escHtml(when)}</span>`}
+        </div>`;
     }
 
     let who, avatar, verb, body, acts;
@@ -20975,9 +20990,9 @@
       verb = 'checked off';
       body = `<div class="crew-feed-card-title">✓ ${escHtml(row.text || 'A task')}</div>
         ${fest ? `<div class="crew-feed-card-sub">${escHtml(fest.name)} Rave Plan</div>` : ''}`;
-      acts = row.festival_id
+      acts = (uid ? crewFeedReactionBtnsHTML(it, crewId) : '') + (row.festival_id
         ? `<button type="button" class="crew-feed-act" data-fest="${escHtml(String(row.festival_id))}" onclick="openCrewFeedPlan(this.dataset.fest)">Open plan ›</button>`
-        : open('Open plan ›');
+        : open('Open plan ›'));
     } else {
       const r = it.actor ? raverByAuthUid(it.actor) : null;
       who = huddleSenderName(it.actor);
@@ -21020,7 +21035,7 @@
         body = `<div class="crew-feed-card-title">${escHtml(row.label || host || 'Photo drop')}</div>
           ${fest ? `<div class="crew-feed-card-sub">${escHtml(fest.name)}</div>` : ''}`;
         const href = safeHref(row.url);
-        acts = (href ? `<a class="crew-feed-act is-hot" href="${href}" target="_blank" rel="noopener noreferrer">↗ Open</a>` : '') + open('Archive ›');
+        acts = (uid ? crewFeedReactionBtnsHTML(it, crewId) : '') + (href ? `<a class="crew-feed-act is-hot" href="${href}" target="_blank" rel="noopener noreferrer">↗ Open</a>` : '') + open('Archive ›');
       }
     }
     // Reply in Huddle: the quote carries the card's headline, and its link
@@ -21040,6 +21055,127 @@
         ${body}
         <div class="crew-feed-card-acts">${acts}</div>
       </article>`;
+  }
+
+  // ── Feed reactions ──
+  // Only for items with no interaction of their own: polls, jams and dreams
+  // already react / hype in place. Each kind has its own set; keep in sync
+  // with toggle_crew_feed_reaction() (20261019000000_crew_feed_reactions).
+  const CREW_FEED_REACTIONS = {
+    badge:    ['🎉', '💖', '🙌'],
+    archive:  ['😍', '🔥', '🥹'],
+    checkoff: ['🙏', '💪', '🫡']
+  };
+  let _crewFeedPickerId = null;
+  let _crewFeedPressTimer = null;
+  let _crewFeedLongPressAt = 0;
+
+  function crewFeedReactionRows(kind) {
+    return kind === 'badge' ? crewFeedEvents : kind === 'archive' ? archiveLinks : kind === 'checkoff' ? crewPlanCheckoffs : [];
+  }
+
+  // usedOnly: just the emoji someone has reacted with (compact pin rows).
+  function crewFeedReactionBtnsHTML(it, crewId, usedOnly = false) {
+    const uid = currentUser?.id;
+    const reactions = it.row.reactions || {};
+    return CREW_FEED_REACTIONS[it.kind]
+      .filter(emoji => !usedOnly || (reactions[emoji] || []).length)
+      .map(emoji => {
+        const users = reactions[emoji] || [];
+        const mine = !!uid && users.includes(uid);
+        return `<button type="button" class="crew-feed-act${mine ? ' is-hot' : ''}" data-kind="${it.kind}" data-id="${escHtml(String(it.id))}" data-crew-id="${escHtml(String(crewId))}" data-emoji="${escHtml(emoji)}" onclick="event.stopPropagation(); toggleCrewFeedReaction(this.dataset.kind, this.dataset.id, this.dataset.crewId, this.dataset.emoji)" aria-pressed="${mine}">${emoji}${users.length ? ` ${users.length}` : ''}</button>`;
+      }).join('');
+  }
+
+  async function toggleCrewFeedReaction(kind, id, crewId, emoji) {
+    const row = crewFeedReactionRows(kind).find(r => String(r.id) === String(id));
+    const uid = currentUser?.id;
+    if (!row || !uid) return;
+    hapticImpact('LIGHT');
+    const before = row.reactions || {};
+    // First reaction of yours on this item → worth a ping; toggling more emoji isn't.
+    const firstReaction = !Object.values(before).some(users => (users || []).includes(uid));
+    const users = before[emoji] || [];
+    const next = { ...before, [emoji]: users.includes(uid) ? users.filter(u => u !== uid) : [...users, uid] };
+    if (!next[emoji].length) delete next[emoji];
+    row.reactions = next;
+    _crewFeedPickerId = null;
+    rerenderCrewFeed(crewId);
+    // The server toggles under a row lock and hands back the merged result.
+    const { data, error } = await sb.rpc('toggle_crew_feed_reaction', { p_kind: kind, p_id: id, p_emoji: emoji });
+    if (error) {
+      row.reactions = before;
+      rerenderCrewFeed(crewId);
+      toastError('Could not save reaction', error);
+      return;
+    }
+    row.reactions = data || {};
+    rerenderCrewFeed(crewId);
+    if (firstReaction && (row.reactions[emoji] || []).includes(uid)) notifyCrewFeedReaction(kind, row, crewId, emoji);
+  }
+
+  // Pings whoever the item is about: the pin's earner, the Archive adder,
+  // or whoever ticked the task. Crew-level pins have no one to ping.
+  async function notifyCrewFeedReaction(kind, row, crewId, emoji) {
+    const crew = getCrew(crewId);
+    if (!crew || !currentUser) return;
+    const clip = (t) => String(t || '').slice(0, 80);
+    let owner = null, what = '';
+    if (kind === 'badge') {
+      if (row.is_crew_level) return;
+      const earner = squad.find(r => String(r.id) === String(row.raver_id));
+      owner = earner?.claimedBy || null;
+      what = `your ${clip(row.badge_name) || 'FAM Pin'}`;
+    } else if (kind === 'archive') {
+      owner = row.added_by;
+      what = row.label ? `your Archive drop “${clip(row.label)}”` : 'your Archive drop';
+    } else {
+      owner = row.done_by;
+      what = `your check-off “${clip(row.text) || 'a task'}”`;
+    }
+    if (!owner || owner === currentUser.id) return;
+    await dbAddNotification(owner, crew.id, `${emoji} ${activityWho()} reacted to ${what} in ${crew.name}`,
+      null, nlData([nlCrew(crew)]));
+  }
+
+  // Pin rows: tap opens Pins (or closes an open picker); long-press or
+  // right-click opens the reaction set. Opening is never a toggle, since
+  // Android fires both the long-press timer and contextmenu.
+  function openCrewFeedPicker(el) {
+    if (!currentUser) return;
+    _crewFeedPickerId = el.dataset.id;
+    rerenderCrewFeed(el.dataset.crewId);
+  }
+  function crewFeedPinTap(el) {
+    // Lifting the finger after a long-press fires a click — that opened the picker.
+    if (Date.now() - _crewFeedLongPressAt < 600) return;
+    if (_crewFeedPickerId === el.dataset.id) {
+      _crewFeedPickerId = null;
+      rerenderCrewFeed(el.dataset.crewId);
+      return;
+    }
+    openCrewFeedItem(el.dataset.feature);
+  }
+  function crewFeedPinTouchStart(el) {
+    clearTimeout(_crewFeedPressTimer);
+    if (!currentUser) return;
+    _crewFeedPressTimer = setTimeout(() => {
+      _crewFeedLongPressAt = Date.now();
+      hapticImpact('MEDIUM');
+      openCrewFeedPicker(el);
+    }, 420);
+  }
+  function crewFeedPinTouchEnd() { clearTimeout(_crewFeedPressTimer); }
+
+  // Crewmates' reactions land live: UPDATEs on the three tables (RLS scopes
+  // delivery). Anything else that changed on the row is ignored here.
+  function handleCrewFeedReactionUpdate(kind, payload) {
+    const next = payload.new;
+    if (!next || !next.reactions) return;
+    const row = crewFeedReactionRows(kind).find(r => String(r.id) === String(next.id));
+    if (!row || JSON.stringify(row.reactions || {}) === JSON.stringify(next.reactions)) return;
+    row.reactions = next.reactions;
+    scheduleCrewFeedRender(activeDetailId);
   }
 
   // "Vote", "Dream Board ›" etc.: switch to that feature's chip and bring
