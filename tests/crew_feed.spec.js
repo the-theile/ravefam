@@ -517,3 +517,87 @@ test.describe('new crew page · feed reactions', () => {
     await expect(page.locator('#crew-feed-list .crew-feed-card[data-kind="archive"] .crew-feed-act[data-emoji="🔥"]')).toHaveText('🔥 1');
   });
 });
+
+// ── 2.25.1: flat Plan view, ticket as plan header ──
+
+test.describe('new crew page · Plan view', () => {
+  test('Plan shows the ticket as header and the sections flat, with no repeated controls', async ({ page }) => {
+    const errors = await bootWithCrewFeed(page);
+    await openC1(page);
+    await page.locator('.crew-ticket[data-fest="f1"]').click();
+    const plan = panel(page, 'raveplan');
+    await expect(plan.locator('.crew-plan-tabs')).toBeVisible();
+    // The second rave switcher, the hint, Mission Briefing and the shortcut row are gone…
+    for (const sel of ['.game-plan-rave-picker', '.game-plan-shortcuts', ':scope > .text-hint-xs']) {
+      await expect(plan.locator(sel)).toHaveCount(0);
+    }
+    await expect(plan.getByRole('button', { name: /Mission Briefing/ })).toHaveCount(0);
+    await expect(plan.locator('.section-banner').first()).toBeHidden();
+    await expect(plan.locator('.crew-plan-tabs .game-plan-section-tab')).toHaveText(['Tasks', 'Roles', 'Rides', 'Stay', 'Outfit']);
+    await expect(plan.locator('.crew-plan-help')).toBeVisible();
+    // …and the ticket carries Briefing and the rave's chat instead of its barcode.
+    const ticket = page.locator('.crew-ticket[data-fest="f1"]');
+    await expect(ticket.locator('.crew-ticket-foot')).toBeHidden();
+    await expect(ticket.locator('.crew-ticket-act')).toHaveText(['🎯 Briefing', '💬 Rave chat']);
+    await expect(ticket.locator('.crew-ticket-progress')).toContainText('No tasks yet');
+    expect(errors).toEqual([]);
+  });
+
+  test('ticket progress and the Tasks count follow the checklist', async ({ page }) => {
+    await bootWithCrewFeed(page);
+    await openC1(page);
+    await page.locator('.crew-ticket[data-fest="f1"]').click();
+    await expect(page.locator('#game-plan-task-input')).toBeAttached();
+    for (const t of ['Buy tickets', 'Book the Airbnb']) {
+      await page.evaluate(async (text) => {
+        document.getElementById('game-plan-task-input').value = text;
+        await addGamePlanTask('c1');
+      }, t);
+    }
+    const progress = page.locator('.crew-ticket[data-fest="f1"] .crew-ticket-progress');
+    await expect(progress).toContainText('0/2 done');
+    await expect(page.locator('.crew-plan-tabs em[data-count="checklist"]')).toHaveText('2');
+    const id = await page.evaluate(() => window.__store.game_plan_items.find(it => it.text === 'Buy tickets').id);
+    await page.evaluate(async (tid) => { await toggleGamePlanTask(tid, true); }, id);
+    await expect(progress).toContainText('1/2 done');
+    await expect(page.locator('.crew-plan-tabs em[data-count="checklist"]')).toHaveText('1');
+  });
+
+  test('the ticket actions work without re-selecting the ticket; leaving Plan restores the barcode', async ({ page }) => {
+    await bootWithCrewFeed(page);
+    await openC1(page);
+    await page.locator('.crew-ticket[data-fest="f1"]').click();
+    await page.locator('.crew-ticket[data-fest="f1"] .crew-ticket-act', { hasText: 'Rave chat' }).click();
+    await expect(page.locator('#huddle-screen')).toBeVisible();
+    await page.evaluate(() => closeHuddleScreen());
+    await page.locator('.crew-feed-filter[data-filter="all"]').click();
+    await expect(page.locator('.crew-ticket[data-fest="f1"] .crew-ticket-foot')).toBeVisible();
+    await expect(page.locator('.crew-ticket[data-fest="f1"] .crew-ticket-plan')).toBeHidden();
+  });
+
+  test('the selected chip is scrolled into view', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await bootWithCrewFeed(page);
+    await openC1(page);
+    await page.locator('.crew-feed-filter[data-filter="memories"]').click();
+    const inView = await page.evaluate(() => {
+      const chip = document.querySelector('.crew-feed-filter[data-filter="memories"]');
+      const row = chip.parentElement.getBoundingClientRect();
+      const r = chip.getBoundingClientRect();
+      return r.left >= row.left - 1 && r.right <= row.right + 1;
+    });
+    expect(inView).toBe(true);
+  });
+});
+
+test.describe('crew description', () => {
+  test('a saved crew description loads with the crew and shows on both pages', async ({ page }) => {
+    const data = seedData();
+    data.crews[0].description = 'Bass in the face, love in the heart';
+    await bootWithCrewFeed(page, { data });
+    await openC1(page);
+    await expect(page.locator('#page-crew-detail .crew-feed-desc')).toHaveText('Bass in the face, love in the heart');
+    await page.evaluate(() => { localStorage.removeItem('ravefam_crew_feed'); renderDetail('c1'); });
+    await expect(page.locator('#page-crew-detail')).toContainText('Bass in the face, love in the heart');
+  });
+});
