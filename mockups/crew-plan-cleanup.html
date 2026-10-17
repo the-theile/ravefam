@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan Tab Cleanup</title>
+<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@800;900&family=Outfit:wght@400;500;600;700;800;900&family=DM+Sans:wght@300;400;500&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --neon-pink: #FF2D78; --neon-cyan: #00F5FF; --neon-yellow: #FFE600;
+    --neon-purple: #BF00FF; --neon-green: #39FF14; --neon-indigo: #5B6EFF;
+    --bg: #050509; --surface2: #16161F; --text: #F0EEFF; --muted: #8585A5; --soft: rgba(240,238,255,0.62);
+    --paper: #F4F1E8; --paper-edge: #E6E1D3; --paper-ink: #D6284B; --ink: #1a1420;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #08080D; color: var(--text); font-family: 'DM Sans', system-ui, sans-serif; padding: 32px 24px 64px; }
+  button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+
+  .page-head { max-width: 1200px; margin: 0 auto 28px; }
+  .page-head h1 { font-family: 'Urbanist'; font-weight: 900; font-size: 1.9rem; margin: 0 0 8px; letter-spacing: -0.5px; }
+  .page-head p { color: var(--muted); margin: 0; font-size: 0.94rem; line-height: 1.5; max-width: 860px; }
+  .changes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin-top: 16px; max-width: 1200px; }
+  .changes div { padding: 10px 14px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); font-size: 0.8rem; line-height: 1.5; color: var(--muted); }
+  .changes b { color: var(--text); font-family: 'Outfit'; display: block; margin-bottom: 2px; }
+
+  .rail { display: flex; gap: 32px; overflow-x: auto; padding-bottom: 20px; }
+  @media (min-width: 1260px) { .rail { justify-content: center; } }
+  .col { flex: 0 0 auto; width: 372px; }
+  .col-head { margin-bottom: 14px; min-height: 96px; }
+  .tag { display: inline-block; font-family: 'Outfit'; font-weight: 800; font-size: 0.64rem; letter-spacing: 1.2px; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; margin-bottom: 8px; }
+  .col-head h2 { font-family: 'Urbanist'; font-weight: 800; font-size: 1.1rem; margin: 0 0 4px; }
+  .col-head p { color: var(--muted); font-size: 0.8rem; margin: 0; line-height: 1.5; }
+
+  /* phone + app chrome */
+  .phone { position: relative; height: 808px; border-radius: 30px; overflow: hidden; border: 1px solid rgba(255,255,255,0.13); box-shadow: 0 18px 50px rgba(0,0,0,0.6); background: var(--bg); display: flex; flex-direction: column; }
+  .sbar { flex: 0 0 auto; height: 32px; display: flex; justify-content: space-between; align-items: center; padding: 0 24px; font-family: 'Outfit'; font-size: 0.74rem; font-weight: 700; background: #1a1a22; }
+  .apphdr { flex: 0 0 auto; height: 52px; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: linear-gradient(180deg, #1a1a22, #121219); border-bottom: 1px solid rgba(255,255,255,0.07); }
+  .apphdr .logo { width: 28px; height: 28px; border-radius: 50%; background: repeating-conic-gradient(var(--neon-green) 0 8deg, transparent 8deg 20deg, var(--neon-pink) 20deg 26deg, transparent 26deg 40deg, var(--neon-cyan) 40deg 46deg, transparent 46deg 60deg); -webkit-mask: radial-gradient(circle, #000 3px, transparent 4px, transparent 6px, #000 7px); mask: radial-gradient(circle, #000 3px, transparent 4px, transparent 6px, #000 7px); }
+  .apphdr .word { font-family: 'Outfit'; font-weight: 800; font-size: 1.15rem; margin-right: auto; }
+  .apphdr .word span { color: var(--neon-green); }
+  .apphdr .hb { width: 34px; height: 28px; border-radius: 9px; border: 1px solid rgba(255,255,255,0.14); display: grid; place-items: center; font-size: 0.78rem; color: var(--muted); }
+  .appnav { flex: 0 0 auto; height: 66px; display: flex; justify-content: space-around; align-items: center; padding-bottom: 6px; background: #0b0b11; border-top: 1px solid rgba(255,255,255,0.07); position: relative; z-index: 9; }
+  .appnav span { display: flex; flex-direction: column; align-items: center; gap: 3px; font-family: 'Outfit'; font-weight: 700; font-size: 0.58rem; color: var(--ac); }
+  .appnav span i { width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--ac); opacity: .55; display: block; }
+  .appnav span.on i { opacity: 1; box-shadow: 0 0 12px -2px var(--ac); }
+  .scroll { flex: 1; overflow-y: auto; scrollbar-width: none; padding: 12px 16px 24px; background:
+      radial-gradient(60% 30% at 15% 8%, rgba(255,45,120,0.30), transparent 70%),
+      radial-gradient(55% 28% at 90% 22%, rgba(0,245,255,0.20), transparent 70%),
+      radial-gradient(70% 35% at 40% 60%, rgba(191,0,255,0.22), transparent 70%), var(--bg); }
+  .scroll::-webkit-scrollbar { display: none; }
+  .glass { background: rgba(255,255,255,0.065); border: 1px solid rgba(255,255,255,0.12); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
+
+  .av { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--paper); margin-left: -7px; display: inline-grid; place-items: center; font-family: 'Outfit'; font-weight: 800; font-size: 0.5rem; color: #000; flex-shrink: 0; }
+  .av:first-child { margin-left: 0; }
+  .avs { display: flex; align-items: center; }
+  .g1 { background: linear-gradient(135deg,#FF2D78,#FFB800); } .g2 { background: linear-gradient(135deg,#00F5FF,#5B6EFF); }
+  .g3 { background: linear-gradient(135deg,#39FF14,#00F5FF); } .g4 { background: linear-gradient(135deg,#BF00FF,#FF2D78); }
+  .g5 { background: linear-gradient(135deg,#FFE600,#FF6B35); } .g6 { background: linear-gradient(135deg,#5B6EFF,#BF00FF); }
+  .more { font-family: 'Outfit'; font-weight: 700; font-size: .66rem; margin-left: 5px; color: var(--ink); }
+
+  /* ticket */
+  .tickets { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; padding-bottom: 6px; }
+  .tickets::-webkit-scrollbar { display: none; }
+  .tk { flex: 0 0 calc(100% - 28px); scroll-snap-align: start; background: var(--paper); color: var(--ink); border-radius: 18px; padding: 14px 16px 12px; text-align: left; --notch: 92px;
+    -webkit-mask: radial-gradient(circle at 0 var(--notch), transparent 9px, #000 9.5px) left / 51% 100% no-repeat, radial-gradient(circle at 100% var(--notch), transparent 9px, #000 9.5px) right / 51% 100% no-repeat;
+            mask: radial-gradient(circle at 0 var(--notch), transparent 9px, #000 9.5px) left / 51% 100% no-repeat, radial-gradient(circle at 100% var(--notch), transparent 9px, #000 9.5px) right / 51% 100% no-repeat; }
+  .tk .row { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .tk .eye { font-family: var(--mono); font-size: .56rem; letter-spacing: 1.6px; color: var(--paper-ink); font-weight: 700; }
+  .tk .nm { font-family: 'Urbanist'; font-weight: 900; font-size: 1.3rem; margin-top: 2px; }
+  .tk .mt { font-size: .68rem; color: #5a5060; }
+  .tk .cd { font-family: 'Urbanist'; font-weight: 900; font-size: 2.2rem; line-height: .9; color: var(--paper-ink); text-align: right; }
+  .tk .cd small { display: block; font-family: var(--mono); font-size: .5rem; letter-spacing: 1.4px; color: #5a5060; font-weight: 400; margin-top: 4px; }
+  .tk .perf { border-top: 1.5px dashed rgba(0,0,0,.18); margin: 12px -16px 10px; }
+  .tk .going { display: flex; align-items: center; gap: 8px; font-size: .7rem; color: #5a5060; }
+  .tk .bar { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  .tk .code { flex: 1; height: 18px; background: repeating-linear-gradient(90deg, var(--ink) 0 2px, transparent 2px 4px, var(--ink) 4px 5px, transparent 5px 8px, var(--ink) 8px 11px, transparent 11px 12px); opacity: .85; }
+  .tk .open { font-family: 'Outfit'; font-weight: 700; font-size: .7rem; color: var(--paper-ink); }
+  /* plan-mode stub */
+  .tk .prog { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  .tk .prog .track { flex: 1; height: 6px; border-radius: 3px; background: rgba(0,0,0,.1); overflow: hidden; }
+  .tk .prog .track i { display: block; height: 100%; background: var(--paper-ink); border-radius: 3px; }
+  .tk .prog span { font-family: 'Outfit'; font-weight: 700; font-size: .68rem; color: #5a5060; white-space: nowrap; }
+  .tk .prog b { color: var(--paper-ink); }
+  .tk .acts { display: flex; gap: 6px; margin-top: 10px; }
+  .tk .acts span { font-family: 'Outfit'; font-weight: 700; font-size: .72rem; padding: 7px 12px; border-radius: 100px; background: var(--paper-edge); }
+  .tk .acts span.hot { background: var(--paper-ink); color: #fff; }
+  .dots { display: flex; justify-content: center; gap: 6px; margin: 4px 0 12px; }
+  .dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.25); }
+  .dots i.on { width: 16px; border-radius: 3px; background: var(--neon-pink); }
+
+  .chips { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+  .chips .row { flex: 1; min-width: 0; display: flex; gap: 2px; padding: 4px; border-radius: 100px; overflow: hidden; }
+  .chips .row span { flex: 0 0 auto; font-family: 'Outfit'; font-weight: 600; font-size: .74rem; padding: 7px 12px; border-radius: 100px; color: var(--soft); }
+  .chips .row span.on { background: rgba(255,255,255,.92); color: #0b0a12; font-weight: 700; }
+  .chips .plus { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--neon-pink), var(--neon-purple)); display: grid; place-items: center; font-size: 1.3rem; flex-shrink: 0; }
+
+  /* BEFORE: today's nested plan panel */
+  .old-panel { border-radius: 24px; padding: 14px; }
+  .old-hint { font-size: .74rem; color: var(--soft); margin-bottom: 8px; }
+  .pills { display: flex; gap: 6px; overflow: hidden; margin-bottom: 12px; }
+  .pills span { flex: 0 0 auto; font-family: 'Outfit'; font-weight: 600; font-size: .72rem; padding: 7px 13px; border-radius: 100px; border: 1px solid rgba(255,255,255,.14); color: var(--soft); }
+  .pills span.on { border-color: var(--neon-cyan); color: var(--text); box-shadow: 0 0 0 1px var(--neon-cyan) inset; }
+  .briefing { display: block; text-align: center; padding: 11px; border-radius: 100px; background: var(--neon-pink); font-family: 'Outfit'; font-weight: 800; font-size: .84rem; margin-bottom: 10px; }
+  .shortcuts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px; }
+  .shortcuts span { font-family: 'Outfit'; font-weight: 700; font-size: .66rem; text-align: center; padding: 9px 4px; border-radius: 100px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04); }
+  .subtabs { display: flex; justify-content: space-around; padding: 6px; border-radius: 14px; background: rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.08); margin-bottom: 10px; }
+  .subtabs span { font-family: 'Outfit'; font-size: .64rem; color: var(--soft); text-align: center; padding: 5px 8px; border-radius: 10px; }
+  .subtabs span.on { background: rgba(255,45,120,.15); color: var(--text); }
+  .old-check { background: var(--paper); color: var(--ink); border-radius: 18px; padding: 16px; text-align: center; }
+  .old-check b { display: block; font-family: 'Outfit'; font-weight: 900; font-size: 1rem; letter-spacing: 2px; color: var(--paper-ink); }
+  .old-check small { font-family: 'Outfit'; font-size: .62rem; letter-spacing: 1.4px; color: var(--paper-ink); opacity: .8; }
+  .redline { outline: 2px dashed rgba(255,230,0,.7); outline-offset: 3px; border-radius: 14px; position: relative; }
+  .redline::after { content: attr(data-note); position: absolute; right: -4px; top: -14px; font-family: 'Outfit'; font-weight: 800; font-size: .58rem; background: var(--neon-yellow); color: #000; padding: 2px 7px; border-radius: 100px; white-space: nowrap; }
+
+  /* AFTER: flat sections */
+  .secs { display: flex; align-items: center; gap: 1px; margin-bottom: 12px; overflow-x: auto; scrollbar-width: none; }
+  .secs::-webkit-scrollbar { display: none; }
+  .secs button { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; font-family: 'Outfit'; font-weight: 600; font-size: .72rem; padding: 6px 7px; border-radius: 100px; color: var(--soft); border: 1px solid transparent; }
+  .secs button.on { color: var(--neon-pink); border-color: rgba(255,45,120,.5); background: rgba(255,45,120,.1); font-weight: 700; }
+  .secs em { font-style: normal; font-size: .58rem; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 9px; display: inline-grid; place-items: center; background: rgba(255,255,255,.1); color: var(--text); }
+  .secs button.on em { background: var(--neon-pink); color: #fff; }
+  .secs .help { margin-left: auto; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; color: var(--soft); border: 1px solid rgba(255,255,255,.14); font-size: .74rem; flex-shrink: 0; }
+  .sec { display: none; }
+  .sec.on { display: block; }
+  .item { display: flex; align-items: center; gap: 11px; padding: 11px 12px; border-radius: 16px; margin-bottom: 6px; }
+  .item .box { width: 20px; height: 20px; border-radius: 7px; border: 1.5px solid rgba(255,255,255,.3); display: grid; place-items: center; flex-shrink: 0; font-size: .7rem; }
+  .item.done .box { background: var(--neon-pink); border-color: var(--neon-pink); }
+  .item .tx { flex: 1; min-width: 0; font-size: .84rem; }
+  .item.done .tx { color: var(--soft); text-decoration: line-through; }
+  .item .tx small { display: block; font-size: .66rem; color: var(--soft); text-decoration: none; margin-top: 1px; }
+  .item .yours { font-family: 'Outfit'; font-weight: 800; font-size: .58rem; letter-spacing: .8px; padding: 3px 8px; border-radius: 100px; background: rgba(255,45,120,.18); color: var(--neon-pink); }
+  .item .av { border-color: #1b1424; width: 24px; height: 24px; margin: 0; }
+  .claim { font-family: 'Outfit'; font-weight: 700; font-size: .66rem; padding: 5px 10px; border-radius: 100px; border: 1px dashed rgba(255,255,255,.25); color: var(--soft); }
+  .add { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 16px; border: 1px dashed rgba(255,255,255,.18); color: var(--soft); font-size: .82rem; margin-top: 4px; }
+  .grp { font-family: 'Outfit'; font-weight: 700; font-size: .66rem; color: var(--soft); margin: 10px 4px 6px; letter-spacing: .4px; }
+  .ride { padding: 12px; border-radius: 16px; margin-bottom: 8px; }
+  .ride .top { display: flex; align-items: center; gap: 10px; }
+  .ride .top b { font-family: 'Outfit'; font-size: .86rem; flex: 1; }
+  .ride .seats { display: flex; gap: 6px; margin-top: 10px; }
+  .ride .seats span { flex: 1; height: 30px; border-radius: 10px; display: grid; place-items: center; font-size: .62rem; font-family: 'Outfit'; font-weight: 700; background: rgba(255,255,255,.06); color: var(--soft); }
+  .ride .seats span.taken { background: rgba(0,245,255,.14); color: var(--neon-cyan); }
+  .ride .vibe { font-size: .68rem; color: var(--soft); margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <h1>Plan tab, cleaned up</h1>
+  <p>The new crew page with the Plan chip selected. Left is today's version, the other two are the proposal. On the right two phones, the section tabs are clickable and the tickets swipe.</p>
+  <div class="changes">
+    <div><b>One rave switcher</b>The tickets are it. The rave buttons and "Tap between raves…" hint are gone.</div>
+    <div><b>The ticket is the plan header</b>Its stub shows progress (7/12 · 1 yours) plus 🎯 Briefing and 💬 Rave chat.</div>
+    <div><b>No repeated shortcuts</b>Huddle, Jams and Archive are already one tap away. "How this works" becomes a small ?.</div>
+    <div><b>One level, no boxes in boxes</b>Section tabs with counts sit right under the ticket, and the list goes straight on the page.</div>
+  </div>
+</div>
+
+<div class="rail">
+  <div class="col">
+    <div class="col-head"><span class="tag" style="background:rgba(255,230,0,.14);color:var(--neon-yellow)">Today</span><h2>Plan, as it is now</h2><p>Yellow outlines mark what repeats or nests. The first task isn't visible until well below the fold.</p></div>
+    <div class="phone" id="before"></div>
+  </div>
+  <div class="col">
+    <div class="col-head"><span class="tag" style="background:rgba(57,255,20,.14);color:var(--neon-green)">Proposed</span><h2>Hulaween · Tasks</h2><p>Ticket → section tabs → your tasks. The task you own is flagged, and the first tasks show without scrolling.</p></div>
+    <div class="phone" id="after1"></div>
+  </div>
+  <div class="col">
+    <div class="col-head"><span class="tag" style="background:rgba(57,255,20,.14);color:var(--neon-green)">Proposed</span><h2>Swiped to EDC Orlando · Rides</h2><p>Swiping the ticket switches the whole plan. Other sections keep the same flat layout.</p></div>
+    <div class="phone" id="after2"></div>
+  </div>
+</div>
+
+<script>
+  const TOP = `<div class="sbar"><span>12:07</span><span>●●● 69%</span></div>
+    <div class="apphdr"><span class="logo"></span><span class="word">Rave<span>FAM</span></span><span class="hb">🔔</span><span class="hb">?</span><span class="hb">⏻</span></div>`;
+  const NAV = `<div class="appnav">
+    <span class="on" style="--ac:var(--neon-pink)"><i></i>Crews</span><span style="--ac:var(--neon-purple)"><i></i>Raves</span>
+    <span style="--ac:var(--neon-green)"><i></i>Ravers</span><span style="--ac:var(--neon-cyan)"><i></i>Stats</span>
+    <span style="--ac:var(--neon-yellow)"><i></i>Village</span></div>`;
+  const GOING = `<span class="avs"><span class="av g1">AA</span><span class="av g2">D</span><span class="av g3">TR</span><span class="av g4">B</span><span class="av g5">KR</span><span class="av g6">JB</span><span class="more">+2</span></span>`;
+  const RAVES = [
+    { name: 'Hulaween', meta: 'Live Oak, FL · 21 Oct', days: 4, done: 7, total: 12 },
+    { name: 'EDC Orlando', meta: 'Tinker Field · 6 Nov', days: 20, done: 3, total: 9 },
+    { name: 'Odesza', meta: 'Kia Center · 15 Nov', days: 29, done: 1, total: 6 },
+  ];
+  const chips = (active) => `<div class="chips"><div class="row glass">${['All','Polls','Jams','Dreams','Plan','Memories'].map(c => `<span class="${c === active ? 'on' : ''}">${c}</span>`).join('')}</div><span class="plus">+</span></div>`;
+
+  // ── Before ──
+  document.getElementById('before').innerHTML = `${TOP}
+    <div class="scroll">
+      <div class="tickets"><div class="tk">
+        <div class="row"><div><div class="eye">NEXT UP · RAVE PLAN</div><div class="nm">Hulaween</div><div class="mt">Live Oak, Florida, United States · 21 Oct</div></div><div class="cd">4<small>DAYS</small></div></div>
+        <div class="perf"></div><div class="going">${GOING} 8 going</div>
+        <div class="bar"><span class="code"></span><span class="open">Open plan ›</span></div>
+      </div><div class="tk" style="opacity:.6"></div></div>
+      <div class="dots"><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="chips"><div class="row glass">${['Polls','Jams','Dreams','Plan','Memories'].map(c => `<span class="${c === 'Plan' ? 'on' : ''}">${c}</span>`).join('')}</div><span class="plus">+</span></div>
+      <div class="old-panel glass">
+        <div class="redline" data-note="2nd rave switcher" style="padding:2px">
+          <div class="old-hint">Tap between raves you and your crew are both going to</div>
+          <div class="pills"><span class="on">Hulaween</span><span>EDC Orlando</span><span>Odesza</span><span>Tapes…</span></div>
+        </div>
+        <span class="briefing">🎯 Mission Briefing</span>
+        <div class="shortcuts redline" data-note="already 1 tap away"><span>🕊️ Huddle</span><span>🎧 Jams</span><span>📸 Archive</span><span>❓ How this works</span></div>
+        <div class="subtabs redline" data-note="box in a box"><span class="on">✅<br>Tasks</span><span>🎭<br>Roles</span><span>🚗<br>Rides</span><span>🏠<br>Stay</span><span>✨<br>Outfit</span></div>
+        <div class="old-check redline" data-note="repeats 'Tasks'"><b>✅ CHECKLIST</b><small>· GET IT DONE BEFORE YOU GO</small></div>
+      </div>
+    </div>${NAV}`;
+
+  // ── After ──
+  const ticket = (r) => `
+    <div class="tk" data-rave="${r.name}">
+      <div class="row"><div><div class="eye">RAVE PLAN</div><div class="nm">${r.name}</div><div class="mt">${r.meta}</div></div><div class="cd">${r.days}<small>DAYS</small></div></div>
+      <div class="perf"></div>
+      <div class="going">${GOING} 8 going</div>
+      <div class="prog"><span class="track"><i style="width:${Math.round(r.done / r.total * 100)}%"></i></span><span>${r.done}/${r.total} done · <b>1 is yours</b></span></div>
+      <div class="acts"><span class="hot">🎯 Briefing</span><span>💬 ${r.name} chat</span></div>
+    </div>`;
+  const SECTIONS = {
+    tasks: `
+      <div class="item glass"><span class="box"></span><span class="tx">Pick a meetup spot<small>Due before Friday</small></span><span class="yours">YOURS</span></div>
+      <div class="item glass"><span class="box"></span><span class="tx">Hydration packs × 8</span><span class="av g3">KR</span></div>
+      <div class="item glass"><span class="box"></span><span class="tx">Kandi for the whole crew</span><span class="claim">Claim</span></div>
+      <div class="item glass"><span class="box"></span><span class="tx">Portable charger rota</span><span class="claim">Claim</span></div>
+      <div class="add">＋ Add a task</div>
+      <div class="grp">DONE · 7</div>
+      <div class="item glass done"><span class="box">✓</span><span class="tx">Buy GA+ tickets</span><span class="av g1">AA</span></div>
+      <div class="item glass done"><span class="box">✓</span><span class="tx">Book the campsite</span><span class="av g2">D</span></div>`,
+    roles: `
+      <div class="item glass"><span class="tx">🧭 Navigator<small>Gets everyone to the right stage</small></span><span class="av g2">D</span></div>
+      <div class="item glass"><span class="tx">💧 Water boss<small>Hydration check every set</small></span><span class="av g3">KR</span></div>
+      <div class="item glass"><span class="tx">📸 Photographer</span><span class="claim">Take it</span></div>
+      <div class="add">＋ Add a role</div>`,
+    rides: `
+      <div class="ride glass"><div class="top"><span class="av g1" style="margin:0;border-color:#1b1424;width:28px;height:28px">AA</span><b>Ashleigh drives</b><span class="claim">Hop in</span></div>
+        <div class="seats"><span class="taken">D</span><span class="taken">B</span><span>Open</span><span>Open</span></div><div class="vibe">🎶 aux cord open · leaves 2pm Friday</div></div>
+      <div class="ride glass"><div class="top"><span class="av g5" style="margin:0;border-color:#1b1424;width:28px;height:28px">KR</span><b>Konstantin drives</b><span class="claim">Hop in</span></div>
+        <div class="seats"><span class="taken">JB</span><span>Open</span><span>Open</span></div><div class="vibe">☕ coffee stop guaranteed</div></div>
+      <div class="add">🚗 I'm driving</div>`,
+    stay: `<div class="item glass"><span class="tx">⛺ Campsite · Spirit Lake area<small>Booked by Destiny · 6 of 8 in</small></span><span class="av g2">D</span></div><div class="add">＋ Add where you're staying</div>`,
+    outfit: `<div class="item glass"><span class="tx">✨ Theme night: neon jungle<small>3 fits shared</small></span></div><div class="add">＋ Share a fit</div>`
+  };
+  const COUNTS = { tasks: 4, roles: 3, rides: 2, stay: null, outfit: 3 };
+  const LABELS = { tasks: 'Tasks', roles: 'Roles', rides: 'Rides', stay: 'Stay', outfit: 'Outfit' };
+
+  function buildAfter(id, startRave, startSec) {
+    const el = document.getElementById(id);
+    el.innerHTML = `${TOP}
+      <div class="scroll">
+        <div class="tickets">${RAVES.map(ticket).join('')}</div>
+        <div class="dots">${RAVES.map((_, i) => `<i class="${i === startRave ? 'on' : ''}"></i>`).join('')}</div>
+        ${chips('Plan')}
+        <div class="secs">${Object.keys(LABELS).map(k => `<button data-sec="${k}" class="${k === startSec ? 'on' : ''}">${LABELS[k]}${COUNTS[k] ? `<em>${COUNTS[k]}</em>` : ''}</button>`).join('')}<span class="help" title="How this works">?</span></div>
+        ${Object.keys(SECTIONS).map(k => `<div class="sec${k === startSec ? ' on' : ''}" data-sec="${k}">${SECTIONS[k]}</div>`).join('')}
+      </div>${NAV}`;
+    el.querySelector('.secs').addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      el.querySelectorAll('.secs button').forEach(x => x.classList.toggle('on', x === b));
+      el.querySelectorAll('.sec').forEach(s => s.classList.toggle('on', s.dataset.sec === b.dataset.sec));
+    });
+    const strip = el.querySelector('.tickets');
+    const step = () => strip.children[0].offsetWidth + 10;
+    requestAnimationFrame(() => { strip.scrollLeft = startRave * step(); });
+    strip.addEventListener('scroll', () => {
+      const i = Math.round(strip.scrollLeft / step());
+      el.querySelectorAll('.dots i').forEach((d, j) => d.classList.toggle('on', j === i));
+    });
+  }
+  buildAfter('after1', 0, 'tasks');
+  buildAfter('after2', 1, 'rides');
+</script>
+</body>
+</html>
