@@ -18992,6 +18992,7 @@
     _crewFeedFilter = 'all';
     _crewFeedSeen = null;
     crewPlanCheckoffs = [];
+    teardownCrewPlanLive();
     closeCrewManifestSheet();
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById('page-crew-detail').classList.add('active');
@@ -19003,7 +19004,10 @@
     // what they can't see (RLS would refuse most of it anyway).
     if (!isCrewFeedPage() || crewFeedIsMember(getCrew(id))) {
       loadCrewFeatureReadMap(id).then(() => { refreshCrewFeatureGlow(id); markCrewFeedSeen(id); }).catch(console.warn);
-      if (isCrewFeedPage()) dbLoadCrewPlanCheckoffs(id).then(() => scheduleCrewFeedRender(id)).catch(console.warn);
+      if (isCrewFeedPage()) {
+        subscribeCrewPlanLive(id);
+        dbLoadCrewPlanCheckoffs(id).then(() => scheduleCrewFeedRender(id)).catch(console.warn);
+      }
       await dbLoadDreamPins(id);
       rerenderDreamBoard(id);
       refreshCrewFeatureGlow(id);
@@ -19037,6 +19041,7 @@
     document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
     document.querySelector('.nav-tab[onclick*="crews"]')?.classList.add('active');
     activeDetailId = null;
+    teardownCrewPlanLive();
     closeCrewManifestSheet();
     if (_huddleScreenOpen) closeHuddleScreen(); else teardownHuddleLive();
     updateCrewPresence();
@@ -21331,6 +21336,76 @@
       });
     }
     scheduleCrewFeedRender(row.crew_id);
+  }
+
+  // Live Rave Plan: while you're on a crew's new page, a crewmate's tick,
+  // new task or claim shows up without a reload, in the feed's check-off
+  // cards and in the open plan. One channel per crew page, filtered by
+  // crew_id (RLS still decides what arrives). game_plan_items joined the
+  // realtime publication in 20261016000000_mission_briefing.
+  let _crewPlanChannel = null;
+  let _crewPlanRerenderTimer = null;
+  function subscribeCrewPlanLive(crewId) {
+    teardownCrewPlanLive();
+    if (!crewId || !sb || typeof sb.channel !== 'function') return;
+    _crewPlanChannel = sb.channel(`crew-plan-${crewId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_plan_items', filter: `crew_id=eq.${crewId}` }, handleCrewPlanItemRealtime)
+      .subscribe();
+  }
+  function teardownCrewPlanLive() {
+    clearTimeout(_crewPlanRerenderTimer);
+    if (_crewPlanChannel) { sb.removeChannel(_crewPlanChannel); _crewPlanChannel = null; }
+  }
+
+  function handleCrewPlanItemRealtime(payload) {
+    const row = payload && payload.new && payload.new.id ? payload.new : null;
+    const old = payload && payload.old;
+    const crewId = row ? row.crew_id : (old && old.crew_id);
+    if (crewId && String(crewId) !== String(activeDetailId)) return;
+    const gone = payload.eventType === 'DELETE' || !!(row && row.deleted_at);
+    const id = row ? row.id : (old && old.id);
+    if (!id) return;
+    // The feed's check-off cards. Rows from before done_at existed have no
+    // timestamp, so they stay out rather than showing up as "just now".
+    if (gone || (row && !row.is_done)) {
+      if (crewPlanCheckoffs.some(r => r.id === id)) {
+        crewPlanCheckoffs = crewPlanCheckoffs.filter(r => r.id !== id);
+        scheduleCrewFeedRender(activeDetailId);
+      }
+    } else if (row.kind === 'task' && row.done_at) {
+      noteCrewPlanCheckoff(row);
+    }
+    // The open plan, when the row belongs to it.
+    const gp = gamePlans.find(g => String(g.crew_id) === String(activeDetailId) && String(g.festival_id) === String(_gamePlanActiveFestivalId));
+    const inPlan = gamePlanItems.some(it => it.id === id);
+    if (!inPlan && !(gp && row && row.game_plan_id === gp.id)) return;
+    if (gone) gamePlanItems = gamePlanItems.filter(it => it.id !== id);
+    else {
+      const idx = gamePlanItems.findIndex(it => it.id === id);
+      if (idx >= 0) gamePlanItems[idx] = { ...gamePlanItems[idx], ...row }; else gamePlanItems.push(row);
+    }
+    scheduleCrewPlanLiveRerender();
+  }
+
+  // Batches bursts (a template adds a dozen rows at once) and waits while
+  // you're typing in the plan, so a crewmate's change never wipes your draft.
+  function scheduleCrewPlanLiveRerender() {
+    clearTimeout(_crewPlanRerenderTimer);
+    _crewPlanRerenderTimer = setTimeout(() => {
+      const crewId = activeDetailId;
+      const panel = document.getElementById('crew-feature-panel-raveplan');
+      if (!crewId || !panel || !panel.querySelector('#game-plan-section-checklist')) return;
+      const typing = document.activeElement;
+      if (typing && panel.contains(typing) && /^(INPUT|TEXTAREA|SELECT)$/.test(typing.tagName)) {
+        scheduleCrewPlanLiveRerender();
+        return;
+      }
+      rerenderGamePlanChecklist(crewId);
+      rerenderGamePlanRoles(crewId);
+      rerenderGamePlanLogistics(crewId);
+      rerenderGamePlanStay(crewId);
+      rerenderGamePlanOutfit(crewId);
+    }, 250);
   }
 
   // 💬 Reply on a feed card: opens the crew's Huddle with the card quoted in
