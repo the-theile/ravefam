@@ -5461,6 +5461,12 @@
   .crew-feed-act.is-hot { background: color-mix(in srgb, var(--ac, var(--neon-pink)) 22%, transparent); color: var(--ac, var(--neon-pink)); }
   .crew-feed-card.is-paper .crew-feed-act { background: var(--paper-edge); color: var(--surface2); }
   .crew-feed-jam { display: flex; align-items: center; gap: 12px; }
+  .crew-feed-pin { display: flex; align-items: center; gap: 10px; padding: 9px 14px; margin-bottom: 8px; border-radius: 16px; cursor: pointer; font-family: inherit; }
+  .crew-feed-pin.is-new::after { top: 6px; left: 30px; }
+  .crew-feed-pin-emoji { font-size: 1.15rem; flex-shrink: 0; line-height: 1; }
+  .crew-feed-pin-text { flex: 1; min-width: 0; font-size: 0.78rem; line-height: 1.3; color: #6a6070; }
+  .crew-feed-pin-text b { color: var(--surface2); font-family: 'Outfit', sans-serif; }
+  .crew-feed-pin-when { flex-shrink: 0; font-size: 0.66rem; color: #8a8090; }
   .crew-feed-jam-art { width: 52px; height: 52px; border-radius: 14px; flex-shrink: 0; object-fit: cover; display: grid; place-items: center; font-size: 1.3rem; }
   .crew-feed-history { display: flex; align-items: center; gap: 12px; cursor: pointer; font-family: inherit; }
   .crew-feed-history b { font-family: 'Outfit', sans-serif; font-size: 0.86rem; }
@@ -20903,15 +20909,22 @@
     const open = (label, hot) => `<button type="button" class="crew-feed-act${hot ? ' is-hot' : ''}" data-feature="${k.feature}" data-id="${itemAttr}" onclick="openCrewFeedItem(this.dataset.feature, this.dataset.id)">${label}</button>`;
     const safeHref = (url) => /^https?:\/\//i.test(url || '') ? escHtml(url) : '';
 
-    let who, avatar, verb, body, acts;
+    // FAM Pins and PLUR tiers come in bursts, so each is one compact paper
+    // row ("Theile reached Peace Guardian · 16d") that opens the Pins panel.
     if (it.kind === 'badge') {
       const earner = row.raver_id ? squad.find(r => String(r.id) === String(row.raver_id)) : null;
-      who = row.is_crew_level ? 'The whole crew' : earner ? displayName(earner).split(' ')[0] : 'The crew';
-      avatar = `<span class="crew-feed-card-emoji" aria-hidden="true">${escHtml(row.badge_emoji || '🏆')}</span>`;
-      verb = row.event_type === 'plur_tier_unlocked' ? 'reached a PLUR tier' : 'unlocked a FAM Pin';
-      body = `<div class="crew-feed-card-title">${escHtml(row.badge_name || '')}</div>`;
-      acts = open('See all pins ›');
-    } else if (it.kind === 'checkoff') {
+      const earnerName = row.is_crew_level ? 'The whole crew' : earner ? displayName(earner).split(' ')[0] : 'The crew';
+      const did = row.event_type === 'plur_tier_unlocked' ? 'reached' : 'unlocked';
+      return `
+        <button type="button" class="crew-feed-card crew-feed-pin is-paper${isNew ? ' is-new' : ''}" data-kind="badge" data-id="${itemAttr}" data-feature="pins" onclick="openCrewFeedItem(this.dataset.feature)">
+          <span class="crew-feed-pin-emoji" aria-hidden="true">${escHtml(row.badge_emoji || '🏆')}</span>
+          <span class="crew-feed-pin-text"><b>${escHtml(earnerName)}</b> ${did} <b>${escHtml(row.badge_name || 'a FAM Pin')}</b></span>
+          <span class="crew-feed-pin-when">${escHtml(when)}</span>
+        </button>`;
+    }
+
+    let who, avatar, verb, body, acts;
+    if (it.kind === 'checkoff') {
       const r = it.actor ? raverByAuthUid(it.actor) : null;
       const fest = row.festival_id ? festivals.find(f => String(f.id) === String(row.festival_id)) : null;
       who = huddleSenderName(it.actor);
@@ -20970,8 +20983,7 @@
     }
     // Reply in Huddle: the quote carries the card's headline, and its link
     // points back here (a Rave Plan for check-offs, the item otherwise).
-    const quote = it.kind === 'badge' ? (row.badge_name || '')
-      : it.kind === 'checkoff' ? (row.text || '')
+    const quote = it.kind === 'checkoff' ? (row.text || '')
       : it.kind === 'poll' ? (row.question || '')
       : it.kind === 'jam' ? (row.title || 'Playlist')
       : (row.label || '');
@@ -20979,7 +20991,7 @@
     if (uid && replyTarget) {
       acts += `<button type="button" class="crew-feed-act" data-target="${escHtml(replyTarget)}" data-quote="${escHtml(quote.slice(0, 80))}" onclick="replyInHuddleFromCard(this.dataset.target, this.dataset.quote)">💬 Reply</button>`;
     }
-    const paper = it.kind === 'badge' || it.kind === 'checkoff';
+    const paper = it.kind === 'checkoff';
     return `
       <article class="crew-feed-card${paper ? ' is-paper' : ''}${isNew ? ' is-new' : ''}" style="--ac:var(${k.ac})" data-kind="${it.kind}" data-id="${itemAttr}">
         <div class="crew-feed-card-head">${avatar}<span class="crew-feed-card-who"><b>${escHtml(who)}</b> ${verb} · ${escHtml(when)}</span><span class="crew-feed-card-icon" aria-hidden="true">${k.icon}</span></div>

@@ -451,3 +451,17 @@ test.describe('new crew page · non-member preview', () => {
     await expect(page.locator('.crew-feed-preview-cta .btn')).toContainText('Locked');
   });
 });
+
+test.describe('new crew page · compact pins', () => {
+  test('a FAM Pin is one short row that opens the Pins panel', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedFeed() });
+    await openC1(page);
+    const pin = page.locator('#crew-feed-list .crew-feed-pin[data-kind="badge"]');
+    await expect(pin).toContainText('The whole crew unlocked Squad Goals');
+    expect((await pin.boundingBox()).height).toBeLessThan(60);
+    await expect(pin.locator('.crew-feed-act')).toHaveCount(0);
+    await pin.click();
+    await expect(page.locator('.crew-feed-filter[data-filter="memories"]')).toHaveClass(/active/);
+    await expect(page.locator('#crew-feature-panel-pins')).toBeVisible();
+  });
+});
