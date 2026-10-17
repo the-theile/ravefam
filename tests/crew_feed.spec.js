@@ -33,6 +33,9 @@ test.describe('new crew page · layout', () => {
     await expect(detail).toHaveClass(/crew-feed/);
     await expect(detail.locator('.crew-feed-name')).toHaveText('Bass Syndicate');
     await expect(detail.locator('.crew-feed-count')).toHaveText('3');
+    // Status sits above the roster + share buttons, not under the name.
+    await expect(detail.locator('.crew-feed-side > .crew-status')).toHaveText(/Recruiting/);
+    await expect(detail.locator('.crew-feed-title .crew-status')).toHaveCount(0);
     await expect(detail.locator('#huddle-tile-preview-root .huddle-tile-preview')).toBeVisible();
     // You and Sam are both going to Tomorrowland, so it gets a Rave Plan ticket.
     await expect(detail.locator('.crew-ticket[data-fest="f1"]')).toContainText('Tomorrowland');
@@ -71,15 +74,14 @@ test.describe('new crew page · filters', () => {
     await bootWithCrewFeed(page);
     await openC1(page);
 
-    // All: polls, dreams and jams together.
-    await expect(panel(page, 'poll')).toBeVisible();
-    await expect(panel(page, 'dreamboard')).toBeVisible();
-    await expect(panel(page, 'jams')).toBeVisible();
-    await expect(panel(page, 'archive')).toBeHidden();
+    // All: the merged feed, no full panels.
+    await expect(page.locator('#crew-feed-list')).toBeVisible();
+    for (const k of ['poll', 'dreamboard', 'jams', 'archive']) await expect(panel(page, k)).toBeHidden();
 
     await page.locator('.crew-feed-filter[data-filter="poll"]').click();
     await expect(page.locator('.crew-feed-filter[data-filter="poll"]')).toHaveAttribute('aria-pressed', 'true');
     await expect(panel(page, 'poll')).toBeVisible();
+    await expect(page.locator('#crew-feed-list')).toBeHidden();
     await expect(panel(page, 'dreamboard')).toBeHidden();
 
     await page.locator('.crew-feed-filter[data-filter="memories"]').click();
@@ -87,6 +89,10 @@ test.describe('new crew page · filters', () => {
     await expect(panel(page, 'archive')).toBeVisible();
     await expect(panel(page, 'history')).toBeVisible();
     await expect(panel(page, 'poll')).toBeHidden();
+    // Archive, then Pins, then History.
+    const tops = [];
+    for (const k of ['archive', 'pins', 'history']) tops.push((await panel(page, k).boundingBox()).y);
+    expect(tops).toEqual([...tops].sort((a, b) => a - b));
   });
 
   test('the chosen chip survives a re-render of the same crew', async ({ page }) => {
@@ -182,5 +188,146 @@ test.describe('new crew page · settings toggle', () => {
     await expect(page.locator('#page-crew-detail')).not.toHaveClass(/crew-feed/);
     await expect(page.locator('#page-crew-detail .stats-subtab')).toHaveCount(2);
     expect(await page.locator('#add-member-input').count()).toBe(1);
+  });
+});
+
+// Crewmate content for the merged feed. `ago` is hours before now, so the
+// "new since you looked" rules (watermark, or the last two weeks when a
+// feature was never opened) can be exercised.
+function seedFeed({ ago = 2, reads = [] } = {}) {
+  const at = (h) => new Date(Date.now() - h * 3600e3).toISOString();
+  const data = seedData();
+  // Under a year old, so opening the crew doesn't award Year One mid-test.
+  data.crews[0].created_at = at(24 * 30);
+  data.dream_board_pins = [
+    { id: 'dp1', crew_id: 'c1', added_by: 'kai-uid', label: 'Tomorrowland 2027', hyped_by: [], created_at: at(ago), deleted_at: null },
+    { id: 'dp2', crew_id: 'c1', added_by: 'test-user-id', label: 'My own dream', hyped_by: [], created_at: at(ago + 1), deleted_at: null },
+  ];
+  data.crew_polls = [
+    { id: 'p1', crew_id: 'c1', created_by: 'kai-uid', question: 'Which stage first?', poll_type: 'yes_no', options: [], is_anonymous: false, expires_at: null, is_locked: false, is_pinned: false, reactions: {}, created_at: at(ago + 2), deleted_at: null },
+  ];
+  data.crew_jams = [
+    { id: 'j1', crew_id: 'c1', added_by: 'kai-uid', url: 'https://open.spotify.com/playlist/x', platform: 'spotify', title: 'Pre-game bangers', cover_url: null, track_count: 1, tag: null, description: '', festival_id: null, reactions: {}, is_pinned: false, poll_id: null, created_at: at(ago + 3), deleted_at: null },
+  ];
+  data.crew_archive_links = [
+    { id: 'al1', crew_id: 'c1', added_by: 'kai-uid', url: 'https://photos.example.com/album', label: 'Gate pics', festival_id: null, created_at: at(400), deleted_at: null },
+  ];
+  data.crew_feed_events = [
+    { id: 'fe1', crew_id: 'c1', event_type: 'badge_earned', raver_id: 'r-kai', badge_id: 'b1', badge_name: 'Squad Goals', badge_emoji: '🎯', is_crew_level: true, created_at: at(500) },
+  ];
+  data.crew_feature_reads = reads;
+  return data;
+}
+
+const feedCards = (page) => page.locator('#crew-feed-list .crew-feed-card[data-kind]');
+
+test.describe('new crew page · merged feed', () => {
+  test('All lists every kind, new ones first then the rest newest first, with History at the end', async ({ page }) => {
+    const errors = await bootWithCrewFeed(page, { data: seedFeed() });
+    await openC1(page);
+    await expect(feedCards(page)).toHaveCount(6);
+    expect(await feedCards(page).evaluateAll(els => els.map(e => `${e.dataset.kind}:${e.dataset.id}`)))
+      .toEqual(['dream:dp1', 'poll:p1', 'jam:j1', 'dream:dp2', 'archive:al1', 'badge:fe1']);
+    await expect(page.locator('#crew-feed-list .crew-feed-card[data-kind="badge"]')).toHaveClass(/is-paper/);
+    await expect(page.locator('#crew-feed-list .crew-feed-history')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
+  test('"new since you looked" covers crewmates\' recent posts, never your own', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedFeed() });
+    await openC1(page);
+    // Never-opened features: the last two weeks count, older ones don't.
+    await expect(page.locator('#crew-feed-list .crew-feed-sep.is-new')).toHaveText('3 new since you looked');
+    const fresh = page.locator('#crew-feed-list .crew-feed-card.is-new');
+    expect(await fresh.evaluateAll(els => els.map(e => e.dataset.id))).toEqual(['dp1', 'p1', 'j1']);
+  });
+
+  test('a read watermark after the post means it is not new, and opening marks features read', async ({ page }) => {
+    const later = new Date(Date.now() - 1800e3).toISOString();
+    await bootWithCrewFeed(page, { data: seedFeed({ reads: [
+      { user_id: 'test-user-id', crew_id: 'c1', feature: 'dreamboard', last_read_at: later },
+    ] }) });
+    await openC1(page);
+    await expect(page.locator('#crew-feed-list .crew-feed-sep.is-new')).toHaveText('2 new since you looked');
+    await expect(page.locator('#crew-feed-list .crew-feed-card[data-id="dp1"]')).not.toHaveClass(/is-new/);
+    await expect.poll(() => page.evaluate(() =>
+      ['poll', 'jams', 'archive', 'pins'].every(f => (window.__store.crew_feature_reads || [])
+        .some(r => r.feature === f && String(r.crew_id) === 'c1')))).toBe(true);
+  });
+
+  test('hyping a dream from its card updates the card and persists', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedFeed() });
+    await openC1(page);
+    const hype = page.locator('#crew-feed-list .crew-feed-card[data-id="dp1"] .crew-feed-act[data-pin-id]');
+    await hype.click();
+    await expect(page.locator('#crew-feed-list .crew-feed-card[data-id="dp1"] .crew-feed-act[data-pin-id]')).toHaveText('🔥 Hype · 1');
+    const stored = await page.evaluate(() => (window.__store.dream_board_pins.find(p => p.id === 'dp1').hyped_by || []).includes('test-user-id'));
+    expect(stored).toBe(true);
+  });
+
+  test('a new dream pin shows up in the feed', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedFeed() });
+    await openC1(page);
+    await page.evaluate(async () => {
+      document.getElementById('dream-pin-input').value = 'Boiler Room Berlin';
+      await addDreamPin('c1');
+    });
+    // Your own post is never "new", so it tops the Earlier group.
+    await expect(page.locator('#crew-feed-list .crew-feed-card[data-kind]:not(.is-new)').first()).toContainText('Boiler Room Berlin');
+  });
+
+  test('Vote jumps to the Polls chip', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedFeed() });
+    await openC1(page);
+    await page.locator('#crew-feed-list .crew-feed-card[data-id="p1"] .crew-feed-act', { hasText: 'Vote' }).click();
+    await expect(page.locator('.crew-feed-filter[data-filter="poll"]')).toHaveClass(/active/);
+    await expect(panel(page, 'poll')).toBeVisible();
+    await expect(page.locator('#crew-feed-list')).toBeHidden();
+  });
+
+  test('an empty crew gets an empty state, not a blank page', async ({ page }) => {
+    const data = seedData();
+    data.crews[0].created_at = new Date(Date.now() - 30 * 86400e3).toISOString();  // no Year One award
+    await bootWithCrewFeed(page, { data });
+    await openC1(page);
+    await expect(page.locator('#crew-feed-list .crew-feed-empty')).toContainText('Nothing here yet');
+    await expect(page.locator('#crew-feed-list .crew-feed-history')).toBeVisible();
+  });
+});
+
+test.describe('new crew page · + menu', () => {
+  test('opens, closes on Escape, and Dream lands in the Dream Board input', async ({ page }) => {
+    await bootWithCrewFeed(page);
+    await openC1(page);
+    const btn = page.locator('.crew-feed-add');
+    const menu = page.locator('.crew-feed-add-menu');
+    await btn.click();
+    await expect(menu).toBeVisible();
+    await expect(btn).toHaveAttribute('aria-expanded', 'true');
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+
+    await btn.click();
+    await menu.locator('[data-kind="dream"]').click();
+    await expect(menu).toBeHidden();
+    await expect(page.locator('.crew-feed-filter[data-filter="dreamboard"]')).toHaveClass(/active/);
+    await expect(page.locator('#dream-pin-input')).toBeFocused();
+  });
+
+  test('Poll opens the create-poll modal', async ({ page }) => {
+    await bootWithCrewFeed(page);
+    await openC1(page);
+    await page.locator('.crew-feed-add').click();
+    await page.locator('.crew-feed-add-menu [data-kind="poll"]').click();
+    await expect(page.locator('.modal-overlay.open')).toHaveCount(1);
+  });
+
+  test('a Secret crew\'s menu has no Poll or Jam', async ({ page }) => {
+    const data = seedData();
+    data.crews[0].status = 'secret';
+    await bootWithCrewFeed(page, { data });
+    await openC1(page);
+    await expect(page.locator('.crew-feed-add-menu [data-kind]')).toHaveCount(2);
+    await expect(page.locator('.crew-feed-add-menu [data-kind="poll"]')).toHaveCount(0);
   });
 });

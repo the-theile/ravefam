@@ -5342,9 +5342,10 @@
   .crew-totem-icon-mark.crew-feed-totem { display: grid; place-items: center; font-size: 1.3rem; }
   .crew-feed-title { flex: 1; min-width: 0; }
   .crew-feed-name { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.25rem; letter-spacing: -0.3px; line-height: 1.15; overflow-wrap: anywhere; }
-  .crew-feed-sub { display: flex; align-items: center; gap: 7px; margin-top: 4px; min-width: 0; }
-  .crew-feed-sub .crew-status { flex-shrink: 0; }
-  .crew-feed-desc { font-size: 0.72rem; color: var(--cf-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .crew-feed-desc { font-size: 0.72rem; color: var(--cf-soft); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .crew-feed-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+  .crew-feed-side .crew-status { flex-shrink: 0; }
+  .crew-feed-side-row { display: flex; align-items: center; gap: 8px; }
   .crew-feed-faces {
     display: flex; align-items: center; gap: 5px; flex-shrink: 0; cursor: pointer;
     padding: 4px 9px 4px 4px; border-radius: 100px; color: var(--text);
@@ -5401,13 +5402,75 @@
   .crew-ticket-dots span.on { width: 16px; border-radius: 3px; background: var(--neon-pink); }
 
   /* Filter chips */
-  .crew-feed-filters { display: flex; gap: 2px; padding: 4px; border-radius: 100px; margin: 8px 0 14px; overflow-x: auto; scrollbar-width: none; }
+  .crew-feed-bar { display: flex; align-items: center; gap: 8px; margin: 8px 0 14px; position: relative; }
+  .crew-feed-filters { flex: 1; min-width: 0; display: flex; gap: 2px; padding: 4px; border-radius: 100px; overflow-x: auto; scrollbar-width: none; }
   .crew-feed-filters::-webkit-scrollbar { display: none; }
   .crew-feed-filter { flex: 0 0 auto; background: none; border: none; cursor: pointer; font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.76rem; padding: 8px 13px; border-radius: 100px; color: var(--cf-soft); }
   .crew-feed-filter.active { background: rgba(var(--white-rgb),0.92); color: #0b0a12; font-weight: 700; }
 
-  /* The existing feature panels, as glass cards */
+  /* + menu */
+  .crew-feed-add {
+    width: 42px; height: 42px; border-radius: 50%; flex-shrink: 0; border: none; cursor: pointer;
+    background: linear-gradient(135deg, var(--neon-pink), var(--neon-purple)); color: var(--white);
+    font-size: 1.4rem; line-height: 1; box-shadow: 0 8px 22px -8px var(--neon-pink); transition: transform 0.18s;
+  }
+  .crew-feed-add[aria-expanded="true"] { transform: rotate(45deg); }
+  .crew-feed-add-menu {
+    position: absolute; right: 0; top: calc(100% + 8px); z-index: 20; width: 220px; padding: 6px; border-radius: 20px;
+    background: rgba(30,20,44,0.96); border: 1px solid var(--cf-glass-line); box-shadow: 0 18px 40px -12px rgba(var(--black-rgb),0.8);
+  }
+  .crew-feed-add-menu[hidden] { display: none; }
+  .crew-feed-add-opt { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: none; border-radius: 14px; background: none; color: var(--text); cursor: pointer; text-align: left; font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.82rem; }
+  .crew-feed-add-opt:hover { background: rgba(var(--white-rgb),0.06); }
+  .crew-feed-add-opt > span:first-child { font-size: 1.1rem; }
+  .crew-feed-add-opt small { display: block; font-family: 'DM Sans', sans-serif; font-weight: 400; font-size: 0.68rem; color: var(--cf-soft); }
+
+  /* Merged feed cards */
+  .crew-feed-list { margin-bottom: 12px; }
+  .crew-feed-sep { display: flex; align-items: center; gap: 8px; margin: 2px 4px 8px; font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.7rem; color: var(--cf-soft); }
+  .crew-feed-sep::after { content: ''; flex: 1; height: 1px; background: rgba(var(--white-rgb),0.1); }
+  .crew-feed-sep.is-new { color: var(--neon-pink); }
+  .crew-feed-sep.is-new::after { background: rgba(var(--neon-pink-rgb),0.3); }
+  .crew-feed-card {
+    display: block; width: 100%; text-align: left; color: var(--text); border-radius: 22px; padding: 14px; margin-bottom: 10px; position: relative;
+    background: var(--cf-glass); border: 1px solid var(--cf-glass-line);
+    backdrop-filter: blur(18px) saturate(140%); -webkit-backdrop-filter: blur(18px) saturate(140%);
+  }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .crew-feed-card { background: var(--surface2); }
+  }
+  .crew-feed-card.is-new { border-color: rgba(var(--neon-pink-rgb),0.4); }
+  .crew-feed-card.is-new::after { content: ''; position: absolute; top: 12px; left: 38px; width: 9px; height: 9px; border-radius: 50%; background: var(--neon-pink); box-shadow: 0 0 10px var(--neon-pink); border: 2px solid #1a1122; }
+  .crew-feed-card.is-paper { background: var(--paper); color: var(--surface2); border-color: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .crew-feed-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
+  .crew-feed-card-av { width: 32px; height: 32px; min-width: 32px; margin: 0; font-size: 0.62rem; }
+  .crew-feed-card-emoji { width: 32px; height: 32px; display: grid; place-items: center; font-size: 1.2rem; flex-shrink: 0; }
+  .crew-feed-card-who { flex: 1; min-width: 0; font-size: 0.72rem; color: var(--cf-soft); line-height: 1.3; }
+  .crew-feed-card-who b { color: var(--text); font-family: 'Outfit', sans-serif; }
+  .crew-feed-card.is-paper .crew-feed-card-who { color: #6a6070; }
+  .crew-feed-card.is-paper .crew-feed-card-who b { color: var(--surface2); }
+  .crew-feed-card-icon { width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center; font-size: 0.85rem; background: color-mix(in srgb, var(--ac, var(--neon-pink)) 16%, transparent); }
+  .crew-feed-card-title { display: block; font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.9rem; line-height: 1.35; overflow-wrap: anywhere; }
+  .crew-feed-card-sub { display: block; font-size: 0.72rem; color: var(--cf-soft); margin-top: 2px; }
+  .crew-feed-card.is-paper .crew-feed-card-sub { color: #6a6070; }
+  .crew-feed-card-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .crew-feed-act {
+    display: inline-flex; align-items: center; gap: 4px; padding: 6px 11px; border-radius: 100px; border: none; cursor: pointer; text-decoration: none;
+    background: rgba(var(--white-rgb),0.07); color: var(--text); font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.7rem;
+  }
+  .crew-feed-act.is-hot { background: color-mix(in srgb, var(--ac, var(--neon-pink)) 22%, transparent); color: var(--ac, var(--neon-pink)); }
+  .crew-feed-card.is-paper .crew-feed-act { background: var(--paper-edge); color: var(--surface2); }
+  .crew-feed-jam { display: flex; align-items: center; gap: 12px; }
+  .crew-feed-jam-art { width: 52px; height: 52px; border-radius: 14px; flex-shrink: 0; object-fit: cover; display: grid; place-items: center; font-size: 1.3rem; }
+  .crew-feed-history { display: flex; align-items: center; gap: 12px; cursor: pointer; font-family: inherit; }
+  .crew-feed-history b { font-family: 'Outfit', sans-serif; font-size: 0.86rem; }
+  .crew-feed-empty { margin-bottom: 10px; }
+
+  /* The existing feature panels, as glass cards. Memories reads Archive,
+     then Pins, then History, though Pins comes first in the markup. */
   .crew-feed .crew-feature-panel { border-radius: 24px; padding: 16px; margin-bottom: 12px; }
+  .crew-feed-panels { display: flex; flex-direction: column; }
+  .crew-feed-panels > #crew-feature-panel-archive { order: -1; }
 
   /* Crew Manifest sheet: a bottom sheet over the crew page */
   .crew-manifest-overlay { align-items: flex-end; padding: 0; }
@@ -10781,7 +10844,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.23.0';
+  const APP_VERSION = '2.24.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -18745,6 +18808,10 @@
   // Which filter chip is on in the new crew page (see CREW FEED); survives
   // re-renders of the same crew, reset by openDetail.
   let _crewFeedFilter = 'all';
+  // Copy of _crewFeatureReadMap taken when the new crew page opens, before it
+  // marks everything read: the feed's "new since you looked" divider reads
+  // this, so it stays put for the whole visit. null until the map loads.
+  let _crewFeedSeen = null;
   // Game Plan: per-(crew, rave) hub folding in the per-rave Huddle plus
   // Checklist/Roles/Logistics/Outfit. gamePlans holds every game_plans row
   // seen for the active crew (one per eligible rave); gamePlanItems holds
@@ -18821,6 +18888,7 @@
     crewHistoryExpanded = false;
     _crewFeatureReadMap = null;
     _crewFeedFilter = 'all';
+    _crewFeedSeen = null;
     closeCrewManifestSheet();
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById('page-crew-detail').classList.add('active');
@@ -18828,7 +18896,7 @@
     renderDetail(id);
     updateCrewPresence();
     if (!(opts && opts.tab)) maybeShowCrewWelcome(id);
-    loadCrewFeatureReadMap(id).then(() => refreshCrewFeatureGlow(id)).catch(console.warn);
+    loadCrewFeatureReadMap(id).then(() => { refreshCrewFeatureGlow(id); markCrewFeedSeen(id); }).catch(console.warn);
     await dbLoadDreamPins(id);
     rerenderDreamBoard(id);
     refreshCrewFeatureGlow(id);
@@ -20529,12 +20597,12 @@
   // then the panels the chosen chip covers. Panels stay in the DOM while
   // hidden, so every rerender* that patches ids inside them keeps working.
   const CREW_FEED_FILTERS = [
-    { key: 'all',        label: 'All',      panels: ['poll', 'dreamboard', 'jams'] },
+    { key: 'all',        label: 'All',      panels: [] },   // the merged feed (rerenderCrewFeed)
     { key: 'poll',       label: 'Polls',    panels: ['poll'] },
     { key: 'jams',       label: 'Jams',     panels: ['jams'] },
     { key: 'dreamboard', label: 'Dreams',   panels: ['dreamboard'] },
     { key: 'raveplan',   label: 'Plan',     panels: ['raveplan'] },
-    { key: 'memories',   label: 'Memories', panels: ['pins', 'archive', 'history'] }
+    { key: 'memories',   label: 'Memories', panels: ['archive', 'pins', 'history'] }   // shown in this order (see .crew-feed-panels CSS)
   ];
 
   function isCrewFeedPage() {
@@ -20554,9 +20622,13 @@
         ${crewFeedHeaderHTML(crew, s, people)}
         <div id="huddle-tile-preview-root" class="crew-feed-huddle"></div>
         ${crewTicketStackHTML(crew)}
-        <div class="crew-feed-filters" role="group" aria-label="Crew sections">
-          ${filters.map(f => `<button type="button" class="crew-feed-filter" data-filter="${f.key}" aria-pressed="false" onclick="selectCrewFeedFilter(this.dataset.filter)">${f.label}</button>`).join('')}
+        <div class="crew-feed-bar">
+          <div class="crew-feed-filters" role="group" aria-label="Crew sections">
+            ${filters.map(f => `<button type="button" class="crew-feed-filter" data-filter="${f.key}" aria-pressed="false" onclick="selectCrewFeedFilter(this.dataset.filter)">${f.label}</button>`).join('')}
+          </div>
+          ${currentUser ? crewFeedAddMenuHTML(isSecret) : ''}
         </div>
+        <div class="crew-feed-list" id="crew-feed-list"></div>
         <div class="crew-feed-panels">${buildCrewFeaturePanelsHTML(crew, isSecret, hasGamePlan)}</div>
       </div>`;
     document.getElementById('crew-manifest-content').innerHTML = `
@@ -20569,11 +20641,12 @@
       </div>
       ${rosterPanelHTML}`;
     rerenderHuddleTilePreview(crew.id);
+    rerenderCrewFeed(crew.id);
     selectCrewFeedFilter(_crewFeedFilter, { quiet: true });
   }
 
-  // Back, totem, name + status, then the avatar stack (opens the roster)
-  // and Share. Replaces the classic page's Overview/Roster tabs and its
+  // Back, totem and name on the left; status above the avatar stack (opens
+  // the roster) and Share on the right, so the name gets the room. Replaces the classic page's Overview/Roster tabs and its
   // full-width Share and Back buttons.
   function crewFeedHeaderHTML(crew, s, people) {
     const faces = people.slice(0, 3).map(p => raverAvatarHTML(p.avatarUrl, p.gradient, p.name, 'avatar crew-feed-face', '')).join('');
@@ -20588,13 +20661,18 @@
         ${totem}
         <div class="crew-feed-title">
           <div class="crew-feed-name">${escHtml(crew.name)}</div>
-          <div class="crew-feed-sub">${status}${crew.description ? `<span class="crew-feed-desc">${escHtml(crew.description)}</span>` : ''}</div>
+          ${crew.description ? `<div class="crew-feed-desc">${escHtml(crew.description)}</div>` : ''}
         </div>
-        <button type="button" class="crew-feed-faces" onclick="openCrewManifestSheet()" aria-label="Crew roster, ${people.length} raver${people.length === 1 ? '' : 's'}">
-          <span class="crew-feed-face-stack">${faces}</span>
-          <span class="crew-feed-count">${people.length}</span><span class="crew-feed-chev" aria-hidden="true">›</span>
-        </button>
-        <button type="button" class="crew-feed-share" onclick="openCrewShareCard('${escJsAttr(crew.id)}')" aria-label="Share Crew Card" title="Share Crew Card">📲</button>
+        <div class="crew-feed-side">
+          ${status}
+          <div class="crew-feed-side-row">
+            <button type="button" class="crew-feed-faces" onclick="openCrewManifestSheet()" aria-label="Crew roster, ${people.length} raver${people.length === 1 ? '' : 's'}">
+              <span class="crew-feed-face-stack">${faces}</span>
+              <span class="crew-feed-count">${people.length}</span><span class="crew-feed-chev" aria-hidden="true">›</span>
+            </button>
+            <button type="button" class="crew-feed-share" onclick="openCrewShareCard('${escJsAttr(crew.id)}')" aria-label="Share Crew Card" title="Share Crew Card">📲</button>
+          </div>
+        </div>
       </div>`;
   }
 
@@ -20680,6 +20758,8 @@
     document.querySelectorAll('#page-crew-detail .crew-feature-panel').forEach(p => {
       p.style.display = filter.panels.includes(p.id.replace('crew-feature-panel-', '')) ? '' : 'none';
     });
+    const list = document.getElementById('crew-feed-list');
+    if (list) list.style.display = filter.key === 'all' ? '' : 'none';
     if (filter.panels.includes('raveplan')) openGamePlanTab(activeDetailId);
     if (!opts.quiet) {
       filter.panels.filter(f => CREW_FEATURE_READ_KEYS.includes(f)).forEach(f => markCrewFeatureRead(activeDetailId, f));
@@ -20703,6 +20783,219 @@
     }
     const tile = document.querySelector(`.crew-feature-tile[data-feature="${feature}"]`);
     if (tile && panel.style.display === 'none') toggleCrewFeatureTile(feature, tile);
+  }
+
+  // ── The merged feed (All chip) ──
+  // Built from the arrays openDetail already loads (crewPolls, dreamPins,
+  // crewJams, archiveLinks, crewFeedEvents), so it costs no extra query.
+  // Each panel's rerender* calls scheduleCrewFeedRender, which keeps the
+  // feed in step with votes, hypes, adds, deletes and realtime pushes.
+  // readKey is the crew_feature_reads key each kind's "new" state follows.
+  const CREW_FEED_KINDS = {
+    poll:    { readKey: 'poll',       feature: 'poll',       ac: '--neon-cyan',   icon: '🗳️' },
+    dream:   { readKey: 'dreamboard', feature: 'dreamboard', ac: '--neon-purple', icon: '✨' },
+    jam:     { readKey: 'jams',       feature: 'jams',       ac: '--neon-green',  icon: '🎧' },
+    archive: { readKey: 'archive',    feature: 'archive',    ac: '--neon-yellow', icon: '📸' },
+    badge:   { readKey: 'pins',       feature: 'pins',       ac: '--neon-orange', icon: '🏆' }
+  };
+
+  function buildCrewFeedItems() {
+    // A row just added locally may not carry created_at yet: it's from now.
+    const now = new Date().toISOString();
+    const item = (kind, row, actor) => ({ kind, id: row.id, at: row.created_at || now, actor, row });
+    return [
+      ...crewPolls.map(p => item('poll', p, p.created_by)),
+      ...dreamPins.map(p => item('dream', p, p.added_by)),
+      ...crewJams.map(j => item('jam', j, j.added_by)),
+      ...archiveLinks.map(l => item('archive', l, l.added_by)),
+      ...crewFeedEvents.map(ev => item('badge', ev, null))
+    ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+  }
+
+  // New = posted by someone else after this feature's read watermark as of
+  // when the page opened. A feature never opened before counts only the last
+  // two weeks, so a first visit doesn't flag the crew's whole history.
+  function crewFeedItemIsNew(it) {
+    if (!_crewFeedSeen || (it.actor && it.actor === currentUser?.id)) return false;
+    const last = _crewFeedSeen[CREW_FEED_KINDS[it.kind].readKey];
+    const at = Date.parse(it.at);
+    return last ? at > Date.parse(last) : Date.now() - at < 14 * 86400000;
+  }
+
+  // Runs once the read map loads: snapshot it for the divider, then mark the
+  // feed's features read (you're looking at all of them).
+  function markCrewFeedSeen(crewId) {
+    if (!isCrewFeedPage() || String(activeDetailId) !== String(crewId) || !_crewFeatureReadMap) return;
+    _crewFeedSeen = { ..._crewFeatureReadMap };
+    rerenderCrewFeed(crewId);
+    CREW_FEATURE_READ_KEYS.forEach(f => markCrewFeatureRead(crewId, f));
+  }
+
+  let _crewFeedRenderQueued = false;
+  function scheduleCrewFeedRender(crewId) {
+    if (_crewFeedRenderQueued || !isCrewFeedPage()) return;
+    _crewFeedRenderQueued = true;
+    Promise.resolve().then(() => { _crewFeedRenderQueued = false; rerenderCrewFeed(crewId); });
+  }
+
+  function rerenderCrewFeed(crewId) {
+    const list = document.getElementById('crew-feed-list');
+    if (!list || String(activeDetailId) !== String(crewId)) return;
+    const items = buildCrewFeedItems();
+    const historyCard = `
+      <button type="button" class="crew-feed-card crew-feed-history" onclick="openCrewFeature('history')">
+        <span class="crew-feed-card-icon" aria-hidden="true">📜</span>
+        <span><b>Crew history</b><span class="crew-feed-card-sub">Everything the crew has done, from day one ›</span></span>
+      </button>`;
+    if (!items.length) {
+      list.innerHTML = `
+        <div class="es-block crew-feed-empty">
+          <div class="es-icon">🌀</div>
+          <div class="es-headline">Nothing here yet</div>
+          <div class="es-sub">Polls, jams, dreams, photos and pins all land here. Tap + to start something.</div>
+        </div>${historyCard}`;
+      return;
+    }
+    const fresh = items.filter(crewFeedItemIsNew);
+    const rest = items.filter(it => !fresh.includes(it)).slice(0, 30);
+    list.innerHTML =
+      (fresh.length ? `<div class="crew-feed-sep is-new">${fresh.length} new since you looked</div>${fresh.map(it => crewFeedCardHTML(it, crewId, true)).join('')}` : '') +
+      (rest.length ? `${fresh.length ? '<div class="crew-feed-sep">Earlier</div>' : ''}${rest.map(it => crewFeedCardHTML(it, crewId, false)).join('')}` : '') +
+      historyCard;
+  }
+
+  function crewFeedCardHTML(it, crewId, isNew) {
+    const k = CREW_FEED_KINDS[it.kind];
+    const row = it.row;
+    const uid = currentUser?.id;
+    const crewAttr = escHtml(String(crewId));
+    const itemAttr = escHtml(String(it.id));
+    const when = relativeTime(Date.parse(it.at));
+    const open = (label, hot) => `<button type="button" class="crew-feed-act${hot ? ' is-hot' : ''}" data-feature="${k.feature}" data-id="${itemAttr}" onclick="openCrewFeedItem(this.dataset.feature, this.dataset.id)">${label}</button>`;
+    const safeHref = (url) => /^https?:\/\//i.test(url || '') ? escHtml(url) : '';
+
+    let who, avatar, verb, body, acts;
+    if (it.kind === 'badge') {
+      const earner = row.raver_id ? squad.find(r => String(r.id) === String(row.raver_id)) : null;
+      who = row.is_crew_level ? 'The whole crew' : earner ? displayName(earner).split(' ')[0] : 'The crew';
+      avatar = `<span class="crew-feed-card-emoji" aria-hidden="true">${escHtml(row.badge_emoji || '🏆')}</span>`;
+      verb = row.event_type === 'plur_tier_unlocked' ? 'reached a PLUR tier' : 'unlocked a FAM Pin';
+      body = `<div class="crew-feed-card-title">${escHtml(row.badge_name || '')}</div>`;
+      acts = open('See all pins ›');
+    } else {
+      const r = it.actor ? raverByAuthUid(it.actor) : null;
+      who = huddleSenderName(it.actor);
+      avatar = r ? raverAvatarHTML(r.avatarUrl, r.gradient, r.name, 'avatar crew-feed-card-av', '')
+                 : `<span class="avatar crew-feed-card-av" aria-hidden="true">${k.icon}</span>`;
+      if (it.kind === 'poll') {
+        const votes = crewPollVotes[row.id] || [];
+        const voters = new Set(votes.map(v => v.voter_user_id)).size;
+        const iVoted = votes.some(v => v.voter_user_id === uid);
+        const live = pollIsOpen(row);
+        const crew = getCrew(crewId);
+        verb = 'asked the crew';
+        body = `<div class="crew-feed-card-title">${escHtml(row.question || '')}</div>
+          <div class="crew-feed-card-sub">${voters} of ${crew ? crewSquad(crew).length : voters} voted${live ? '' : ' · closed'}</div>`;
+        acts = live && !iVoted ? open('🗳️ Vote', true) : open('See results ›');
+      } else if (it.kind === 'dream') {
+        const hypers = row.hyped_by || [];
+        const hyped = hypers.includes(uid);
+        verb = 'pinned a dream';
+        body = `<div class="crew-feed-card-title">${escHtml(row.label || '')}</div>`;
+        acts = `<button type="button" class="crew-feed-act${hyped ? ' is-hot' : ''}" data-pin-id="${itemAttr}" data-crew-id="${crewAttr}" onclick="toggleHype(this.dataset.pinId, this.dataset.crewId)" aria-pressed="${hyped}">🔥 Hype${hypers.length ? ` · ${hypers.length}` : ''}</button>${open('Dream Board ›')}`;
+      } else if (it.kind === 'jam') {
+        const plat = PLATFORM_STYLES[row.platform] || PLATFORM_STYLES.other;
+        const reactions = row.reactions || {};
+        const cover = row.cover_url
+          ? `<img class="crew-feed-jam-art" src="${escHtml(row.cover_url)}" alt="" loading="lazy">`
+          : `<span class="crew-feed-jam-art" style="background:${plat.bg};color:${plat.color}" aria-hidden="true">♪</span>`;
+        verb = 'dropped a jam';
+        body = `<div class="crew-feed-jam">${cover}<span><span class="crew-feed-card-title">${escHtml(row.title || 'Playlist')}</span><span class="crew-feed-card-sub">${escHtml(plat.label)}</span></span></div>`;
+        const href = safeHref(row.url);
+        acts = JAM_REACTION_EMOJIS.map(({ emoji, label }) => {
+          const users = reactions[emoji] || [];
+          return `<button type="button" class="crew-feed-act${users.includes(uid) ? ' is-hot' : ''}" data-jam-id="${itemAttr}" data-crew-id="${crewAttr}" data-emoji="${escHtml(emoji)}" onclick="toggleJamReaction(this.dataset.jamId, this.dataset.crewId, this.dataset.emoji)" title="${escHtml(label)}">${emoji}${users.length ? ` ${users.length}` : ''}</button>`;
+        }).join('') + (href ? `<a class="crew-feed-act" href="${href}" target="_blank" rel="noopener noreferrer">▶ Play</a>` : '');
+      } else {
+        const fest = row.festival_id ? festivals.find(f => String(f.id) === String(row.festival_id)) : null;
+        let host = '';
+        try { host = new URL(row.url).hostname; } catch { host = ''; }
+        verb = 'added to the Archive';
+        body = `<div class="crew-feed-card-title">${escHtml(row.label || host || 'Photo drop')}</div>
+          ${fest ? `<div class="crew-feed-card-sub">${escHtml(fest.name)}</div>` : ''}`;
+        const href = safeHref(row.url);
+        acts = (href ? `<a class="crew-feed-act is-hot" href="${href}" target="_blank" rel="noopener noreferrer">↗ Open</a>` : '') + open('Archive ›');
+      }
+    }
+    return `
+      <article class="crew-feed-card${it.kind === 'badge' ? ' is-paper' : ''}${isNew ? ' is-new' : ''}" style="--ac:var(${k.ac})" data-kind="${it.kind}" data-id="${itemAttr}">
+        <div class="crew-feed-card-head">${avatar}<span class="crew-feed-card-who"><b>${escHtml(who)}</b> ${verb} · ${escHtml(when)}</span><span class="crew-feed-card-icon" aria-hidden="true">${k.icon}</span></div>
+        ${body}
+        <div class="crew-feed-card-acts">${acts}</div>
+      </article>`;
+  }
+
+  // "Vote", "Dream Board ›" etc.: switch to that feature's chip and bring
+  // the item into view in its full panel.
+  function openCrewFeedItem(feature, id) {
+    openCrewFeature(feature);
+    const panel = document.getElementById('crew-feature-panel-' + feature);
+    if (!panel || !id) return;
+    const esc = CSS.escape(String(id));
+    const sel = { poll: `[data-poll-id="${esc}"]`, dreamboard: `#dream-pin-${esc}`, jams: `#jam-card-${esc}`, archive: `#archive-link-${esc}` }[feature];
+    const target = sel && panel.querySelector(sel);
+    (target ? (target.closest('.poll-card') || target) : panel).scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  // ── + menu: start a poll, jam, dream or archive link ──
+  function crewFeedAddMenuHTML(isSecret) {
+    const opt = (kind, icon, label, hint) =>
+      `<button type="button" role="menuitem" class="crew-feed-add-opt" data-kind="${kind}" onclick="crewFeedCreate(this.dataset.kind)"><span aria-hidden="true">${icon}</span><span>${label}<small>${hint}</small></span></button>`;
+    return `
+      <button type="button" class="crew-feed-add" aria-label="Add to the crew" aria-haspopup="menu" aria-expanded="false" onclick="toggleCrewFeedAddMenu()">+</button>
+      <div class="crew-feed-add-menu" role="menu" hidden>
+        ${isSecret ? '' : opt('poll', '🗳️', 'Poll', 'Ask the crew')}
+        ${isSecret ? '' : opt('jam', '🎧', 'Jam', 'Share a playlist')}
+        ${opt('dream', '✨', 'Dream', 'Pin a bucket-list rave')}
+        ${opt('archive', '📸', 'Archive link', 'Photos, videos, recaps')}
+      </div>`;
+  }
+
+  let _crewFeedAddMenuCloser = null;
+  function toggleCrewFeedAddMenu(forceOpen) {
+    const menu = document.querySelector('#page-crew-detail .crew-feed-add-menu');
+    const btn = document.querySelector('#page-crew-detail .crew-feed-add');
+    if (!menu || !btn) return;
+    const open = forceOpen !== undefined ? forceOpen : menu.hidden;
+    menu.hidden = !open;
+    btn.setAttribute('aria-expanded', String(open));
+    if (_crewFeedAddMenuCloser) {
+      document.removeEventListener('pointerdown', _crewFeedAddMenuCloser, true);
+      document.removeEventListener('keydown', _crewFeedAddMenuCloser, true);
+      _crewFeedAddMenuCloser = null;
+    }
+    if (!open) return;
+    // Tap outside or Escape closes it; it isn't an overlay, so the shared
+    // Escape handler doesn't know about it.
+    _crewFeedAddMenuCloser = (e) => {
+      if (e.type === 'keydown' ? e.key === 'Escape' : !e.target.closest('.crew-feed-bar')) {
+        if (e.type === 'keydown') e.preventDefault();
+        toggleCrewFeedAddMenu(false);
+      }
+    };
+    document.addEventListener('pointerdown', _crewFeedAddMenuCloser, true);
+    document.addEventListener('keydown', _crewFeedAddMenuCloser, true);
+  }
+
+  function crewFeedCreate(kind) {
+    toggleCrewFeedAddMenu(false);
+    const crewId = activeDetailId;
+    if (!crewId) return;
+    if (kind === 'poll') { openCreatePollModal(crewId); return; }
+    if (kind === 'jam') { openAddJamModal(crewId); return; }
+    const feature = kind === 'dream' ? 'dreamboard' : 'archive';
+    openCrewFeature(feature);
+    setTimeout(() => document.getElementById(kind === 'dream' ? 'dream-pin-input' : 'archive-url-input')?.focus(), 250);
   }
 
   function openCrewManifestSheet() {
@@ -26187,6 +26480,7 @@
   function rerenderDreamBoard(crewId) {
     const el = document.getElementById('dream-board-section');
     if (el) el.outerHTML = buildDreamBoardHTML(crewId);
+    scheduleCrewFeedRender(crewId);
   }
 
   function buildDreamBoardHTML(crewId) {
@@ -26323,6 +26617,7 @@
   function rerenderArchive(crewId) {
     const el = document.getElementById('archive-section');
     if (el) el.outerHTML = buildArchiveHTML(crewId);
+    scheduleCrewFeedRender(crewId);
   }
 
   function toggleArchiveFilter(crewId, festivalId) {
@@ -26714,6 +27009,7 @@
   function rerenderPolls(crewId) {
     const el = document.getElementById('fam-poll-section');
     if (el) el.outerHTML = buildPollsHTML(crewId);
+    scheduleCrewFeedRender(crewId);
   }
 
   function buildPollsHTML(crewId) {
@@ -27414,6 +27710,7 @@
   function rerenderJams(crewId) {
     const el = document.getElementById('jam-section');
     if (el) el.outerHTML = buildJamsHTML(crewId);
+    scheduleCrewFeedRender(crewId);
   }
 
   function toggleJamFilter(crewId, type, val) {
@@ -30309,6 +30606,7 @@
   function rerenderFamPins(crewId) {
     const el = document.getElementById('fam-pins-section');
     if (el) el.outerHTML = buildFamPinsHTML(crewId);
+    scheduleCrewFeedRender(crewId);
   }
 
   // Full-view status set (Lead only) — shows confirmation first
