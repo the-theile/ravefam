@@ -33,6 +33,9 @@ test.describe('new crew page · layout', () => {
     await expect(detail).toHaveClass(/crew-feed/);
     await expect(detail.locator('.crew-feed-name')).toHaveText('Bass Syndicate');
     await expect(detail.locator('.crew-feed-count')).toHaveText('3');
+    // Status sits above the roster + share buttons, not under the name.
+    await expect(detail.locator('.crew-feed-side > .crew-status')).toHaveText(/Recruiting/);
+    await expect(detail.locator('.crew-feed-title .crew-status')).toHaveCount(0);
     await expect(detail.locator('#huddle-tile-preview-root .huddle-tile-preview')).toBeVisible();
     // You and Sam are both going to Tomorrowland, so it gets a Rave Plan ticket.
     await expect(detail.locator('.crew-ticket[data-fest="f1"]')).toContainText('Tomorrowland');
@@ -86,6 +89,10 @@ test.describe('new crew page · filters', () => {
     await expect(panel(page, 'archive')).toBeVisible();
     await expect(panel(page, 'history')).toBeVisible();
     await expect(panel(page, 'poll')).toBeHidden();
+    // Archive, then Pins, then History.
+    const tops = [];
+    for (const k of ['archive', 'pins', 'history']) tops.push((await panel(page, k).boundingBox()).y);
+    expect(tops).toEqual([...tops].sort((a, b) => a - b));
   });
 
   test('the chosen chip survives a re-render of the same crew', async ({ page }) => {

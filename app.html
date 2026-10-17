@@ -5342,9 +5342,10 @@
   .crew-totem-icon-mark.crew-feed-totem { display: grid; place-items: center; font-size: 1.3rem; }
   .crew-feed-title { flex: 1; min-width: 0; }
   .crew-feed-name { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.25rem; letter-spacing: -0.3px; line-height: 1.15; overflow-wrap: anywhere; }
-  .crew-feed-sub { display: flex; align-items: center; gap: 7px; margin-top: 4px; min-width: 0; }
-  .crew-feed-sub .crew-status { flex-shrink: 0; }
-  .crew-feed-desc { font-size: 0.72rem; color: var(--cf-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .crew-feed-desc { font-size: 0.72rem; color: var(--cf-soft); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .crew-feed-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+  .crew-feed-side .crew-status { flex-shrink: 0; }
+  .crew-feed-side-row { display: flex; align-items: center; gap: 8px; }
   .crew-feed-faces {
     display: flex; align-items: center; gap: 5px; flex-shrink: 0; cursor: pointer;
     padding: 4px 9px 4px 4px; border-radius: 100px; color: var(--text);
@@ -5465,8 +5466,11 @@
   .crew-feed-history b { font-family: 'Outfit', sans-serif; font-size: 0.86rem; }
   .crew-feed-empty { margin-bottom: 10px; }
 
-  /* The existing feature panels, as glass cards */
+  /* The existing feature panels, as glass cards. Memories reads Archive,
+     then Pins, then History, though Pins comes first in the markup. */
   .crew-feed .crew-feature-panel { border-radius: 24px; padding: 16px; margin-bottom: 12px; }
+  .crew-feed-panels { display: flex; flex-direction: column; }
+  .crew-feed-panels > #crew-feature-panel-archive { order: -1; }
 
   /* Crew Manifest sheet: a bottom sheet over the crew page */
   .crew-manifest-overlay { align-items: flex-end; padding: 0; }
@@ -20598,7 +20602,7 @@
     { key: 'jams',       label: 'Jams',     panels: ['jams'] },
     { key: 'dreamboard', label: 'Dreams',   panels: ['dreamboard'] },
     { key: 'raveplan',   label: 'Plan',     panels: ['raveplan'] },
-    { key: 'memories',   label: 'Memories', panels: ['pins', 'archive', 'history'] }
+    { key: 'memories',   label: 'Memories', panels: ['archive', 'pins', 'history'] }   // shown in this order (see .crew-feed-panels CSS)
   ];
 
   function isCrewFeedPage() {
@@ -20641,8 +20645,8 @@
     selectCrewFeedFilter(_crewFeedFilter, { quiet: true });
   }
 
-  // Back, totem, name + status, then the avatar stack (opens the roster)
-  // and Share. Replaces the classic page's Overview/Roster tabs and its
+  // Back, totem and name on the left; status above the avatar stack (opens
+  // the roster) and Share on the right, so the name gets the room. Replaces the classic page's Overview/Roster tabs and its
   // full-width Share and Back buttons.
   function crewFeedHeaderHTML(crew, s, people) {
     const faces = people.slice(0, 3).map(p => raverAvatarHTML(p.avatarUrl, p.gradient, p.name, 'avatar crew-feed-face', '')).join('');
@@ -20657,13 +20661,18 @@
         ${totem}
         <div class="crew-feed-title">
           <div class="crew-feed-name">${escHtml(crew.name)}</div>
-          <div class="crew-feed-sub">${status}${crew.description ? `<span class="crew-feed-desc">${escHtml(crew.description)}</span>` : ''}</div>
+          ${crew.description ? `<div class="crew-feed-desc">${escHtml(crew.description)}</div>` : ''}
         </div>
-        <button type="button" class="crew-feed-faces" onclick="openCrewManifestSheet()" aria-label="Crew roster, ${people.length} raver${people.length === 1 ? '' : 's'}">
-          <span class="crew-feed-face-stack">${faces}</span>
-          <span class="crew-feed-count">${people.length}</span><span class="crew-feed-chev" aria-hidden="true">›</span>
-        </button>
-        <button type="button" class="crew-feed-share" onclick="openCrewShareCard('${escJsAttr(crew.id)}')" aria-label="Share Crew Card" title="Share Crew Card">📲</button>
+        <div class="crew-feed-side">
+          ${status}
+          <div class="crew-feed-side-row">
+            <button type="button" class="crew-feed-faces" onclick="openCrewManifestSheet()" aria-label="Crew roster, ${people.length} raver${people.length === 1 ? '' : 's'}">
+              <span class="crew-feed-face-stack">${faces}</span>
+              <span class="crew-feed-count">${people.length}</span><span class="crew-feed-chev" aria-hidden="true">›</span>
+            </button>
+            <button type="button" class="crew-feed-share" onclick="openCrewShareCard('${escJsAttr(crew.id)}')" aria-label="Share Crew Card" title="Share Crew Card">📲</button>
+          </div>
+        </div>
       </div>`;
   }
 
