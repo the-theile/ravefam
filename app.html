@@ -4949,6 +4949,16 @@
   .hd-vdur { font-family: var(--hd-mono); font-size: 0.66rem; color: var(--muted); flex-shrink: 0; }
 
   .hd-meetup { display: flex; flex-direction: column; gap: 4px; }
+  /* Mission Briefing share card: a scrap of the paper file, live numbers */
+  .hd-briefing { display: flex; flex-direction: column; gap: 3px; min-width: 210px; padding: 10px 12px; border-radius: 6px; cursor: pointer;
+    background: var(--paper); color: var(--surface2); box-shadow: 0 1px 4px rgba(var(--black-rgb),0.35); }
+  .hd-briefing-tab { font-family: 'Courier Prime', ui-monospace, monospace; font-weight: 700; font-size: 0.62rem; letter-spacing: 0.12em; color: var(--paper-ink); }
+  .hd-briefing-name { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 1.05rem; line-height: 1.1; }
+  .hd-briefing-when { font-family: 'Courier Prime', ui-monospace, monospace; font-size: 0.68rem; color: rgba(var(--surface2-rgb),0.62); text-transform: uppercase; }
+  .hd-briefing-stats { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 6px; border-top: 1px solid rgba(var(--surface2-rgb),0.18); }
+  .hd-briefing-stats div { padding-top: 6px; text-align: center; font-family: 'Courier Prime', ui-monospace, monospace; font-size: 0.58rem; text-transform: uppercase; color: rgba(var(--surface2-rgb),0.62); }
+  .hd-briefing-stats b { display: block; font-family: 'Outfit', sans-serif; font-size: 0.95rem; color: var(--surface2); }
+  .hd-briefing-open { margin-top: 4px; font-family: 'Courier Prime', ui-monospace, monospace; font-weight: 700; font-size: 0.7rem; color: var(--paper-ink); }
   .hd-lineup { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(var(--neon-yellow-rgb),0.35); background: rgba(var(--neon-yellow-rgb),0.07); }
   .hd-lineup-title { font-weight: 600; line-height: 1.4; }
   .hd-lineup-open { align-self: flex-start; font-size: 0.8rem; font-weight: 700; color: var(--neon-yellow); text-decoration: none; min-height: 32px; display: inline-flex; align-items: center; }
@@ -21190,6 +21200,7 @@
     if (m.kind === 'lineup') return m.body || '📋 Shared their lineup picks';
     if (m.kind === 'beacon') return `📣 ${m.body || 'Beacon'}`;
     if (m.kind === 'gif') return '🎞️ GIF';
+    if (m.kind === 'briefing') return m.body || '🎯 Mission Briefing';
     return m.body || '';
   }
 
@@ -21285,6 +21296,7 @@
       return `<div class="huddle-bubble-beacon-text">📣 ${escHtml(m.body || '')}</div>`;
     }
     if (m.kind === 'gif') return huddleGifHTML(m);
+    if (m.kind === 'briefing') return missionBriefingHuddleCardHTML(m);
     return highlightHuddleMentions(linkifyHuddleText(escHtml(m.body || '')));
   }
 
@@ -24904,6 +24916,7 @@
         <button type="button" class="mb-x" onclick="closeMissionBriefing()" aria-label="Close briefing">✕</button>
         <div class="mb-tabs" id="mb-tabs" role="tablist" aria-label="Briefing pages">${MB_CARDS.map((c, i) =>
           `<button type="button" class="mb-tab" role="tab" aria-label="${escHtml(c.tab.toLowerCase())}" onclick="mbGoTo(${i})"></button>`).join('')}</div>
+        <button type="button" class="mb-share" onclick="mbShareToHuddle()">Share ↗</button>
       </div>
       <div class="mb-track" id="mb-track">${MB_CARDS.map(c =>
         `<section class="mb-page" aria-label="${escHtml(c.tab.toLowerCase())}"><div class="mb-file"><div class="mb-sheet" id="mb-card-${c.key}"></div></div></section>`).join('')}</div>`;
@@ -24964,6 +24977,7 @@
 
   function mbRerenderAll() {
     if (!_mb) return;
+    delete _mbStatsCache[mbStatsKey(_mb.crewId, _mb.festivalId)];
     MB_CARDS.forEach(c => mbRenderCard(c.key));
     mbUpdateTabs();
   }
@@ -25378,6 +25392,7 @@
         ${gaps.length ? `<div class="mb-gaps">${gaps.map(g => `<span>▸ ${escHtml(g)}</span>`).join('')}</div>` : ''}
         ${imGoing ? `<button type="button" class="mb-btn red wide" onclick="mbAct('ready')">${locked ? 'UNSIGN' : 'SIGN &amp; LOCK IN'}</button>`
           : `<div class="mb-empty">RSVP to this rave to sign off. <button type="button" class="mb-link" onclick="mbJump('rsvp')">RSVP</button></div>`}
+        <button type="button" class="mb-btn ghost" onclick="mbShareToHuddle()">Share file to Huddle</button>
         <button type="button" class="mb-btn ghost" onclick="mbJump('huddle')">Open the Huddle</button>`
     };
   }
@@ -25560,6 +25575,112 @@
       default: return;
     }
     mbRerenderAll();
+  }
+
+  // ── Sharing into the Huddle ──
+  // A 'briefing' message in the rave's room. media_meta carries a snapshot
+  // so the card draws at once; the card then refreshes itself from the plan
+  // (mbStatsFor), so the numbers stay live long after it was posted.
+
+  const MB_STATS_TTL_MS = 60 * 1000;
+  const _mbStatsCache = {}; // "crewId|festId" -> { ts, stats } or { pending: Promise }
+  function mbStatsKey(crewId, festId) { return `${crewId}|${festId}`; }
+
+  function mbGoingFor(crewId, festId) {
+    const crew = getCrew(crewId);
+    return crew ? crewSquad(crew).filter(p => (p.festIds || []).some(id => String(id) === String(festId))) : [];
+  }
+
+  function mbStatsFrom(crewId, festId, gp, items) {
+    const claimed = mbGoingFor(crewId, festId).filter(raverIsClaimed);
+    const live = items.filter(it => !it.deleted_at);
+    const doneIds = new Set(live.filter(it => it.kind === 'ready' && it.is_done).map(it => String(it.assignee_raver_id)));
+    const tasks = live.filter(it => it.kind === 'task');
+    return {
+      ready: claimed.filter(p => doneIds.has(String(p.id))).length, total: claimed.length,
+      tasksDone: tasks.filter(t => t.is_done).length, tasks: tasks.length,
+      meetup: (gp && gp.meetup_location) || null, meetupAt: (gp && gp.meetup_at) || null
+    };
+  }
+
+  // Cached stats for a plan, or undefined while a fetch is in flight; when
+  // that fetch lands every card for the plan on screen is patched in place.
+  function mbStatsFor(crewId, festId) {
+    const key = mbStatsKey(crewId, festId);
+    const hit = _mbStatsCache[key];
+    if (hit && hit.stats && Date.now() - hit.ts < MB_STATS_TTL_MS) return hit.stats;
+    if (hit && hit.pending) return hit.stats;
+    const pending = (async () => {
+      const { data: gp } = await sb.from('game_plans').select('id,meetup_location,meetup_at')
+        .eq('crew_id', crewId).eq('festival_id', festId).maybeSingle();
+      let rows = [];
+      if (gp) {
+        const { data } = await sb.from('game_plan_items').select('kind,is_done,assignee_raver_id,deleted_at')
+          .eq('game_plan_id', gp.id).in('kind', ['task', 'ready']).is('deleted_at', null);
+        rows = data || [];
+      }
+      const stats = mbStatsFrom(crewId, festId, gp, rows);
+      _mbStatsCache[key] = { ts: Date.now(), stats };
+      document.querySelectorAll('.hd-briefing[data-mb-key]').forEach(el => {
+        if (el.dataset.mbKey === key) el.querySelector('.hd-briefing-stats').innerHTML = mbHuddleStatsHTML(stats);
+      });
+      return stats;
+    })().catch(e => { console.error('briefing card stats error', e); delete _mbStatsCache[key]; });
+    _mbStatsCache[key] = { ...(hit || {}), pending };
+    return hit && hit.stats;
+  }
+
+  function mbHuddleStatsHTML(st) {
+    if (!st) return '';
+    return `<div><b>${st.ready}/${st.total}</b>locked in</div><div><b>${st.tasksDone}/${st.tasks}</b>tasks</div><div><b>${st.meetup ? '📍' : '—'}</b>${st.meetup ? 'meetup set' : 'no meetup'}</div>`;
+  }
+
+  function missionBriefingHuddleCardHTML(m) {
+    const meta = m.media_meta || {};
+    const festId = meta.festival_id != null ? String(meta.festival_id) : '';
+    const fest = festivals.find(f => String(f.id) === festId);
+    if (!fest || !m.crew_id) return escHtml(m.body || '🎯 Mission Briefing');
+    const key = mbStatsKey(m.crew_id, festId);
+    const stats = mbStatsFor(m.crew_id, festId) || meta.snapshot || null;
+    const d = festDate(fest);
+    const days = d ? daysUntil(d) : null;
+    const when = days == null ? '' : days > 1 ? `T-minus ${days} days` : days === 1 ? 'Tomorrow' : days === 0 ? 'Today' : 'Case closed';
+    return `<div class="hd-briefing" data-mb-key="${escHtml(key)}" role="button" tabindex="0" aria-label="Open the ${escHtml(fest.name)} Mission Briefing"
+        onclick="openMissionBriefing('${escJsAttr(String(m.crew_id))}','${escJsAttr(festId)}','signoff')">
+        <span class="hd-briefing-tab">🎯 MISSION BRIEFING</span>
+        <b class="hd-briefing-name">${escHtml(fest.name)}</b>
+        ${when ? `<span class="hd-briefing-when">${escHtml(when)}</span>` : ''}
+        <div class="hd-briefing-stats">${mbHuddleStatsHTML(stats)}</div>
+        <span class="hd-briefing-open">Open the file →</span>
+      </div>`;
+  }
+
+  async function mbShareToHuddle() {
+    if (!_mb || !currentUser) return;
+    const { crewId, festivalId } = _mb;
+    const fest = mbFest();
+    const room = await ensureHuddleRoomForFestival(crewId, festivalId);
+    if (!room) { toastError('Could not find this rave\'s Huddle. Try again'); return; }
+    const snapshot = mbStatsFrom(crewId, festivalId, mbPlan(), gamePlanItems);
+    const { data, error } = await sb.from('huddle_messages').insert({
+      room_id: room.id, crew_id: crewId, sender_id: currentUser.id, kind: 'briefing',
+      body: `🎯 Mission Briefing · ${fest ? fest.name : 'Rave Plan'}`,
+      media_meta: { festival_id: festivalId, snapshot }
+    }).select().single();
+    if (error) { toastError('Could not share to the Huddle. Try again', error); return; }
+    if (_huddleActiveRoomId === room.id && !huddleMessages.some(x => x.id === data.id)) { huddleMessages.push(data); renderHuddleUI(); }
+    hapticSuccess();
+    showToast('Shared to the Huddle');
+  }
+
+  // Rave Focus "Plan" tab: one row per crew that shares this rave.
+  function missionBriefingRaveFocusHTML(f) {
+    if (!currentUser) return '';
+    const mine = crews.filter(c => deriveCrewFestivalPlans(c).live.some(e => String(e.festival.id) === String(f.id)));
+    if (!mine.length) return '';
+    return `<div class="rf-card">${mine.map(c => `
+      <div class="rf-recap-row"><span>🎯 Mission Briefing${mine.length > 1 ? ` · ${escHtml(c.name)}` : ''}</span>
+        <button type="button" class="rf-mini-btn" onclick="openMissionBriefing('${escJsAttr(String(c.id))}','${escJsAttr(String(f.id))}')">Open</button></div>`).join('')}</div>`;
   }
 
   // ===== Dream Board =====
@@ -35189,6 +35310,7 @@
 
     const planPanel = `
       ${isUpcoming ? raveReadyChecklistHTML(f, you) : recapCard}
+      ${isUpcoming ? missionBriefingRaveFocusHTML(f) : ''}
       ${vibeSection}
       <div class="rf-section-label">Crew</div>
       ${crewSummaryHtml}`;

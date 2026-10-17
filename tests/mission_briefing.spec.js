@@ -122,6 +122,39 @@ test.describe('mission briefing', () => {
     await expect(page.locator('#crew-feature-panel-raveplan button', { hasText: 'Mission Briefing' })).toBeVisible();
   });
 
+  test('Rave Focus offers the briefing for a crew sharing the rave', async ({ page }) => {
+    await bootAuthedApp(page, { data: briefingData() });
+    await page.evaluate(() => openRaveFocus('f1'));
+    const row = page.locator('#rave-focus-modal .rf-recap-row', { hasText: 'Mission Briefing' });
+    await expect(row).toBeVisible();
+    await row.locator('button', { hasText: 'Open' }).click();
+    await expect(page.locator('#mission-briefing-overlay')).toHaveClass(/open/);
+    await expect(page.locator('#mb-card-cover')).toContainText('Tomorrowland');
+  });
+
+  test('sharing posts a live briefing card to the rave Huddle that opens the deck', async ({ page }) => {
+    await bootAuthedApp(page, { data: briefingData() });
+    await openBriefing(page);
+    await page.locator('#mb-card-signoff button', { hasText: 'SIGN & LOCK IN' }).click();
+    await page.locator('.mb-share').click();
+    const msg = await page.evaluate(() => (window.__store.huddle_messages || []).find(m => m.kind === 'briefing'));
+    expect(msg).toBeTruthy();
+    expect(msg.body).toContain('Tomorrowland');
+    expect(msg.media_meta).toMatchObject({ festival_id: 'f1', snapshot: { ready: 1, total: 2 } });
+
+    await page.locator('.mb-x').click();
+    await page.evaluate(() => openHuddleForFestival('c1', 'f1'));
+    const card = page.locator('.hd-briefing');
+    await expect(card).toBeVisible();
+    await expect(card).toContainText('Tomorrowland');
+    await expect(card.locator('.hd-briefing-stats')).toContainText('1/2');
+
+    await card.click();
+    await expect(page.locator('#mission-briefing-overlay')).toHaveClass(/open/);
+    // Opens on the sign-off page.
+    await expect.poll(() => page.evaluate(() => _mb && _mb.card)).toBe(7);
+  });
+
   test('Escape closes the deck', async ({ page }) => {
     await bootAuthedApp(page, { data: briefingData() });
     await openBriefing(page);
