@@ -36,7 +36,7 @@
 }
 </script>
 
-<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@800;900&family=Outfit:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,700;9..144,800&family=DM+Sans:wght@300;400;500&family=Orbitron:wght@600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@800;900&family=Outfit:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,700;9..144,800&family=DM+Sans:wght@300;400;500&family=Orbitron:wght@600;700;800;900&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css" rel="stylesheet">
 <!-- supabase-js stays blocking: the main script block calls createClient() at
      parse time, so it must already be defined. The rest are deferred (nothing
@@ -2387,6 +2387,133 @@
   .game-plan-shortcuts .btn { flex: 1; padding: 7px 8px; font-size: 0.72rem; }
   .game-plan-section { margin-bottom: 8px; }
   .game-plan-task-done .archive-link-label { color: var(--muted); }
+
+  /* Mission Briefing: full-screen deck of case-file pages over a Rave Plan.
+     Neon only in the chrome; each page is paper with typewriter labels, red
+     ink and highlighter. Sits above the Huddle (260) and page panels (300),
+     below confirms (1000) so remove/undo prompts still land on top. */
+  .mb-overlay {
+    --mb-ink: var(--surface2); --mb-ink-soft: rgba(var(--surface2-rgb),0.62); --mb-rule: rgba(var(--surface2-rgb),0.16);
+    --mb-red: var(--paper-ink); --mb-ok: #1f7a3a; --mb-type: 'Courier Prime', ui-monospace, Menlo, monospace;
+    position: fixed; inset: 0; z-index: 900; background: var(--bg); display: none; flex-direction: column;
+    padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .mb-overlay.open { display: flex; }
+  .mb-chrome { display: flex; align-items: center; gap: 8px; padding: 12px max(14px, env(safe-area-inset-right, 0px)) 8px max(14px, env(safe-area-inset-left, 0px)); }
+  .mb-x { width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; background: var(--surface); border: 1px solid rgba(var(--white-rgb),0.12); color: var(--muted); font-size: 0.9rem; cursor: pointer; }
+  .mb-tabs { flex: 1; display: flex; gap: 3px; min-width: 0; }
+  .mb-tab { flex: 1; height: 22px; padding: 0; border: 0; background: none; cursor: pointer; position: relative; }
+  .mb-tab::before { content: ""; position: absolute; left: 0; right: 0; top: 9px; height: 3px; border-radius: 2px; background: rgba(var(--white-rgb),0.12); }
+  .mb-tab.seen::before { background: rgba(var(--neon-cyan-rgb),0.4); }
+  .mb-tab.on::before { background: var(--neon-cyan); box-shadow: 0 0 8px rgba(var(--neon-cyan-rgb),0.7); }
+  .mb-tab.changed::after { content: ""; position: absolute; right: 0; top: 2px; width: 6px; height: 6px; border-radius: 50%; background: var(--neon-pink); box-shadow: 0 0 6px var(--neon-pink); }
+  .mb-share { flex-shrink: 0; font-size: 0.7rem; font-weight: 700; color: var(--neon-pink); background: rgba(var(--neon-pink-rgb),0.08); border: 1px solid rgba(var(--neon-pink-rgb),0.5); border-radius: 100px; padding: 6px 10px; cursor: pointer; }
+  .mb-track { flex: 1; min-height: 0; display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; }
+  .mb-track::-webkit-scrollbar { display: none; }
+  .mb-page { flex: 0 0 100%; scroll-snap-align: center; scroll-snap-stop: always; min-width: 0; display: flex; justify-content: center; padding: 4px max(12px, env(safe-area-inset-right, 0px)) 12px max(12px, env(safe-area-inset-left, 0px)); }
+  .mb-file { position: relative; width: 100%; max-width: 480px; display: flex; }
+  .mb-file::before, .mb-file::after { content: ""; position: absolute; left: 6px; right: 6px; border-radius: 6px; background: var(--paper-edge); pointer-events: none; }
+  .mb-file::before { top: 6px; bottom: -6px; transform: rotate(-1.2deg); opacity: 0.45; }
+  .mb-file::after { top: 3px; bottom: -3px; transform: rotate(0.8deg); opacity: 0.75; }
+  .mb-sheet { position: relative; z-index: 1; flex: 1; min-width: 0; display: flex; flex-direction: column; border-radius: 6px; overflow: hidden; color: var(--mb-ink);
+    background: repeating-linear-gradient(0deg, transparent 0 23px, var(--mb-rule) 23px 24px), var(--paper); }
+  .mb-sheet-h { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding: 12px 14px 8px; border-bottom: 1.5px solid var(--mb-ink); }
+  .mb-ref { font-family: var(--mb-type); font-size: 0.66rem; line-height: 1.35; color: var(--mb-ink-soft); text-transform: uppercase; }
+  .mb-ref b { color: var(--mb-red); }
+  .mb-tabel { font-family: var(--mb-type); font-weight: 700; font-size: 0.62rem; letter-spacing: 0.1em; color: var(--paper); background: var(--mb-ink); padding: 3px 7px; border-radius: 3px; white-space: nowrap; }
+  .mb-body { position: relative; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; padding: 12px 14px 16px; display: flex; flex-direction: column; gap: 11px; }
+  .mb-foot { display: flex; justify-content: space-between; font-family: var(--mb-type); font-size: 0.64rem; color: var(--mb-ink-soft); padding: 7px 14px 10px; border-top: 1px dashed var(--mb-rule); }
+  .mb-foot b { color: var(--mb-ink); }
+  .mb-sub { font-family: var(--mb-type); font-size: 0.7rem; color: var(--mb-ink-soft); text-transform: uppercase; letter-spacing: 0.12em; }
+  .mb-h { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 1.55rem; line-height: 1; margin: 2px 0 0; letter-spacing: -0.01em; text-wrap: balance; color: var(--mb-ink); }
+  .mb-sec { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-family: var(--mb-type); font-weight: 700; font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--mb-red); border-bottom: 1px solid var(--mb-red); padding-bottom: 2px; margin-top: 4px; }
+  .mb-sec button { font-family: var(--mb-type); font-size: 0.66rem; color: var(--mb-ink-soft); background: none; border: 0; padding: 0; text-decoration: underline; letter-spacing: 0.04em; font-weight: 400; cursor: pointer; text-transform: none; }
+  .mb-type { font-family: var(--mb-type); }
+  .mb-hl { background: linear-gradient(transparent 45%, rgba(var(--neon-yellow-rgb),0.55) 45% 90%, transparent 90%); padding: 0 2px; }
+  .mb-hl.pk { background: linear-gradient(transparent 45%, rgba(var(--neon-pink-rgb),0.28) 45% 90%, transparent 90%); }
+  .mb-stamp { position: absolute; font-family: var(--mb-type); font-weight: 700; color: var(--mb-red); border: 2.5px solid var(--mb-red); border-radius: 4px; padding: 3px 9px; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.8; pointer-events: none; mix-blend-mode: multiply; }
+  .mb-fields { display: grid; grid-template-columns: 78px 1fr; border-top: 1px solid var(--mb-rule); }
+  .mb-fields > * { padding: 7px 0; border-bottom: 1px solid var(--mb-rule); font-size: 0.82rem; min-width: 0; margin: 0; }
+  .mb-fields dt { font-family: var(--mb-type); font-size: 0.64rem; color: var(--mb-ink-soft); text-transform: uppercase; letter-spacing: 0.1em; padding-top: 9px; }
+  .mb-fields dd { font-weight: 600; overflow-wrap: anywhere; }
+  .mb-link { color: var(--mb-red); font-family: var(--mb-type); font-size: 0.72rem; background: none; border: 0; padding: 0 0 0 4px; cursor: pointer; text-decoration: underline; }
+  .mb-pols { display: flex; flex-wrap: wrap; gap: 8px; }
+  .mb-pol { background: var(--white); padding: 3px 3px 12px; box-shadow: 0 1px 3px rgba(var(--black-rgb),0.25); text-align: center; width: 54px; }
+  .mb-pol:nth-child(odd) { transform: rotate(-2.5deg); } .mb-pol:nth-child(even) { transform: rotate(2deg); }
+  .mb-pol-face { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 0.9rem; color: var(--white); filter: grayscale(0.85) contrast(1.1); }
+  .mb-pol-face img { width: 100%; height: 100%; object-fit: cover; }
+  .mb-pol small { display: block; font-family: var(--mb-type); font-size: 0.55rem; color: var(--mb-ink); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mb-clip { background: #fffbe0; border-left: 3px solid var(--mb-red); padding: 6px 8px; font-family: var(--mb-type); font-size: 0.74rem; transform: rotate(-0.6deg); box-shadow: 0 1px 2px rgba(var(--black-rgb),0.15); }
+  .mb-li { display: flex; align-items: center; gap: 8px; font-family: var(--mb-type); font-size: 0.82rem; min-width: 0; }
+  .mb-li .t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .mb-li.done .t { text-decoration: line-through; text-decoration-color: var(--mb-red); text-decoration-thickness: 2px; color: var(--mb-ink-soft); }
+  .mb-box { width: 22px; height: 22px; flex-shrink: 0; border: 1.5px solid var(--mb-ink); border-radius: 2px; background: transparent; padding: 0; position: relative; cursor: pointer; }
+  .mb-box.on::after { content: "✗"; position: absolute; inset: -5px -2px 0 2px; font-size: 1.25rem; line-height: 1; font-weight: 700; color: var(--mb-red); }
+  .mb-box:disabled { opacity: 0.45; cursor: default; }
+  .mb-who { font-family: var(--mb-type); font-size: 0.68rem; color: var(--mb-ink-soft); white-space: nowrap; }
+  .mb-claim { font-family: var(--mb-type); font-size: 0.66rem; font-weight: 700; color: var(--mb-red); border: 1.5px dashed var(--mb-red); background: none; border-radius: 3px; padding: 2px 7px; cursor: pointer; white-space: nowrap; }
+  .mb-del { background: none; border: 0; padding: 2px 4px; color: var(--mb-ink-soft); font-size: 0.85rem; cursor: pointer; }
+  .mb-phase { font-family: var(--mb-type); font-size: 0.64rem; color: var(--mb-ink-soft); text-transform: uppercase; letter-spacing: 0.12em; margin-top: 2px; }
+  .mb-write { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .mb-write input, .mb-write select { flex: 1; min-width: 0; font-family: var(--mb-type); font-size: 16px; background: transparent; border: 0; border-bottom: 1.5px dotted var(--mb-ink-soft); padding: 5px 2px; color: var(--mb-ink); border-radius: 0; }
+  .mb-write select { flex: 0 1 auto; max-width: 48%; }
+  .mb-write input::placeholder { color: rgba(var(--surface2-rgb),0.4); }
+  .mb-btn { font-family: var(--mb-type); font-weight: 700; font-size: 0.74rem; background: var(--mb-ink); color: var(--paper); border: 0; border-radius: 3px; padding: 7px 10px; cursor: pointer; white-space: nowrap; }
+  .mb-btn.red { background: var(--mb-red); }
+  .mb-btn.ghost { background: transparent; color: var(--mb-ink); border: 1.5px solid var(--mb-ink); }
+  .mb-btn.wide { width: 100%; padding: 12px; letter-spacing: 0.08em; }
+  .mb-overlay button:focus-visible, .mb-overlay input:focus-visible, .mb-overlay select:focus-visible { outline: 2px solid var(--mb-red); outline-offset: 2px; }
+  .mb-sched { display: grid; grid-template-columns: 58px 1fr auto; column-gap: 8px; align-items: center; font-family: var(--mb-type); }
+  .mb-sched > * { padding: 6px 0; border-bottom: 1px solid var(--mb-rule); min-width: 0; }
+  .mb-sched .tm { font-size: 0.66rem; color: var(--mb-ink-soft); font-variant-numeric: tabular-nums; }
+  .mb-sched .nm b { display: block; font-family: 'DM Sans', sans-serif; font-size: 0.86rem; color: var(--mb-ink); }
+  .mb-sched .nm span { font-size: 0.64rem; color: var(--mb-ink-soft); }
+  .mb-star { font-size: 1.1rem; color: rgba(var(--surface2-rgb),0.3); background: none; border: 0; padding: 4px; cursor: pointer; }
+  .mb-star.on { color: var(--mb-red); }
+  .mb-roles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .mb-role { border: 1.5px solid var(--mb-ink); padding: 6px 7px; font-family: var(--mb-type); font-size: 0.7rem; min-width: 0; display: flex; align-items: flex-start; gap: 4px; }
+  .mb-role > span { flex: 1; min-width: 0; }
+  .mb-role b { display: block; font-family: 'DM Sans', sans-serif; font-size: 0.76rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mb-role.open { border-style: dashed; color: var(--mb-red); background: none; cursor: pointer; text-align: left; }
+  .mb-manifest { font-family: var(--mb-type); font-size: 0.78rem; border: 1.5px solid var(--mb-ink); }
+  .mb-manifest .mh { background: var(--mb-ink); color: var(--paper); padding: 5px 8px; display: flex; justify-content: space-between; gap: 6px; font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase; }
+  .mb-manifest .mh .mb-del { color: var(--paper); }
+  .mb-manifest .mr { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 5px 8px; border-top: 1px solid var(--mb-rule); min-width: 0; }
+  .mb-manifest .mr.open { color: var(--mb-red); }
+  .mb-manifest .mr .mb-write { flex: 1; justify-content: flex-end; }
+  .mb-map { position: relative; border: 1.5px solid var(--mb-ink); background: var(--paper-edge); overflow: hidden; }
+  .mb-map img { display: block; width: 100%; filter: grayscale(1) contrast(1.05); mix-blend-mode: multiply; }
+  .mb-map-x { position: absolute; transform: translate(-50%,-50%); font-family: var(--mb-type); font-weight: 700; font-size: 1.7rem; line-height: 1; color: var(--mb-red); pointer-events: none; }
+  .mb-map-x::after { content: ""; position: absolute; left: 50%; top: 50%; width: 46px; height: 40px; transform: translate(-50%,-50%) rotate(-8deg); border: 2px solid var(--mb-red); border-radius: 50%; }
+  .mb-ledger { font-family: var(--mb-type); font-size: 0.78rem; }
+  .mb-ledger .r { display: grid; grid-template-columns: 1fr auto auto auto; column-gap: 6px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--mb-rule); }
+  .mb-ledger .r > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+  .mb-ledger .amt { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .mb-ledger .tot { display: flex; justify-content: space-between; padding-top: 6px; margin-top: 2px; border-top: 2px double var(--mb-ink); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .mb-edit { background: none; border: 0; padding: 0; color: var(--mb-ink); font: inherit; text-align: left; cursor: pointer; }
+  .mb-owe { display: flex; align-items: center; gap: 6px; font-family: var(--mb-type); font-size: 0.78rem; padding: 3px 0; flex-wrap: wrap; }
+  .mb-owe .amt { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .mb-paid { font-family: var(--mb-type); font-size: 0.6rem; font-weight: 700; color: var(--mb-ok); border: 1.5px solid var(--mb-ok); border-radius: 2px; padding: 0 4px; transform: rotate(-4deg); display: inline-block; }
+  .mb-toggle { display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1.5px solid var(--mb-ink); padding: 8px; font-family: var(--mb-type); font-size: 0.76rem; }
+  .mb-sw { width: 42px; height: 24px; flex-shrink: 0; border: 1.5px solid var(--mb-ink); border-radius: 100px; background: transparent; position: relative; cursor: pointer; padding: 0; }
+  .mb-sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 17px; height: 17px; border-radius: 50%; background: var(--mb-ink-soft); transition: transform 0.2s; }
+  .mb-sw[aria-checked="true"] { background: var(--mb-red); border-color: var(--mb-red); }
+  .mb-sw[aria-checked="true"]::after { transform: translateX(18px); background: var(--paper); }
+  .mb-void { position: relative; text-align: center; font-family: var(--mb-type); font-size: 0.8rem; color: var(--mb-ink-soft); padding: 30px 10px; border: 1.5px dashed var(--mb-ink-soft); }
+  .mb-splits { display: flex; flex-wrap: wrap; gap: 4px 10px; font-family: var(--mb-type); font-size: 0.72rem; }
+  .mb-splits label { display: inline-flex; align-items: center; gap: 4px; }
+  .mb-sig { display: grid; grid-template-columns: 26px 1fr auto; column-gap: 8px; align-items: end; padding: 3px 0; }
+  .mb-sig .av { width: 26px; height: 26px; border-radius: 3px; overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 0.58rem; font-weight: 800; color: var(--white); filter: grayscale(1); }
+  .mb-sig .av img { width: 100%; height: 100%; object-fit: cover; }
+  .mb-sig .line { border-bottom: 1px solid var(--mb-ink); min-height: 24px; padding-left: 4px; font-family: 'Segoe Script', 'Brush Script MT', cursive; font-size: 1.05rem; color: var(--neon-indigo); }
+  .mb-sig .st { font-family: var(--mb-type); font-size: 0.62rem; color: var(--mb-ink-soft); text-align: right; }
+  .mb-sig .st.ok { color: var(--mb-ok); font-weight: 700; }
+  .mb-sig.unclaimed .av, .mb-sig.unclaimed .line { opacity: 0.6; }
+  .mb-sig .line .nm { font-family: var(--mb-type); font-size: 0.72rem; color: var(--mb-ink-soft); }
+  .mb-gaps { display: flex; flex-direction: column; gap: 3px; font-family: var(--mb-type); font-size: 0.72rem; color: var(--mb-red); }
+  .mb-empty { font-family: var(--mb-type); font-size: 0.76rem; color: var(--mb-ink-soft); padding: 4px 0; }
+  .mb-loading { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--muted); font-family: var(--mb-type); letter-spacing: 0.14em; text-transform: uppercase; font-size: 0.8rem; }
+  @media (prefers-reduced-motion: reduce) { .mb-track { scroll-behavior: auto; } .mb-sw::after { transition: none; } }
 
   /* Roles: cast card (hero) */
   .game-plan-cast-wrap {
@@ -4822,6 +4949,16 @@
   .hd-vdur { font-family: var(--hd-mono); font-size: 0.66rem; color: var(--muted); flex-shrink: 0; }
 
   .hd-meetup { display: flex; flex-direction: column; gap: 4px; }
+  /* Mission Briefing share card: a scrap of the paper file, live numbers */
+  .hd-briefing { display: flex; flex-direction: column; gap: 3px; min-width: 210px; padding: 10px 12px; border-radius: 6px; cursor: pointer;
+    background: var(--paper); color: var(--surface2); box-shadow: 0 1px 4px rgba(var(--black-rgb),0.35); }
+  .hd-briefing-tab { font-family: 'Courier Prime', ui-monospace, monospace; font-weight: 700; font-size: 0.62rem; letter-spacing: 0.12em; color: var(--paper-ink); }
+  .hd-briefing-name { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 1.05rem; line-height: 1.1; }
+  .hd-briefing-when { font-family: 'Courier Prime', ui-monospace, monospace; font-size: 0.68rem; color: rgba(var(--surface2-rgb),0.62); text-transform: uppercase; }
+  .hd-briefing-stats { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 6px; border-top: 1px solid rgba(var(--surface2-rgb),0.18); }
+  .hd-briefing-stats div { padding-top: 6px; text-align: center; font-family: 'Courier Prime', ui-monospace, monospace; font-size: 0.58rem; text-transform: uppercase; color: rgba(var(--surface2-rgb),0.62); }
+  .hd-briefing-stats b { display: block; font-family: 'Outfit', sans-serif; font-size: 0.95rem; color: var(--surface2); }
+  .hd-briefing-open { margin-top: 4px; font-family: 'Courier Prime', ui-monospace, monospace; font-weight: 700; font-size: 0.7rem; color: var(--paper-ink); }
   .hd-lineup { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(var(--neon-yellow-rgb),0.35); background: rgba(var(--neon-yellow-rgb),0.07); }
   .hd-lineup-title { font-weight: 600; line-height: 1.4; }
   .hd-lineup-open { align-self: flex-start; font-size: 0.8rem; font-weight: 700; color: var(--neon-yellow); text-decoration: none; min-height: 32px; display: inline-flex; align-items: center; }
@@ -9872,6 +10009,13 @@
           </div>
           <button class="poll-anon-toggle" id="alert-toggle-postfest" onclick="toggleLineupAlert('postfest', this)"></button>
         </div>
+        <div class="poll-setting-row">
+          <div>
+            <div class="poll-setting-label">🎯 Mission Briefing</div>
+            <div class="poll-setting-hint">6 PM the night before: lock in with your crew</div>
+          </div>
+          <button class="poll-anon-toggle" id="alert-toggle-mission_briefing" onclick="toggleLineupAlert('mission_briefing', this)"></button>
+        </div>
       </div>
       <p class="settings-note">Lineup alerts come as a push on this device when it's allowed, otherwise by email.</p>
     </div>
@@ -10242,6 +10386,9 @@
   </div>
 </div>
 
+<!-- Mission Briefing — swipeable case-file deck over one crew + rave's Rave Plan -->
+<div id="mission-briefing-overlay" class="mb-overlay" role="dialog" aria-modal="true" aria-label="Mission Briefing" onclick="if(event.target===this)closeMissionBriefing()"></div>
+
 <!-- Meetup Pin Map Picker — zoom/pan a festival map, tap to place a pin -->
 <div id="meetup-map-overlay" class="photo-crop-overlay">
   <div class="photo-crop-box">
@@ -10484,7 +10631,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.21.4';
+  const APP_VERSION = '2.22.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -11283,7 +11430,7 @@
   // pushes carry a site path in url.
   function openFromNativePush(data) {
     if (!data) return;
-    if (data.crewId) { openHuddleDeepLink({ crewId: data.crewId, roomId: data.roomId, messageId: data.messageId }); return; }
+    if (data.crewId) { openHuddleDeepLink({ crewId: data.crewId, roomId: data.roomId, messageId: data.messageId, briefing: data.briefing }); return; }
     if (data.url) openNativeAppUrl(new URL(data.url, window.location.origin).href);
   }
 
@@ -19433,6 +19580,7 @@
   // ===== PM METRICS DASHBOARD (super-admin only) =====
   let pmDashData = null;
   let pmExplorerData = null;  // get_explorer_metrics() — Lineup Explorer → member funnel; null if it failed
+  let pmBriefingData = null;  // get_mission_briefing_metrics() — night-before nudge funnel; null if it failed
   let pmDashCharts = {};
   let _chartJsPromise = null;
   function loadChartJs() {
@@ -19474,11 +19622,13 @@
       <div class="text-hint-lg" style="margin-bottom:18px;">Live numbers straight from the database — visible to you only.</div>
       <div id="pm-dash-body" class="es-block" style="padding:40px 24px;"><div class="es-icon">⏳</div><div class="es-headline">Loading metrics…</div></div>
     `;
-    const [{ data, error }, explorerRes] = await Promise.all([
+    const [{ data, error }, explorerRes, briefingRes] = await Promise.all([
       sb.rpc('get_pm_dashboard_metrics'),
-      sb.rpc('get_explorer_metrics')
+      sb.rpc('get_explorer_metrics'),
+      sb.rpc('get_mission_briefing_metrics')
     ]);
     pmExplorerData = explorerRes && explorerRes.data && explorerRes.data.ok ? explorerRes.data : null;
+    pmBriefingData = briefingRes && briefingRes.data && briefingRes.data.ok ? briefingRes.data : null;
     if (error || !data || !data.ok) {
       const body = document.getElementById('pm-dash-body');
       if (body) body.innerHTML = `<div class="es-block" style="padding:40px 24px;"><div class="es-icon">⚠️</div><div class="es-headline">Couldn't load metrics</div><div class="es-sub">${escHtml(data?.error || error?.message || 'Unknown error')}</div></div>`;
@@ -19554,6 +19704,12 @@
         <div class="pm-section-title">🔭 Lineup Explorer → Members</div>
         <div class="pm-section-sub">Weekly cohorts of first-time explorer visitors, and how many signed up within 30 days (baseline before explorer member features)</div>
         ${pmExplorerSection(pmExplorerData)}
+      </div>
+
+      <div class="pm-section">
+        <div class="pm-section-title">🎯 Mission Briefing nudge</div>
+        <div class="pm-section-sub">6 PM the night before: nudges sent, and how many ravers opened their briefing from it within 24 h</div>
+        ${pmBriefingSection(pmBriefingData)}
       </div>
 
       <div class="pm-section">
@@ -19704,6 +19860,35 @@
       ${weeks || pmEmptyNote('No explorer visitors yet')}
       <div class="pm-section-sub" style="margin-top:12px;">Top lineups (7d)</div>
       ${top}`;
+  }
+
+  const PM_BRIEFING_SKIP_LABELS = {
+    turned_off: 'switched off', no_channel: 'no push or email', no_shared_crew: 'crew changed',
+    push_failed_no_email: 'push failed, no email'
+  };
+  function pmBriefingSection(x) {
+    if (!x) return pmEmptyNote('Mission Briefing metrics unavailable right now');
+    const rate = x.sent_30d ? `${Math.round((x.opened_30d / x.sent_30d) * 100)}%` : '—';
+    const kpis = `<div class="pm-kpi-grid">
+        ${pmKpiCard('Nudges sent (30d)', pmFmt(x.sent_30d), `${pmFmt(x.push_30d)} push · ${pmFmt(x.email_30d)} email`)}
+        ${pmKpiCard('Opened from nudge (30d)', rate, `${pmFmt(x.opened_30d)} of ${pmFmt(x.sent_30d)} within 24 h`)}
+      </div>`;
+    const weeks = (x.weekly || []).slice().reverse().map(w => `
+      <div class="pm-row">
+        <span class="pm-row-label">${pmWeekLabel(w.week_start)} <span class="pm-pill">n=${pmFmt(w.sent)}</span></span>
+        <span class="pm-row-value">${pmFmt(w.opened)} opened · ${w.sent ? Math.round((w.opened / w.sent) * 100) + '%' : '—'}</span>
+      </div>`).join('');
+    const skipped = Object.entries(x.skipped_30d || {}).map(([k, n]) => `
+      <div class="pm-row"><span class="pm-row-label">${escHtml(PM_BRIEFING_SKIP_LABELS[k] || k)}</span><span class="pm-row-value">${pmFmt(n)}</span></div>`).join('');
+    const sources = Object.entries(x.opens_by_source_30d || {}).sort((a, b) => b[1] - a[1]).map(([k, n]) => `
+      <div class="pm-row"><span class="pm-row-label">${escHtml(k.replace('_', ' '))}</span><span class="pm-row-value">${pmFmt(n)} open${n === 1 ? '' : 's'}</span></div>`).join('');
+    return `${kpis}
+      <div class="pm-section-sub" style="margin-top:12px;">Nudge → open by week (newest first)</div>
+      ${weeks || pmEmptyNote('No nudges sent yet')}
+      <div class="pm-section-sub" style="margin-top:12px;">Not delivered (30d)</div>
+      ${skipped || pmEmptyNote('Every nudge went out')}
+      <div class="pm-section-sub" style="margin-top:12px;">All briefing opens by entry point (30d)</div>
+      ${sources || pmEmptyNote('No briefings opened yet')}`;
   }
 
   function pmTopCrewsRows(crews) {
@@ -21060,6 +21245,7 @@
     if (m.kind === 'lineup') return m.body || '📋 Shared their lineup picks';
     if (m.kind === 'beacon') return `📣 ${m.body || 'Beacon'}`;
     if (m.kind === 'gif') return '🎞️ GIF';
+    if (m.kind === 'briefing') return m.body || '🎯 Mission Briefing';
     return m.body || '';
   }
 
@@ -21155,6 +21341,7 @@
       return `<div class="huddle-bubble-beacon-text">📣 ${escHtml(m.body || '')}</div>`;
     }
     if (m.kind === 'gif') return huddleGifHTML(m);
+    if (m.kind === 'briefing') return missionBriefingHuddleCardHTML(m);
     return highlightHuddleMentions(linkifyHuddleText(escHtml(m.body || '')));
   }
 
@@ -23107,6 +23294,8 @@
     if ('meetupAt' in fields) patch.meetup_at = fields.meetupAt;
     if ('meetupLocation' in fields) patch.meetup_location = fields.meetupLocation;
     if ('templateKey' in fields) patch.template_key = fields.templateKey;
+    if ('budgetEnabled' in fields) patch.budget_enabled = !!fields.budgetEnabled;
+    if ('currency' in fields) patch.currency = fields.currency;
     const { data, error } = await sb.from('game_plans').update(patch).eq('id', gamePlanId).select().single();
     if (error) { toastError('Could not save. Try again', error); return null; }
     const idx = gamePlans.findIndex(gp => gp.id === gamePlanId);
@@ -23340,6 +23529,174 @@
     return data;
   }
 
+  // -- Packing (Mission Briefing) — kind='pack'. scope 'personal' rows are
+  // owner-only at the RLS level, so gamePlanItems only ever holds the
+  // viewer's own; 'crew' rows are shared gear, claimed via
+  // dbClaimGamePlanTask exactly like an unassigned task.
+  async function dbAddPackItem(gamePlanId, crewId, text, scope) {
+    const { data, error } = await sb.from('game_plan_items').insert({
+      game_plan_id: gamePlanId, crew_id: crewId, kind: 'pack', added_by: currentUser.id,
+      text: text.trim(), scope: scope === 'crew' ? 'crew' : 'personal', is_done: false
+    }).select().single();
+    if (error) { toastError('Could not add that. Try again', error); return null; }
+    gamePlanItems.push(data);
+    return data;
+  }
+
+  async function dbTogglePackItem(itemId, done) {
+    const { data, error } = await sb.from('game_plan_items').update({ is_done: done }).eq('id', itemId).select().single();
+    if (error) { toastError('Could not update. Try again', error); return null; }
+    const idx = gamePlanItems.findIndex(it => it.id === itemId);
+    if (idx >= 0) gamePlanItems[idx] = data;
+    return data;
+  }
+
+  // A line on your own private list isn't crew content: no confirm, no audit
+  // row (the new-account rate limiter counts those), and the DB trigger
+  // skips the limiter for it too.
+  async function dbDeletePersonalPackItem(itemId) {
+    const { ok, rateLimited } = await softDeleteRow('game_plan_items', { id: itemId }, null);
+    if (!ok) { if (!rateLimited) toastError('Could not remove. Try again'); return false; }
+    gamePlanItems = gamePlanItems.filter(it => it.id !== itemId);
+    return true;
+  }
+
+  // -- Budget (Mission Briefing) — kind='expense' (assignee_raver_id = who
+  // paid, split_raver_ids null = everyone going) and kind='payment'
+  // (assignee_raver_id = from, to_raver_id = to). Balances are always
+  // recomputed from both, so a cost added after someone settled up stays
+  // correct. Removing either goes through dbDeleteGamePlanItem.
+  const BUDGET_CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'MXN'];
+
+  async function dbAddExpense(gamePlanId, crewId, text, amountCents, payerRaverId, splitRaverIds) {
+    const { data, error } = await sb.from('game_plan_items').insert({
+      game_plan_id: gamePlanId, crew_id: crewId, kind: 'expense', added_by: currentUser.id,
+      text: text.trim(), amount_cents: amountCents, assignee_raver_id: payerRaverId,
+      split_raver_ids: splitRaverIds && splitRaverIds.length ? splitRaverIds : null
+    }).select().single();
+    if (error) { toastError('Could not log that cost. Try again', error); return null; }
+    gamePlanItems.push(data);
+    return data;
+  }
+
+  async function dbUpdateExpense(itemId, fields) {
+    const patch = {};
+    if ('text' in fields) patch.text = fields.text.trim();
+    if ('amountCents' in fields) patch.amount_cents = fields.amountCents;
+    if ('payerRaverId' in fields) patch.assignee_raver_id = fields.payerRaverId;
+    if ('splitRaverIds' in fields) patch.split_raver_ids = fields.splitRaverIds && fields.splitRaverIds.length ? fields.splitRaverIds : null;
+    const { data, error } = await sb.from('game_plan_items').update(patch).eq('id', itemId).select().single();
+    if (error) {
+      toastError(error.message && error.message.includes('FORBIDDEN') ? 'Only whoever logged or paid this cost (or the crew lead) can edit it' : 'Could not save. Try again', error);
+      return null;
+    }
+    const idx = gamePlanItems.findIndex(it => it.id === itemId);
+    if (idx >= 0) gamePlanItems[idx] = data;
+    return data;
+  }
+
+  async function dbRecordPayment(gamePlanId, crewId, fromRaverId, toRaverId, amountCents) {
+    const { data, error } = await sb.from('game_plan_items').insert({
+      game_plan_id: gamePlanId, crew_id: crewId, kind: 'payment', added_by: currentUser.id,
+      assignee_raver_id: fromRaverId, to_raver_id: toRaverId, amount_cents: amountCents
+    }).select().single();
+    if (error) {
+      toastError(error.message && error.message.includes('FORBIDDEN') ? 'Only the two people settling up (or the crew lead) can mark this paid' : 'Could not mark paid. Try again', error);
+      return null;
+    }
+    gamePlanItems.push(data);
+    return data;
+  }
+
+  // "228", "228.5", "$1,140.00" → cents; null for anything that isn't a
+  // positive amount within the DB's 1¢–$100k check.
+  function parseMoneyToCents(input) {
+    const cleaned = String(input || '').replace(/[^0-9.]/g, '');
+    if (!/^\d+(\.\d{0,2})?$/.test(cleaned)) return null;
+    const cents = Math.round(parseFloat(cleaned) * 100);
+    return cents >= 1 && cents <= 10000000 ? cents : null;
+  }
+
+  function formatMoney(cents, currency) {
+    try {
+      return new Intl.NumberFormat(undefined, { style: 'currency', currency: currency || 'USD' }).format((cents || 0) / 100);
+    } catch (e) {
+      return `${((cents || 0) / 100).toFixed(2)} ${currency || 'USD'}`;
+    }
+  }
+
+  // Net position per raver id, in cents: > 0 is owed money, < 0 owes.
+  // goingRaverIds is the default split pool (every crew member going,
+  // unclaimed profiles included). Odd cents go to the first ravers in id
+  // order so every client computes the same split.
+  function computeBudgetBalances(items, goingRaverIds) {
+    const net = {};
+    const add = (id, cents) => { if (id) net[id] = (net[id] || 0) + cents; };
+    for (const it of items) {
+      if (it.deleted_at || !it.amount_cents) continue;
+      if (it.kind === 'expense') {
+        const pool = [...new Set((it.split_raver_ids && it.split_raver_ids.length ? it.split_raver_ids : goingRaverIds).map(String))].sort();
+        if (!pool.length) continue;
+        const base = Math.floor(it.amount_cents / pool.length);
+        const extra = it.amount_cents - base * pool.length;
+        add(String(it.assignee_raver_id), it.amount_cents);
+        pool.forEach((id, i) => add(id, -(base + (i < extra ? 1 : 0))));
+      } else if (it.kind === 'payment') {
+        add(String(it.assignee_raver_id), it.amount_cents);
+        add(String(it.to_raver_id), -it.amount_cents);
+      }
+    }
+    return net;
+  }
+
+  // Fewest who-pays-whom transfers that zero every balance: repeatedly match
+  // the biggest debtor with the biggest creditor.
+  function computeSettleUp(net) {
+    const debtors = [], creditors = [];
+    for (const [id, cents] of Object.entries(net)) {
+      if (cents < 0) debtors.push({ id, cents: -cents });
+      else if (cents > 0) creditors.push({ id, cents });
+    }
+    const byBiggest = (a, b) => b.cents - a.cents || (a.id < b.id ? -1 : 1);
+    const transfers = [];
+    while (debtors.length && creditors.length) {
+      debtors.sort(byBiggest); creditors.sort(byBiggest);
+      const d = debtors[0], c = creditors[0];
+      const cents = Math.min(d.cents, c.cents);
+      transfers.push({ fromRaverId: d.id, toRaverId: c.id, cents });
+      d.cents -= cents; c.cents -= cents;
+      if (!d.cents) debtors.shift();
+      if (!c.cents) creditors.shift();
+    }
+    return transfers;
+  }
+
+  // -- Ready check (Mission Briefing) — kind='ready', one row per raver per
+  // plan. Unlocking flips is_done rather than deleting, so updated_at always
+  // marks the last lock/unlock (what the "plan changed since" dot compares
+  // against). The DB only lets you lock in yourself.
+  async function dbSetReady(gamePlanId, crewId, raverId, ready) {
+    const findMine = () => gamePlanItems.find(it => it.kind === 'ready' && String(it.assignee_raver_id) === String(raverId));
+    let existing = findMine();
+    if (!existing) {
+      const { data, error } = await sb.from('game_plan_items').insert({
+        game_plan_id: gamePlanId, crew_id: crewId, kind: 'ready', added_by: currentUser.id,
+        assignee_raver_id: raverId, is_done: !!ready
+      }).select().single();
+      if (!error) { gamePlanItems.push(data); return data; }
+      // 23505: another tab locked in first. Pick up that row and update it.
+      if (error.code !== '23505') { toastError('Could not lock in. Try again', error); return null; }
+      await dbLoadGamePlanItems(gamePlanId);
+      existing = findMine();
+      if (!existing) { toastError('Could not lock in. Try again', error); return null; }
+    }
+    const { data, error } = await sb.from('game_plan_items').update({ is_done: !!ready }).eq('id', existing.id).select().single();
+    if (error) { toastError('Could not update your lock-in. Try again', error); return null; }
+    const idx = gamePlanItems.findIndex(it => it.id === existing.id);
+    if (idx >= 0) gamePlanItems[idx] = data;
+    return data;
+  }
+
   function deleteGamePlanItem(itemId, crewId, label, onDone) {
     showConfirmWithReason(
       `Remove this ${label}?`,
@@ -23495,6 +23852,7 @@
     return `
       ${ordered.length > 1 ? `<div class="text-hint-xs" style="margin-bottom:8px;">Tap between raves you and your crew are both going to</div>` : ''}
       <div class="game-plan-rave-picker">${picker}</div>
+      <button class="btn btn-primary btn-wide" style="margin-bottom:10px;" onclick="openMissionBriefing('${escCrewId}','${escJsAttr(activeFestId)}')">🎯 Mission Briefing</button>
       <div class="game-plan-shortcuts">
         <button class="btn btn-ghost" onclick="openHuddleForFestival('${escCrewId}','${escJsAttr(activeFestId)}')">🕊️ Huddle</button>
         <button class="btn btn-ghost" onclick="jumpToGamePlanJams('${escCrewId}','${escJsAttr(activeFestId)}')">🎧 Jams</button>
@@ -24364,6 +24722,1015 @@
     hapticImpact('LIGHT');
     await dbToggleReaction('game_plan_items', gamePlanItems, itemId, emoji);
     rerenderGamePlanOutfit(_gamePlanActiveCrewId);
+  }
+
+  // ===== MISSION BRIEFING =====
+  // Full-screen, swipeable case-file deck over one crew + rave's Rave Plan:
+  // eight pages (cover, lineup, orders, logistics, meetup, kit, ledger,
+  // sign-off), each a live editor over the same gamePlans/gamePlanItems the
+  // Rave Plan tab uses. Opening goes through loadGamePlanForFestival, so the
+  // tab and the deck always agree on which rave is loaded. Every write goes
+  // through the GAME PLAN db* helpers (or the tab's own handlers where those
+  // don't read the tab's inputs); while open, a realtime channel scoped to
+  // this one plan keeps crewmates' ticks and lock-ins live.
+
+  const MB_CARDS = [
+    { key: 'cover',     tab: 'COVER',     next: 'LINEUP →' },
+    { key: 'lineup',    tab: 'LINEUP',    next: 'ORDERS →' },
+    { key: 'orders',    tab: 'ORDERS',    next: 'LOGISTICS →' },
+    { key: 'logistics', tab: 'LOGISTICS', next: 'RENDEZVOUS →' },
+    { key: 'meetup',    tab: 'MEETUP',    next: 'KIT →' },
+    { key: 'kit',       tab: 'KIT',       next: 'EXPENSES →' },
+    { key: 'ledger',    tab: 'LEDGER',    next: 'SIGN-OFF →' },
+    { key: 'signoff',   tab: 'SIGN-OFF',  next: 'END OF FILE · PLUR' }
+  ];
+  // Item kinds behind each page, for the "changed since you locked in" dot.
+  // Private packing never counts: only you can change it.
+  const MB_CARD_KINDS = {
+    orders: ['task', 'role'],
+    logistics: ['carpool_driver', 'carpool_rider', 'lodging_host', 'lodging_guest'],
+    kit: ['pack'],
+    ledger: ['expense', 'payment']
+  };
+  const MB_KIT_STARTER = ['ID + wristband', 'Earplugs', 'Portable charger', 'Hydration pack', 'Sunscreen', 'Kandi to trade'];
+  const MB_VACANT_ROLES = ['Driver / DD', 'First Aid'];
+
+  // { crewId, festivalId, card, channel, appearances, meetupPin, weather,
+  //   editingTheme, editingExpenseId, splitOpen, rerenderTimer } — null when closed.
+  let _mb = null;
+
+  // ── State helpers ──
+
+  function mbPlan() {
+    if (!_mb) return null;
+    return gamePlans.find(g => String(g.crew_id) === String(_mb.crewId) && String(g.festival_id) === String(_mb.festivalId)) || null;
+  }
+  function mbFest() { return _mb ? festivals.find(f => String(f.id) === String(_mb.festivalId)) || null : null; }
+  // Everyone in the crew RSVP'd to this rave, unclaimed profiles included:
+  // they count in a cost split, they just can't lock in.
+  function mbGoing() {
+    const crew = _mb && getCrew(_mb.crewId);
+    if (!crew) return [];
+    return crewSquad(crew).filter(p => (p.festIds || []).some(id => String(id) === String(_mb.festivalId)));
+  }
+  function mbPerson(raverId) {
+    return mbGoing().find(p => String(p.id) === String(raverId)) || getRaver(raverId) || null;
+  }
+  function mbFirst(r) { return r ? displayName(r).split(' ')[0] : 'Someone'; }
+  function mbInitials(raverId) {
+    const r = mbPerson(raverId);
+    return r ? initials(displayName(r)).toUpperCase() : '?';
+  }
+  function mbItems(kind) { return gamePlanItems.filter(it => it.kind === kind && !it.deleted_at); }
+  function mbMe() { return squad.find(r => r.isYou) || null; }
+  function mbCanManage() { return crewPerms(getCrew(_mb.crewId)).canEdit; }
+  function mbAv(r, cls) {
+    return raverAvatarHTML(r ? r.avatarUrl : null, r ? r.gradient : null, r ? displayName(r) : '?', cls, '');
+  }
+  function mbPeopleOptions(people, selectedId) {
+    return people.map(p => `<option value="${escHtml(String(p.id))}"${String(p.id) === String(selectedId) ? ' selected' : ''}>${escHtml(mbFirst(p))}</option>`).join('');
+  }
+
+  function mbMyReady() {
+    const me = mbMe();
+    return me ? mbItems('ready').find(it => String(it.assignee_raver_id) === String(me.id)) || null : null;
+  }
+  function mbReadyCount() {
+    const claimed = mbGoing().filter(raverIsClaimed);
+    const doneIds = new Set(mbItems('ready').filter(r => r.is_done).map(r => String(r.assignee_raver_id)));
+    return { total: claimed.length, done: claimed.filter(p => doneIds.has(String(p.id))).length, doneIds };
+  }
+  // Going but in nobody's car, once at least one ride exists.
+  function mbNeedsRide() {
+    const drivers = mbItems('carpool_driver');
+    if (!drivers.length) return [];
+    const inCar = new Set(drivers.concat(mbItems('carpool_rider')).map(it => String(it.assignee_raver_id)));
+    return mbGoing().filter(p => !inCar.has(String(p.id)));
+  }
+  // Pages that changed after your last lock-in. The header row's updated_at
+  // moves for the meetup, theme and budget switch alike; it's flagged on the
+  // meetup page, the one people re-check.
+  function mbChangedCards() {
+    const mine = mbMyReady();
+    const out = new Set();
+    if (!mine || !mine.is_done) return out;
+    const since = new Date(mine.updated_at || mine.created_at).getTime();
+    const after = it => new Date(it.updated_at || it.created_at).getTime() > since;
+    for (const [card, kinds] of Object.entries(MB_CARD_KINDS)) {
+      if (gamePlanItems.some(it => kinds.includes(it.kind) && it.scope !== 'personal' && after(it))) out.add(card);
+    }
+    const gp = mbPlan();
+    if (gp && gp.updated_at && new Date(gp.updated_at).getTime() > since) out.add('meetup');
+    return out;
+  }
+
+  // ── Open / close ──
+
+  // source (rave_plan | rave_focus | huddle | nudge) feeds the PM
+  // dashboard's nudge funnel via briefing_opened.
+  async function openMissionBriefing(crewId, festivalId, startCard = 'cover', source = 'rave_plan') {
+    if (!currentUser) { toastError('Sign in to open the Mission Briefing'); return; }
+    if (!getCrew(crewId)) return;
+    const overlay = document.getElementById('mission-briefing-overlay');
+    if (!overlay) return;
+    if (_mb) closeMissionBriefing({ quiet: true });
+    _mb = {
+      crewId, festivalId, card: Math.max(0, MB_CARDS.findIndex(c => c.key === startCard)),
+      channel: null, appearances: [], meetupPin: null, weather: null,
+      editingTheme: false, editingExpenseId: null, splitOpen: false, rerenderTimer: null
+    };
+    const session = _mb;
+    overlay.innerHTML = `<div class="mb-loading">Opening case file…</div>`;
+    overlay.classList.add('open');
+    await Promise.all([loadGamePlanForFestival(crewId, festivalId), mbLoadAppearances(festivalId)]);
+    if (_mb !== session) return; // closed or reopened while loading
+    if (!mbPlan()) { closeMissionBriefing({ quiet: true }); toastError('Could not open the briefing. Try again'); return; }
+    mbRenderShell();
+    mbSubscribe();
+    logAnalyticsEvent('briefing_opened', { crew_id: crewId, source, festival_id: festivalId });
+    mbLoadMeetupPin(session);
+    mbLoadWeather(session);
+  }
+
+  function closeMissionBriefing(opts = {}) {
+    const overlay = document.getElementById('mission-briefing-overlay');
+    if (_mb) {
+      if (_mb.channel) { try { sb.removeChannel(_mb.channel); } catch (e) { /* already gone */ } }
+      clearTimeout(_mb.rerenderTimer);
+    }
+    _mb = null;
+    if (overlay) { overlay.classList.remove('open'); overlay.innerHTML = ''; }
+    if (opts.quiet) return;
+    // gamePlanItems is shared with the Rave Plan tab and now holds the
+    // briefing's plan. If the tab is on screen, reload it for its own crew.
+    const panel = document.getElementById('crew-feature-panel-raveplan');
+    if (panel && panel.style.display !== 'none' && activeDetailId) openGamePlanTab(activeDetailId);
+  }
+
+  // Leave the deck for another screen (RSVP, Huddle, Lineup Explorer).
+  function mbJump(where) {
+    if (!_mb) return;
+    const { crewId, festivalId } = _mb;
+    const fest = mbFest();
+    closeMissionBriefing();
+    if (where === 'rsvp') openRaveFocus(festivalId);
+    else if (where === 'huddle') openHuddleForFestival(crewId, festivalId);
+    else if (where === 'huddle-pin') Promise.resolve(openHuddle(crewId, { festivalId })).then(() => toggleHuddleMeetupForm());
+    else if (where === 'explorer' && fest) { const url = getLineupExplorerUrl(fest); if (url) openLineupExplorer(url); }
+  }
+
+  // ── Loading extras (set times, the live meetup pin, weather) ──
+
+  // The shared artistAppearances cache doesn't carry set times; fetch them
+  // for just this rave.
+  async function mbLoadAppearances(festivalId) {
+    const { data, error } = await sb.from('artist_festival_appearances')
+      .select('artist_id,start_at,end_at,stage,night').eq('festival_id', festivalId);
+    if (error) { console.error('briefing set times load error', error); return; }
+    if (_mb && String(_mb.festivalId) === String(festivalId)) _mb.appearances = data || [];
+  }
+
+  async function mbLoadMeetupPin(session) {
+    const room = await ensureHuddleRoomForFestival(session.crewId, session.festivalId);
+    if (!room || _mb !== session) return;
+    const { data, error } = await sb.from('huddle_messages')
+      .select('body,meetup_at,pin_x,pin_y,sender_id,created_at')
+      .eq('room_id', room.id).eq('kind', 'meetup').is('deleted_at', null)
+      .order('created_at', { ascending: false }).limit(1);
+    if (error) { console.error('briefing meetup pin load error', error); return; }
+    if (_mb === session && data && data[0]) { _mb.meetupPin = data[0]; mbRenderCard('meetup'); }
+  }
+
+  async function mbLoadWeather(session) {
+    const f = mbFest();
+    if (!f) return;
+    const fx = { ...f, _d: festDate(f) };
+    if (!weatherEligible(fx)) return;
+    const cache = loadWeatherCache();
+    const hit = cache[weatherCacheKey(fx)];
+    let data = hit && (Date.now() - hit.ts) < WEATHER_TTL_MS ? hit.data : undefined;
+    if (data === undefined) {
+      try {
+        data = await fetchFestWeather(fx);
+        cache[weatherCacheKey(fx)] = { ts: Date.now(), data };
+        saveWeatherCache(cache);
+      } catch (e) { return; /* weather is decorative */ }
+    }
+    if (_mb === session && data) { _mb.weather = data; mbRenderCard('cover'); }
+  }
+
+  // ── Live sync ──
+
+  function mbSubscribe() {
+    const gp = mbPlan();
+    if (!gp || !sb || typeof sb.channel !== 'function') return;
+    const onItem = payload => {
+      if (!_mb) return;
+      const row = payload.new && payload.new.id ? payload.new : null;
+      if (payload.eventType === 'DELETE' || (row && row.deleted_at)) {
+        const id = row ? row.id : (payload.old && payload.old.id);
+        gamePlanItems = gamePlanItems.filter(it => it.id !== id);
+      } else if (row) {
+        const idx = gamePlanItems.findIndex(it => it.id === row.id);
+        if (idx >= 0) gamePlanItems[idx] = row; else gamePlanItems.push(row);
+      }
+      mbScheduleRerender();
+    };
+    const onPlan = payload => {
+      if (!_mb || !payload.new) return;
+      const idx = gamePlans.findIndex(g => g.id === payload.new.id);
+      if (idx >= 0) gamePlans[idx] = payload.new;
+      mbScheduleRerender();
+    };
+    _mb.channel = sb.channel(`mission-briefing-${gp.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_plan_items', filter: `game_plan_id=eq.${gp.id}` }, onItem)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_plans', filter: `id=eq.${gp.id}` }, onPlan)
+      .subscribe();
+  }
+
+  function mbScheduleRerender() {
+    if (!_mb) return;
+    clearTimeout(_mb.rerenderTimer);
+    _mb.rerenderTimer = setTimeout(mbRerenderAll, 120);
+  }
+
+  // ── Shell, paging, rendering ──
+
+  function mbRenderShell() {
+    const overlay = document.getElementById('mission-briefing-overlay');
+    if (!overlay || !_mb) return;
+    overlay.innerHTML = `
+      <div class="mb-chrome">
+        <button type="button" class="mb-x" onclick="closeMissionBriefing()" aria-label="Close briefing">✕</button>
+        <div class="mb-tabs" id="mb-tabs" role="tablist" aria-label="Briefing pages">${MB_CARDS.map((c, i) =>
+          `<button type="button" class="mb-tab" role="tab" aria-label="${escHtml(c.tab.toLowerCase())}" onclick="mbGoTo(${i})"></button>`).join('')}</div>
+        <button type="button" class="mb-share" onclick="mbShareToHuddle()">Share ↗</button>
+      </div>
+      <div class="mb-track" id="mb-track">${MB_CARDS.map(c =>
+        `<section class="mb-page" aria-label="${escHtml(c.tab.toLowerCase())}"><div class="mb-file"><div class="mb-sheet" id="mb-card-${c.key}"></div></div></section>`).join('')}</div>`;
+    MB_CARDS.forEach(c => mbRenderCard(c.key));
+    const track = document.getElementById('mb-track');
+    track.scrollLeft = _mb.card * track.clientWidth;
+    track.addEventListener('scroll', mbOnScroll, { passive: true });
+    mbUpdateTabs();
+  }
+
+  function mbOnScroll() {
+    const track = document.getElementById('mb-track');
+    if (!track || !_mb) return;
+    const i = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
+    if (i !== _mb.card) { _mb.card = i; mbUpdateTabs(); }
+  }
+
+  function mbGoTo(i) {
+    const track = document.getElementById('mb-track');
+    if (!track) return;
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    track.scrollTo({ left: i * track.clientWidth, behavior: reduce ? 'auto' : 'smooth' });
+  }
+
+  function mbUpdateTabs() {
+    if (!_mb) return;
+    const changed = mbChangedCards();
+    document.querySelectorAll('#mb-tabs .mb-tab').forEach((t, i) => {
+      t.classList.toggle('on', i === _mb.card);
+      t.classList.toggle('seen', i < _mb.card);
+      t.classList.toggle('changed', changed.has(MB_CARDS[i].key));
+      t.setAttribute('aria-selected', i === _mb.card ? 'true' : 'false');
+    });
+  }
+
+  function mbRenderCard(key) {
+    const el = document.getElementById('mb-card-' + key);
+    // A data refresh (loadAllData) empties crews for a moment; keep the page
+    // as drawn until the crew is back rather than render half a file.
+    if (!el || !_mb || !getCrew(_mb.crewId)) return;
+    // Keep anything mid-typed, the focused field and the scroll position
+    // across a re-render: crewmates' realtime changes land while you write.
+    const kept = {};
+    el.querySelectorAll('input[id], select[id]').forEach(i => {
+      const dirty = i.type === 'checkbox' ? i.checked !== i.defaultChecked
+        : i.tagName === 'SELECT' ? i === document.activeElement : i.value !== i.defaultValue;
+      if (dirty) kept[i.id] = i.type === 'checkbox' ? i.checked : i.value;
+    });
+    const focusId = el.contains(document.activeElement) && document.activeElement.id ? document.activeElement.id : null;
+    const scrollTop = el.querySelector('.mb-body')?.scrollTop || 0;
+    el.innerHTML = mbSheetHTML(key);
+    for (const [id, v] of Object.entries(kept)) {
+      const i = document.getElementById(id);
+      if (i) { if (i.type === 'checkbox') i.checked = v; else i.value = v; }
+    }
+    const body = el.querySelector('.mb-body');
+    if (body) body.scrollTop = scrollTop;
+    if (focusId) document.getElementById(focusId)?.focus({ preventScroll: true });
+  }
+
+  function mbRerenderAll() {
+    if (!_mb) return;
+    delete _mbStatsCache[mbStatsKey(_mb.crewId, _mb.festivalId)];
+    MB_CARDS.forEach(c => mbRenderCard(c.key));
+    mbUpdateTabs();
+  }
+
+  function mbSheetHTML(key) {
+    const i = MB_CARDS.findIndex(c => c.key === key);
+    const card = MB_CARDS[i];
+    const page = MB_BUILDERS[key]();
+    return `
+      <div class="mb-sheet-h"><div class="mb-ref">${page.ref}</div><span class="mb-tabel">${card.tab}</span></div>
+      <div class="mb-body">
+        <div><div class="mb-sub">${escHtml(page.sub)}</div><h3 class="mb-h">${escHtml(page.title)}</h3></div>
+        ${page.body}
+      </div>
+      <div class="mb-foot"><span>PAGE ${i + 1} OF ${MB_CARDS.length}</span><b>${card.next}</b></div>`;
+  }
+
+  // ── Page builders ── each returns { ref (HTML), sub, title, body (HTML) }.
+
+  function mbDateRange(f) {
+    const d = festDate(f);
+    if (!d) return '';
+    const days = Math.max(1, Number(f.days) || 1);
+    const end = new Date(d); end.setDate(end.getDate() + days - 1);
+    const fmt = x => x.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+    return days === 1 ? fmt(d) : `${fmt(d)} – ${fmt(end)}`;
+  }
+  function mbCaseRef(f) {
+    const d = festDate(f);
+    const code = (f.name || 'RAVE').replace(/[^A-Za-z0-9 ]/g, '').split(/\s+/).filter(Boolean).map(w => w.slice(0, 3)).join('-').toUpperCase().slice(0, 11);
+    return `${code || 'RAVE'}-${d ? String(d.getFullYear()).slice(2) : '00'}`;
+  }
+  function mbTMinus(f) {
+    const d = festDate(f);
+    if (!d) return 'TBA';
+    const ms = d.getTime() - Date.now();
+    if (ms <= 0) return ms > -Math.max(1, Number(f.days) || 1) * 86400000 ? 'MISSION LIVE' : 'CASE CLOSED';
+    const h = Math.floor(ms / 3600000);
+    return `${Math.floor(h / 24)}d ${String(h % 24).padStart(2, '0')}h`;
+  }
+
+  function mbBuildCover() {
+    const f = mbFest(), gp = mbPlan(), crew = getCrew(_mb.crewId);
+    const going = mbGoing();
+    const tasks = mbItems('task');
+    const ready = mbReadyCount();
+    const needRide = mbNeedsRide().length;
+    const w = _mb.weather;
+    const theme = _mb.editingTheme
+      ? `<div class="mb-write"><input id="mb-theme-input" maxlength="120" aria-label="Theme" placeholder="cosmic cowboys, all white…" value="${escHtml(gp.theme_text || '')}"><button type="button" class="mb-btn" onclick="mbAct('theme-save')">Save</button></div>`
+      : `${gp.theme_text ? `<span class="mb-hl">${escHtml(gp.theme_text)}</span>` : `<span class="mb-type" style="color:var(--mb-ink-soft);">None yet</span>`}<button type="button" class="mb-link" onclick="mbAct('theme-edit')">✎ edit</button>`;
+    const pols = going.map(p => {
+      const t = p.ticketTypes && p.ticketTypes[_mb.festivalId];
+      const tt = t && TICKET_TYPES.find(x => x.key === t.type);
+      return `<div class="mb-pol">${mbAv(p, 'mb-pol-face')}<small>${escHtml(mbFirst(p))}${tt ? ' · ' + escHtml(tt.abbr) : ''}</small></div>`;
+    }).join('');
+    const status = [
+      `${tasks.filter(t => t.is_done).length}/${tasks.length} tasks done`,
+      needRide ? `${needRide} need${needRide === 1 ? 's' : ''} a ride` : null,
+      `${ready.done}/${ready.total} signed`
+    ].filter(Boolean).join(' · ');
+    return {
+      ref: `CASE <b>${escHtml(mbCaseRef(f))}</b><br>CREW: ${escHtml(crew.name)}`,
+      sub: 'Operation', title: f.name,
+      body: `
+        <span class="mb-stamp" style="right:12px;top:10px;transform:rotate(12deg);font-size:0.7rem;">Top secret</span>
+        <dl class="mb-fields">
+          <dt>When</dt><dd>${escHtml(mbDateRange(f) || 'Date TBA')}</dd>
+          <dt>Where</dt><dd>${escHtml(f.location || 'Location TBA')}</dd>
+          ${w ? `<dt>Weather</dt><dd>${w.icon} ${escHtml(w.temp)}</dd>` : ''}
+          <dt>Theme</dt><dd>${theme}</dd>
+          <dt>T-minus</dt><dd class="mb-type" style="font-size:1rem;font-weight:700;">${escHtml(mbTMinus(f))}</dd>
+        </dl>
+        <div class="mb-sec">Operatives · ${going.length}</div>
+        <div class="mb-pols">${pols || `<span class="mb-empty">No one from the crew is going yet.</span>`}</div>
+        <div class="mb-clip">STATUS: ${escHtml(status)}</div>
+        <button type="button" class="mb-btn ghost" onclick="mbJump('rsvp')">Edit my RSVP</button>`
+    };
+  }
+
+  function mbSetLabel(ap, tz) {
+    if (!ap || !ap.start_at) return ap && ap.night ? escHtml(String(ap.night)) : '—';
+    try {
+      return escHtml(new Intl.DateTimeFormat(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: tz || undefined })
+        .format(new Date(ap.start_at)).replace(/\s?([AP])M/i, (m, a) => a.toLowerCase()));
+    } catch (e) {
+      return escHtml(new Date(ap.start_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }));
+    }
+  }
+
+  function mbBuildLineup() {
+    const f = mbFest(), me = mbMe();
+    const going = mbGoing();
+    const goingIds = new Set(going.map(p => String(p.id)));
+    const picks = raverArtistPlans.filter(p => String(p.festival_id) === String(_mb.festivalId) && goingIds.has(String(p.raver_id)));
+    const byArtist = {};
+    picks.forEach(p => { (byArtist[String(p.artist_id)] = byArtist[String(p.artist_id)] || []).push(String(p.raver_id)); });
+    const apBy = {};
+    _mb.appearances.forEach(a => { apBy[String(a.artist_id)] = a; });
+    const startKey = r => (r.ap && r.ap.start_at) || '~';
+    const rows = Object.keys(byArtist).map(aid => ({ aid, artist: findArtistById(aid), ap: apBy[aid], who: byArtist[aid].sort() }))
+      .sort((a, b) => startKey(a) < startKey(b) ? -1 : startKey(a) > startKey(b) ? 1 : (a.artist?.name || '').localeCompare(b.artist?.name || ''));
+    const mine = new Set(picks.filter(p => me && String(p.raver_id) === String(me.id)).map(p => String(p.artist_id)));
+    const whoLabel = who => who.length === goingIds.size && goingIds.size > 1 ? 'WHOLE CREW' : who.map(mbInitials).join(' ');
+
+    // Two crew-picked sets that overlap, picked by different people: someone splits off.
+    const timed = rows.filter(r => r.ap && r.ap.start_at && r.ap.end_at);
+    const clashes = [];
+    for (let i = 0; i < timed.length && clashes.length < 2; i++) {
+      for (let j = i + 1; j < timed.length && clashes.length < 2; j++) {
+        const a = timed[i], b = timed[j];
+        const overlap = Math.min(new Date(a.ap.end_at), new Date(b.ap.end_at)) - Math.max(new Date(a.ap.start_at), new Date(b.ap.start_at));
+        if (overlap > 0 && a.who.join() !== b.who.join()) clashes.push({ a, b, min: Math.round(overlap / 60000) });
+      }
+    }
+    const sched = rows.map(r => `
+      <span class="tm">${mbSetLabel(r.ap, f.timezone)}</span>
+      <span class="nm"><b>${escHtml(r.artist ? r.artist.name : 'Unknown artist')}</b><span>${r.ap && r.ap.stage ? escHtml(r.ap.stage) + ' · ' : ''}${escHtml(whoLabel(r.who))}</span></span>
+      ${me ? `<button type="button" class="mb-star${mine.has(r.aid) ? ' on' : ''}" aria-pressed="${mine.has(r.aid)}" aria-label="${mine.has(r.aid) ? 'Drop from' : 'Add to'} my picks: ${escHtml(r.artist ? r.artist.name : 'artist')}" onclick="mbAct('pick','${escJsAttr(r.aid)}')">★</button>` : '<span></span>'}`).join('');
+    const addable = lineupArtistsFor(_mb.festivalId)
+      .map(a => findArtistById(a.artist_id)).filter(a => a && !mine.has(String(a.id)))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const explorer = getLineupExplorerUrl(f);
+    return {
+      ref: `EXHIBIT <b>B</b><br>${rows.length} TARGET${rows.length === 1 ? '' : 'S'} · ${picks.length} PICK${picks.length === 1 ? '' : 'S'}`,
+      sub: 'Surveillance schedule', title: "Who we're seeing",
+      body: `
+        ${rows.length ? `<div class="mb-sched">${sched}</div>` : `<div class="mb-empty">No crew picks yet. Star the sets you don't want to miss.</div>`}
+        ${clashes.map(c => `<div class="mb-clip">⚠ MEMO: ${escHtml(c.a.artist ? c.a.artist.name : 'A set')} × ${escHtml(c.b.artist ? c.b.artist.name : 'a set')} overlap ${c.min} min. <button type="button" class="mb-link" onclick="mbGoTo(4)">set a regroup spot</button></div>`).join('')}
+        ${me && addable.length ? `<div class="mb-write"><select id="mb-pick-add" aria-label="Add an artist to your picks"><option value="">Add a set…</option>${addable.map(a => `<option value="${escHtml(String(a.id))}">${escHtml(a.name)}</option>`).join('')}</select><button type="button" class="mb-btn" onclick="mbAct('pick-add')">Add</button></div>` : ''}
+        ${!lineupArtistsFor(_mb.festivalId).length ? `<div class="mb-empty">No lineup posted for this rave yet.</div>` : ''}
+        ${explorer ? `<button type="button" class="mb-btn ghost" onclick="mbJump('explorer')">Open the Lineup Explorer</button>` : ''}`
+    };
+  }
+
+  function mbBuildOrders() {
+    const uid = currentUser.id, me = mbMe(), canManage = mbCanManage();
+    const tasks = mbItems('task');
+    const taskRow = t => {
+      const assignee = t.assignee_raver_id ? mbPerson(t.assignee_raver_id) : null;
+      const canToggle = canManage || t.added_by === uid || (me && String(me.id) === String(t.assignee_raver_id)) || !t.assignee_raver_id;
+      return `<div class="mb-li${t.is_done ? ' done' : ''}">
+        <button type="button" class="mb-box${t.is_done ? ' on' : ''}" ${canToggle ? '' : 'disabled'} aria-pressed="${t.is_done}" aria-label="${t.is_done ? 'Mark not done' : 'Mark done'}: ${escHtml(t.text)}" onclick="mbAct('task-toggle','${escJsAttr(t.id)}')"></button>
+        <span class="t">${escHtml(t.text)}</span>
+        ${assignee ? `<span class="mb-who">${escHtml(mbFirst(assignee).toUpperCase())}</span>`
+          : (me && !t.is_done ? `<button type="button" class="mb-claim" onclick="mbAct('task-claim','${escJsAttr(t.id)}')">CLAIM</button>` : '')}
+        <button type="button" class="mb-del" title="Change when" aria-label="Change when: ${escHtml(t.text)}" onclick="mbAct('task-phase','${escJsAttr(t.id)}')">⏱</button>
+        ${ownerOrManager(t.added_by, uid, canManage) ? `<button type="button" class="mb-del" aria-label="Remove task: ${escHtml(t.text)}" onclick="mbAct('task-del','${escJsAttr(t.id)}')">✕</button>` : ''}
+      </div>`;
+    };
+    const groups = GAME_PLAN_TASK_PHASES.map(p => ({ key: p.key, label: `${p.icon} ${p.label}` })).concat([{ key: null, label: '📋 Anytime' }]);
+    const taskHTML = groups.map(g => {
+      const list = tasks.filter(t => (t.phase || null) === g.key);
+      return list.length ? `<div class="mb-phase">${escHtml(g.label)}</div>${list.map(taskRow).join('')}` : '';
+    }).join('');
+
+    const roles = mbItems('role');
+    const roleCell = r => {
+      const who = mbPerson(r.assignee_raver_id);
+      const canDel = ownerOrManager(r.added_by, uid, canManage) || (who && who.isYou);
+      return `<div class="mb-role"><span><b>${gamePlanRoleIcon(r.role_name)} ${escHtml(r.role_name)}</b>${escHtml(mbFirst(who).toUpperCase())}</span>${canDel ? `<button type="button" class="mb-del" aria-label="Remove role: ${escHtml(r.role_name)}" onclick="mbAct('role-del','${escJsAttr(r.id)}')">✕</button>` : ''}</div>`;
+    };
+    const vacant = me ? MB_VACANT_ROLES.filter(name => !roles.some(r => r.role_name === name)) : [];
+    const going = mbGoing();
+    const done = tasks.filter(t => t.is_done).length;
+    return {
+      ref: `ORDERS <b>${done}/${tasks.length}</b> COMPLETE<br>${roles.length} ASSIGNMENT${roles.length === 1 ? '' : 'S'}`,
+      sub: 'Standing orders', title: "Who's doing what",
+      body: `
+        <div class="mb-sec">Tasks</div>
+        ${taskHTML || `<div class="mb-empty">No tasks yet. Add the first one below.</div>`}
+        <div class="mb-write">
+          <input id="mb-task-text" maxlength="200" aria-label="New task" placeholder="New order…">
+          <select id="mb-task-phase" aria-label="When"><option value="">Anytime</option>${GAME_PLAN_TASK_PHASES.map(p => `<option value="${p.key}">${p.icon} ${escHtml(p.label)}</option>`).join('')}</select>
+          <button type="button" class="mb-btn" onclick="mbAct('task-add')">Add</button>
+        </div>
+        <div class="mb-sec">Assignments</div>
+        ${roles.length || vacant.length ? `<div class="mb-roles">${roles.map(roleCell).join('')}${vacant.map(name =>
+          `<button type="button" class="mb-role open" onclick="mbAct('role-take','${escJsAttr(name)}')"><span><b>${gamePlanRoleIcon(name)} ${escHtml(name)}</b>VACANT · take it</span></button>`).join('')}</div>`
+          : `<div class="mb-empty">No roles handed out yet.</div>`}
+        ${going.length ? `<div class="mb-write">
+          <select id="mb-role-name" aria-label="Role">${GAME_PLAN_ROLES.map(r => `<option value="${escHtml(r)}">${gamePlanRoleIcon(r)} ${escHtml(r)}</option>`).join('')}</select>
+          <select id="mb-role-who" aria-label="Who">${mbPeopleOptions(going, me && me.id)}</select>
+          <button type="button" class="mb-btn" onclick="mbAct('role-add')">Assign</button>
+        </div>` : ''}`
+    };
+  }
+
+  function mbBuildLogistics() {
+    const uid = currentUser.id, me = mbMe(), canManage = mbCanManage();
+    const going = mbGoing();
+    const drivers = mbItems('carpool_driver'), riders = mbItems('carpool_rider');
+    const hosts = mbItems('lodging_host'), guests = mbItems('lodging_guest');
+    const inCar = new Set(drivers.concat(riders).map(it => String(it.assignee_raver_id)));
+    const staying = new Set(hosts.concat(guests).map(it => String(it.assignee_raver_id)));
+    const carless = going.filter(p => !inCar.has(String(p.id)));
+    const roofless = going.filter(p => !staying.has(String(p.id)));
+
+    // One manifest for a car or a stay: named seats, then open ones. The
+    // first open slot carries the "assign" picker; null capacity = no limit.
+    const manifest = (head, parent, children, pool, joinAction, removeAction, removeLabel, parentDelAction, capacity) => {
+      const rows = children.map(c => {
+        const who = mbPerson(c.assignee_raver_id);
+        const canDel = ownerOrManager(c.added_by, uid, canManage) || (who && who.isYou);
+        return `<div class="mr"><span>${escHtml(mbFirst(who).toUpperCase())}</span>${canDel ? `<button type="button" class="mb-del" aria-label="Remove ${removeLabel}" onclick="mbAct('${escJsAttr(removeAction)}','${escJsAttr(c.id)}')">✕</button>` : ''}</div>`;
+      }).join('');
+      const left = capacity != null ? Math.max(0, capacity - children.length) : (pool.length ? 1 : 0);
+      const openRows = Array.from({ length: left }, (_, i) => i === 0 && pool.length
+        ? `<div class="mr open"><span>OPEN</span><span class="mb-write"><select id="mb-join-${escHtml(parent.id)}" aria-label="Who takes this spot">${mbPeopleOptions(pool, me && pool.some(p => p.isYou) ? me.id : null)}</select><button type="button" class="mb-btn red" onclick="mbAct('${escJsAttr(joinAction)}','${escJsAttr(parent.id)}')">Assign</button></span></div>`
+        : `<div class="mr open"><span>OPEN</span></div>`).join('');
+      const owner = mbPerson(parent.assignee_raver_id);
+      const canDelParent = ownerOrManager(parent.added_by, uid, canManage) || (owner && owner.isYou);
+      return `<div class="mb-manifest"><div class="mh"><span>${head}</span>${canDelParent ? `<button type="button" class="mb-del" aria-label="Remove this" onclick="mbAct('${escJsAttr(parentDelAction)}','${escJsAttr(parent.id)}')">✕</button>` : ''}</div>${rows}${openRows}</div>`;
+    };
+
+    const cars = drivers.map((d, i) => manifest(
+      `VEHICLE ${String(i + 1).padStart(2, '0')} · ${escHtml(mbFirst(mbPerson(d.assignee_raver_id)).toUpperCase())}${d.seats != null ? ` · ${riders.filter(r => r.driver_item_id === d.id).length}/${d.seats}` : ''}${d.vibe_tag ? ` · ${escHtml(d.vibe_tag)}` : ''}`,
+      d, riders.filter(r => r.driver_item_id === d.id), carless.filter(p => String(p.id) !== String(d.assignee_raver_id)),
+      'ride-join', 'rider-del', 'rider', 'ride-del', d.seats)).join('');
+    const stays = hosts.map(h => {
+      const type = lodgingTypeInfo(h.lodging_type);
+      const place = h.text || `${mbFirst(mbPerson(h.assignee_raver_id))}'s place`;
+      return manifest(
+        `${type ? type.emoji + ' ' : '🏠 '}${escHtml(place.toUpperCase())}${h.seats != null ? ` · ${guests.filter(g => g.driver_item_id === h.id).length + 1}/${h.seats + 1}` : ''}`,
+        h, guests.filter(g => g.driver_item_id === h.id), roofless.filter(p => String(p.id) !== String(h.assignee_raver_id)),
+        'stay-join', 'guest-del', 'guest', 'stay-del', h.seats)
+        + (h.link_url && /^https?:\/\//i.test(h.link_url) ? `<a class="mb-link" href="${escHtml(h.link_url)}" target="_blank" rel="noopener noreferrer">Booking link</a>` : '');
+    }).join('');
+    const driving = me && drivers.some(d => String(d.assignee_raver_id) === String(me.id));
+    const hosting = me && hosts.some(h => String(h.assignee_raver_id) === String(me.id));
+    const needRide = mbNeedsRide();
+    return {
+      ref: `TRANSPORT &amp; <b>SAFEHOUSE</b><br>${needRide.length ? `${needRide.length} WITHOUT A RIDE` : `${drivers.length} VEHICLE${drivers.length === 1 ? '' : 'S'}`}`,
+      sub: 'Extraction plan', title: 'Getting there',
+      body: `
+        <div class="mb-sec">Transport</div>
+        ${cars || `<div class="mb-empty">No rides posted yet.</div>`}
+        ${me && !driving ? `<div class="mb-write"><input id="mb-driver-seats" type="number" min="1" max="12" inputmode="numeric" aria-label="Seats you can offer" placeholder="Seats you can offer"><button type="button" class="mb-btn ghost" onclick="mbAct('ride-add')">＋ I'm driving</button></div>` : ''}
+        <div class="mb-sec">Safehouse</div>
+        ${stays || `<div class="mb-empty">No place to stay posted yet.</div>`}
+        ${me && !hosting ? `<div class="mb-write"><input id="mb-host-place" maxlength="120" aria-label="Place" placeholder="Place name"><input id="mb-host-spaces" type="number" min="1" max="30" inputmode="numeric" aria-label="Spots for others" placeholder="Spots" style="flex:0 0 64px;"><button type="button" class="mb-btn ghost" onclick="mbAct('stay-add')">＋ I've got a place</button></div>` : ''}`
+    };
+  }
+
+  function mbLocalInputValue(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  }
+
+  function mbBuildMeetup() {
+    const f = mbFest(), gp = mbPlan(), pin = _mb.meetupPin;
+    const pinner = pin ? raverByAuthUid(pin.sender_id) : null;
+    const map = f.mapUrl ? `<div class="mb-map"><img src="${escHtml(f.mapUrl)}" alt="${escHtml(f.name)} map" loading="lazy">${pin && pin.pin_x != null
+      ? `<span class="mb-map-x" style="left:${Number(pin.pin_x) * 100}%;top:${Number(pin.pin_y) * 100}%;">✗</span>` : ''}</div>` : '';
+    return {
+      ref: `RENDEZVOUS <b>POINT ALPHA</b><br>${pin ? `PINNED BY ${escHtml(mbFirst(pinner).toUpperCase())}` : 'NO LIVE PIN YET'}`,
+      sub: 'If separated', title: 'Home base',
+      body: `
+        ${map}
+        ${pin ? `<div class="mb-clip">📍 ${escHtml(pin.body || 'Meetup pin')}${pin.meetup_at ? ` · ${escHtml(new Date(pin.meetup_at).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))}` : ''}</div>` : ''}
+        <button type="button" class="mb-btn ghost" onclick="mbJump('huddle-pin')">📍 Drop a live pin in the Huddle</button>
+        ${gp.meetup_at ? `<div class="mb-type" style="font-weight:700;">${escHtml(gamePlanCountdownText(gp.meetup_at))}</div>` : ''}
+        <dl class="mb-fields">
+          <dt>Place</dt><dd><div class="mb-write"><input id="mb-meet-place" maxlength="160" aria-label="Meetup place" placeholder="Giant disco ball, left of the booth" value="${escHtml(gp.meetup_location || '')}"></div></dd>
+          <dt>Time</dt><dd><div class="mb-write"><input id="mb-meet-at" type="datetime-local" aria-label="Meetup time" value="${escHtml(mbLocalInputValue(gp.meetup_at))}"></div></dd>
+        </dl>
+        <div class="mb-write">
+          <button type="button" class="mb-btn" onclick="mbAct('meetup-save')">Save rendezvous</button>
+          ${gp.meetup_location ? `<a class="mb-link" href="${escHtml(gamePlanMapLink(gp.meetup_location))}" target="_blank" rel="noopener noreferrer">Open in Maps</a>` : ''}
+        </div>`
+    };
+  }
+
+  function mbBuildKit() {
+    const uid = currentUser.id, me = mbMe(), canManage = mbCanManage();
+    const packs = mbItems('pack');
+    const mine = packs.filter(p => p.scope === 'personal' && p.added_by === uid);
+    const crewGear = packs.filter(p => p.scope === 'crew');
+    const mineRow = p => `<div class="mb-li${p.is_done ? ' done' : ''}">
+      <button type="button" class="mb-box${p.is_done ? ' on' : ''}" aria-pressed="${p.is_done}" aria-label="${p.is_done ? 'Unpack' : 'Packed'}: ${escHtml(p.text)}" onclick="mbAct('pack-toggle','${escJsAttr(p.id)}')"></button>
+      <span class="t">${escHtml(p.text)}</span>
+      <button type="button" class="mb-del" aria-label="Remove ${escHtml(p.text)}" onclick="mbAct('pack-del-mine','${escJsAttr(p.id)}')">✕</button></div>`;
+    const crewRow = p => {
+      const who = p.assignee_raver_id ? mbPerson(p.assignee_raver_id) : null;
+      const canToggle = canManage || p.added_by === uid || (me && String(me.id) === String(p.assignee_raver_id)) || !p.assignee_raver_id;
+      return `<div class="mb-li${p.is_done ? ' done' : ''}">
+        <button type="button" class="mb-box${p.is_done ? ' on' : ''}" ${canToggle ? '' : 'disabled'} aria-pressed="${p.is_done}" aria-label="${p.is_done ? 'Unpack' : 'Packed'}: ${escHtml(p.text)}" onclick="mbAct('pack-toggle','${escJsAttr(p.id)}')"></button>
+        <span class="t">${escHtml(p.text)}</span>
+        ${who ? `<span class="mb-who">${escHtml(mbFirst(who).toUpperCase())}</span>` : (me ? `<button type="button" class="mb-claim" onclick="mbAct('pack-claim','${escJsAttr(p.id)}')">I'LL BRING IT</button>` : '')}
+        ${ownerOrManager(p.added_by, uid, canManage) ? `<button type="button" class="mb-del" aria-label="Remove ${escHtml(p.text)}" onclick="mbAct('pack-del-crew','${escJsAttr(p.id)}')">✕</button>` : ''}</div>`;
+    };
+    const have = new Set(mine.map(p => (p.text || '').toLowerCase()));
+    const starterLeft = MB_KIT_STARTER.filter(s => !have.has(s.toLowerCase()));
+    const n = list => `${list.filter(p => p.is_done).length}/${list.length}`;
+    return {
+      ref: `FIELD KIT <b>INVENTORY</b><br>MY KIT ${n(mine)} · CREW ${n(crewGear)}`,
+      sub: 'Night-before inspection', title: 'Bag check',
+      body: `
+        <div class="mb-sec">My kit · only you see this</div>
+        ${mine.map(mineRow).join('') || `<div class="mb-empty">Your bag is empty.</div>`}
+        <div class="mb-write"><input id="mb-pack-mine" maxlength="120" aria-label="Add to my kit" placeholder="Add to my kit…"><button type="button" class="mb-btn" onclick="mbAct('pack-add','personal')">Add</button></div>
+        ${starterLeft.length ? `<button type="button" class="mb-btn ghost" onclick="mbAct('pack-starter')">＋ Starter kit (${escHtml(starterLeft.slice(0, 3).join(', ').toLowerCase())}…)</button>` : ''}
+        <div class="mb-sec">Crew gear · one person brings it</div>
+        ${crewGear.map(crewRow).join('') || `<div class="mb-empty">Speaker, canopy, first aid kit? Add shared gear here.</div>`}
+        <div class="mb-write"><input id="mb-pack-crew" maxlength="120" aria-label="Add crew gear" placeholder="Add crew gear…"><button type="button" class="mb-btn" onclick="mbAct('pack-add','crew')">Add</button></div>`
+    };
+  }
+
+  function mbBuildLedger() {
+    const uid = currentUser.id, me = mbMe(), canManage = mbCanManage(), gp = mbPlan();
+    const going = mbGoing();
+    const cur = gp.currency || 'USD';
+    const toggle = `<div class="mb-toggle"><span>Split costs for this rave</span><button type="button" class="mb-sw" role="switch" aria-checked="${gp.budget_enabled ? 'true' : 'false'}" aria-label="Split costs for this rave" onclick="mbAct('budget-toggle')"></button></div>`;
+    if (!gp.budget_enabled) {
+      return {
+        ref: `EXPENSE <b>REPORT</b><br>NOT IN USE`, sub: 'Operational costs', title: 'The damage',
+        body: `${toggle}<div class="mb-void"><span class="mb-stamp" style="left:50%;top:50%;transform:translate(-50%,-50%) rotate(-14deg);font-size:1.3rem;">Void</span>No cost split for this rave.<br>Everyone covers their own.</div>`
+      };
+    }
+    const expenses = mbItems('expense'), payments = mbItems('payment');
+    const goingIds = going.map(p => String(p.id));
+    const total = expenses.reduce((s, e) => s + (e.amount_cents || 0), 0);
+    const canEdit = e => canManage || e.added_by === uid || (me && String(me.id) === String(e.assignee_raver_id));
+    const splitBoxes = (prefix, selected) => `<div class="mb-splits">${going.map(p =>
+      `<label><input type="checkbox" id="${prefix}${escHtml(String(p.id))}"${!selected || selected.includes(String(p.id)) ? ' checked' : ''}> ${escHtml(mbFirst(p))}</label>`).join('')}</div>`;
+    const rows = expenses.map(e => {
+      if (_mb.editingExpenseId === e.id) {
+        return `<div class="mb-clip" style="transform:none;display:flex;flex-direction:column;gap:6px;">
+          <div class="mb-write"><input id="mb-eexp-text" maxlength="120" aria-label="What" value="${escHtml(e.text || '')}"><input id="mb-eexp-amt" inputmode="decimal" aria-label="Amount" style="flex:0 0 90px;" value="${escHtml((e.amount_cents / 100).toFixed(2))}"></div>
+          <div class="mb-write"><span class="mb-who">PAID BY</span><select id="mb-eexp-payer" aria-label="Paid by">${mbPeopleOptions(going, e.assignee_raver_id)}</select></div>
+          <span class="mb-who">SPLIT BETWEEN</span>${splitBoxes('mb-esplit-', e.split_raver_ids && e.split_raver_ids.map(String))}
+          <div class="mb-write"><button type="button" class="mb-btn" onclick="mbAct('exp-save','${escJsAttr(e.id)}')">Save</button><button type="button" class="mb-btn ghost" onclick="mbAct('exp-cancel')">Cancel</button></div>
+        </div>`;
+      }
+      const subset = e.split_raver_ids && e.split_raver_ids.length ? ` <span class="mb-who">(${escHtml(e.split_raver_ids.map(mbInitials).join(' '))})</span>` : '';
+      const label = `${escHtml(e.text || 'Cost')}${subset}`;
+      return `<div class="r">
+        <span>${canEdit(e) ? `<button type="button" class="mb-edit" aria-label="Edit ${escHtml(e.text || 'cost')}" onclick="mbAct('exp-edit','${escJsAttr(e.id)}')">${label}</button>` : label}</span>
+        <span class="mb-who">${escHtml(mbInitials(e.assignee_raver_id))}</span>
+        <span class="amt">${escHtml(formatMoney(e.amount_cents, cur))}</span>
+        ${canEdit(e) ? `<button type="button" class="mb-del" aria-label="Remove ${escHtml(e.text || 'cost')}" onclick="mbAct('exp-del','${escJsAttr(e.id)}')">✕</button>` : '<span></span>'}
+      </div>`;
+    }).join('');
+    const net = computeBudgetBalances(expenses.concat(payments), goingIds);
+    const transfers = computeSettleUp(net);
+    const myNet = me ? (net[String(me.id)] || 0) : 0;
+    const settle = transfers.map(t => {
+      const from = mbPerson(t.fromRaverId), to = mbPerson(t.toRaverId);
+      const mineToo = me && (String(me.id) === t.fromRaverId || String(me.id) === t.toRaverId);
+      return `<div class="mb-owe">${escHtml(from && from.isYou ? 'You' : mbFirst(from))} → ${escHtml(to && to.isYou ? 'you' : mbFirst(to))}<span class="amt">${escHtml(formatMoney(t.cents, cur))}</span>${mineToo || canManage
+        ? `<button type="button" class="mb-claim" onclick="mbAct('pay','${escJsAttr(t.fromRaverId + '|' + t.toRaverId + '|' + t.cents)}')">mark paid</button>` : ''}</div>`;
+    }).join('');
+    const paid = payments.map(p => {
+      const canUndo = canManage || p.added_by === uid || (me && (String(me.id) === String(p.assignee_raver_id) || String(me.id) === String(p.to_raver_id)));
+      return `<div class="mb-owe">${escHtml(mbFirst(mbPerson(p.assignee_raver_id)))} → ${escHtml(mbFirst(mbPerson(p.to_raver_id)))}<span class="mb-paid">PAID</span><span class="amt">${escHtml(formatMoney(p.amount_cents, cur))}</span>${canUndo
+        ? `<button type="button" class="mb-del" aria-label="Undo this payment" onclick="mbAct('pay-undo','${escJsAttr(p.id)}')">✕</button>` : ''}</div>`;
+    }).join('');
+    return {
+      ref: `EXPENSE <b>REPORT</b><br>SPLIT ×${going.length} · TOTAL ${escHtml(formatMoney(total, cur))}`,
+      sub: 'Operational costs', title: 'The damage',
+      body: `
+        ${toggle}
+        <div class="mb-write"><span class="mb-who">CURRENCY</span><select id="mb-currency" aria-label="Currency" onchange="mbAct('currency', this.value)">${BUDGET_CURRENCIES.map(c => `<option value="${c}"${c === cur ? ' selected' : ''}>${c}</option>`).join('')}</select></div>
+        <div class="mb-ledger">${rows || `<div class="mb-empty">No costs logged yet.</div>`}<div class="tot"><span>TOTAL</span><span>${escHtml(formatMoney(total, cur))}</span></div></div>
+        <div class="mb-write">
+          <input id="mb-exp-text" maxlength="120" aria-label="What was it for" placeholder="What was it?">
+          <input id="mb-exp-amt" inputmode="decimal" aria-label="Amount" placeholder="0.00" style="flex:0 0 80px;">
+        </div>
+        <div class="mb-write">
+          <span class="mb-who">PAID BY</span><select id="mb-exp-payer" aria-label="Paid by">${mbPeopleOptions(going, me && me.id)}</select>
+          <button type="button" class="mb-link" onclick="mbAct('split-toggle')">${_mb.splitOpen ? 'Split with everyone' : 'Split between…'}</button>
+        </div>
+        ${_mb.splitOpen ? splitBoxes('mb-split-', null) : ''}
+        <button type="button" class="mb-btn" onclick="mbAct('exp-add')">Log cost</button>
+        <div class="mb-sec">Settle up</div>
+        ${me && expenses.length ? `<div class="mb-type" style="font-size:0.78rem;">${myNet > 0 ? `You're owed <b>${escHtml(formatMoney(myNet, cur))}</b>` : myNet < 0 ? `You owe <b>${escHtml(formatMoney(-myNet, cur))}</b>` : `You're square`}</div>` : ''}
+        ${settle || (expenses.length ? `<div class="mb-empty">All square. 🤝</div>` : '')}
+        ${paid ? `<div class="mb-sec">Paid</div>${paid}` : ''}`
+    };
+  }
+
+  function mbBuildSignoff() {
+    const crew = getCrew(_mb.crewId), me = mbMe();
+    const going = mbGoing();
+    const ready = mbReadyCount();
+    const allIn = ready.total >= 2 && ready.done === ready.total;
+    const sigs = going.map(p => {
+      const av = mbAv(p, 'av');
+      if (!raverIsClaimed(p)) {
+        return `<div class="mb-sig unclaimed">${av}<span class="line"><span class="nm">${escHtml(mbFirst(p))} · not on RaveFAM yet</span></span>${crewPerms(crew).canInvite
+          ? `<button type="button" class="mb-claim" onclick="shareCrewInvite('${escJsAttr(String(crew.id))}')">Invite</button>` : '<span></span>'}</div>`;
+      }
+      const signed = ready.doneIds.has(String(p.id));
+      return `<div class="mb-sig">${av}<span class="line">${signed ? escHtml(mbFirst(p)) : `<span class="nm">${escHtml(mbFirst(p))}</span>`}</span><span class="st${signed ? ' ok' : ''}">${signed ? 'SIGNED' : 'UNSIGNED'}</span></div>`;
+    }).join('');
+    const gaps = [];
+    mbNeedsRide().forEach(p => gaps.push(`${mbFirst(p)} has no transport (p.4)`));
+    const openNight = mbItems('task').filter(t => t.phase === 'night_before' && !t.is_done && !t.assignee_raver_id).length;
+    if (openNight) gaps.push(`${openNight} night-before order${openNight === 1 ? '' : 's'} unclaimed (p.3)`);
+    const changed = mbChangedCards();
+    MB_CARDS.forEach((c, i) => { if (changed.has(c.key)) gaps.push(`${c.tab} changed since you signed (p.${i + 1})`); });
+    const imGoing = me && going.some(p => String(p.id) === String(me.id));
+    const mine = mbMyReady();
+    const locked = !!(mine && mine.is_done);
+    return {
+      ref: `AUTHORISATION <b>${ready.done}/${ready.total}</b><br>SIGNED OFF`,
+      sub: 'Final authorisation', title: 'Are we locked in?',
+      body: `
+        ${allIn ? `<span class="mb-stamp" style="right:12px;top:44px;transform:rotate(-10deg);font-size:0.95rem;">Mission ready</span>` : ''}
+        <div>${sigs || `<div class="mb-empty">No one from the crew is going yet.</div>`}</div>
+        ${gaps.length ? `<div class="mb-gaps">${gaps.map(g => `<span>▸ ${escHtml(g)}</span>`).join('')}</div>` : ''}
+        ${imGoing ? `<button type="button" class="mb-btn red wide" onclick="mbAct('ready')">${locked ? 'UNSIGN' : 'SIGN &amp; LOCK IN'}</button>`
+          : `<div class="mb-empty">RSVP to this rave to sign off. <button type="button" class="mb-link" onclick="mbJump('rsvp')">RSVP</button></div>`}
+        <button type="button" class="mb-btn ghost" onclick="mbShareToHuddle()">Share file to Huddle</button>
+        <button type="button" class="mb-btn ghost" onclick="mbJump('huddle')">Open the Huddle</button>`
+    };
+  }
+
+  const MB_BUILDERS = {
+    cover: mbBuildCover, lineup: mbBuildLineup, orders: mbBuildOrders, logistics: mbBuildLogistics,
+    meetup: mbBuildMeetup, kit: mbBuildKit, ledger: mbBuildLedger, signoff: mbBuildSignoff
+  };
+
+  // ── Actions ── one dispatcher so every page edit re-renders the whole
+  // deck (the cover and sign-off summarise the other pages).
+  async function mbAct(action, arg) {
+    if (!_mb) return;
+    const gp = mbPlan();
+    if (!gp) return;
+    const { crewId, festivalId } = _mb;
+    const me = mbMe();
+    const val = id => (document.getElementById(id)?.value || '').trim();
+    const clear = (...ids) => ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    const item = id => gamePlanItems.find(it => it.id === id);
+    const fest = mbFest();
+    switch (action) {
+      // Cover
+      case 'theme-edit': _mb.editingTheme = true; break;
+      case 'theme-save': {
+        const ok = await dbUpdateGamePlanHeader(gp.id, { themeText: val('mb-theme-input') || null });
+        if (ok && _mb) { _mb.editingTheme = false; showToast('Theme saved'); }
+        break;
+      }
+      // Lineup
+      case 'pick': await dbToggleArtistPlan(festivalId, arg); break;
+      case 'pick-add': {
+        const aid = val('mb-pick-add');
+        if (!aid) { toastError('Pick a set first'); return; }
+        await dbToggleArtistPlan(festivalId, aid);
+        break;
+      }
+      // Orders
+      case 'task-toggle': { const t = item(arg); if (t) await toggleGamePlanTask(arg, !t.is_done); break; }
+      case 'task-claim': await claimGamePlanTask(arg); break;
+      case 'task-phase': await cycleGamePlanTaskPhase(arg); break;
+      case 'task-del': deleteGamePlanTask(arg, crewId, mbRerenderAll); return;
+      case 'task-add': {
+        const text = val('mb-task-text');
+        if (!text) { toastError('Type a task first'); return; }
+        const ok = await dbAddGamePlanTask(gp.id, crewId, text, null, { phase: val('mb-task-phase') || null });
+        if (ok) { clear('mb-task-text'); postGamePlanActivity(crewId, festivalId, `📝 ${activityWho()} added "${ok.text}" to the plan`); }
+        break;
+      }
+      case 'role-take':
+      case 'role-add': {
+        const roleName = action === 'role-take' ? arg : val('mb-role-name');
+        const who = action === 'role-take' ? (me && me.id) : val('mb-role-who');
+        if (!roleName || !who) { toastError('Choose a role and who takes it'); return; }
+        const ok = await dbAddGamePlanRole(gp.id, crewId, roleName, who);
+        if (ok) {
+          const assignee = mbPerson(who);
+          postGamePlanActivity(crewId, festivalId, `${gamePlanRoleIcon(roleName)} ${mbFirst(assignee)} claimed ${roleName}`, activityAbout(assignee));
+        }
+        break;
+      }
+      case 'role-del': deleteGamePlanItem(arg, crewId, 'role', mbRerenderAll); return;
+      // Logistics
+      case 'ride-add': {
+        if (!me) return;
+        const seats = parseInt(val('mb-driver-seats'), 10) || null;
+        const ok = await dbAddCarpoolDriver(gp.id, crewId, me.id, seats, null);
+        if (ok) { clear('mb-driver-seats'); postGamePlanActivity(crewId, festivalId, `🚗 ${mbFirst(me)} is driving${seats ? ` (${seats} seat${seats === 1 ? '' : 's'})` : ''}`); }
+        break;
+      }
+      case 'ride-join':
+      case 'stay-join': {
+        const who = val('mb-join-' + arg);
+        if (!who) { toastError('Pick who takes this spot'); return; }
+        const isRide = action === 'ride-join';
+        const ok = isRide ? await dbAddCarpoolRider(gp.id, crewId, arg, who) : await dbAddLodgingGuest(gp.id, crewId, arg, who);
+        if (ok) {
+          const person = mbPerson(who);
+          const parent = item(arg);
+          const owner = parent ? mbPerson(parent.assignee_raver_id) : null;
+          postGamePlanActivity(crewId, festivalId, isRide ? `🎟️ ${mbFirst(person)} joined a ride` : `🔑 ${mbFirst(person)} is staying with ${owner ? mbFirst(owner) : 'the crew'}`, activityAbout(person, owner));
+        }
+        break;
+      }
+      case 'ride-del': deleteGamePlanItem(arg, crewId, 'ride', mbRerenderAll); return;
+      case 'rider-del': deleteGamePlanItem(arg, crewId, 'rider', mbRerenderAll); return;
+      case 'stay-add': {
+        if (!me) return;
+        const place = val('mb-host-place');
+        const spaces = parseInt(val('mb-host-spaces'), 10) || null;
+        const ok = await dbAddLodgingHost(gp.id, crewId, me.id, spaces, place, null, null);
+        if (ok) { clear('mb-host-place', 'mb-host-spaces'); postGamePlanActivity(crewId, festivalId, `🏠 ${mbFirst(me)} has a place to stay${spaces ? ` (${spaces} spot${spaces === 1 ? '' : 's'})` : ''}`); }
+        break;
+      }
+      case 'stay-del': deleteGamePlanItem(arg, crewId, 'stay', mbRerenderAll); return;
+      case 'guest-del': deleteGamePlanItem(arg, crewId, 'guest', mbRerenderAll); return;
+      // Meetup
+      case 'meetup-save': {
+        const at = val('mb-meet-at');
+        const ok = await dbUpdateGamePlanHeader(gp.id, { meetupAt: at ? new Date(at).toISOString() : null, meetupLocation: val('mb-meet-place') || null });
+        if (ok) showToast('Rendezvous saved');
+        break;
+      }
+      // Kit
+      case 'pack-toggle': { const p = item(arg); if (p) await dbTogglePackItem(arg, !p.is_done); break; }
+      case 'pack-claim': if (me) await dbClaimGamePlanTask(arg, me.id); break;
+      case 'pack-del-mine': await dbDeletePersonalPackItem(arg); break;
+      case 'pack-del-crew': deleteGamePlanItem(arg, crewId, 'item', mbRerenderAll); return;
+      case 'pack-add': {
+        const inputId = arg === 'crew' ? 'mb-pack-crew' : 'mb-pack-mine';
+        const text = val(inputId);
+        if (!text) { toastError('Type something to pack'); return; }
+        const ok = await dbAddPackItem(gp.id, crewId, text, arg);
+        if (ok) { clear(inputId); if (arg === 'crew') postGamePlanActivity(crewId, festivalId, `🎒 ${activityWho()} added "${ok.text}" to crew gear`); }
+        break;
+      }
+      case 'pack-starter': {
+        const have = new Set(mbItems('pack').filter(p => p.scope === 'personal').map(p => (p.text || '').toLowerCase()));
+        await Promise.all(MB_KIT_STARTER.filter(s => !have.has(s.toLowerCase())).map(s => dbAddPackItem(gp.id, crewId, s, 'personal')));
+        break;
+      }
+      // Ledger
+      case 'budget-toggle': await dbUpdateGamePlanHeader(gp.id, { budgetEnabled: !gp.budget_enabled }); break;
+      case 'currency': if (BUDGET_CURRENCIES.includes(arg)) await dbUpdateGamePlanHeader(gp.id, { currency: arg }); break;
+      case 'split-toggle': _mb.splitOpen = !_mb.splitOpen; break;
+      case 'exp-edit': _mb.editingExpenseId = arg; break;
+      case 'exp-cancel': _mb.editingExpenseId = null; break;
+      case 'exp-add':
+      case 'exp-save': {
+        const isAdd = action === 'exp-add';
+        const text = val(isAdd ? 'mb-exp-text' : 'mb-eexp-text');
+        const cents = parseMoneyToCents(val(isAdd ? 'mb-exp-amt' : 'mb-eexp-amt'));
+        const payer = val(isAdd ? 'mb-exp-payer' : 'mb-eexp-payer');
+        if (!text) { toastError('Say what the cost was for'); return; }
+        if (!cents) { toastError('Enter an amount, like 45.50'); return; }
+        if (!payer) { toastError('Choose who paid'); return; }
+        const prefix = isAdd ? 'mb-split-' : 'mb-esplit-';
+        const going = mbGoing();
+        const boxes = going.filter(p => document.getElementById(prefix + p.id));
+        let split = null;
+        if (boxes.length) {
+          split = boxes.filter(p => document.getElementById(prefix + p.id).checked).map(p => String(p.id));
+          if (!split.length) { toastError('Pick at least one person to split it with'); return; }
+          if (split.length === going.length) split = null; // everyone = the default pool
+        }
+        if (isAdd) {
+          const ok = await dbAddExpense(gp.id, crewId, text, cents, payer, split);
+          if (ok && _mb) {
+            clear('mb-exp-text', 'mb-exp-amt');
+            _mb.splitOpen = false;
+            postGamePlanActivity(crewId, festivalId, `💸 ${activityWho()} logged ${formatMoney(cents, gp.currency)} for "${text}"`);
+          }
+        } else {
+          const ok = await dbUpdateExpense(arg, { text, amountCents: cents, payerRaverId: payer, splitRaverIds: split });
+          if (ok && _mb) _mb.editingExpenseId = null;
+        }
+        break;
+      }
+      case 'exp-del': deleteGamePlanItem(arg, crewId, 'cost', mbRerenderAll); return;
+      case 'pay': {
+        const [from, to, cents] = String(arg).split('|');
+        const ok = await dbRecordPayment(gp.id, crewId, from, to, parseInt(cents, 10));
+        if (ok) { hapticImpact('MEDIUM'); showToast('Marked paid'); }
+        break;
+      }
+      case 'pay-undo': deleteGamePlanItem(arg, crewId, 'payment', mbRerenderAll); return;
+      // Sign-off
+      case 'ready': {
+        if (!me) return;
+        const mine = mbMyReady();
+        const next = !(mine && mine.is_done);
+        const ok = await dbSetReady(gp.id, crewId, me.id, next);
+        if (ok && next) {
+          hapticSuccess();
+          const rc = mbReadyCount();
+          postGamePlanActivity(crewId, festivalId, `🔒 ${mbFirst(me)} locked in for ${fest ? fest.name : 'the rave'} (${rc.done}/${rc.total})`, activityAbout(me));
+        }
+        break;
+      }
+      default: return;
+    }
+    mbRerenderAll();
+  }
+
+  // ── Sharing into the Huddle ──
+  // A 'briefing' message in the rave's room. media_meta carries a snapshot
+  // so the card draws at once; the card then refreshes itself from the plan
+  // (mbStatsFor), so the numbers stay live long after it was posted.
+
+  const MB_STATS_TTL_MS = 60 * 1000;
+  const _mbStatsCache = {}; // "crewId|festId" -> { ts, stats } or { pending: Promise }
+  function mbStatsKey(crewId, festId) { return `${crewId}|${festId}`; }
+
+  function mbGoingFor(crewId, festId) {
+    const crew = getCrew(crewId);
+    return crew ? crewSquad(crew).filter(p => (p.festIds || []).some(id => String(id) === String(festId))) : [];
+  }
+
+  function mbStatsFrom(crewId, festId, gp, items) {
+    const claimed = mbGoingFor(crewId, festId).filter(raverIsClaimed);
+    const live = items.filter(it => !it.deleted_at);
+    const doneIds = new Set(live.filter(it => it.kind === 'ready' && it.is_done).map(it => String(it.assignee_raver_id)));
+    const tasks = live.filter(it => it.kind === 'task');
+    return {
+      ready: claimed.filter(p => doneIds.has(String(p.id))).length, total: claimed.length,
+      tasksDone: tasks.filter(t => t.is_done).length, tasks: tasks.length,
+      meetup: (gp && gp.meetup_location) || null, meetupAt: (gp && gp.meetup_at) || null
+    };
+  }
+
+  // Cached stats for a plan, or undefined while a fetch is in flight; when
+  // that fetch lands every card for the plan on screen is patched in place.
+  function mbStatsFor(crewId, festId) {
+    const key = mbStatsKey(crewId, festId);
+    const hit = _mbStatsCache[key];
+    if (hit && hit.stats && Date.now() - hit.ts < MB_STATS_TTL_MS) return hit.stats;
+    if (hit && hit.pending) return hit.stats;
+    const pending = (async () => {
+      const { data: gp } = await sb.from('game_plans').select('id,meetup_location,meetup_at')
+        .eq('crew_id', crewId).eq('festival_id', festId).maybeSingle();
+      let rows = [];
+      if (gp) {
+        const { data } = await sb.from('game_plan_items').select('kind,is_done,assignee_raver_id,deleted_at')
+          .eq('game_plan_id', gp.id).in('kind', ['task', 'ready']).is('deleted_at', null);
+        rows = data || [];
+      }
+      const stats = mbStatsFrom(crewId, festId, gp, rows);
+      _mbStatsCache[key] = { ts: Date.now(), stats };
+      document.querySelectorAll('.hd-briefing[data-mb-key]').forEach(el => {
+        if (el.dataset.mbKey === key) el.querySelector('.hd-briefing-stats').innerHTML = mbHuddleStatsHTML(stats);
+      });
+      return stats;
+    })().catch(e => { console.error('briefing card stats error', e); delete _mbStatsCache[key]; });
+    _mbStatsCache[key] = { ...(hit || {}), pending };
+    return hit && hit.stats;
+  }
+
+  function mbHuddleStatsHTML(st) {
+    if (!st) return '';
+    return `<div><b>${st.ready}/${st.total}</b>locked in</div><div><b>${st.tasksDone}/${st.tasks}</b>tasks</div><div><b>${st.meetup ? '📍' : '—'}</b>${st.meetup ? 'meetup set' : 'no meetup'}</div>`;
+  }
+
+  function missionBriefingHuddleCardHTML(m) {
+    const meta = m.media_meta || {};
+    const festId = meta.festival_id != null ? String(meta.festival_id) : '';
+    const fest = festivals.find(f => String(f.id) === festId);
+    if (!fest || !m.crew_id) return escHtml(m.body || '🎯 Mission Briefing');
+    const key = mbStatsKey(m.crew_id, festId);
+    const stats = mbStatsFor(m.crew_id, festId) || meta.snapshot || null;
+    const d = festDate(fest);
+    const days = d ? daysUntil(d) : null;
+    const when = days == null ? '' : days > 1 ? `T-minus ${days} days` : days === 1 ? 'Tomorrow' : days === 0 ? 'Today' : 'Case closed';
+    return `<div class="hd-briefing" data-mb-key="${escHtml(key)}" role="button" tabindex="0" aria-label="Open the ${escHtml(fest.name)} Mission Briefing"
+        onclick="openMissionBriefing('${escJsAttr(String(m.crew_id))}','${escJsAttr(festId)}','signoff','huddle')">
+        <span class="hd-briefing-tab">🎯 MISSION BRIEFING</span>
+        <b class="hd-briefing-name">${escHtml(fest.name)}</b>
+        ${when ? `<span class="hd-briefing-when">${escHtml(when)}</span>` : ''}
+        <div class="hd-briefing-stats">${mbHuddleStatsHTML(stats)}</div>
+        <span class="hd-briefing-open">Open the file →</span>
+      </div>`;
+  }
+
+  async function mbShareToHuddle() {
+    if (!_mb || !currentUser) return;
+    const { crewId, festivalId } = _mb;
+    const fest = mbFest();
+    const room = await ensureHuddleRoomForFestival(crewId, festivalId);
+    if (!room) { toastError('Could not find this rave\'s Huddle. Try again'); return; }
+    const snapshot = mbStatsFrom(crewId, festivalId, mbPlan(), gamePlanItems);
+    const { data, error } = await sb.from('huddle_messages').insert({
+      room_id: room.id, crew_id: crewId, sender_id: currentUser.id, kind: 'briefing',
+      body: `🎯 Mission Briefing · ${fest ? fest.name : 'Rave Plan'}`,
+      media_meta: { festival_id: festivalId, snapshot }
+    }).select().single();
+    if (error) { toastError('Could not share to the Huddle. Try again', error); return; }
+    if (_huddleActiveRoomId === room.id && !huddleMessages.some(x => x.id === data.id)) { huddleMessages.push(data); renderHuddleUI(); }
+    hapticSuccess();
+    showToast('Shared to the Huddle');
+  }
+
+  // Rave Focus "Plan" tab: one row per crew that shares this rave.
+  function missionBriefingRaveFocusHTML(f) {
+    if (!currentUser) return '';
+    const mine = crews.filter(c => deriveCrewFestivalPlans(c).live.some(e => String(e.festival.id) === String(f.id)));
+    if (!mine.length) return '';
+    return `<div class="rf-card">${mine.map(c => `
+      <div class="rf-recap-row"><span>🎯 Mission Briefing${mine.length > 1 ? ` · ${escHtml(c.name)}` : ''}</span>
+        <button type="button" class="rf-mini-btn" onclick="openMissionBriefing('${escJsAttr(String(c.id))}','${escJsAttr(String(f.id))}','cover','rave_focus')">Open</button></div>`).join('')}</div>`;
   }
 
   // ===== Dream Board =====
@@ -33993,6 +35360,7 @@
 
     const planPanel = `
       ${isUpcoming ? raveReadyChecklistHTML(f, you) : recapCard}
+      ${isUpcoming ? missionBriefingRaveFocusHTML(f) : ''}
       ${vibeSection}
       <div class="rf-section-label">Crew</div>
       ${crewSummaryHtml}`;
@@ -35548,9 +36916,13 @@
   // Lineup alerts (send-lineup-alerts): one row per type in alert_preferences,
   // no row = on. Delivery picks push or email on the server.
   const LINEUP_ALERT_TYPES = ['artist_added', 'set_times', 'postfest'];
+  // Every switch on this page. mission_briefing rides the same sender but
+  // stays out of LINEUP_ALERT_TYPES, so enableAllNativePushTypes' batch upsert
+  // never depends on the 20261017000000 migration (no row = on anyway).
+  const ALERT_TOGGLE_TYPES = LINEUP_ALERT_TYPES.concat(['mission_briefing']);
 
   async function renderLineupAlertSettings() {
-    LINEUP_ALERT_TYPES.forEach(t => document.getElementById('alert-toggle-' + t)?.classList.add('on'));
+    ALERT_TOGGLE_TYPES.forEach(t => document.getElementById('alert-toggle-' + t)?.classList.add('on'));
     if (!currentUser) return;
     const { data, error } = await sb.from('alert_preferences').select('type, enabled').eq('user_id', currentUser.id);
     if (error) { console.warn('alert_preferences load failed', error); return; }
@@ -35558,7 +36930,7 @@
   }
 
   async function toggleLineupAlert(type, btn) {
-    if (!currentUser || !LINEUP_ALERT_TYPES.includes(type)) return;
+    if (!currentUser || !ALERT_TOGGLE_TYPES.includes(type)) return;
     const enabling = !btn.classList.contains('on');
     btn.disabled = true;
     const { error } = await sb.from('alert_preferences').upsert(
@@ -37284,9 +38656,9 @@
     const p = new URLSearchParams(location.search);
     const crewId = p.get('crew');
     if (!crewId) return null;
-    const link = { crewId, roomId: p.get('room'), messageId: p.get('msg') };
+    const link = { crewId, roomId: p.get('room'), messageId: p.get('msg'), briefing: p.get('briefing') };
     // Drop them from the address bar so a later reload doesn't reopen the room.
-    ['crew', 'room', 'msg'].forEach(k => p.delete(k));
+    ['crew', 'room', 'msg', 'briefing'].forEach(k => p.delete(k));
     const qs = p.toString();
     history.replaceState(null, '', location.pathname + (qs ? `?${qs}` : '') + location.hash);
     return link;
@@ -37299,6 +38671,8 @@
     if (!getCrew(link.crewId)) return;
     switchTab('crews');
     await openDetail(link.crewId);
+    // The night-before Mission Briefing nudge opens the deck, not a room.
+    if (link.briefing) { await openMissionBriefing(link.crewId, link.briefing, 'signoff', 'nudge'); return; }
     await openHuddle(link.crewId, link.roomId ? { roomId: link.roomId } : {});
     if (!link.roomId || !link.messageId) return;
     // The payload has no timestamp and switchHuddleRoomAtMessage pages around

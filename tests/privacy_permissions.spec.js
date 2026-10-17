@@ -108,7 +108,7 @@ test.describe('privacy & permissions', () => {
     const overlay = page.locator('#privacy-settings-overlay');
     await expect(overlay.locator('#settings-title')).toHaveText('⚙️ Settings');
     await expect(overlay.locator('#settings-profile-card')).toContainText('Edit profile');
-    await expect(overlay.locator('#settings-sum-notif')).toHaveText(/^\d of 5 on$/);
+    await expect(overlay.locator('#settings-sum-notif')).toHaveText(/^\d of 6 on$/);
     await expect(overlay.locator('#settings-sum-privacy')).toHaveText(/^Phone (shared|hidden)/);
     await expect(overlay.locator('#settings-sum-safety')).toContainText('PLUR Code');
     await expect(overlay.locator('[data-page="privacy"]')).toBeHidden();
