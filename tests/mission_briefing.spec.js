@@ -163,11 +163,9 @@ test.describe('mission briefing', () => {
     await expect(page.locator('#mb-card-signoff')).toContainText('Are we locked in?');
     expect(new URL(page.url()).search).toBe(''); // params dropped so a reload doesn't reopen it
 
-    // A running tab gets the same target from the service worker by postMessage.
-    // Wait past switchTab's 400 ms double-tap window first: two code-driven
-    // switchTab('crews') calls inside it trigger a full data refresh, which
-    // briefly empties crews and drops any deep link (Huddle rooms included).
-    await page.waitForTimeout(500);
+    // A running tab gets the same target from the service worker by postMessage,
+    // straight after the cold-start one: code-driven switchTab calls no longer
+    // count as a double-tap refresh, so the second link isn't dropped.
     await page.evaluate(() => { closeMissionBriefing(); openHuddleDeepLink({ crewId: 'c1', briefing: 'f1' }); });
     await expect(page.locator('#mission-briefing-overlay')).toHaveClass(/open/, { timeout: 15000 });
   });
@@ -216,5 +214,22 @@ test.describe('mission briefing', () => {
     await openBriefing(page);
     await page.keyboard.press('Escape');
     await expect(page.locator('#mission-briefing-overlay')).not.toHaveClass(/open/);
+  });
+});
+
+test.describe('Rave Plan meetup time', () => {
+  // Outside UTC, so a UTC-formatted value would show the wrong hour.
+  test.use({ timezoneId: 'America/Los_Angeles' });
+
+  test('the Rides meetup field shows local time, not UTC', async ({ page }) => {
+    await bootAuthedApp(page, { data: briefingData() });
+    await page.evaluate(async () => {
+      await openDetail('c1', { tab: 'gameplan' });
+      const gp = await dbGetOrCreateGamePlan('c1', 'f1');
+      await dbUpdateGamePlanHeader(gp.id, { meetupAt: '2099-07-18T03:30:00Z' }); // 20:30 PDT on the 17th
+      switchGamePlanSection('logistics', document.querySelector('.game-plan-section-tab[data-section="logistics"]'));
+      rerenderGamePlanLogistics('c1');
+    });
+    await expect(page.locator('#game-plan-meetup-at')).toHaveValue('2099-07-17T20:30');
   });
 });
