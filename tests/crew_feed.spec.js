@@ -459,10 +459,83 @@ test.describe('new crew page · compact pins', () => {
     const pin = page.locator('#crew-feed-list .crew-feed-pin[data-kind="badge"]');
     await expect(pin).toContainText('The whole crew unlocked Squad Goals');
     expect((await pin.boundingBox()).height).toBeLessThan(60);
-    await expect(pin.locator('.crew-feed-act')).toHaveCount(0);
+    // No reactions yet: just the ＋ to add one.
+    await expect(pin.locator('.crew-feed-act')).toHaveText(['＋']);
     await pin.click();
     await expect(page.locator('.crew-feed-filter[data-filter="memories"]')).toHaveClass(/active/);
     await expect(page.locator('#crew-feature-panel-pins')).toBeVisible();
+  });
+});
+
+test.describe('new crew page · feed reactions', () => {
+  test('long-pressing a pin row shows its reactions; picking one adds a chip and pings the earner', async ({ page }) => {
+    const data = seedFeed();
+    data.crew_feed_events[0] = { ...data.crew_feed_events[0], event_type: 'plur_tier_unlocked', badge_name: 'Peace Guardian', is_crew_level: false, reactions: {} };
+    data.__rpc = { toggle_crew_feed_reaction: { '💖': ['test-user-id'] } };
+    await bootWithCrewFeed(page, { data });
+    await openC1(page);
+    const pin = page.locator('#crew-feed-list .crew-feed-pin[data-kind="badge"]');
+    await expect(pin.locator('.crew-feed-act')).toHaveText(['＋']);
+    await pin.click({ button: 'right' });
+    await expect(pin).toHaveClass(/is-picking/);
+    await expect(pin.locator('.crew-feed-act')).toHaveText(['🎉', '💖', '🙌']);
+    await pin.locator('.crew-feed-act', { hasText: '💖' }).click();
+    await expect(pin).not.toHaveClass(/is-picking/);
+    await expect(pin.locator('.crew-feed-act')).toHaveText(['💖 1', '＋']);
+    await expect(pin.locator('.crew-feed-act').first()).toHaveClass(/is-hot/);
+    // Tapping the chip reacted, it didn't open the Pins panel.
+    await expect(page.locator('#crew-feature-panel-pins')).toBeHidden();
+    const calls = await page.evaluate(() => window.__store.__rpcCalls.filter(c => c.fn === 'toggle_crew_feed_reaction'));
+    expect(calls).toEqual([{ fn: 'toggle_crew_feed_reaction', args: { p_kind: 'badge', p_id: 'fe1', p_emoji: '💖' } }]);
+    await expect.poll(() => page.evaluate(() => (window.__store.notifications || []).map(n => [n.user_id, n.message])))
+      .toEqual([['kai-uid', expect.stringMatching(/^💖 .+ reacted to your Peace Guardian in Bass Syndicate$/)]]);
+  });
+
+  test('the ＋ on a pin row opens the picker instead of the Pins panel', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedFeed() });
+    await openC1(page);
+    const pin = page.locator('#crew-feed-list .crew-feed-pin[data-kind="badge"]');
+    await pin.locator('.crew-feed-pin-add').click();
+    await expect(pin).toHaveClass(/is-picking/);
+    await expect(pin.locator('.crew-feed-act')).toHaveText(['🎉', '💖', '🙌']);
+    await expect(page.locator('#crew-feature-panel-pins')).toBeHidden();
+  });
+
+  test('archive drops and check-offs get their own reaction sets; polls, jams and dreams don\'t', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedCheckoffs() });
+    await openC1(page);
+    const card = (kind) => page.locator(`#crew-feed-list .crew-feed-card[data-kind="${kind}"] .crew-feed-act[onclick*="toggleCrewFeedReaction"]`);
+    await expect(card('archive')).toHaveText(['😍', '🔥', '🥹']);
+    await expect(card('checkoff')).toHaveText(['🙏', '💪', '🫡']);
+    for (const kind of ['poll', 'jam', 'dream']) await expect(card(kind)).toHaveCount(0);
+  });
+
+  test('a failed save rolls the reaction back', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedCheckoffs() });
+    await openC1(page);
+    // No canned result: make the RPC fail.
+    await page.evaluate(() => { sb.rpc = async () => ({ data: null, error: { message: 'nope' } }); });
+    const btn = page.locator('#crew-feed-list .crew-feed-card[data-kind="checkoff"] .crew-feed-act[data-emoji="🙏"]');
+    await btn.click();
+    await expect(btn).toHaveText('🙏');
+    await expect(btn).not.toHaveClass(/is-hot/);
+  });
+
+  test('a crewmate\'s reaction lands live', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedCheckoffs() });
+    await openC1(page);
+    await page.evaluate(() => handleCrewFeedReactionUpdate('archive', { new: { id: 'al1', reactions: { '🔥': ['kai-uid'] } } }));
+    await expect(page.locator('#crew-feed-list .crew-feed-card[data-kind="archive"] .crew-feed-act[data-emoji="🔥"]')).toHaveText('🔥 1');
+  });
+
+  test('a crewmate\'s reaction on a check-off lands live through the crew-plan channel', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedCheckoffs() });
+    await openC1(page);
+    await page.evaluate(() => {
+      const row = { ...crewPlanCheckoffs.find(r => r.id === 't1'), reactions: { '💪': ['kai-uid'] } };
+      handleCrewPlanItemRealtime({ eventType: 'UPDATE', new: row, old: { id: 't1' } });
+    });
+    await expect(page.locator('#crew-feed-list .crew-feed-card[data-kind="checkoff"] .crew-feed-act[data-emoji="💪"]')).toHaveText('💪 1');
   });
 });
 
