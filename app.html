@@ -10631,7 +10631,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.22.0';
+  const APP_VERSION = '2.22.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -16857,12 +16857,17 @@
 
   function switchTab(page, el) {
     const _now = Date.now();
-    if (_lastTabTap.page === page && _now - _lastTabTap.time < 400
+    // Only real taps (the nav button passes itself) count toward a double-tap
+    // refresh. Code paths like push deep links call switchTab('crews') too,
+    // and two of those inside 400 ms must not start a reload that empties
+    // crews under them.
+    const isTap = !!(el && el.classList && el.classList.contains('nav-tab'));
+    if (isTap && _lastTabTap.page === page && _now - _lastTabTap.time < 400
         && REFRESHABLE_TABS.has(page)) {
       _lastTabTap = { page: null, time: 0 };  // reset so a 3rd tap starts fresh
       refreshTab(page);
     } else {
-      _lastTabTap = { page, time: _now };
+      _lastTabTap = isTap ? { page, time: _now } : { page: null, time: 0 };
     }
     document.querySelectorAll('.modal-overlay.open').forEach(o => o.classList.remove('open'));
     editingId = null;
@@ -24400,7 +24405,7 @@
         <div class="archive-add-area">
           <label for="game-plan-meetup-at" class="form-label">Meetup time &amp; place</label>
           <input class="form-input" id="game-plan-meetup-at" type="datetime-local"
-            value="${gp && gp.meetup_at ? escHtml(new Date(gp.meetup_at).toISOString().slice(0, 16)) : ''}">
+            value="${gp && gp.meetup_at ? escHtml(mbLocalInputValue(gp.meetup_at)) : ''}">
           <input class="form-input" id="game-plan-meetup-location" aria-label="Meetup place" placeholder="Where are you meeting?"
             value="${gp && gp.meetup_location ? escHtml(gp.meetup_location) : ''}">
           <div class="archive-add-row">

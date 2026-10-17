@@ -59,7 +59,7 @@ test.describe('authenticated app', () => {
   test('double-tap on an active tab re-fetches and shows the refresh toast', async ({ page }) => {
     await bootAuthedApp(page);
     // Real refreshTab runs loadAllData (stubbed) then re-renders; assert the toast.
-    await page.evaluate(() => { switchTab('crews'); switchTab('crews'); });
+    await page.evaluate(() => { const t = document.querySelector('.nav-tab.c-crews'); switchTab('crews', t); switchTab('crews', t); });
     await expect(page.locator('#toast')).toHaveClass(/show/);
     await expect(page.locator('#toast')).toContainText(/Refreshed|Refreshing/);
   });
