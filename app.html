@@ -21820,12 +21820,14 @@
     });
     const shared = Object.values(byFest)
       .filter(entry => entry.who.some(p => p.isYou) && entry.who.some(p => !p.isYou));
-    // History privacy: past plans only from raves on or after the day you
-    // joined this crew. Client-side only — the rows still reach the browser.
+    // History privacy: past plans only from raves whose last day is on or
+    // after the day you joined this crew (join mid-fest and you still see it).
+    // Client-side only — the rows still reach the browser.
     const since = crewJoinedAt(crew);
+    const lastDay = f => { const d = festDate(f); if (d) d.setDate(d.getDate() + Math.max(1, Number(f.days) || 1) - 1); return d; };
     return {
       live: shared.filter(e => !festivalIsArchived(e.festival)).sort((a, b) => a.festival._d - b.festival._d),
-      past: shared.filter(e => festivalIsArchived(e.festival) && (!since || !festDate(e.festival) || festDate(e.festival) >= since))
+      past: shared.filter(e => festivalIsArchived(e.festival) && (!since || !festDate(e.festival) || lastDay(e.festival) >= since))
         .sort((a, b) => b.festival._d - a.festival._d)
     };
   }

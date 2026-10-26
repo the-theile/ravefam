@@ -700,10 +700,12 @@ function seedPastRaves() {
   d.crew_members.find(m => m.raver_id === 'r-you').added_at = '2026-06-01T12:00:00Z';
   d.festivals.push(
     { id: 'f-old', name: 'Before Fest', date: '2026-03-01', location: 'Miami, FL', color: '#39FF14', days: 1, deleted_at: null },
+    // Started the day before you joined, ended the day after: still yours.
+    { id: 'f-span', name: 'Span Fest', date: '2026-05-31', location: 'Austin, TX', color: '#39FF14', days: 3, deleted_at: null },
     { id: 'f-mid', name: 'Summer Fest', date: '2026-08-01', location: 'Chicago, IL', color: '#39FF14', days: 1, deleted_at: null },
     { id: 'f-hula', name: 'Hulaween', date: '2026-10-24', location: 'Live Oak, FL', color: '#39FF14', days: 1, deleted_at: null },
   );
-  for (const f of ['f-old', 'f-mid', 'f-hula']) {
+  for (const f of ['f-old', 'f-span', 'f-mid', 'f-hula']) {
     d.raver_festivals.push({ raver_id: 'r-you', festival_id: f }, { raver_id: 'r-sam', festival_id: f });
   }
   d.artists.push({ id: 71, name: 'Kaskade', genres: ['house'] });
@@ -723,8 +725,8 @@ test.describe('new crew page · past raves', () => {
     await bootWithCrewFeed(page, { data: seedPastRaves() });
     await openC1(page);
     const stack = page.locator('#page-crew-detail .crew-ticket-stack');
-    await expect(stack.locator(':scope > .crew-ticket')).toHaveCount(3);
-    expect(await stack.locator(':scope > .crew-ticket').evaluateAll(els => els.map(e => e.dataset.fest))).toEqual(['f-mid', 'f-hula', 'f1']);
+    await expect(stack.locator(':scope > .crew-ticket')).toHaveCount(4);
+    expect(await stack.locator(':scope > .crew-ticket').evaluateAll(els => els.map(e => e.dataset.fest))).toEqual(['f-span', 'f-mid', 'f-hula', 'f1']);
     await expect(stack.locator('.crew-ticket[data-fest="f-hula"] .crew-ticket-eyebrow')).toHaveText(/Just wrapped/);
     await expect(stack.locator('.crew-ticket[data-fest="f-mid"] .crew-ticket-stamp')).toHaveText('Used');
     // Next up is fully in view (as the last card it sits flush right, with
@@ -737,7 +739,7 @@ test.describe('new crew page · past raves', () => {
     expect(pos.scrolled).toBeGreaterThan(0);
     // Before you joined: not in the stack, not in the past-raves pills either.
     await page.evaluate(() => openCrewPastRaves());
-    await expect(panel(page, 'raveplan').locator('.game-plan-rave-picker .huddle-room-pill')).toHaveText(['Summer Fest']);
+    await expect(panel(page, 'raveplan').locator('.game-plan-rave-picker .huddle-room-pill')).toHaveText(['Summer Fest', 'Span Fest']);
   });
 
   test("Who'd you catch? nudges on the stub, atop All and in the bell, and the stub opens the check-off", async ({ page }) => {
