@@ -8,6 +8,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         guard let windowScene = scene as? UIWindowScene else { return }
 
+        // This is the app's only window. Info.plist must not name a scene
+        // storyboard: UIKit would build a second window around Main.storyboard's
+        // own bridge, the likely cause of the iPad "taps do nothing" rejection.
         window = UIWindow(windowScene: windowScene)
         window?.rootViewController = RaveBridgeViewController()
         window?.makeKeyAndVisible()
