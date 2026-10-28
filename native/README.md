@@ -54,6 +54,9 @@ Each native PR adds a line here; **After release** holds web changes that wait o
   uses it when present and falls back to the browser API on older builds
   - `NSLocationAlwaysAndWhenInUseUsageDescription` added to Info.plist (ITMS-90683 on 2.16.0 build 9:
     the plugin references the "Always" API even though the app only asks for When In Use)
+- One window on launch: Info.plist no longer names `Main` as the scene/main storyboard, so UIKit stops
+  building a second window (with its own bridge) beside `SceneDelegate`'s. Likely fix for the iPad rejection
+  (2.1(a), iPad Air 11" on iPadOS 27: "unresponsive when tapping anywhere")
 - Privacy manifest declares Search History (Huddle GIF search terms sent to GIPHY, not linked);
   add the same to App Store Connect's App Privacy answers
 
