@@ -120,11 +120,13 @@ function messageFor(group: Alert[]): Message {
       cta: "Open My schedule",
     };
   }
+  // Post-fest opens the rave in the app (?rave=<slug> → Rave Focus, Lineup
+  // tab), where the check-off and the top 3 pick live together.
   return {
-    title: "Who'd you catch? 📼",
-    body: `Tick off the sets you saw at ${fest}.`,
-    path: a.slug ? `${page}?view=checkoff` : page,
-    cta: "Check off my sets",
+    title: "What were your top 3 sets? 🏆",
+    body: `Tick off who you caught at ${fest} and rank your favorites.`,
+    path: a.slug ? `/app.html?rave=${encodeURIComponent(a.slug)}` : "/app.html",
+    cta: "Pick my top 3",
   };
 }
 

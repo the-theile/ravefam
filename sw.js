@@ -171,11 +171,15 @@ self.addEventListener('notificationclick', e => {
   // query params; an already-open window gets it by postMessage, because
   // focusing a client doesn't navigate it — which is why tapping a push used to
   // drop you wherever you happened to be.
+  // The post-fest push (send-lineup-alerts) opens a rave: /app.html?rave=<slug>.
+  let rave = null;
+  try { if (target) rave = new URL(target, self.location.origin).searchParams.get('rave'); } catch (err) {}
   const params = new URLSearchParams();
   if (crewId)    params.set('crew', crewId);
   if (roomId)    params.set('room', roomId);
   if (messageId) params.set('msg', messageId);
   if (briefing)  params.set('briefing', briefing);  // Mission Briefing nudge (send-lineup-alerts)
+  if (rave && !crewId) params.set('rave', rave);
   const qs = params.toString();
   const url = qs ? `/app.html?${qs}` : '/app.html';
 
@@ -185,6 +189,7 @@ self.addEventListener('notificationclick', e => {
       for (const c of list) {
         if ('focus' in c) {
           if (crewId) c.postMessage({ type: 'rf-huddle-deeplink', crewId, roomId, messageId, briefing });
+          else if (rave) c.postMessage({ type: 'rf-rave-deeplink', slug: rave });
           return c.focus();
         }
       }
