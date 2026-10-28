@@ -5400,6 +5400,20 @@
   .crew-ticket-dots { display: flex; justify-content: center; gap: 6px; margin: 0 0 12px; }
   .crew-ticket-dots span { width: 6px; height: 6px; border-radius: 50%; background: rgba(var(--white-rgb),0.25); transition: width 0.2s, background 0.2s; }
   .crew-ticket-dots span.on { width: 16px; border-radius: 3px; background: var(--neon-pink); }
+  .crew-ticket-dots span[data-past] { background: rgba(var(--white-rgb),0.12); }
+  .crew-ticket-dots span[data-past].on { background: var(--neon-cyan); }
+
+  /* Wrapped raves: stubs left of Next up — faded paper, a USED stamp, and a
+     "Who'd you catch?" strip until sets are logged */
+  .crew-ticket-slot { flex: 0 0 calc(100% - 28px); min-width: 0; scroll-snap-align: start; }
+  .crew-ticket.is-past { background: var(--paper-edge); filter: drop-shadow(0 8px 18px rgba(var(--black-rgb),0.3)); }
+  .crew-ticket.is-past .crew-ticket-name { color: #3d3442; }
+  .crew-ticket.is-past .crew-ticket-barcode { opacity: 0.35; }
+  .crew-ticket-stamp { flex-shrink: 0; transform: rotate(-12deg); margin-top: 6px; padding: 3px 9px; border: 2px solid var(--paper-ink); border-radius: 6px; font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; font-size: 0.7rem; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; color: var(--paper-ink); opacity: 0.7; }
+  .crew-ticket-seen { display: block; width: 100%; margin-top: 10px; border: none; cursor: pointer; text-align: left; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.72rem; padding: 8px 12px; border-radius: 100px; background: rgba(var(--black-rgb),0.08); color: var(--surface2); }
+  .crew-ticket-seen.is-hot { background: var(--paper-ink); color: var(--white); }
+  .crew-ticket-older { display: block; margin: 8px 0 0 auto; border: none; background: none; cursor: pointer; padding: 2px 0; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.66rem; color: #5a5060; }
+  .crew-ticket-seen:focus-visible, .crew-ticket-older:focus-visible { outline: 2px solid var(--neon-cyan); outline-offset: 2px; }
 
   /* Plan mode: the ticket's stub shows progress + actions instead of the barcode */
   .crew-ticket-plan { display: none !important; }
@@ -10939,7 +10953,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.27.1';
+  const APP_VERSION = '2.28.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -14264,8 +14278,9 @@
     renderCrews();
     renderEvents();
     countChecks();
-    // Load persisted notifications from DB
-    dbLoadNotifications();
+    // Load persisted notifications from DB, then add any due "Who'd you
+    // catch?" nudge (it dedupes against what just loaded).
+    Promise.all([dbLoadNotifications(), _postfestDataReady]).then(queuePostfestBellNudges).catch(() => {});
     setupRealtimeSync();
     initNativePushAfterLogin();
     // A push notification opened us cold — go to the room it was about before
@@ -14353,6 +14368,7 @@
                                    err && err.stack);
   }
 
+  let _postfestDataReady = Promise.resolve();
   async function loadAllData() {
     const uid = currentUser.id;
 
@@ -14373,11 +14389,14 @@
     dbLoadMyVendorBadges().catch(reportBackgroundFailure('dbLoadMyVendorBadges'));
     dbLoadUserBlocks().catch(reportBackgroundFailure('dbLoadUserBlocks'));
     dbLoadMySanctions().catch(reportBackgroundFailure('dbLoadMySanctions'));
-    dbLoadArtists().catch(reportBackgroundFailure('dbLoadArtists'));
-    dbLoadArtistAppearances().catch(reportBackgroundFailure('dbLoadArtistAppearances'));
-    dbLoadArtistSightings().catch(reportBackgroundFailure('dbLoadArtistSightings'));
-    dbLoadArtistPlans().catch(reportBackgroundFailure('dbLoadArtistPlans'));
-    dbLoadPostfestCheckoffs().catch(reportBackgroundFailure('dbLoadPostfestCheckoffs'));
+    // Everything postfestPending reads; the bell nudge waits on it (bootApp).
+    _postfestDataReady = Promise.all([
+      dbLoadArtists().catch(reportBackgroundFailure('dbLoadArtists')),
+      dbLoadArtistAppearances().catch(reportBackgroundFailure('dbLoadArtistAppearances')),
+      dbLoadArtistSightings().catch(reportBackgroundFailure('dbLoadArtistSightings')),
+      dbLoadArtistPlans().catch(reportBackgroundFailure('dbLoadArtistPlans')),
+      dbLoadPostfestCheckoffs().catch(reportBackgroundFailure('dbLoadPostfestCheckoffs'))
+    ]);
     dbLoadVenues().catch(reportBackgroundFailure('dbLoadVenues'));
     // "Our Photos" only feeds the profile detail modal (opened on demand,
     // never on first paint) — likewise non-blocking.
@@ -14498,6 +14517,8 @@
           invite_token: c.invite_token || null,
           createdAt: c.created_at || null,
           squadIds,
+          // raver id → when they joined; gates which past Rave Plans they see.
+          memberSince: Object.fromEntries(sortedMembers.map(cm => [String(cm.raver_id), cm.added_at || null])),
           members: members.length ? members : []
         });
       });
@@ -18928,6 +18949,7 @@
   // Past raves nest behind one pill in the Rave Plan picker; collapsed on
   // every open, same as the Huddle switcher.
   let _gamePlanPastRavesOpen = false;
+  let _gamePlanOpenPastNext = false; // openCrewPastRaves → next openGamePlanTab opens the fold
   let _archiveFilters = { festivalId: null };
   // Vendor Village — lazy-loaded the first time the Village nav tab is
   // tapped (see renderVendorVillage()), so sessions that never open it pay
@@ -20593,7 +20615,9 @@
     // already used before Rave Plan absorbed it.
     // .live carries the same grace window the Rave Plan tab uses, so the tile
     // doesn't vanish the morning after a rave while its plan is still open.
-    const hasGamePlan = deriveCrewFestivalPlans(crew).live.length > 0;
+    // Past plans count too: their stubs in the ticket stack open the Plan.
+    const crewPlans = deriveCrewFestivalPlans(crew);
+    const hasGamePlan = crewPlans.live.length + crewPlans.past.length > 0;
 
     // Everything except the roster + Huddle — the Overview tab. Not built on
     // the new crew page, which lays the same panels out itself.
@@ -20761,6 +20785,7 @@
         <div class="crew-feed-panels">${buildCrewFeaturePanelsHTML(crew, isSecret, hasGamePlan)}</div>
       </div>`;
     document.getElementById('crew-manifest-content').innerHTML = roster;
+    scrollCrewTicketsToNext();
     rerenderHuddleTilePreview(crew.id);
     rerenderCrewFeed(crew.id);
     selectCrewFeedFilter(_crewFeedFilter, { quiet: true });
@@ -20798,12 +20823,22 @@
   }
 
   // One paper ticket per live Rave Plan (you + a crewmate going), soonest
-  // first; more than one swipes sideways. With no shared rave yet it falls
+  // first; more than one swipes sideways. The last few wrapped raves sit to
+  // the left as stamped stubs — swipe back to revisit them; the stack opens
+  // on Next up (scrollCrewTicketsToNext). With no shared rave yet it falls
   // back to the Next Rave Up card, then to a blank stub, so there's never a gap.
+  const CREW_TICKET_PAST_MAX = 5;
   function crewTicketStackHTML(crew) {
-    const live = deriveCrewFestivalPlans(crew).live;
+    const plans = deriveCrewFestivalPlans(crew);
+    // Inside the grace window a rave is still live (its plan stays open) but
+    // it's behind you, so it stacks with the stubs rather than leading.
+    const wrapped = plans.live.filter(e => (daysUntil(festDate(e.festival)) ?? 0) < 0);
+    const live = plans.live.filter(e => !wrapped.includes(e));
+    const older = plans.past.slice(0, CREW_TICKET_PAST_MAX).reverse();
+    const past = older.concat(wrapped);
+    const pastHTML = past.map((e, i) => crewPastTicketHTML(e, i === 0 ? plans.past.length - older.length : 0, wrapped.includes(e))).join('');
     if (!live.length) {
-      return crewNextFestBlock(crew) || `
+      const next = crewNextFestBlock(crew) || `
         <button type="button" class="crew-ticket crew-ticket-blank" onclick="switchTab('events')">
           <span class="crew-ticket-eyebrow">Next up · ???</span>
           <span class="crew-ticket-name">Where are we raving next?</span>
@@ -20811,6 +20846,9 @@
           <span class="crew-ticket-perf" aria-hidden="true"></span>
           <span class="crew-ticket-cta">+ Find a rave</span>
         </button>`;
+      if (!past.length) return next;
+      // The fallback card is the "next" slot, so it's last and gets snapped to.
+      return `<div class="crew-ticket-stack is-multi" onscroll="onCrewTicketScroll(this)">${pastHTML}<div class="crew-ticket-slot is-next">${next}</div></div>${crewTicketDotsHTML(past.length + 1, past.length)}`;
     }
     const tickets = live.map(({ festival: f, who }) => {
       const d = festDate(f);
@@ -20820,7 +20858,7 @@
       const faces = who.slice(0, 6).map(p => raverAvatarHTML(p.avatarUrl, p.gradient, p.name, 'avatar crew-ticket-face', '')).join('');
       const more = who.length > 6 ? `<span class="crew-ticket-more">+${who.length - 6}</span>` : '';
       return `
-        <div class="crew-ticket" role="button" tabindex="0" data-fest="${escHtml(String(f.id))}" onclick="openCrewFeedPlan(this.dataset.fest)" onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openCrewFeedPlan(this.dataset.fest);}" aria-label="Open the Rave Plan for ${escHtml(f.name)}">
+        <div class="crew-ticket${f === live[0].festival ? ' is-next' : ''}" role="button" tabindex="0" data-fest="${escHtml(String(f.id))}" onclick="openCrewFeedPlan(this.dataset.fest)" onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openCrewFeedPlan(this.dataset.fest);}" aria-label="Open the Rave Plan for ${escHtml(f.name)}">
           <span class="crew-ticket-top">
             <span>
               <span class="crew-ticket-eyebrow">Next up · Rave Plan</span>
@@ -20841,9 +20879,79 @@
           </span>
         </div>`;
     }).join('');
-    const dots = live.length > 1
-      ? `<div class="crew-ticket-dots" aria-hidden="true">${live.map((_, i) => `<span${i ? '' : ' class="on"'}></span>`).join('')}</div>` : '';
-    return `<div class="crew-ticket-stack${live.length > 1 ? ' is-multi' : ''}" onscroll="onCrewTicketScroll(this)">${tickets}</div>${dots}`;
+    const total = past.length + live.length;
+    return `<div class="crew-ticket-stack${total > 1 ? ' is-multi' : ''}" onscroll="onCrewTicketScroll(this)">${pastHTML}${tickets}</div>${crewTicketDotsHTML(total, past.length)}`;
+  }
+
+  function crewTicketDotsHTML(total, on) {
+    return total > 1
+      ? `<div class="crew-ticket-dots" aria-hidden="true">${Array.from({ length: total }, (_, i) => `<span${i === on ? ' class="on"' : ''}${i < on ? ' data-past=""' : ''}></span>`).join('')}</div>` : '';
+  }
+
+  // A wrapped rave: stamped, no countdown, and a "Who'd you catch?" strip
+  // until you've logged your sets (feeds Artists Seen). The oldest stub
+  // links to the rest of the history when there's more than fits.
+  function crewPastTicketHTML({ festival: f, who }, olderCount, justWrapped) {
+    const d = festDate(f);
+    const when = d ? `${d.getDate()} ${MON_SHORT[d.getMonth()]} ${d.getFullYear()}` : '';
+    const fid = escHtml(String(f.id));
+    const faces = who.slice(0, 6).map(p => raverAvatarHTML(p.avatarUrl, p.gradient, p.name, 'avatar crew-ticket-face', '')).join('');
+    const more = who.length > 6 ? `<span class="crew-ticket-more">+${who.length - 6}</span>` : '';
+    const nudge = crewTicketSightingsNudge(f);
+    const stop = 'event.stopPropagation(); ';
+    return `
+      <div class="crew-ticket is-past" role="button" tabindex="0" data-fest="${fid}" onclick="openCrewFeedPlan(this.dataset.fest)" onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openCrewFeedPlan(this.dataset.fest);}" aria-label="Open the past Rave Plan for ${escHtml(f.name)}">
+        <span class="crew-ticket-top">
+          <span>
+            <span class="crew-ticket-eyebrow">${justWrapped ? 'Just wrapped' : 'Wrapped'} · Rave Plan</span>
+            <span class="crew-ticket-name">${escHtml(f.name)}</span>
+            <span class="crew-ticket-meta">${escHtml([f.location, when].filter(Boolean).join(' · '))}</span>
+          </span>
+          <span class="crew-ticket-stamp" aria-hidden="true">Used</span>
+        </span>
+        <span class="crew-ticket-perf" aria-hidden="true"></span>
+        <span class="crew-ticket-going"><span class="crew-ticket-faces">${faces}${more}</span>${who.length} went</span>
+        ${nudge
+          ? `<button type="button" class="crew-ticket-seen${nudge.hot ? ' is-hot' : ''}" data-fest="${fid}" onclick="${stop}openRaveSightings(this.dataset.fest)">${nudge.label}</button>`
+          : `<span class="crew-ticket-foot"><span class="crew-ticket-barcode" aria-hidden="true"></span><span class="crew-ticket-open">Recap ›</span></span>`}
+        ${olderCount ? `<button type="button" class="crew-ticket-older" onclick="${stop}openCrewPastRaves()">+${olderCount} older rave${olderCount === 1 ? '' : 's'} ›</button>` : ''}
+      </div>`;
+  }
+
+  // Null once there's nothing to log: no lineup, or you've answered.
+  function crewTicketSightingsNudge(f) {
+    if (!(squad.find(r => r.isYou)?.festIds || []).some(id => String(id) === String(f.id))) return null;
+    if (postfestPending(f.id)) return { hot: true, label: '📼 Who\'d you catch? Log your sets ›' };
+    const lineup = lineupArtistsFor(f.id).length;
+    if (!lineup) return null;
+    const seen = myLineupSightingIds(f.id).size;
+    return seen
+      ? { hot: false, label: `🎧 Caught ${seen} of ${lineup} set${lineup === 1 ? '' : 's'} · Edit ›` }
+      : { hot: true, label: `🎧 Who did you see? Mark sets for your stats ›` };
+  }
+
+  function openRaveSightings(festId) {
+    openRaveFocus(festId);
+    if (getFestival(festId)) raveFocusSwitchTab('lineup');
+  }
+
+  // "+N older raves": the Plan view with every past rave as a pill (the
+  // stack only carries the last few).
+  function openCrewPastRaves() {
+    _gamePlanOpenPastNext = true;
+    selectCrewFeedFilter('raveplan');
+  }
+
+  // The stack renders scrolled to the start; past stubs sit left of Next up,
+  // so jump there without animating (the swipe back is the user's to make).
+  function scrollCrewTicketsToNext() {
+    const stack = document.querySelector('#page-crew-detail .crew-ticket-stack');
+    const next = stack && stack.querySelector(':scope > .is-next');
+    if (!next) return;
+    const prev = stack.style.scrollBehavior;
+    stack.style.scrollBehavior = 'auto';
+    stack.scrollLeft = next.offsetLeft - stack.offsetLeft;
+    stack.style.scrollBehavior = prev;
   }
 
   // Swiping the ticket stack moves the dots and, when Plan is showing,
@@ -20858,7 +20966,7 @@
       const ticket = el.children[i];
       if (!ticket) return;
       document.querySelectorAll('#page-crew-detail .crew-ticket-dots span').forEach((dot, j) => dot.classList.toggle('on', j === i));
-      if (_crewFeedFilter === 'raveplan' && String(_gamePlanActiveFestivalId) !== String(ticket.dataset.fest)) {
+      if (_crewFeedFilter === 'raveplan' && ticket.dataset.fest && String(_gamePlanActiveFestivalId) !== String(ticket.dataset.fest)) {
         switchGamePlanFestival(activeDetailId, ticket.dataset.fest);
       }
     }, 150);
@@ -21012,13 +21120,14 @@
     const list = document.getElementById('crew-feed-list');
     if (!list || String(activeDetailId) !== String(crewId)) return;
     const items = buildCrewFeedItems();
+    const sightings = crewFeedSightingsCardHTML(getCrew(crewId));
     const historyCard = `
       <button type="button" class="crew-feed-card crew-feed-history" onclick="openCrewFeature('history')">
         <span class="crew-feed-card-icon" aria-hidden="true">📜</span>
         <span><b>Crew history</b><span class="crew-feed-card-sub">Everything the crew has done, from day one ›</span></span>
       </button>`;
     if (!items.length) {
-      list.innerHTML = `
+      list.innerHTML = `${sightings}
         <div class="es-block crew-feed-empty">
           <div class="es-icon">🌀</div>
           <div class="es-headline">Nothing here yet</div>
@@ -21028,10 +21137,29 @@
     }
     const fresh = items.filter(crewFeedItemIsNew);
     const rest = items.filter(it => !fresh.includes(it)).slice(0, 30);
-    list.innerHTML =
+    list.innerHTML = sightings +
       (fresh.length ? `<div class="crew-feed-sep is-new">${fresh.length} new since you looked</div>${fresh.map(it => crewFeedCardHTML(it, crewId, true)).join('')}` : '') +
       (rest.length ? `${fresh.length ? '<div class="crew-feed-sep">Earlier</div>' : ''}${rest.map(it => crewFeedCardHTML(it, crewId, false)).join('')}` : '') +
       historyCard;
+  }
+
+  // Pinned atop All for two weeks after a rave you shared with this crew,
+  // until your sets are logged (same test as the ticket stub's strip).
+  const CREW_FEED_SIGHTINGS_DAYS = 14;
+  function crewFeedSightingsCardHTML(crew) {
+    if (!crew) return '';
+    const plans = deriveCrewFestivalPlans(crew);
+    const hit = plans.live.concat(plans.past)
+      .map(e => e.festival)
+      .filter(f => { const n = daysUntil(festDate(f)); return n !== null && n < 0 && n >= -CREW_FEED_SIGHTINGS_DAYS; })
+      .sort((a, b) => b._d - a._d)
+      .find(f => crewTicketSightingsNudge(f)?.hot);
+    if (!hit) return '';
+    return `
+      <button type="button" class="crew-feed-card crew-feed-history crew-feed-sightings" style="--ac:var(--neon-green)" data-fest="${escHtml(String(hit.id))}" onclick="openRaveSightings(this.dataset.fest)">
+        <span class="crew-feed-card-icon" aria-hidden="true">📼</span>
+        <span><b>Who'd you catch at ${escHtml(hit.name)}?</b><span class="crew-feed-card-sub">Mark who you saw and missed. It keeps your Artists Seen stats honest ›</span></span>
+      </button>`;
   }
 
   function crewFeedCardHTML(it, crewId, isNew) {
@@ -21692,10 +21820,27 @@
     });
     const shared = Object.values(byFest)
       .filter(entry => entry.who.some(p => p.isYou) && entry.who.some(p => !p.isYou));
+    // History privacy: past plans only from raves whose last day is on or
+    // after the day you joined this crew (join mid-fest and you still see it).
+    // Client-side only — the rows still reach the browser.
+    const since = crewJoinedAt(crew);
+    const lastDay = f => { const d = festDate(f); if (d) d.setDate(d.getDate() + Math.max(1, Number(f.days) || 1) - 1); return d; };
     return {
       live: shared.filter(e => !festivalIsArchived(e.festival)).sort((a, b) => a.festival._d - b.festival._d),
-      past: shared.filter(e => festivalIsArchived(e.festival)).sort((a, b) => b.festival._d - a.festival._d)
+      past: shared.filter(e => festivalIsArchived(e.festival) && (!since || !festDate(e.festival) || lastDay(e.festival) >= since))
+        .sort((a, b) => b.festival._d - a.festival._d)
     };
+  }
+
+  // Start of the day you joined the crew (your crew_members.added_at; the
+  // crew's creation for a lead with no row). Null = unknown, show everything.
+  function crewJoinedAt(crew) {
+    const you = squad.find(r => r.isYou);
+    const at = (you && crew.memberSince?.[String(you.id)]) || (crew.isLead ? crew.createdAt : null);
+    const d = at ? new Date(at) : null;
+    if (!d || isNaN(d)) return null;
+    d.setHours(0, 0, 0, 0);
+    return d;
   }
 
   function huddleSenderName(uid) {
@@ -24925,7 +25070,8 @@
     }
     // Live raves come first, so the tab opens on the next one up rather than
     // on whatever the crew did last summer.
-    _gamePlanPastRavesOpen = false;
+    _gamePlanPastRavesOpen = _gamePlanOpenPastNext;
+    _gamePlanOpenPastNext = false;
     const targetFestId = (_gamePlanActiveFestivalId && ordered.some(r => String(r.festival.id) === String(_gamePlanActiveFestivalId)))
       ? _gamePlanActiveFestivalId : ordered[0].festival.id;
     panel.innerHTML = `<div class="es-block"><div class="es-icon">🗺️</div><div class="es-headline">Loading Rave Plan…</div></div>`;
@@ -25050,6 +25196,7 @@
           data-section="${s.key}" onclick="switchGamePlanSection(this.dataset.section, this)">${s.label}<em data-count="${s.key}"${counts[s.key] ? '' : ' hidden'}>${counts[s.key] || ''}</em></button>`).join('')}
         <button type="button" class="crew-plan-help" onclick="openAppGuide({category:'game-plan'})" aria-label="How Rave Plans work" title="How Rave Plans work">?</button>
       </div>
+      ${_gamePlanPastRavesOpen && plans.past.length ? `<div class="game-plan-rave-picker">${plans.past.map(pickerPill).join('')}</div>` : ''}
       ${sectionsHTML}`;
     }
 
@@ -39630,8 +39777,8 @@
   // Sent once your own profile exists, from the profile editor or onboarding.
   const PROFILE_LOCKED_IN_MSG = "✨ Profile locked in. You're on the grid: scan QR codes, join crews, and let the fam find you in the wild.";
 
-  function addNotification(message, links) {
-    const data = nlData(links);
+  function addNotification(message, links, extra) {
+    const data = extra ? { ...(nlData(links) || {}), ...extra } : nlData(links);
     const n = { id: Date.now() + '_' + Math.random(), message, timestamp: Date.now(), read: false, type: null, data };
     _notifications.unshift(n);
     if (_notifications.length > 100) _notifications.splice(100);
@@ -39649,6 +39796,36 @@
         })
         .catch(() => {});
     }
+  }
+
+  // Bell nudge for "Who'd you catch? 📼": once the morning after, once more
+  // a few days on if the sets still aren't logged. Sent marks live in the
+  // notification's data and, so a deleted row doesn't re-nudge, localStorage.
+  const POSTFEST_BELL_REMIND_DAYS = 3;
+  function queuePostfestBellNudges() {
+    const you = squad.find(r => r.isYou);
+    if (!you || !currentUser) return;
+    let marks = {};
+    try { marks = JSON.parse(localStorage.getItem('rf_postfest_bell') || '{}') || {}; } catch (e) {}
+    loadNotifs().forEach(n => {
+      const pf = n.data?.postfest;
+      if (pf) marks[pf.fest] = Math.max(marks[pf.fest] || 0, pf.stage);
+    });
+    let changed = false;
+    (you.festIds || []).map(getFestival).filter(Boolean).forEach(f => {
+      if (!postfestPending(f.id)) return;
+      const end = festDate(f); end.setDate(end.getDate() + Math.max(1, Number(f.days) || 1));
+      const stage = (TODAY - end) / 86400000 >= POSTFEST_BELL_REMIND_DAYS ? 2 : 1;
+      const key = String(f.id);
+      if ((marks[key] || 0) >= stage) return;
+      marks[key] = stage;
+      changed = true;
+      addNotification(stage === 1
+        ? `📼 Who'd you catch at ${f.name}? Log your sets while it's fresh.`
+        : `📼 Still need your sets from ${f.name}. Your Artists Seen count is waiting.`,
+        [nlRave(f)], { postfest: { fest: key, stage } });
+    });
+    if (changed) { try { localStorage.setItem('rf_postfest_bell', JSON.stringify(marks)); } catch (e) {} }
   }
 
   function unreadNotifCount() { return loadNotifs().filter(n => !n.read).length; }
