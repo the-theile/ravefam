@@ -36,15 +36,16 @@ test.describe('notification inline links', () => {
     await expect(page.locator('#page-crew-detail')).toHaveClass(/active/);
   });
 
-  test('tapping a rave link opens the rave', async ({ page }) => {
+  test('tapping a rave link opens the rave popup, not the editor', async ({ page }) => {
     await bootAuthedApp(page);
     await page.evaluate(() =>
       addNotification('🗓️ Awakenings is on the radar!', [nlRave(getFestival('f2'))]));
     await page.evaluate(() => openNotifDrawer());
 
     await page.locator('#notif-list .notif-link').click();
-    await expect(page.locator('#rave-edit-overlay')).toHaveClass(/open/);
-    expect(await page.evaluate(() => editingFestivalId)).toBe('f2');
+    await expect(page.locator('#rave-focus-overlay')).toHaveClass(/open/);
+    await expect(page.locator('#rave-edit-overlay')).not.toHaveClass(/open/);
+    expect(await page.evaluate(() => _raveFocusTabFestId)).toBe('f2');
   });
 
   test('a message with a person AND a crew links both, without nesting', async ({ page }) => {

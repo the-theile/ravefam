@@ -1104,7 +1104,7 @@
   /* ── Edit rave wizard (Basics · Place · Look · Tools) — same tokens as the
      popup above; Tools is the moderator-only amber step. */
   #rave-edit-overlay { background: var(--rf-panel); }
-  #rave-edit-overlay .rw-header { justify-content: space-between; gap: 10px; padding: 14px 20px 8px; border-bottom: 0; }
+  #rave-edit-overlay .rw-header { justify-content: space-between; gap: 10px; padding: calc(14px + env(safe-area-inset-top, 0px)) 20px 8px; border-bottom: 0; }
   #rave-edit-overlay .rw-head-title { flex: 1; text-align: center; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.05rem; }
   #rave-edit-overlay .rw-header .kebab-btn { width: 44px; height: 44px; border-radius: 12px; }
   #rave-edit-overlay .rw-header .kebab-menu { top: calc(100% + 6px); bottom: auto; }
@@ -1571,6 +1571,8 @@
   .plur-bar-section.loading { opacity: 0.5; cursor: default; }
 
   /* PLUR "How Points Work" info sheet */
+  .plur-sheet-close-row { position: sticky; top: 0; height: 0; display: flex; justify-content: flex-end; z-index: 2; }
+  .plur-sheet-close-row .tag-sheet-close { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
   .plur-info-sheet-head { text-align: center; margin-bottom: 20px; }
   .plur-info-sheet-emoji { font-size: 2rem; margin-bottom: 4px; }
   .plur-info-sheet-title {
@@ -10645,6 +10647,7 @@
 <!-- PLUR Points — How It Works -->
 <div class="modal-overlay" id="plur-info-overlay" onclick="if(event.target===this)closePlurInfo()">
   <div class="modal" style="max-width:420px;max-height:85vh;overflow-y:auto;">
+    <div class="plur-sheet-close-row"><button type="button" class="tag-sheet-close" aria-label="Close" onclick="closePlurInfo()">✕</button></div>
     <div id="plur-info-body"><!-- rendered by JS --></div>
   </div>
 </div>
@@ -10652,6 +10655,7 @@
 <!-- PLUR Points — My Milestones -->
 <div class="modal-overlay" id="plur-milestones-overlay" onclick="if(event.target===this)closePlurMilestones()">
   <div class="modal" style="max-width:420px;max-height:85vh;overflow-y:auto;">
+    <div class="plur-sheet-close-row"><button type="button" class="tag-sheet-close" aria-label="Close" onclick="closePlurMilestones()">✕</button></div>
     <div id="plur-milestones-body"><!-- rendered by JS --></div>
   </div>
 </div>
@@ -34964,7 +34968,9 @@
   }
 
   function closeNewRavePopup() {
-    document.getElementById('new-rave-popup-overlay').classList.remove('open');
+    const overlay = document.getElementById('new-rave-popup-overlay');
+    releaseOverlayFocus(overlay);
+    overlay.classList.remove('open');
     _newRaveCtx = null;
   }
 
@@ -37567,8 +37573,21 @@
     closeGoingOptionsSheet();
   }
 
+  // iOS: hiding an overlay while one of its inputs still has focus leaves the
+  // page panned sideways where Safari scrolled it for the keyboard, and it
+  // never pans back. Drop focus first, then undo any horizontal offset — again
+  // once the keyboard has finished sliding away.
+  function releaseOverlayFocus(overlay) {
+    if (overlay?.contains(document.activeElement)) document.activeElement.blur();
+    const unpan = () => { if (window.scrollX) window.scrollTo(0, window.scrollY); };
+    unpan();
+    setTimeout(unpan, 350);
+  }
+
   function closeRaveEditor() {
-    document.getElementById('rave-edit-overlay').classList.remove('open');
+    const overlay = document.getElementById('rave-edit-overlay');
+    releaseOverlayFocus(overlay);
+    overlay.classList.remove('open');
     editingFestivalId = null;
     _raveEditStepFestId = null;
   }
@@ -40130,7 +40149,7 @@
   // fallback for rows with no inline links (see linkifyNotifMessage).
   async function notifNavigate(entityType, entityId, opts) {
     closeNotifDrawer();
-    if (entityType === 'rave') { switchTab('events'); openRaveEditor(entityId); }
+    if (entityType === 'rave') { switchTab('events'); openRaveFocus(entityId); }
     else if (entityType === 'crew') { switchTab('crews'); await openDetail(entityId); }
     else if (entityType === 'raver') { openProfile(entityId); }
     else if (entityType === 'plur') { openPlurInfo(entityId); }
