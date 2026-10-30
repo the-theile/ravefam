@@ -10,6 +10,10 @@
 //
 // `end` and `stage` are optional; a set that runs past midnight uses the next
 // day's date for `end`. A b2b act ("A b2b B") gives both artists the same time.
+// A staged set with no `end` gets one inferred (inferredEnd below, the same
+// rule as lineup-common.js): the next later start on its stage that day, at
+// most SET_CAP_MIN minutes on; a stage's last set of the day runs to 23:59
+// when that is within CLOSE_MAX_MIN minutes (else the cap applies).
 // On pages with a stage filter, `stage` is the filter key and the SQL gets the
 // button's display name (key "vivid" → "Vivid").
 //
@@ -50,6 +54,28 @@ function field(body, key) {
   return m ? m[1] : null;
 }
 
+const SET_CAP_MIN = 90;
+const CLOSE_MAX_MIN = 120;
+
+function addMinutes(local, min) {
+  return new Date(Date.parse(local + ':00Z') + min * 60000).toISOString().slice(0, 16);
+}
+
+// acts: one page's { start, end, stage } entries (stage as written in ACTS).
+function inferredEnd(a, acts) {
+  if (!a.start || a.end || !a.stage) return null;
+  const day = a.start.slice(0, 10);
+  let next = null;
+  for (const o of acts) {
+    if (o.start && o.stage === a.stage && o.start.slice(0, 10) === day && o.start > a.start && (!next || o.start < next)) next = o.start;
+  }
+  const cap = addMinutes(a.start, SET_CAP_MIN);
+  if (next) return next < cap ? next : cap;
+  const close = day + 'T23:59';
+  if (close <= a.start) return null;
+  return close <= addMinutes(a.start, CLOSE_MAX_MIN) ? close : cap;
+}
+
 function sqlStr(s) {
   return s == null ? 'null' : "'" + String(s).replace(/'/g, "''") + "'";
 }
@@ -71,13 +97,17 @@ for (const file of files) {
   let bm;
   while ((bm = btnRe.exec(text))) if (bm[1] !== 'all') stageLabels[bm[1]] = bm[2].trim();
   const objRe = /\{([^{}]*)\}/g;
+  const acts = [];
   let m;
   while ((m = objRe.exec(body))) {
     const b = m[1];
-    const name = field(b, 'name');
-    const start = field(b, 'start');
-    const end = field(b, 'end');
-    const stageRaw = field(b, 'stage');
+    acts.push({ name: field(b, 'name'), start: field(b, 'start'), end: field(b, 'end'), stage: field(b, 'stage') });
+  }
+  for (const a of acts) {
+    const name = a.name;
+    const start = a.start;
+    const end = a.end || (start && TIME_RE.test(start) ? inferredEnd(a, acts) : null);
+    const stageRaw = a.stage;
     const stage = stageRaw ? (stageLabels[stageRaw] || stageRaw) : null;
     if (!name || (!start && !stage)) continue;
     if (start && !TIME_RE.test(start)) { problems.push(`${slug}: ${name} start "${start}" is not YYYY-MM-DDTHH:MM`); continue; }

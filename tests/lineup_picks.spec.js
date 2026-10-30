@@ -954,6 +954,33 @@ test.describe('Lineup Explorer — Hulaween official set times (page data)', () 
   });
 });
 
+test.describe('Lineup Explorer — start-only posters infer set ends (EDC Orlando page data)', () => {
+  test.beforeEach(async ({ page }) => { await blockExternal(page); });
+
+  test('a set ends at the next start on its stage, capped at 90 min; closers run to 11:59 PM', async ({ page }) => {
+    const errors = collectPageErrors(page);
+    await page.addInitScript(() => {
+      if (sessionStorage.getItem('seeded')) return;
+      sessionStorage.setItem('seeded', '1');
+      localStorage.setItem('rf_picks', JSON.stringify({ 'edc-orlando-2026': { n: ['Afrojack', 'Interplanetary Criminal'] } }));
+    });
+    await installSupabaseStub(page, { session: null, data: { festivals: [], artists: [] } });
+    await page.goto(PAGE);
+    const time = name => page.locator('.act-wrap', { has: star(page, name) }).locator('.lp-time');
+    await expect(time('Afrojack')).toHaveText('🕘 Fri 8 PM–9:13 PM · Kinetic Field');          // next: Mau P 9:13
+    await expect(time('KREAM')).toHaveText('🕘 Fri 4:47 PM–5:18 PM · Kinetic Field');           // next: Alesso 5:18
+    await expect(time('Alesso')).toHaveText('🕘 Fri 5:18 PM–6:48 PM · Kinetic Field');          // gap to 8 PM, capped
+    await expect(time('David Guetta')).toHaveText('🕘 Fri 10:31 PM–11:59 PM · Kinetic Field');  // stage closer
+    await expect(time('ALLEYCVT')).toHaveText('🕘 Sat 1 PM–2:30 PM · Circuit Grounds');         // shares 1 PM with Fury
+    await expect(time('Fury with MC Dino')).toHaveText('🕘 Sat 1 PM–2:30 PM · Circuit Grounds');
+    await expect(time('ALLNIGHTKEV')).toHaveText('🕘 Sat 1 PM–2:30 PM · Casa Bacardí');        // lone set, 11:59 PM too far
+
+    await page.locator('.lp-f[data-v="schedule"]').click();
+    await expect(page.locator('.lp-clash-t')).toContainText('overlap (8 PM–8:30 PM)');
+    expect(errors).toEqual([]);
+  });
+});
+
 test.describe('Lineup Explorer 4b — On deck, set reminders, offline', () => {
   test.beforeEach(async ({ page }) => { await blockExternal(page); await withoutPageSetTimes(page); });
 

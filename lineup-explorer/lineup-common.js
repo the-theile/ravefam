@@ -2360,11 +2360,37 @@
     return m ? m.getAttribute("content") : null;
   }
 
+  // Posters that give start times only (EDC Orlando): a staged set with no
+  // `end` runs until the next later start on its stage that day, at most
+  // SET_CAP_MIN, and a stage's last set of the day runs to 23:59 when that is
+  // within CLOSE_MAX_MIN (else the cap applies). Acts that share a start
+  // share the slot. Festival-local wall times throughout;
+  // _ops/aggregate-artists/build-set-times.mjs applies the same rule for the DB.
+  var SET_CAP_MIN = 90, CLOSE_MAX_MIN = 120;
+  function addMinutes(local, min) {
+    var d = new Date(Date.parse(local + ":00Z") + min * 60000);
+    return d.toISOString().slice(0, 16);
+  }
+  function inferredEnd(a) {
+    if (!a.start || a.end || !a.stage) return null;
+    var day = a.start.slice(0, 10), next = null;
+    for (var i = 0; i < acts.length; i++) {
+      var s = acts[i].start;
+      if (s && acts[i].stage === a.stage && s.slice(0, 10) === day && s > a.start && (!next || s < next)) next = s;
+    }
+    var cap = addMinutes(a.start, SET_CAP_MIN);
+    if (next) return next < cap ? next : cap;
+    var close = day + "T23:59";
+    if (close <= a.start) return null;
+    return close <= addMinutes(a.start, CLOSE_MAX_MIN) ? close : cap;
+  }
+
   function actSet(a) {
     var tz = a && a.start ? pageTz() : null;
     if (tz) {
       var st = zonedToIso(a.start, tz);
-      if (st) return { start_at: st, end_at: a.end ? zonedToIso(a.end, tz) : null, stage: a.stage || null, page: true };
+      var en = a.end || inferredEnd(a);
+      if (st) return { start_at: st, end_at: en ? zonedToIso(en, tz) : null, stage: a.stage || null, page: true };
     }
     if (!sets) return null;
     var keys = splitKeys(a.name);
