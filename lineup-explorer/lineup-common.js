@@ -2495,6 +2495,24 @@
     return pairs;
   }
 
+  // Act name -> the picked acts its set overlaps, for the ⚡ chip on cards.
+  // Unresolved clashes only; rebuilt when picks, set times or choices change.
+  var cardClashMemo = { key: null, map: {} };
+  function cardClash(a) {
+    var picked = pickedActs();
+    var key = picked.map(function (x) { return x.name; }).join("|") + "#" + (sets ? 1 : 0) + "#" + JSON.stringify(clash);
+    if (key !== cardClashMemo.key) {
+      var map = {};
+      clashPairs(picked.map(function (x) { return { act: x, set: actSet(x) }; })).forEach(function (p) {
+        if (clash[p.key]) return;
+        (map[p.a] = map[p.a] || []).push(p.b);
+        (map[p.b] = map[p.b] || []).push(p.a);
+      });
+      cardClashMemo = { key: key, map: map };
+    }
+    return cardClashMemo.map[a.name] || [];
+  }
+
   // Act name -> the act kept instead, from the Split / keep-one choices.
   function skipMap(pairs) {
     var skipped = {};
@@ -3364,7 +3382,7 @@
     wrap: function (el, a) {
       var picked = isPicked(a);
       var w = document.createElement("div");
-      w.className = "act-wrap" + (picked ? " picked" : "");
+      w.className = "act-wrap lp-row" + (picked ? " picked" : "");
       var b = document.createElement("button");
       b.type = "button";
       b.className = "pick";
@@ -3373,28 +3391,82 @@
       b.setAttribute("aria-label", picked ? "Remove " + a.name + " from my picks" : "Add " + a.name + " to my picks");
       b.innerHTML = picked ? CLIP_ON : CLIP_OFF;
       b.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); toggle(a); });
-      if (isShared(a)) {
-        var sp = document.createElement("div");
-        sp.className = "lp-shared";
-        sp.textContent = "📋 " + (picked ? "You both picked this" : shared.first + " picked this");
-        el.insertBefore(sp, el.querySelector(".foot"));
-      }
+      // Schedule-ticket layout: time rail | name, stage line, chips, pulse,
+      // then the .foot stub (genre + platform) that ♡ / 📋 sit on.
+      var foot = el.querySelector(".foot");
+      var eq = el.querySelector(".eq");
+      if (eq) eq.remove();
       var st = actSet(a);
+      var timed = !!(st && st.start_at);
+      var nb = el.querySelector(".nb");
+      var body = document.createElement("div");
+      body.className = "lp-body";
+      while (el.firstChild) body.appendChild(el.firstChild);
+      if (timed) {
+        var rail = document.createElement("div");
+        rail.className = "lp-rail";
+        var tp = fmtTime(st.start_at).split(/\s+/);
+        var rh = document.createElement("span");
+        rh.className = "lp-rail-h";
+        rh.textContent = tp[0];
+        rail.appendChild(rh);
+        var ra = document.createElement("span");
+        ra.className = "lp-rail-ap";
+        ra.textContent = tp[1] || "";
+        rail.appendChild(ra);
+        if (nb) rail.appendChild(nb);
+        el.appendChild(rail);
+      } else {
+        w.classList.add("lp-untimed");
+      }
+      el.appendChild(body);
       if (st && (st.start_at || st.stage)) {
+        var bits = [];
+        if (st.stage) bits.push(st.stage);
+        if (timed && !nb) bits.unshift(fmtDay(st.start_at));
+        if (timed && st.end_at) {
+          bits.push("until " + fmtEnd(st));
+          var mins = Math.round((new Date(st.end_at) - new Date(st.start_at)) / 60000);
+          if (mins > 0) bits.push((st.end_est ? "~" : "") + mins + "m");
+        }
         var tl = document.createElement("div");
         tl.className = "lp-time";
-        tl.textContent = "🕘 " + timeText(st);
-        el.insertBefore(tl, el.querySelector(".foot"));
+        tl.textContent = bits.join(" · ");
+        body.insertBefore(tl, foot);
+      }
+      var chips = document.createElement("div");
+      chips.className = "lp-chips";
+      var note = body.querySelector(".note");
+      if (note) {
+        note.classList.add("lp-chip");
+        if (/^sunset/i.test(note.textContent)) { note.classList.add("lp-sun"); note.textContent = "🌅 " + note.textContent; }
+        chips.appendChild(note);
+      }
+      if (picked && isMemberMode()) {
+        var cl = cardClash(a);
+        if (cl.length) {
+          var cc = document.createElement("span");
+          cc.className = "lp-chip lp-clash-chip";
+          cc.textContent = "⚡ Overlaps " + cl[0] + (cl.length > 1 ? " +" + (cl.length - 1) : "");
+          chips.appendChild(cc);
+        }
       }
       var fam = actFaves(a);
       if (fam.length) {
-        var ff = document.createElement("div");
-        ff.className = "lp-famfave";
+        var ff = document.createElement("span");
+        ff.className = "lp-chip lp-famfave";
         ff.textContent = "⭐ Fam Fave · " + fam.join(", ");
-        el.insertBefore(ff, el.querySelector(".foot"));
+        chips.appendChild(ff);
       }
+      if (isShared(a)) {
+        var sp = document.createElement("span");
+        sp.className = "lp-chip lp-shared";
+        sp.textContent = "📋 " + (picked ? "You both picked this" : shared.first + " picked this");
+        chips.appendChild(sp);
+      }
+      if (chips.firstChild) body.insertBefore(chips, foot);
       var pulse = pulseEl(a);
-      if (pulse) el.insertBefore(pulse, el.querySelector(".foot"));
+      if (pulse) body.insertBefore(pulse, foot);
       w.appendChild(el);
       w.appendChild(b);
       // The crew tray sits under the card in an outer cell, so ♡/📋 stay
