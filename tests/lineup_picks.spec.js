@@ -818,6 +818,10 @@ test.describe('Lineup Explorer follow-ups — change vote, ?vote=1', () => {
   });
 });
 
+// Card set time as "<start> <AM/PM> <day> · <stage line>" (time rail + .lp-time).
+const cardWhen = (page, name) => expect.poll(() => page.locator('.act-wrap', { has: star(page, name) }).evaluateAll(cards => cards.map(c =>
+  [...c.querySelectorAll('.lp-rail-h, .lp-rail-ap, .lp-rail .nb')].map(x => x.textContent).join(' ') + ' · ' + (c.querySelector('.lp-time') || {}).textContent)));
+
 test.describe('Lineup Explorer 4a — set times and My schedule', () => {
   test.beforeEach(async ({ page }) => { await blockExternal(page); await withoutPageSetTimes(page); });
 
@@ -853,7 +857,8 @@ test.describe('Lineup Explorer 4a — set times and My schedule', () => {
     await installSupabaseStub(page, { session: null, data: schedData() });
     await page.goto(PAGE);
     const card = page.locator('.act-wrap', { has: star(page, 'Afrojack') });
-    await expect(card.locator('.lp-time')).toHaveText('🕘 Fri 9:30 PM–10:45 PM · kineticFIELD');
+    await expect(card).toHaveCount(1);
+    await cardWhen(page, 'Afrojack').toEqual(['9:30 PM FRI · kineticFIELD · until 10:45 PM · 75m']);
 
     await page.locator('.lp-f[data-v="schedule"]').click();
     const sched = page.locator('.lp-sched');
@@ -938,9 +943,9 @@ test.describe('Lineup Explorer — Hulaween official set times (page data)', () 
     await installSupabaseStub(page, { session: null, data: { festivals: [], artists: [] } });
     await page.goto('/lineup-explorer/hulaween-2026.html');
     const excision = page.locator('.act-wrap', { has: star(page, 'Excision') });
-    await expect(excision.locator('.lp-time')).toHaveText('🕘 Thu 10:30 PM–12 AM · The Meadow');
-    const sci = page.locator('.act-wrap', { has: star(page, 'The String Cheese Incident') }).locator('.lp-time');
-    await expect(sci).toHaveText(['🕘 Fri 7:30 PM–9 PM · The Meadow', '🕘 Sat 5:45 PM–7 PM · The Meadow', '🕘 Sun 3 PM–5 PM · The Meadow']);
+    await expect(excision).toHaveCount(1);
+    await cardWhen(page, 'Excision').toEqual(['10:30 PM THU · The Meadow · until 12 AM · 90m']);
+    await cardWhen(page, 'The String Cheese Incident').toEqual(['7:30 PM FRI · The Meadow · until 9 PM · 90m', '5:45 PM SAT · The Meadow · until 7 PM · 75m', '3 PM SUN · The Meadow · until 5 PM · 120m']);
 
     await page.locator('.lp-f[data-v="schedule"]').click();
     await expect(page.locator('.lp-sched-days .lp-crew-chip')).toHaveText(['Fri', 'Sat', 'Sun']);
@@ -966,14 +971,13 @@ test.describe('Lineup Explorer — start-only posters infer set ends (EDC Orland
     });
     await installSupabaseStub(page, { session: null, data: { festivals: [], artists: [] } });
     await page.goto(PAGE);
-    const time = name => page.locator('.act-wrap', { has: star(page, name) }).locator('.lp-time');
-    await expect(time('Afrojack')).toHaveText('🕘 Fri 8 PM–~9:13 PM · Kinetic Field');          // next: Mau P 9:13
-    await expect(time('KREAM')).toHaveText('🕘 Fri 4:47 PM–~5:18 PM · Kinetic Field');           // next: Alesso 5:18
-    await expect(time('Alesso')).toHaveText('🕘 Fri 5:18 PM–~6:48 PM · Kinetic Field');          // gap to 8 PM, capped
-    await expect(time('David Guetta')).toHaveText('🕘 Fri 10:31 PM–~11:59 PM · Kinetic Field');  // stage closer
-    await expect(time('ALLEYCVT')).toHaveText('🕘 Sat 1 PM–~2:30 PM · Circuit Grounds');        // shares 1 PM with Fury
-    await expect(time('Fury with MC Dino')).toHaveText('🕘 Sat 1 PM–~2:30 PM · Circuit Grounds');
-    await expect(time('ALLNIGHTKEV')).toHaveText('🕘 Sat 1 PM–~2:30 PM · Casa Bacardí');        // lone set, 11:59 PM too far
+    await cardWhen(page, 'Afrojack').toEqual(['8 PM FRI · Kinetic Field · until ~9:13 PM · ~73m']);          // next: Mau P 9:13
+    await cardWhen(page, 'KREAM').toEqual(['4:47 PM FRI · Kinetic Field · until ~5:18 PM · ~31m']);           // next: Alesso 5:18
+    await cardWhen(page, 'Alesso').toEqual(['5:18 PM FRI · Kinetic Field · until ~6:48 PM · ~90m']);          // gap to 8 PM, capped
+    await cardWhen(page, 'David Guetta').toEqual(['10:31 PM FRI · Kinetic Field · until ~11:59 PM · ~88m']);  // stage closer
+    await cardWhen(page, 'ALLEYCVT').toEqual(['1 PM SAT · Circuit Grounds · until ~2:30 PM · ~90m']);        // shares 1 PM with Fury
+    await cardWhen(page, 'Fury with MC Dino').toEqual(['1 PM SAT · Circuit Grounds · until ~2:30 PM · ~90m']);
+    await cardWhen(page, 'ALLNIGHTKEV').toEqual(['1 PM SAT · Casa Bacardí · until ~2:30 PM · ~90m']);        // lone set, 11:59 PM too far
 
     await page.locator('.lp-f[data-v="schedule"]').click();
     await expect(page.locator('.lp-clash-t')).toContainText('overlap (8 PM–~8:30 PM)');
