@@ -2366,6 +2366,7 @@
   // within CLOSE_MAX_MIN (else the cap applies). Acts that share a start
   // share the slot. Festival-local wall times throughout;
   // _ops/aggregate-artists/build-set-times.mjs applies the same rule for the DB.
+  // Inferred ends carry end_est and show with a "~" (fmtEnd).
   var SET_CAP_MIN = 90, CLOSE_MAX_MIN = 120;
   function addMinutes(local, min) {
     var d = new Date(Date.parse(local + ":00Z") + min * 60000);
@@ -2390,7 +2391,7 @@
     if (tz) {
       var st = zonedToIso(a.start, tz);
       var en = a.end || inferredEnd(a);
-      if (st) return { start_at: st, end_at: en ? zonedToIso(en, tz) : null, stage: a.stage || null, page: true };
+      if (st) return { start_at: st, end_at: en ? zonedToIso(en, tz) : null, end_est: !a.end && !!en, stage: a.stage || null, page: true };
     }
     if (!sets) return null;
     var keys = splitKeys(a.name);
@@ -2406,12 +2407,13 @@
     }
   }
   function fmtTime(iso) { return fmtParts(iso, { hour: "numeric", minute: "2-digit" }).replace(":00", ""); }
+  function fmtEnd(s) { return (s.end_est ? "~" : "") + fmtTime(s.end_at); }
   function fmtDay(iso) { return fmtParts(iso, { weekday: "short" }); }
 
   function timeText(s) {
     if (!s) return "";
     var bits = [];
-    if (s.start_at) bits.push(fmtDay(s.start_at) + " " + fmtTime(s.start_at) + (s.end_at ? "–" + fmtTime(s.end_at) : ""));
+    if (s.start_at) bits.push(fmtDay(s.start_at) + " " + fmtTime(s.start_at) + (s.end_at ? "–" + fmtEnd(s) : ""));
     if (s.stage) bits.push(s.stage);
     return bits.join(" · ");
   }
@@ -2485,7 +2487,8 @@
         var bE = b.set.end_at ? +new Date(b.set.end_at) : bS + 3600000;
         if (aS < bE && bS < aE) {
           var names = [a.act.name, b.act.name].sort();
-          pairs.push({ key: names.join("|"), a: names[0], b: names[1], from: Math.max(aS, bS), to: Math.min(aE, bE) });
+          pairs.push({ key: names.join("|"), a: names[0], b: names[1], from: Math.max(aS, bS), to: Math.min(aE, bE),
+            toEst: !!(aE <= bE ? a.set.end_est : b.set.end_est) });
         }
       }
     }
@@ -2576,7 +2579,7 @@
     list.forEach(function (x) {
       var li = el("li", "lp-sched-row" + (skipped[x.act.name] ? " is-skipped" : ""));
       var t = el("span", "lp-sched-time", x.set && x.set.start_at
-        ? fmtTime(x.set.start_at) + (x.set.end_at ? "–" + fmtTime(x.set.end_at) : "")
+        ? fmtTime(x.set.start_at) + (x.set.end_at ? "–" + fmtEnd(x.set) : "")
         : "Time TBA");
       li.appendChild(t);
       var main = el("div", "lp-sched-main");
@@ -2603,7 +2606,7 @@
 
     pairs.forEach(function (p) {
       var box = el("div", "lp-clash");
-      box.appendChild(el("p", "lp-clash-t", "⚡ " + p.a + " and " + p.b + " overlap (" + fmtTime(new Date(p.from).toISOString()) + "–" + fmtTime(new Date(p.to).toISOString()) + ")"));
+      box.appendChild(el("p", "lp-clash-t", "⚡ " + p.a + " and " + p.b + " overlap (" + fmtTime(new Date(p.from).toISOString()) + "–" + (p.toEst ? "~" : "") + fmtTime(new Date(p.to).toISOString()) + ")"));
       var row = el("div", "lp-clash-opts");
       row.setAttribute("role", "group");
       row.setAttribute("aria-label", "Choose for " + p.a + " and " + p.b);
@@ -2693,7 +2696,7 @@
     c.appendChild(el("span", "lp-now-label", label));
     c.appendChild(el("span", "lp-now-name", p.x.act.name));
     var sub = [p.x.set.stage || "Stage TBA"];
-    sub.push(live ? "until " + fmtTime(new Date(p.e).toISOString()) : fmtTime(p.x.set.start_at));
+    sub.push(live ? "until " + (p.x.set.end_est ? "~" : "") + fmtTime(new Date(p.e).toISOString()) : fmtTime(p.x.set.start_at));
     if (p.x.fam.length) sub.push("⭐ " + p.x.fam.join(", "));
     c.appendChild(el("span", "lp-now-sub", sub.join(" · ")));
     if (live) {
