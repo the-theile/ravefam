@@ -26,7 +26,7 @@ select a.id, f.id, false, null, v.note
 from (values ('obskür', 'Sunset Set'), ('allnightkev', null), ('george smeddles', 'b2b set')) as v(name_lower, note)
 join public.artists a on a.name_lower = v.name_lower
 join public.festivals f on f.slug = 'edc-orlando-2026' and f.deleted_at is null
-on conflict (artist_id, festival_id, (coalesce(night, '')), (coalesce(note, ''))) do nothing;
+on conflict (artist_id, festival_id, (coalesce(night, '')), (coalesce(note, '')), (coalesce(b2b_group, ''))) do nothing;
 
 -- Set times + stages (EDC rows of _ops/aggregate-artists/set-times.sql; "Fury with MC Dino"
 -- is stored as Fury + Dknow and MADVKTM as Mad Dubz & VKTM).
