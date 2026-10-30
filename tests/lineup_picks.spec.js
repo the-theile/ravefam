@@ -32,6 +32,17 @@ function memberData(extra = {}) {
 
 const star = (page, name) => page.locator(`.pick[data-n="${name}"]`);
 
+// The 4a/4b blocks drive set times from the DB (get_lineup_set_times). The EDC
+// Orlando page now carries its own official times, which win over the DB, so
+// serve it with the ACTS start/end/stage fields stripped.
+async function withoutPageSetTimes(page) {
+  await page.route(/\/lineup-explorer\/edc-orlando-2026(\.html)?(\?.*)?$/, async route => {
+    const res = await route.fetch();
+    const body = (await res.text()).replace(/, (start|end|stage): "[^"]*"/g, '');
+    await route.fulfill({ response: res, body });
+  });
+}
+
 test.describe('Lineup Explorer 📋 picks — visitor', () => {
   test.beforeEach(async ({ page }) => {
     await blockExternal(page);
@@ -808,7 +819,7 @@ test.describe('Lineup Explorer follow-ups — change vote, ?vote=1', () => {
 });
 
 test.describe('Lineup Explorer 4a — set times and My schedule', () => {
-  test.beforeEach(async ({ page }) => { await blockExternal(page); });
+  test.beforeEach(async ({ page }) => { await blockExternal(page); await withoutPageSetTimes(page); });
 
   // EDC Orlando is Eastern: Fri Nov 6 9:30 PM EST = 02:30Z on Nov 7.
   const SETS = { ok: true, tz: 'America/New_York', date: '2026-11-06', days: 3, sets: [
@@ -944,7 +955,7 @@ test.describe('Lineup Explorer — Hulaween official set times (page data)', () 
 });
 
 test.describe('Lineup Explorer 4b — On deck, set reminders, offline', () => {
-  test.beforeEach(async ({ page }) => { await blockExternal(page); });
+  test.beforeEach(async ({ page }) => { await blockExternal(page); await withoutPageSetTimes(page); });
 
   // Eastern: Fri 9:30 PM = 02:30Z Nov 7; Sat 11 PM = 04:00Z Nov 8.
   const SETS = { ok: true, tz: 'America/New_York', date: '2026-11-06', days: 3, sets: [
