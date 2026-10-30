@@ -2360,11 +2360,38 @@
     return m ? m.getAttribute("content") : null;
   }
 
+  // Posters that give start times only (EDC Orlando): a staged set with no
+  // `end` runs until the next later start on its stage that day, at most
+  // SET_CAP_MIN, and a stage's last set of the day runs to 23:59 when that is
+  // within CLOSE_MAX_MIN (else the cap applies). Acts that share a start
+  // share the slot. Festival-local wall times throughout;
+  // _ops/aggregate-artists/build-set-times.mjs applies the same rule for the DB.
+  // Inferred ends carry end_est and show with a "~" (fmtEnd).
+  var SET_CAP_MIN = 90, CLOSE_MAX_MIN = 120;
+  function addMinutes(local, min) {
+    var d = new Date(Date.parse(local + ":00Z") + min * 60000);
+    return d.toISOString().slice(0, 16);
+  }
+  function inferredEnd(a) {
+    if (!a.start || a.end || !a.stage) return null;
+    var day = a.start.slice(0, 10), next = null;
+    for (var i = 0; i < acts.length; i++) {
+      var s = acts[i].start;
+      if (s && acts[i].stage === a.stage && s.slice(0, 10) === day && s > a.start && (!next || s < next)) next = s;
+    }
+    var cap = addMinutes(a.start, SET_CAP_MIN);
+    if (next) return next < cap ? next : cap;
+    var close = day + "T23:59";
+    if (close <= a.start) return null;
+    return close <= addMinutes(a.start, CLOSE_MAX_MIN) ? close : cap;
+  }
+
   function actSet(a) {
     var tz = a && a.start ? pageTz() : null;
     if (tz) {
       var st = zonedToIso(a.start, tz);
-      if (st) return { start_at: st, end_at: a.end ? zonedToIso(a.end, tz) : null, stage: a.stage || null, page: true };
+      var en = a.end || inferredEnd(a);
+      if (st) return { start_at: st, end_at: en ? zonedToIso(en, tz) : null, end_est: !a.end && !!en, stage: a.stage || null, page: true };
     }
     if (!sets) return null;
     var keys = splitKeys(a.name);
@@ -2380,12 +2407,13 @@
     }
   }
   function fmtTime(iso) { return fmtParts(iso, { hour: "numeric", minute: "2-digit" }).replace(":00", ""); }
+  function fmtEnd(s) { return (s.end_est ? "~" : "") + fmtTime(s.end_at); }
   function fmtDay(iso) { return fmtParts(iso, { weekday: "short" }); }
 
   function timeText(s) {
     if (!s) return "";
     var bits = [];
-    if (s.start_at) bits.push(fmtDay(s.start_at) + " " + fmtTime(s.start_at) + (s.end_at ? "–" + fmtTime(s.end_at) : ""));
+    if (s.start_at) bits.push(fmtDay(s.start_at) + " " + fmtTime(s.start_at) + (s.end_at ? "–" + fmtEnd(s) : ""));
     if (s.stage) bits.push(s.stage);
     return bits.join(" · ");
   }
@@ -2459,7 +2487,8 @@
         var bE = b.set.end_at ? +new Date(b.set.end_at) : bS + 3600000;
         if (aS < bE && bS < aE) {
           var names = [a.act.name, b.act.name].sort();
-          pairs.push({ key: names.join("|"), a: names[0], b: names[1], from: Math.max(aS, bS), to: Math.min(aE, bE) });
+          pairs.push({ key: names.join("|"), a: names[0], b: names[1], from: Math.max(aS, bS), to: Math.min(aE, bE),
+            toEst: !!(aE <= bE ? a.set.end_est : b.set.end_est) });
         }
       }
     }
@@ -2550,7 +2579,7 @@
     list.forEach(function (x) {
       var li = el("li", "lp-sched-row" + (skipped[x.act.name] ? " is-skipped" : ""));
       var t = el("span", "lp-sched-time", x.set && x.set.start_at
-        ? fmtTime(x.set.start_at) + (x.set.end_at ? "–" + fmtTime(x.set.end_at) : "")
+        ? fmtTime(x.set.start_at) + (x.set.end_at ? "–" + fmtEnd(x.set) : "")
         : "Time TBA");
       li.appendChild(t);
       var main = el("div", "lp-sched-main");
@@ -2577,7 +2606,7 @@
 
     pairs.forEach(function (p) {
       var box = el("div", "lp-clash");
-      box.appendChild(el("p", "lp-clash-t", "⚡ " + p.a + " and " + p.b + " overlap (" + fmtTime(new Date(p.from).toISOString()) + "–" + fmtTime(new Date(p.to).toISOString()) + ")"));
+      box.appendChild(el("p", "lp-clash-t", "⚡ " + p.a + " and " + p.b + " overlap (" + fmtTime(new Date(p.from).toISOString()) + "–" + (p.toEst ? "~" : "") + fmtTime(new Date(p.to).toISOString()) + ")"));
       var row = el("div", "lp-clash-opts");
       row.setAttribute("role", "group");
       row.setAttribute("aria-label", "Choose for " + p.a + " and " + p.b);
@@ -2667,7 +2696,7 @@
     c.appendChild(el("span", "lp-now-label", label));
     c.appendChild(el("span", "lp-now-name", p.x.act.name));
     var sub = [p.x.set.stage || "Stage TBA"];
-    sub.push(live ? "until " + fmtTime(new Date(p.e).toISOString()) : fmtTime(p.x.set.start_at));
+    sub.push(live ? "until " + (p.x.set.end_est ? "~" : "") + fmtTime(new Date(p.e).toISOString()) : fmtTime(p.x.set.start_at));
     if (p.x.fam.length) sub.push("⭐ " + p.x.fam.join(", "));
     c.appendChild(el("span", "lp-now-sub", sub.join(" · ")));
     if (live) {
