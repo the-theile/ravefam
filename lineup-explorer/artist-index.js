@@ -733,7 +733,6 @@ window.ARTIST_INDEX = [
   { name: "ProbCause", name_lower: "probcause", slug: "probcause", festivals: [{ slug: "dancefestopia-2026", title: "Dancefestopia 2026" }, { slug: "seven-stars-2026", title: "Valley of the Seven Stars 2026" }] },
   { name: "Project 26", name_lower: "project 26", slug: "project-26", festivals: [{ slug: "ember-shores-2026", title: "Ember Shores 2026" }] },
   { name: "Prosecute", name_lower: "prosecute", slug: "prosecute", festivals: [{ slug: "cyclops-cove-4-2026", title: "Cyclops Cove 4" }] },
-  { name: "Prospa", name_lower: "prospa", slug: "prospa", festivals: [{ slug: "edc-orlando-2026", title: "EDC Orlando 2026" }] },
   { name: "Purity Ring", name_lower: "purity ring", slug: "purity-ring", festivals: [{ slug: "iii-points-2026", title: "III Points 2026" }] },
   { name: "Purple Disco Machine", name_lower: "purple disco machine", slug: "purple-disco-machine", festivals: [{ slug: "day-trip-block-party-denver-2026", title: "Day Trip Block Party Denver 2026" }] },
   { name: "Quest", name_lower: "quest", slug: "quest", festivals: [{ slug: "hard-summer-2026", title: "Hard Summer 2026" }] },

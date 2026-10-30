@@ -1,7 +1,7 @@
 # EDC Orlando 2026 official set times
 
 Source: official set-time poster and five per-stage posters from @edc_orlando, Oct 30 2026. Eastern time, Tinker Field.
-The set-time poster gives start times only, no end times. Prospa moved from Sat to Sun with an estimated time and is on no stage poster. Casa Bacardí sets are not on the set-time poster except ALLNIGHTKEV, and AAT, RAJE, Gabss, Alves and Me n Ü also play there.
+The set-time poster gives start times only, no end times. Prospa (listed on the set-time poster as moved to Sun 9:30 PM) has since dropped from the lineup. Casa Bacardí sets are not on the set-time poster except ALLNIGHTKEV, and AAT, RAJE, Gabss, Alves and Me n Ü also play there.
 On a stage poster but untimed: OBSKÜR (Fri, Neon Garden, sunset set), Luke Dean b2b George Smeddles (Sat, Neon Garden, sunset set), MADVKTM (Sat, Circuit Grounds), Nico Moreno (Sat, Kinetic Field).
 
 ## Fri 11/6
@@ -110,7 +110,6 @@ On a stage poster but untimed: OBSKÜR (Fri, Neon Garden, sunset set), Luke Dean
 - **8:45 PM** · Deorro b2b DJ Diesel · Circuit Grounds
 - **9:00 PM** · KI/KI · Neon Garden
 - **9:15 PM** · Hardwell · Kinetic Field
-- **9:30 PM** · Prospa · stage TBA — Moved to Sunday · estimated time
 - **9:40 PM** · ATLiens · Circuit Grounds
 - **9:50 PM** · Boogie T · Stereobloom
 - **10:28 PM** · Martin Garrix · Kinetic Field
