@@ -184,7 +184,7 @@
   .act:hover::before, .act:focus-visible::before { opacity: 1; }
   .act:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 55%, transparent), 0 14px 34px -16px var(--c); }
 
-  .act .name { font-family: "Orbitron", sans-serif; font-weight: 700; font-size: 1.02rem; line-height: 1.12; letter-spacing: 0.01em; }
+  .act .name { font-family: "Orbitron", sans-serif; font-weight: 700; font-size: 1.02rem; line-height: 1.12; letter-spacing: 0.01em; padding-right: 44px; }
   .act .name .star { color: var(--c); margin-right: 4px; }
   .act .note { display: block; margin-top: 4px; font-weight: 400; font-size: 0.72rem; color: var(--muted); letter-spacing: 0; text-transform: none; }
   .act .foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -238,6 +238,25 @@
     .act { transition: border-color .16s, box-shadow .2s; }
     .act:hover, .act:focus-visible { transform: none; }
   }
+
+  /* day segmented toggle */
+  .nights { display: inline-flex; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 12px; background: rgba(12,8,30,0.7); margin-bottom: 4px; flex-wrap: wrap; }
+  .night { cursor: pointer; border: 0; background: transparent; color: var(--muted); font-family: inherit; font-weight: 600;
+    font-size: 0.82rem; padding: 8px 16px; border-radius: 9px; transition: color .15s, background .15s, box-shadow .15s; }
+  .night[aria-pressed="true"] { color: #0a0512; }
+  .night[data-key="all"][aria-pressed="true"] { background: var(--ink); }
+  .night[data-key="fri"][aria-pressed="true"] { background: var(--pink); box-shadow: 0 0 18px -3px var(--pink); }
+  .night[data-key="sat"][aria-pressed="true"] { background: var(--teal); box-shadow: 0 0 18px -3px var(--teal); }
+
+  .banner { display: none; margin: 0 0 16px; padding: 11px 14px; border-radius: 12px; font-size: 0.82rem; line-height: 1.45;
+    color: var(--ink); border: 1px solid var(--line); background: rgba(14,10,32,0.7); }
+  .banner.show { display: block; }
+  .banner b { color: var(--teal); font-weight: 600; }
+
+  .nb { position: absolute; top: 12px; right: 12px; font-family: "Orbitron", sans-serif; font-size: 0.52rem; font-weight: 700;
+    letter-spacing: 0.1em; color: #0a0512; border-radius: 999px; padding: 3px 8px; }
+  .nb.fri { background: var(--pink); box-shadow: 0 0 16px -3px var(--pink); }
+  .nb.sat { background: var(--teal); box-shadow: 0 0 16px -3px var(--teal); }
 </style>
 </head>
 <body>
@@ -296,7 +315,7 @@
 
     <p class="eyebrow">Relentless Beats presents</p>
     <h1>DUSK<br>ARIZONA</h1>
-    <p class="sub">Tap any artist to dig their sound — choose Spotify, Apple Music, YouTube Music, SoundCloud, or Beatport below. <b>Nov 13–14, 2026</b> · Jácome Plaza, Downtown Tucson AZ. DUSK's 10th anniversary, headlined by BigXthaPlug and Knock2 — day-by-day schedule hasn't dropped yet.</p>
+    <p class="sub">Tap any artist to dig their sound — choose Spotify, Apple Music, YouTube Music, SoundCloud, or Beatport below. <b>Nov 13–14, 2026</b> · Jácome Plaza, Downtown Tucson AZ. DUSK's 10th anniversary, headlined by BigXthaPlug and Knock2 — filter by day or vibe, search the lineup, or roll the dice. ★ marks the headliners.</p>
 
     <div class="controls">
       <label class="search">
@@ -308,10 +327,18 @@
 
     <div class="platform-toggle" id="platformToggle" role="group" aria-label="Choose music service"></div>
 
+    <p class="filterlabel">Days</p>
+    <div class="nights" id="nights" role="group" aria-label="Filter by day">
+      <button class="night" data-key="all" aria-pressed="true">Both days</button>
+      <button class="night" data-key="fri" aria-pressed="false">Fri (11/13)</button>
+      <button class="night" data-key="sat" aria-pressed="false">Sat (11/14)</button>
+    </div>
+
     <p class="filterlabel">Vibes</p>
     <div class="chips" id="chips" role="group" aria-label="Filter by subgenre"></div>
 
     <p class="count" id="count"></p>
+    <div class="banner" id="banner"></div>
 
     <div class="deck" id="deck"></div>
     <div class="empty" id="empty">
@@ -320,7 +347,7 @@
     </div>
 
     <footer>
-      Links run a <b>search</b> on your chosen platform (Spotify, Apple Music, YouTube Music, SoundCloud, or Beatport) so they always land, even for the underground acts. On iOS, Apple Music and SoundCloud open via a quick Google detour first, since those apps don't support direct search links. Day-by-day set times haven't been announced yet — this is the full artist roster. Built for the <span class="fam">fam</span>. 🔊
+      Links run a <b>search</b> on your chosen platform (Spotify, Apple Music, YouTube Music, SoundCloud, or Beatport) so they always land, even for the underground acts. On iOS, Apple Music and SoundCloud open via a quick Google detour first, since those apps don't support direct search links. Lineup is split by day per the official DUSK site; ★ marks headliners. Stages and set times haven't dropped yet (DUSK says about a week out). Built for the <span class="fam">fam</span>. 🔊
     </footer>
   </main>
 
@@ -339,67 +366,74 @@
     house:  { label: "House",      c: "var(--house)" },
   };
 
-  // Featured A-Z by tier per the official 10th-anniversary poster; no day/stage/set-time data published yet.
+  // night: "fri" (11/13, official "Day 1") | "sat" (11/14, "Day 2") per duskmusicfestival.com, Nov 4 2026.
+  // hl: headliner (★). Within each day, tier order from the official site. No stage/set-time data yet
+  // (the site says set times drop about a week out).
   const ACTS = [
-    { name: "BigXthaPlug",   g: "hiphop", hl: true, note: "10th anniversary headliner" },
-    { name: "Knock2",        g: "bass",   hl: true, note: "10th anniversary headliner" },
+    // Friday Nov 13
+    { name: "Knock2",        g: "bass",   hl: true, note: "10th anniversary headliner", night: "fri" },
+    { name: "Fetty Wap",     g: "hiphop", hl: true, night: "fri" },
+    { name: "54 Ultra",      g: "bass",  q: "54 Ultra bass", night: "fri" },
+    { name: "Sudan Archives", g: "indie", night: "fri" },
+    { name: "Close Friends Only", g: "house", q: "Close Friends Only DJ", night: "fri" },
+    { name: "LaVern",        g: "house", q: "LaVern DJ", night: "fri" },
+    { name: "Rad Cat",       g: "house", q: "Rad Cat DJ", night: "fri" },
+    { name: "ADHDJ9",        g: "bass", night: "fri" },
+    { name: "Cheers To The Outside", g: "indie", night: "fri" },
+    { name: "Coach",         g: "house", q: "Coach DJ", night: "fri" },
+    { name: "Drew Cooper",   g: "house", q: "Drew Cooper DJ", night: "fri" },
+    { name: "Formerly Known As", g: "bass", q: "Formerly Known As DJ", night: "fri" },
+    { name: "Güero",         g: "house", q: "Güero DJ", night: "fri" },
+    { name: "House Of Ghosts", g: "bass", night: "fri" },
+    { name: "Phazix",        g: "bass", night: "fri" },
+    { name: "Shannnnnoonnnn", g: "house", night: "fri" },
+    { name: "Soaplab",       g: "house", night: "fri" },
+    { name: "Swigfoot",      g: "house", night: "fri" },
+    { name: "The Hawthorne Experience", g: "indie", night: "fri" },
+    { name: "Tkno Gangsta",  g: "bass", night: "fri" },
 
-    { name: "Fetty Wap",     g: "hiphop" },
-    { name: "Horsegiirl",    g: "indie" },
-    { name: "Phantogram",    g: "indie" },
+    // Saturday Nov 14
+    { name: "BigXthaPlug",   g: "hiphop", hl: true, note: "10th anniversary headliner", night: "sat" },
+    { name: "Horsegiirl",    g: "indie", hl: true, night: "sat" },
+    { name: "Phantogram",    g: "indie", hl: true, night: "sat" },
+    { name: "HOL!",          g: "bass", night: "sat" },
+    { name: "Ship Wrek",     g: "bass", night: "sat" },
+    { name: "The Aces",      g: "indie", night: "sat" },
+    { name: "Avello",        g: "house", q: "AVELLO DJ", night: "sat" },
+    { name: "Good Boy Daisy", g: "indie", night: "sat" },
+    { name: "Jackie Hollander", g: "house", night: "sat" },
+    { name: "Lucky",         g: "house", q: "Lucky DJ Arizona", night: "sat" },
+    { name: "BAUM",          g: "house", q: "BAUM DJ", night: "sat" },
+    { name: "Bodykast",      g: "bass", night: "sat" },
+    { name: "BPM",           g: "house", q: "BPM DJ Tucson", night: "sat" },
+    { name: "Dabdoub",       g: "bass", night: "sat" },
+    { name: "Grøsh",         g: "bass", night: "sat" },
+    { name: "Half Dead",     g: "bass", q: "Half Dead DJ", night: "sat" },
+    { name: "Insound",       g: "house", q: "Insound DJ", night: "sat" },
+    { name: "Jocy",          g: "house", night: "sat" },
+    { name: "Kade Findley",  g: "house", night: "sat" },
+    { name: "Revolú",        g: "house", night: "sat" },
+    { name: "Sophia Rankin & The Sound", g: "indie", night: "sat" },
+    { name: "Thraxx",        g: "bass", q: "Thraxx DJ", night: "sat" },
+    { name: "Wr!ght",        g: "house", q: "Wr!ght DJ", night: "sat" },
 
-    { name: "54 Ultra",      g: "bass",  q: "54 Ultra bass" },
-    { name: "HOL!",          g: "bass" },
-    { name: "Ship Wrek",     g: "bass" },
-    { name: "Sudan Archives", g: "indie" },
-    { name: "The Aces",      g: "indie" },
-
-    { name: "Avello",        g: "house", q: "AVELLO DJ" },
-    { name: "Close Friends Only", g: "house", q: "Close Friends Only DJ" },
-    { name: "Good Boy Daisy", g: "indie" },
-    { name: "Jackie Hollander", g: "house" },
-    { name: "LaVern",        g: "house", q: "LaVern DJ" },
-    { name: "Lucky",         g: "house", q: "Lucky DJ Arizona" },
-    { name: "Rad Cat",       g: "house", q: "Rad Cat DJ" },
-
-    { name: "ADHDJ9",        g: "bass" },
-    { name: "BAUM",          g: "house", q: "BAUM DJ" },
-    { name: "Bodykast",      g: "bass" },
-    { name: "BPM",           g: "house", q: "BPM DJ Tucson" },
-    { name: "Cheers To The Outside", g: "indie" },
-    { name: "Coach",         g: "house", q: "Coach DJ" },
-    { name: "Dabdoub",       g: "bass" },
-    { name: "Drew Cooper",   g: "house", q: "Drew Cooper DJ" },
-    { name: "Formerly Known As", g: "bass", q: "Formerly Known As DJ" },
-    { name: "Grøsh",         g: "bass" },
-    { name: "Güero",         g: "house", q: "Güero DJ" },
-    { name: "Half Dead",     g: "bass", q: "Half Dead DJ" },
-    { name: "House Of Ghosts", g: "bass" },
-    { name: "Insound",       g: "house", q: "Insound DJ" },
-    { name: "Jocy",          g: "house" },
-    { name: "Kade Findley",  g: "house" },
-    { name: "Phazix",        g: "bass" },
-    { name: "Pijama Piyama", g: "house" },
-    { name: "Revolú",        g: "house" },
-    { name: "Shannnnnoonnnn", g: "house" },
-    { name: "Soaplab",       g: "house" },
-    { name: "Sophia Rankin & The Sound", g: "indie" },
-    { name: "Swigfoot",      g: "house" },
-    { name: "The Hawthorne Experience", g: "indie" },
-    { name: "Thraxx",        g: "bass", q: "Thraxx DJ" },
-    { name: "Tkno Gangsta",  g: "bass" },
-    { name: "Wr!ght",        g: "house", q: "Wr!ght DJ" },
+    // No day: dropped from the official lineup page since we added it
+    { name: "Pijama Piyama", g: "house", note: "Not on the latest official lineup" },
   ];
+
+  const NIGHT_LABEL = { fri: "FRI", sat: "SAT" };
 
   const serviceUrl = a => window.LineupPlatforms.buildUrl(a.q || a.name);
 
   const deck = document.getElementById("deck");
   const empty = document.getElementById("empty");
+  const banner = document.getElementById("banner");
   const countEl = document.getElementById("count");
   const qInput = document.getElementById("q");
   const chipsEl = document.getElementById("chips");
+  const nightsEl = document.getElementById("nights");
 
-  let activeGenre = "all", query = "";
+  let activeGenre = "all", activeNight = "all", query = "";
 
   function chip(key, label, c) {
     const b = document.createElement("button");
@@ -411,14 +445,17 @@
   }
   chipsEl.appendChild(chip("all", "All", null));
   Object.entries(GENRES).forEach(([k, v]) => chipsEl.appendChild(chip(k, v.label, v.c)));
+  nightsEl.querySelectorAll(".night").forEach(b =>
+    b.addEventListener("click", () => { activeNight = b.dataset.key; render(); }));
   window.LineupPlatforms.renderToggle(document.getElementById("platformToggle"), () => render());
 
   function visible() {
     return ACTS.filter(a => {
       const okG = activeGenre === "all" || a.g === activeGenre;
       const hay = (a.name + " " + GENRES[a.g].label + " " + (a.note || "")).toLowerCase();
+      const okN = activeNight === "all" || a.night === activeNight;
       const okQ = !query || hay.includes(query);
-      return window.LineupPicks.ok(a) && okG && okQ;
+      return window.LineupPicks.ok(a) && okG && okN && okQ;
     });
   }
 
@@ -428,8 +465,9 @@
     const el = document.createElement("a");
     el.className = "act"; el.href = serviceUrl(a); el.target = "_blank"; el.rel = "noopener noreferrer";
     el.style.setProperty("--c", g.c);
-    el.setAttribute("aria-label", a.name + " — " + g.label + " — open on " + platform.label);
+    el.setAttribute("aria-label", a.name + " — " + g.label + (a.night ? " — " + NIGHT_LABEL[a.night] : "") + " — open on " + platform.label);
     el.innerHTML =
+      (a.night ? '<span class="nb ' + a.night + '">' + NIGHT_LABEL[a.night] + '</span>' : '') +
       '<div><span class="name">' + (a.hl ? '<span class="star">★</span>' : '') + a.name + '</span>' +
         (a.note ? '<span class="note">' + a.note + '</span>' : '') + '</div>' +
       '<div class="eq"><span></span><span></span><span></span><span></span></div>' +
@@ -440,6 +478,7 @@
 
   function render() {
     chipsEl.querySelectorAll(".chip").forEach(c => c.setAttribute("aria-pressed", c.dataset.key === activeGenre));
+    nightsEl.querySelectorAll(".night").forEach(n => n.setAttribute("aria-pressed", n.dataset.key === activeNight));
 
     const list = visible();
     deck.innerHTML = "";
@@ -450,6 +489,13 @@
     countEl.innerHTML = (list.length === total)
       ? '<b>' + total + '</b> artists locked in'
       : '<b>' + list.length + '</b> of ' + total + ' artists';
+
+    const showBanner = activeNight !== "all";
+    banner.classList.toggle("show", showBanner);
+    if (showBanner) {
+      const lbl = activeNight === "fri" ? "Friday (11/13)" : "Saturday (11/14)";
+      banner.innerHTML = 'Showing only acts confirmed for <b>' + lbl + '</b>.';
+    }
   }
 
   qInput.addEventListener("input", e => { query = e.target.value.trim().toLowerCase(); render(); });
