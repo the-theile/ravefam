@@ -12684,7 +12684,7 @@
     squad.length = 0; crews.length = 0; festivals.length = 0; dreamPins = []; archiveLinks = [];
     crewPolls = []; crewJams = []; crewJamVibes = [];
     crewAchievements = []; raverAchievements = []; crewFeedEvents = [];
-    _notifications = [];
+    _notifications = []; updateNotifBadge();
     Object.keys(nicknameCache).forEach(k => delete nicknameCache[k]);
     Object.keys(festVibesCache).forEach(k => delete festVibesCache[k]);
     Object.keys(metStoriesCache).forEach(k => delete metStoriesCache[k]);
@@ -15956,17 +15956,25 @@
     if (error) console.error('notification insert error', error);
   }
 
+  // Realtime fires this on every notifications change (our own inserts too), so
+  // overlapping loads are normal — _notifLoadSeq drops any response a newer load superseded.
+  let _notifLoadSeq = 0;
   async function dbLoadNotifications() {
     const uid = currentUser?.id;
     if (!uid) return;
+    const seq = ++_notifLoadSeq;
     const { data, error } = await sb
       .from('notifications')
       .select('*')
       .eq('user_id', uid)
       .order('created_at', { ascending: false })
       .limit(100);
-    if (error || !data) return;
-    _notifications = data.filter(n => !isBlockedUser(n.data?.actor_id)).map(n => ({
+    if (error || !data || seq !== _notifLoadSeq) return;
+    // Rows hidden but still in their undo window stay hidden; local rows whose
+    // insert hasn't returned an id yet stay put — otherwise badge and panel drift.
+    const hiddenIds = new Set((_notifHidden?.items || []).map(n => String(n.id)));
+    const pendingLocal = _notifications.filter(n => !NOTIF_UUID_RE.test(String(n.id)) && !data.some(d => d.message === n.message));
+    _notifications = data.filter(n => !isBlockedUser(n.data?.actor_id) && !hiddenIds.has(String(n.id))).map(n => ({
       id: n.id,
       message: n.message,
       timestamp: new Date(n.created_at).getTime(),
@@ -15976,7 +15984,10 @@
       entityType: n.entity_type || null,
       entityId: n.entity_id || null
     }));
+    if (pendingLocal.length) _notifications = pendingLocal.concat(_notifications).slice(0, 100);
+    // Badge and panel both read unreadNotifCount() — refresh both from the same store.
     updateNotifBadge();
+    if (isNotifDrawerOpen()) renderNotifList();
   }
 
   async function dbMarkNotifsRead() {
