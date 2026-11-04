@@ -446,6 +446,12 @@ async function installSupabaseStub(page, opts = {}) {
               return { data: { ok: true, removed, status, target_type: f.target_type, target_id: f.target_id, closed: closed.length }, error: null };
             }
             if (fn === 'mod_flag_context') return { data: {}, error: null };
+            // Mirrors the server: checks EVERY raver (no RLS), case-insensitive, like ravers_handle_unique_idx.
+            if (fn === 'handle_available') {
+              const h = String(args.p_handle || '').trim().toLowerCase();
+              const taken = (store.ravers || []).some(r => r.handle && String(r.handle).toLowerCase() === h && String(r.id) !== String(args.p_exclude_id));
+              return { data: !taken, error: null };
+            }
             if (fn === 'mod_issue_sanction') {
               if (!isMod()) return { data: { ok: false, error: 'FORBIDDEN' }, error: null };
               if (String(args.p_user) === String(uid)) return { data: { ok: false, error: 'SELF' }, error: null };

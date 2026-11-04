@@ -3566,6 +3566,12 @@
   }
   .micro-feedback-card.show { transform: translateX(-50%) translateY(0); pointer-events: auto; }
   @media (max-width: 640px) { .micro-feedback-card { bottom: 84px; } }
+  /* While the card is up, reserve its height under the page so nothing (e.g.
+     the crew Roster buttons) is stuck beneath it — everything can scroll clear. */
+  body:has(.micro-feedback-card.show) main { padding-bottom: 260px; }
+  @media (max-width: 640px) {
+    body:has(.micro-feedback-card.show) main { padding-bottom: calc(300px + env(safe-area-inset-bottom, 0px)); }
+  }
   .micro-feedback-close { position: absolute; top: 10px; right: 12px; color: var(--muted); cursor: pointer; font-size: 0.8rem; padding: 4px;
     background: none; border: 0; margin: 0; line-height: 1; font-family: inherit; -webkit-appearance: none; appearance: none; }
   .micro-feedback-eyebrow { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.66rem; text-transform: uppercase; letter-spacing: 1px; color: var(--neon-cyan); margin-bottom: 6px; }
@@ -9054,6 +9060,13 @@
     overflow: hidden;
   }
   .crew-share-qr canvas { display: block; }
+  /* Secret crews: no QR on the card — the Roster only opens QR invites in Recruiting. */
+  .crew-share-qr-pending {
+    flex-shrink: 0; width: 56px; height: 56px; display: flex; align-items: center; justify-content: center;
+    border: 1px dashed rgba(var(--white-rgb),0.35); border-radius: 6px; text-align: center;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.42rem; line-height: 1.25;
+    letter-spacing: 0.4px; text-transform: uppercase; color: rgba(var(--white-rgb),0.55);
+  }
   .crew-share-mode-toggle {
     display: flex;
     gap: 6px;
@@ -11005,7 +11018,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.31.0';
+  const APP_VERSION = '2.32.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -12684,7 +12697,7 @@
     squad.length = 0; crews.length = 0; festivals.length = 0; dreamPins = []; archiveLinks = [];
     crewPolls = []; crewJams = []; crewJamVibes = [];
     crewAchievements = []; raverAchievements = []; crewFeedEvents = [];
-    _notifications = [];
+    _notifications = []; updateNotifBadge();
     Object.keys(nicknameCache).forEach(k => delete nicknameCache[k]);
     Object.keys(festVibesCache).forEach(k => delete festVibesCache[k]);
     Object.keys(metStoriesCache).forEach(k => delete metStoriesCache[k]);
@@ -14765,7 +14778,7 @@
   const SETUP_ITEMS = [
     { key: 'identity', label: 'Name & handle', where: '' },
     { key: 'crew', label: 'Start or join a crew', where: 'in Crews' },
-    { key: 'sound', label: 'Pick your sound', where: 'in Raves' },
+    { key: 'sound', label: 'Pick your sound', where: 'in Ravers' },
     { key: 'photo', label: 'Add a photo', where: 'in Ravers' },
     { key: 'rave', label: 'Mark a rave Going or Interested', where: 'in Raves' }
   ];
@@ -14852,9 +14865,8 @@
   function setupGo(key) {
     closeZoneSheet();
     const me = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
-    if (key === 'identity' || key === 'photo') { switchTab('members'); if (me) openProfileEditor(me.id); }
+    if (key === 'identity' || key === 'photo' || key === 'sound') { switchTab('members'); if (me) openProfileEditor(me.id); }
     else if (key === 'crew') switchTab('crews');
-    else if (key === 'sound') { switchTab('events'); openRealmIntro('raves'); }
     else if (key === 'rave') { switchTab('events'); showToast('Tap Going or 👀 Interested on any rave'); }
   }
 
@@ -15956,17 +15968,25 @@
     if (error) console.error('notification insert error', error);
   }
 
+  // Realtime fires this on every notifications change (our own inserts too), so
+  // overlapping loads are normal — _notifLoadSeq drops any response a newer load superseded.
+  let _notifLoadSeq = 0;
   async function dbLoadNotifications() {
     const uid = currentUser?.id;
     if (!uid) return;
+    const seq = ++_notifLoadSeq;
     const { data, error } = await sb
       .from('notifications')
       .select('*')
       .eq('user_id', uid)
       .order('created_at', { ascending: false })
       .limit(100);
-    if (error || !data) return;
-    _notifications = data.filter(n => !isBlockedUser(n.data?.actor_id)).map(n => ({
+    if (error || !data || seq !== _notifLoadSeq) return;
+    // Rows hidden but still in their undo window stay hidden; local rows whose
+    // insert hasn't returned an id yet stay put — otherwise badge and panel drift.
+    const hiddenIds = new Set((_notifHidden?.items || []).map(n => String(n.id)));
+    const pendingLocal = _notifications.filter(n => !NOTIF_UUID_RE.test(String(n.id)) && !data.some(d => d.message === n.message));
+    _notifications = data.filter(n => !isBlockedUser(n.data?.actor_id) && !hiddenIds.has(String(n.id))).map(n => ({
       id: n.id,
       message: n.message,
       timestamp: new Date(n.created_at).getTime(),
@@ -15976,7 +15996,10 @@
       entityType: n.entity_type || null,
       entityId: n.entity_id || null
     }));
+    if (pendingLocal.length) _notifications = pendingLocal.concat(_notifications).slice(0, 100);
+    // Badge and panel both read unreadNotifCount() — refresh both from the same store.
     updateNotifBadge();
+    if (isNotifDrawerOpen()) renderNotifList();
   }
 
   async function dbMarkNotifsRead() {
@@ -17274,7 +17297,17 @@
     if (e.target.closest('.nav-tab')) hapticImpact('LIGHT');
   });
 
-  function switchTab(page, el) {
+  // Browser Back moves between bottom-nav sections before it leaves /app.
+  // switchTab is the only writer: it pushes one entry per section change (the
+  // URL itself never changes), and popstate replays it with fromHistory so the
+  // replay doesn't push again.
+  window.addEventListener('popstate', e => {
+    if (!currentUser || isOnboarding) return;
+    const page = e.state?.rfTab || 'crews';
+    if (document.getElementById('page-' + page)) switchTab(page, null, { fromHistory: true });
+  });
+
+  function switchTab(page, el, opts) {
     const _now = Date.now();
     // Only real taps (the nav button passes itself) count toward a double-tap
     // refresh. Code paths like push deep links call switchTab('crews') too,
@@ -17298,6 +17331,7 @@
     // The Huddle is a full-screen surface layered over the page — navigating
     // the bottom nav has to dismiss it, or it would hide the tab you picked.
     if (_huddleScreenOpen) closeHuddleScreen();
+    const prevPage = document.querySelector('.page.active')?.id.replace(/^page-/, '') || null;
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
     document.getElementById('page-' + page).classList.add('active');
@@ -17305,6 +17339,12 @@
     else document.querySelector(`.nav-tab[onclick*="'${page}'"]`)?.classList.add('active');
     onPlaceEntered(page, !!el);  // 2.0 discovery: banner + intro the first time (see REALMS)
     updateCrewPresence();
+    if (!opts?.fromHistory) {
+      // First switch: stamp the entry we're on with the section we came from.
+      let cur = history.state?.rfTab;
+      if (!cur) { cur = prevPage || page; history.replaceState({ ...(history.state || {}), rfTab: cur }, ''); }
+      if (cur !== page) history.pushState({ rfTab: page }, '');
+    }
   }
 
   // Modal
@@ -17932,7 +17972,9 @@
           <div class="crew-share-footer">myravefam.com</div>
           <div class="crew-share-bottom-row">
             <div class="crew-share-barcode">${crewShareBarcodeHTML()}</div>
-            <div class="crew-share-qr" id="crew-share-qr"></div>
+            ${crew.status === 'secret'
+              ? '<div class="crew-share-qr-pending">Invites open<br>when Recruiting</div>'
+              : '<div class="crew-share-qr" id="crew-share-qr"></div>'}
           </div>
         </div>
       </div>
@@ -37748,7 +37790,9 @@
       you.interestedFestIds = (you.interestedFestIds || []).filter(fid => String(fid) !== String(festId));
       you.festIds.push(fest ? fest.id : festId);
       hapticImpact('MEDIUM');
-      showToast(isPast ? `🎟️ Sent it at ${fest?.name || 'that rave'}!` : `🎟️ You're going to ${fest?.name || 'that rave'}!`);
+      // The first-RSVP sheet below already says "You're going!" — one confirmation, not a toast on top of it.
+      const firstRsvpMoment = !isPast && currentUser && fest && _guidance && !_guidance.quests.first_rsvp;
+      if (!firstRsvpMoment) showToast(isPast ? `🎟️ Sent it at ${fest?.name || 'that rave'}!` : `🎟️ You're going to ${fest?.name || 'that rave'}!`);
       addNotification(isPast ? `🎟️ Logged! You sent it at ${fest?.name || 'that rave'}.` : `🎪 You're locked in for ${fest?.name || 'that rave'}! Pack your kit, charge the glowsticks, and get ready for the frequencies.`, [nlRave(fest)]);
       // Let each of your crews know — skip Secret crews, same posture as notifyCrewMembers.
       if (currentUser && fest) {
@@ -39425,16 +39469,24 @@
   (function initOfflineBanner() {
     const banner = document.getElementById('offline-banner');
     let _bannerDismissed = false;
+    let _offlineTimer = null;
+    // iOS WebKit fires short false 'offline' blips on network handoffs and when
+    // the app returns from Mail/Messages mid-onboarding, and doesn't always
+    // follow with 'online'. Only show once offline has held for a few seconds.
     function update() {
+      clearTimeout(_offlineTimer);
       if (navigator.onLine) {
         banner.classList.remove('visible');
       } else if (!_bannerDismissed) {
-        banner.classList.add('visible');
+        _offlineTimer = setTimeout(() => {
+          if (!navigator.onLine && !_bannerDismissed) banner.classList.add('visible');
+        }, 3000);
       }
     }
     window.addEventListener('offline', () => {
       update();
     });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) update(); });
     window.addEventListener('online', () => {
       update();
       // Auto-retry pending claim if one is queued
@@ -40028,6 +40080,16 @@
     return { ok: true, handle: h };
   }
 
+  // Single source of truth for "is this handle free?" — the handle_available RPC
+  // checks lower(handle) across ALL ravers (same rule as ravers_handle_unique_idx).
+  // A direct select can't: RLS hides strangers' rows, so they read as free.
+  // Returns true / false, or null when the check itself failed (never claim free then).
+  async function isHandleAvailable(handle, excludeId) {
+    const { data, error } = await sb.rpc('handle_available', { p_handle: handle, p_exclude_id: excludeId || null });
+    if (error) { console.error('handle_available rpc error', error); return null; }
+    return data === true;
+  }
+
   let _hpDebounce = null;
   let _hpReady = false;
   let _hpSeq = 0;
@@ -40061,15 +40123,14 @@
     clearTimeout(_hpDebounce);
     const seq = ++_hpSeq;
     _hpDebounce = setTimeout(async () => {
-      const myRaver = squad.find(r => r.isYou);
-      const { data } = await sb.from('ravers')
-        .select('id')
-        .ilike('handle', handle)
-        .neq('id', myRaver?.id || '00000000-0000-0000-0000-000000000000')
-        .maybeSingle();
+      const myRaver = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
+      const available = await isHandleAvailable(handle, myRaver?.id);
 
       if (seq !== _hpSeq) return; // stale response — a newer check superseded this one
-      if (data) {
+      if (available === null) {
+        if (status) { status.textContent = "Couldn't check that handle. Try again"; status.className = 'hp-status hp-err'; }
+        _hpReady = false;
+      } else if (!available) {
         if (status) { status.textContent = `@${handle} is taken 😔`; status.className = 'hp-status hp-err'; }
         if (input)  input.className = 'hp-invalid';
         _hpReady = false;
@@ -40303,12 +40364,12 @@
     const seq = ++_obHandleSeq;
     _obHandleDebounce = setTimeout(async () => {
       const _obExisting = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
-      const { data } = await sb.from('ravers').select('id')
-        .ilike('handle', handle)
-        .neq('id', _obExisting?.id || '00000000-0000-0000-0000-000000000000')
-        .maybeSingle();
+      const available = await isHandleAvailable(handle, _obExisting?.id);
       if (seq !== _obHandleSeq) return; // stale response — a newer check superseded this one
-      if (data) {
+      if (available === null) {
+        if (status) { status.textContent = "Couldn't check that handle. Try again"; status.className = 'ob-handle-status ob-err'; }
+        _obHandleValid = false;
+      } else if (!available) {
         if (status) { status.textContent = `@${handle} is taken 😔`; status.className = 'ob-handle-status ob-err'; }
         if (input)  input.className = 'ob-inline-field ob-invalid';
         _obHandleValid = false;
@@ -40376,8 +40437,18 @@
 
     if (error) {
       console.error('obStep2Next save error', error);
-      toastError('Could not save. Try again');
-      if (btn) { btn.disabled = false; btn.textContent = "I'm Ready →"; }
+      if (error.code === '23505') {
+        // Handle got claimed between the check and the save — say so instead of a generic retry loop.
+        const status = document.getElementById('ob-handle-status');
+        const input  = document.getElementById('ob-handle-input');
+        if (status) { status.textContent = `@${handle} is taken 😔`; status.className = 'ob-handle-status ob-err'; }
+        if (input)  input.className = 'ob-inline-field ob-invalid';
+        _obHandleValid = false;
+        toastError('That handle was just taken. Try another', error);
+      } else {
+        toastError(isContentBlocked(error) ? "That name or handle isn't allowed. Try another" : 'Could not save. Try again', error);
+      }
+      if (btn) { btn.disabled = !_obHandleValid; btn.textContent = "I'm Ready →"; }
       return;
     }
     addNotification(PROFILE_LOCKED_IN_MSG);
@@ -41684,12 +41755,12 @@
     html += `<div class="stats-hero-grid">
       <div class="stats-hero-card tappable" onclick="openRavesLoggedPage()" role="button" tabindex="0" aria-label="View your logged raves">
         <span class="stats-hero-chevron">›</span>
-        <div class="stats-hero-number">${totalRaves}</div>
+        <div class="stats-hero-number">${totalRaves || '—'}</div>
         <div class="stats-hero-label">Raves Logged</div>
       </div>
       <div class="stats-hero-card tappable" onclick="openDaysStatsPage()" role="button" tabindex="0" aria-label="View your day and month rave stats">
         <span class="stats-hero-chevron">›</span>
-        <div class="stats-hero-number">${totalDays}</div>
+        <div class="stats-hero-number">${totalDays || '—'}</div>
         <div class="stats-hero-label">Days Raved</div>
       </div>
       <div class="stats-hero-card tappable" onclick="openCitiesMapPage()" role="button" tabindex="0" aria-label="View a map of cities you've raved in">
@@ -42004,7 +42075,7 @@
           <div class="stats-hero-label">Crew Size</div>
         </div>
         <div class="stats-hero-card">
-          <div class="stats-hero-number">${sharedFests.length}</div>
+          <div class="stats-hero-number">${sharedFests.length || '—'}</div>
           <div class="stats-hero-label">Shared Raves</div>
         </div>
         <div class="stats-hero-card">
