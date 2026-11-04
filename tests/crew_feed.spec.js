@@ -554,7 +554,7 @@ test.describe('new crew page · Plan view', () => {
     }
     await expect(plan.getByRole('button', { name: /Mission Briefing/ })).toHaveCount(0);
     await expect(plan.locator('.section-banner').first()).toBeHidden();
-    await expect(plan.locator('.crew-plan-tabs .game-plan-section-tab')).toHaveText(['Tasks', 'Roles', 'Rides', 'Stay', 'Outfit']);
+    await expect(plan.locator('.crew-plan-tabs .game-plan-section-tab')).toHaveText(['Tasks', 'Roles', 'Rides', 'Stay', 'Outfit', 'Lineup']);
     await expect(plan.locator('.crew-plan-help')).toBeVisible();
     // …and the ticket carries Briefing and the rave's chat instead of its barcode.
     const ticket = page.locator('.crew-ticket[data-fest="f1"]');
