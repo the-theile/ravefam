@@ -2649,6 +2649,17 @@
       schedEl.appendChild(el("p", "lp-sched-note", "Clash check turns on when set times drop."));
     }
     if (isMemberMode() && nowItems().length) schedEl.appendChild(remindRow());
+    // Landed from the app's "Turn on set reminders" nudge: point at the 🔔
+    // button (push permission needs the tap itself, so it isn't auto-toggled).
+    if (remindIntent && isMemberMode()) {
+      var rb = schedEl.querySelector(".lp-remind-btn");
+      if (rb) {
+        remindIntent = false;
+        setTimeout(function () { rb.scrollIntoView({ block: "center", behavior: "smooth" }); rb.classList.add("lp-flash"); }, 60);
+      } else {
+        schedEl.appendChild(el("p", "lp-sched-note", "Add sets with times to your schedule, then turn on 🔔 reminders here."));
+      }
+    }
     if (!member) {
       schedEl.appendChild(el("p", "lp-sched-note", "Log in to suggest set times and see your crew's Fam Faves here."));
     }
@@ -2665,6 +2676,7 @@
   // all of this still works without signal.
   var nowEl = null, nowTimer = null, autoNowDone = false, nowAuto = false, nowLogged = false;
   var remind = false, remindSig = null, remindTimer = null, offlineAsked = false, onlineHooked = false;
+  var remindIntent = false;  // ?remind=1 from the app's fest-week nudge: open My schedule at the 🔔 button
   var SNAP_KEY = "rf_lp_offline";
   var VAPID_PUBLIC_KEY = "BCF_mOzUV61zYqsbcN-NuAiGrmuc3pPx6qQDCmRV057Dw8JNy-IwvrPb9mpYDvqDBLruXtLCk9-Q1E7caAfn_6M";
   var HOUR = 3600000;
@@ -3350,6 +3362,7 @@
         var qv = new URLSearchParams(location.search).get("view");
         if (qv === "schedule" || qv === "now") { view = qv; autoNowDone = true; }
         if (qv === "checkoff") { checkFocus = true; autoNowDone = true; }
+        if (new URLSearchParams(location.search).get("remind") === "1") { view = "schedule"; autoNowDone = true; remindIntent = true; }
       } catch (e) {}
       try { if (window.sessionStorage.getItem("rf_now_off_" + slug)) autoNowDone = true; } catch (e) {}
       // No signal (festival grounds): the member's last saved schedule, if
