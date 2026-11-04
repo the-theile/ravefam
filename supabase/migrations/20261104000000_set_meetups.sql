@@ -88,6 +88,10 @@ drop trigger if exists set_meetups_touch on public.set_meetups;
 create trigger set_meetups_touch before update on public.set_meetups
   for each row execute function public.touch_set_meetup();
 
+-- Default privileges on this project can still hand anon/authenticated
+-- everything (incl. TRUNCATE, which skips RLS), so strip it back first.
+revoke all on public.set_meetups from anon;
+revoke truncate, references, trigger on public.set_meetups from authenticated;
 grant select, insert, update, delete on public.set_meetups to authenticated;
 grant select, insert, update, delete on public.set_meetups to service_role;
 
