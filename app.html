@@ -39453,16 +39453,24 @@
   (function initOfflineBanner() {
     const banner = document.getElementById('offline-banner');
     let _bannerDismissed = false;
+    let _offlineTimer = null;
+    // iOS WebKit fires short false 'offline' blips on network handoffs and when
+    // the app returns from Mail/Messages mid-onboarding, and doesn't always
+    // follow with 'online'. Only show once offline has held for a few seconds.
     function update() {
+      clearTimeout(_offlineTimer);
       if (navigator.onLine) {
         banner.classList.remove('visible');
       } else if (!_bannerDismissed) {
-        banner.classList.add('visible');
+        _offlineTimer = setTimeout(() => {
+          if (!navigator.onLine && !_bannerDismissed) banner.classList.add('visible');
+        }, 3000);
       }
     }
     window.addEventListener('offline', () => {
       update();
     });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) update(); });
     window.addEventListener('online', () => {
       update();
       // Auto-retry pending claim if one is queued
