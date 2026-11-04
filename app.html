@@ -37782,7 +37782,9 @@
       you.interestedFestIds = (you.interestedFestIds || []).filter(fid => String(fid) !== String(festId));
       you.festIds.push(fest ? fest.id : festId);
       hapticImpact('MEDIUM');
-      showToast(isPast ? `🎟️ Sent it at ${fest?.name || 'that rave'}!` : `🎟️ You're going to ${fest?.name || 'that rave'}!`);
+      // The first-RSVP sheet below already says "You're going!" — one confirmation, not a toast on top of it.
+      const firstRsvpMoment = !isPast && currentUser && fest && _guidance && !_guidance.quests.first_rsvp;
+      if (!firstRsvpMoment) showToast(isPast ? `🎟️ Sent it at ${fest?.name || 'that rave'}!` : `🎟️ You're going to ${fest?.name || 'that rave'}!`);
       addNotification(isPast ? `🎟️ Logged! You sent it at ${fest?.name || 'that rave'}.` : `🎪 You're locked in for ${fest?.name || 'that rave'}! Pack your kit, charge the glowsticks, and get ready for the frequencies.`, [nlRave(fest)]);
       // Let each of your crews know — skip Secret crews, same posture as notifyCrewMembers.
       if (currentUser && fest) {
