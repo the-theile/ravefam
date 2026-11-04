@@ -3644,6 +3644,7 @@
   .gk-nudge-also { font-size: 0.76rem; color: var(--muted); margin-top: 8px; }
   .gk-nudge-also.tap { display: block; background: none; border: 0; padding: 4px 0; font-family: inherit; text-align: left; cursor: pointer; color: var(--gk-color, var(--muted)); }
   .gk-nudge .gk-btn { height: 38px; margin-top: 10px; width: 100%; }
+  .gk-nudge .gk-btn-row { margin-top: 0; }
 
   /* 07 One-time hint */
   .gk-hint { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 12px; background: color-mix(in srgb, var(--gk-color, var(--neon-cyan)) 7%, transparent); border: 1px solid color-mix(in srgb, var(--gk-color, var(--neon-cyan)) 28%, transparent); font-size: 0.8rem; color: var(--text); animation: fadeIn 0.25s ease-out; }
@@ -10983,7 +10984,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.29.1';
+  const APP_VERSION = '2.30.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -11088,7 +11089,8 @@
       skips: 0,                        // intros skipped in a row (fewer-tips offer after 3)
       fewer_tips_offered: false,
       rave_mode: null,                 // { until: ms, festival_id } while Rave mode is on
-      found_during_rave: []            // realms found in Rave mode, celebrated at the check-off
+      found_during_rave: [],           // realms found in Rave mode, celebrated at the check-off
+      fest_nudge_off: {}               // festival id → { remind, plan }: fest-week cards hidden with "Not now"
     };
   }
   function saveGuidance(patch) {
@@ -14748,6 +14750,34 @@
   ];
   let _reminderOptinsLoaded = false;  // set_reminder_optins fetched once per session (for the fest-week nudge)
   let _reminderOptinFestIds = new Set();  // festivals this user turned 🔔 Remind me on for (Lineup Explorer)
+  let _pushBlocked = false;  // notifications denied for RaveFAM (iOS) or this site (web): the fest-week card says so
+
+  // Reminder opt-ins + push permission for the fest-week card. Re-checked when
+  // the app comes back into view, since 🔔 is switched on in the explorer
+  // (a new tab on web) and permission changes in iOS Settings.
+  async function refreshFestNudgeState() {
+    if (!currentUser) return false;
+    const before = [..._reminderOptinFestIds].sort().join(',') + '|' + _pushBlocked;
+    const { data, error } = await sb.from('set_reminder_optins').select('festival_id');
+    if (!error) _reminderOptinFestIds = new Set((data || []).map(r => String(r.festival_id)));
+    try {
+      const NativePush = nativePushPlugin();
+      if (NativePush) _pushBlocked = (await NativePush.checkPermissions()).receive === 'denied';
+      else _pushBlocked = 'Notification' in window && Notification.permission === 'denied';
+    } catch (e) {}
+    return before !== [..._reminderOptinFestIds].sort().join(',') + '|' + _pushBlocked;
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden || !_reminderOptinsLoaded) return;
+    refreshFestNudgeState().then(changed => { if (changed) renderEvents(); }).catch(() => {});
+  });
+
+  // iOS: open RaveFAM's page in the Settings app (Capacitor hands non-web URLs
+  // to iOS). Web has no such link, so the toast carries the steps.
+  function openNotificationSettings() {
+    if (IS_NATIVE_APP) { location.href = 'app-settings:'; return; }
+    showToast('Turn notifications on for this site in your browser settings, then come back.');
+  }
 
   function setupItemDone(key) {
     const me = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
@@ -14772,8 +14802,7 @@
     if (!pill) return;
     if (!_reminderOptinsLoaded && currentUser) {
       _reminderOptinsLoaded = true;
-      const { data } = await sb.from('set_reminder_optins').select('festival_id');
-      _reminderOptinFestIds = new Set((data || []).map(r => String(r.festival_id)));
+      await refreshFestNudgeState();
     }
     pill.style.display = setupPillVisible() ? '' : 'none';
     const n = document.getElementById('setup-pill-n');
@@ -29303,6 +29332,7 @@
   function renderVendorVillage() {
     const root = document.getElementById('vendor-village-root');
     if (!root) return;
+    _vendorFestFilter = null;  // the nav tab always opens the whole Village
     root.innerHTML = vendorVillageShellHTML();
     loadVendorVillageData();
     renderVillageRespectCard();
@@ -29379,8 +29409,16 @@
   // vendor/vendor_review/vendor_spot report (they shouldn't have to find and
   // tap the nav tab themselves) AND by the "saved vendor spotted"
   // notification action button (Feature 5).
-  async function jumpToVendorVillage(vendorIdToOpen) {
+  // festivalId (from a rave card's fest-week line): opens Browse filtered to
+  // vendors tagged for that rave, with a chip to clear it.
+  async function jumpToVendorVillage(vendorIdToOpen, festivalId = null) {
     switchTab('checklist');
+    if (villageSection !== 'vendors') {
+      const t = document.querySelector('#village-section-tabs .stats-subtab');
+      if (t) switchVillageSection('vendors', t);
+    }
+    if (festivalId) { vendorVillageTab = 'browse'; _vendorCategoryFilter = null; _vendorSearchQuery = ''; }
+    _vendorFestFilter = festivalId ? String(festivalId) : null;
     const root = document.getElementById('vendor-village-root');
     if (root) root.innerHTML = vendorVillageShellHTML();
     await loadVendorVillageData();
@@ -29437,6 +29475,7 @@
   // ===== VENDOR VILLAGE — Browse panel =====
   let _vendorCategoryFilter = null;
   let _vendorSearchQuery = '';
+  let _vendorFestFilter = null;  // festival id from jumpToVendorVillage(…, festId); cleared by the chip or the nav tab
 
   function renderVendorBrowsePanel() {
     const panel = document.getElementById('vv-browse-panel');
@@ -29472,17 +29511,21 @@
         onclick="toggleVendorCategoryFilter('${escJsAttr(cat)}')">${VENDOR_CATEGORY_LABELS[cat] || escHtml(cat)}</button>`;
     }).join('');
     const query = _vendorSearchQuery.trim().toLowerCase();
+    const festF = _vendorFestFilter && festivals.find(f => String(f.id) === _vendorFestFilter);
+    const festChip = festF
+      ? `<button class="jam-filter-pill active" aria-label="Show all vendors" onclick="clearVendorFestFilter()">✕ 🎪 ${escHtml(festF.name)}</button>` : '';
     const visible = vendors
+      .filter(v => !festF || (vendorFestivalTagsCache[v.id] || []).some(t => String(t.festival_id) === _vendorFestFilter))
       .filter(v => !_vendorCategoryFilter || v.category === _vendorCategoryFilter)
       .filter(v => vendorMatchesSearch(v, query));
     const cards = visible.map(v => vendorCardHTML(v)).join('');
     const emptyMsg = vendors.length === 0
       ? `<div class="jam-empty es-block"><div class="es-icon">🏪</div><div class="es-headline">The village is empty</div><div class="es-sub">Post a vendor you love: merch, kandi, glass, gear, whatever keeps the fam supplied.</div></div>`
       : visible.length === 0
-      ? `<div class="jam-empty text-hint-lg" style="text-align:center;padding:20px 0;">${query ? `No vendors match “${escHtml(_vendorSearchQuery.trim())}”` : 'No vendors in this category yet'}</div>`
+      ? `<div class="jam-empty text-hint-lg" style="text-align:center;padding:20px 0;">${query ? `No vendors match “${escHtml(_vendorSearchQuery.trim())}”` : _vendorCategoryFilter ? 'No vendors in this category yet' : `No vendors tagged for ${escHtml(festF ? festF.name : 'this rave')} yet. Tap ✕ to see them all.`}</div>`
       : '';
     return `
-      ${filterPills ? `<div class="jam-filter-bar" style="margin-top:16px;">${filterPills}</div>` : ''}
+      ${festChip || filterPills ? `<div class="jam-filter-bar" style="margin-top:16px;">${festChip}${filterPills}</div>` : ''}
       <div class="jam-cards-list vv-cards-list" style="margin-top:12px;">
         ${emptyMsg}
         ${cards}
@@ -29496,6 +29539,11 @@
 
   function onVendorSearchInput(val) {
     _vendorSearchQuery = val;
+    renderVendorBrowseList();
+  }
+
+  function clearVendorFestFilter() {
+    _vendorFestFilter = null;
     renderVendorBrowseList();
   }
 
@@ -36163,6 +36211,39 @@
     renderEvents();
   }
 
+  // Open (unassigned, not done) Rave Plan tasks per crew+rave, for the lead's
+  // fest-week card. Fetched once per session; the card re-renders when it lands.
+  const _festPlanOpen = {};  // `${crewId}|${festId}` → count, or 'loading'
+  function festPlanOpenCount(crewId, festId) {
+    const key = `${crewId}|${festId}`;
+    if (key in _festPlanOpen) return _festPlanOpen[key] === 'loading' ? 0 : _festPlanOpen[key];
+    _festPlanOpen[key] = 'loading';
+    (async () => {
+      const { data: plans } = await sb.from('game_plans').select('id').eq('crew_id', crewId).eq('festival_id', festId);
+      const ids = (plans || []).map(p => p.id);
+      let n = 0;
+      if (ids.length) {
+        const { count } = await sb.from('game_plan_items').select('id', { count: 'exact', head: true })
+          .in('game_plan_id', ids).eq('kind', 'task').eq('is_done', false).is('assignee_raver_id', null);
+        n = count || 0;
+      }
+      _festPlanOpen[key] = n;
+      if (n) renderEvents();
+    })().catch(() => { _festPlanOpen[key] = 0; });
+    return 0;
+  }
+
+  // "Not now" on a fest-week card hides that card for that rave only.
+  function festNudgeOff(festId, which) {
+    return !!(_guidance?.fest_nudge_off?.[festId]?.[which]);
+  }
+  function hideFestNudge(festId, which) {
+    const all = { ...(_guidance?.fest_nudge_off || {}) };
+    all[festId] = { ...(all[festId] || {}), [which]: true };
+    saveGuidance({ fest_nudge_off: all });
+    renderEvents();
+  }
+
   function raveNudgeHTML(f) {
     if (!_guidance) return '';
     const d = festDate(f);
@@ -36173,8 +36254,8 @@
     const end = new Date(d); end.setDate(end.getDate() + days);
     const daysOut = Math.round((d - TODAY) / 86400000);
     const lineupUrl = getLineupExplorerUrl(f);
-    const village = 'Gearing up? Browse vendors in the Village →';
-    const villageAttr = `${stop}jumpToVendorVillage()`;
+    const village = `Vendors at ${f.name} → see the Village`;
+    const villageAttr = `${stop}jumpToVendorVillage(null, '${id}')`;
     if (TODAY >= d && TODAY < end) {
       return gkRaveModeOn()
         ? timelineNudgeHTML({ color: '#FF2D78', eyebrow: 'RAVE MODE ON', title: 'Tips are quiet', body: 'On deck and your schedule up front until the morning after. Beacons still get through.', cta: 'Turn off', ctaAttr: `${stop}raveModeOff()` })
@@ -36189,20 +36270,30 @@
       const found = (_guidance.found_during_rave || []).map(r => REALM_NAMES[r]).filter(Boolean);
       return timelineNudgeHTML({ color: '#39FF14', eyebrow: 'HOW WAS IT?', title: 'Check off who you caught', body: '20 seconds. Logs the night in Stats and drops a pin on your Raves Radar.', cta: 'Start check-off', ctaAttr: `${stop}openRaveFocus('${id}')`,
         also: found.length ? `You found the ${found.join(' & ')} last night · +10 Unity` : 'Any vendors worth a shout-out? Review them in the Village →',
-        alsoAttr: found.length ? '' : `${stop}jumpToVendorVillage()` });
+        alsoAttr: found.length ? '' : villageAttr });
     }
     if (daysOut <= 7) {
-      if (lineupUrl && !_reminderOptinFestIds.has(String(f.id))) {
+      // One card at a time, in order: a lead's Plan check when tasks are still
+      // unclaimed, then set reminders, then the crew card. "Not now" moves on.
+      const going = crewmatesGoing(f.id).filter(m => m.going.length);
+      const withCrew = going.find(m => m.crew.isLead) || going[0];
+      const planOff = festNudgeOff(f.id, 'plan');
+      const planCard = () => timelineNudgeHTML({ color: '#FFE600', eyebrow: 'FEST WEEK', title: withCrew.crew.isLead ? 'Plan check before you go' : 'Get ready with the crew', body: withCrew.crew.isLead ? 'See what’s unclaimed and who still needs a ride — one nudge covers it.' : 'Grab a task and a seat in the Rave Plan so nothing’s left to the last minute.', cta: 'Open the Rave Plan', ctaAttr: `${stop}openDetail('${escJsAttr(withCrew.crew.id)}', { tab: 'gameplan', festivalId: '${id}' })`, laterAttr: `${stop}hideFestNudge('${id}', 'plan')`, also: village, alsoAttr: villageAttr });
+      if (withCrew && withCrew.crew.isLead && !planOff && festPlanOpenCount(withCrew.crew.id, f.id) > 0) return planCard();
+      if (lineupUrl && !_reminderOptinFestIds.has(String(f.id)) && !festNudgeOff(f.id, 'remind')) {
+        const later = `${stop}hideFestNudge('${id}', 'remind')`;
+        if (_pushBlocked) {
+          return timelineNudgeHTML({ color: '#FFE600', eyebrow: 'FEST WEEK', title: 'Notifications are off',
+            body: IS_NATIVE_APP ? 'Set reminders can’t reach you. Turn notifications on for RaveFAM in iOS Settings, then come back to switch them on.' : 'Set reminders can’t reach you. Allow notifications for this site in your browser settings, then come back.',
+            cta: IS_NATIVE_APP ? 'Open Settings' : 'How to turn them on', ctaAttr: `${stop}openNotificationSettings()`, laterAttr: later, also: village, alsoAttr: villageAttr });
+        }
         // With picks: land on My schedule at the 🔔 toggle. Without: picks come first.
         const hasPicks = myLineupPlanIds(f.id).size > 0;
         return timelineNudgeHTML({ color: '#FFE600', eyebrow: 'FEST WEEK', title: 'Turn on set reminders',
           body: hasPicks ? 'A push 15 minutes before each set you’ve picked. The lineup keeps working offline once you’ve opened it.' : 'Pick the sets you can’t miss, then get a push 15 minutes before each one.',
-          cta: hasPicks ? '🔔 Set up reminders' : 'Pick my sets', ctaAttr: `${stop}openLineupExplorer('${escJsAttr(hasPicks ? lineupUrl + '?remind=1' : lineupUrl)}')`, also: village, alsoAttr: villageAttr });
+          cta: hasPicks ? '🔔 Set up reminders' : 'Pick my sets', ctaAttr: `${stop}openLineupExplorer('${escJsAttr(hasPicks ? lineupUrl + '?remind=1' : lineupUrl)}')`, laterAttr: later, also: village, alsoAttr: villageAttr });
       }
-      const withCrew = crewmatesGoing(f.id).find(m => m.going.length);
-      if (withCrew) {
-        return timelineNudgeHTML({ color: '#FFE600', eyebrow: 'FEST WEEK', title: withCrew.crew.isLead ? 'Plan check before you go' : 'Get ready with the crew', body: withCrew.crew.isLead ? 'See what’s unclaimed and who still needs a ride — one nudge covers it.' : 'Grab a task and a seat in the Rave Plan so nothing’s left to the last minute.', cta: 'Open the Rave Plan', ctaAttr: `${stop}openDetail('${escJsAttr(withCrew.crew.id)}', { tab: 'gameplan', festivalId: '${id}' })`, also: village, alsoAttr: villageAttr });
-      }
+      if (withCrew && !planOff) return planCard();
       return '';
     }
     if (lineupUrl && !myLineupPlanIds(f.id).size) {
@@ -39418,12 +39509,13 @@
 
   // 05 — timeline nudge, rendered inside a rave card. ctaAttr is an inline
   // onclick string (same pattern as the rest of the rave card markup).
-  function timelineNudgeHTML({ color, eyebrow, title, body, cta, ctaAttr, also = '', alsoAttr = '' }) {
+  function timelineNudgeHTML({ color, eyebrow, title, body, cta, ctaAttr, also = '', alsoAttr = '', laterAttr = '' }) {
+    const btn = cta ? `<button type="button" class="gk-btn primary" onclick="${ctaAttr}">${escHtml(cta)}</button>` : '';
     return `<div class="gk-nudge" style="--gk-color:${color}">
       <div class="gk-eyebrow">${escHtml(eyebrow)}</div>
       <div class="gk-title">${escHtml(title)}</div>
       <div class="gk-body">${escHtml(body)}</div>
-      ${cta ? `<button type="button" class="gk-btn primary" onclick="${ctaAttr}">${escHtml(cta)}</button>` : ''}
+      ${laterAttr ? `<div class="gk-btn-row"><button type="button" class="gk-btn ghost" onclick="${laterAttr}">Not now</button>${btn}</div>` : btn}
       ${also ? (alsoAttr
         ? `<button type="button" class="gk-nudge-also tap" onclick="${alsoAttr}">${escHtml(also)}</button>`
         : `<div class="gk-nudge-also">· ${escHtml(also)}</div>`) : ''}
