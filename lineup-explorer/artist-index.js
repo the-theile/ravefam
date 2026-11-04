@@ -721,7 +721,6 @@ window.ARTIST_INDEX = [
   { name: "Phaxe", name_lower: "phaxe", slug: "phaxe", festivals: [{ slug: "dreamstate-socal-2026", title: "Dreamstate SoCal 2026" }] },
   { name: "Phazix", name_lower: "phazix", slug: "phazix", festivals: [{ slug: "dusk-arizona-2026", title: "DUSK Arizona 2026" }] },
   { name: "Phrva", name_lower: "phrva", slug: "phrva", festivals: [{ slug: "bass-canyon-2026", title: "Bass Canyon 2026" }, { slug: "breakaway-michigan-2026", title: "Breakaway Michigan 2026" }, { slug: "dancefestopia-2026", title: "Dancefestopia 2026" }, { slug: "edc-orlando-2026", title: "EDC Orlando 2026" }, { slug: "lost-lands-2026", title: "Lost Lands 2026" }] },
-  { name: "Pijama Piyama", name_lower: "pijama piyama", slug: "pijama-piyama", festivals: [{ slug: "dusk-arizona-2026", title: "DUSK Arizona 2026" }] },
   { name: "Player Dave", name_lower: "player dave", slug: "player-dave", festivals: [{ slug: "seven-stars-2026", title: "Valley of the Seven Stars 2026" }] },
   { name: "Playlunch", name_lower: "playlunch", slug: "playlunch", festivals: [{ slug: "hulaween-2026", title: "Hulaween 2026" }] },
   { name: "Polarity", name_lower: "polarity", slug: "polarity", festivals: [{ slug: "wasteland-2026", title: "Wasteland 2026" }] },
