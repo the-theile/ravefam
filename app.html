@@ -17285,7 +17285,17 @@
     if (e.target.closest('.nav-tab')) hapticImpact('LIGHT');
   });
 
-  function switchTab(page, el) {
+  // Browser Back moves between bottom-nav sections before it leaves /app.
+  // switchTab is the only writer: it pushes one entry per section change (the
+  // URL itself never changes), and popstate replays it with fromHistory so the
+  // replay doesn't push again.
+  window.addEventListener('popstate', e => {
+    if (!currentUser || isOnboarding) return;
+    const page = e.state?.rfTab || 'crews';
+    if (document.getElementById('page-' + page)) switchTab(page, null, { fromHistory: true });
+  });
+
+  function switchTab(page, el, opts) {
     const _now = Date.now();
     // Only real taps (the nav button passes itself) count toward a double-tap
     // refresh. Code paths like push deep links call switchTab('crews') too,
@@ -17309,6 +17319,7 @@
     // The Huddle is a full-screen surface layered over the page — navigating
     // the bottom nav has to dismiss it, or it would hide the tab you picked.
     if (_huddleScreenOpen) closeHuddleScreen();
+    const prevPage = document.querySelector('.page.active')?.id.replace(/^page-/, '') || null;
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
     document.getElementById('page-' + page).classList.add('active');
@@ -17316,6 +17327,12 @@
     else document.querySelector(`.nav-tab[onclick*="'${page}'"]`)?.classList.add('active');
     onPlaceEntered(page, !!el);  // 2.0 discovery: banner + intro the first time (see REALMS)
     updateCrewPresence();
+    if (!opts?.fromHistory) {
+      // First switch: stamp the entry we're on with the section we came from.
+      let cur = history.state?.rfTab;
+      if (!cur) { cur = prevPage || page; history.replaceState({ ...(history.state || {}), rfTab: cur }, ''); }
+      if (cur !== page) history.pushState({ rfTab: page }, '');
+    }
   }
 
   // Modal
