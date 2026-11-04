@@ -40028,6 +40028,16 @@
     return { ok: true, handle: h };
   }
 
+  // Single source of truth for "is this handle free?" — the handle_available RPC
+  // checks lower(handle) across ALL ravers (same rule as ravers_handle_unique_idx).
+  // A direct select can't: RLS hides strangers' rows, so they read as free.
+  // Returns true / false, or null when the check itself failed (never claim free then).
+  async function isHandleAvailable(handle, excludeId) {
+    const { data, error } = await sb.rpc('handle_available', { p_handle: handle, p_exclude_id: excludeId || null });
+    if (error) { console.error('handle_available rpc error', error); return null; }
+    return data === true;
+  }
+
   let _hpDebounce = null;
   let _hpReady = false;
   let _hpSeq = 0;
@@ -40061,15 +40071,14 @@
     clearTimeout(_hpDebounce);
     const seq = ++_hpSeq;
     _hpDebounce = setTimeout(async () => {
-      const myRaver = squad.find(r => r.isYou);
-      const { data } = await sb.from('ravers')
-        .select('id')
-        .ilike('handle', handle)
-        .neq('id', myRaver?.id || '00000000-0000-0000-0000-000000000000')
-        .maybeSingle();
+      const myRaver = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
+      const available = await isHandleAvailable(handle, myRaver?.id);
 
       if (seq !== _hpSeq) return; // stale response — a newer check superseded this one
-      if (data) {
+      if (available === null) {
+        if (status) { status.textContent = "Couldn't check that handle. Try again"; status.className = 'hp-status hp-err'; }
+        _hpReady = false;
+      } else if (!available) {
         if (status) { status.textContent = `@${handle} is taken 😔`; status.className = 'hp-status hp-err'; }
         if (input)  input.className = 'hp-invalid';
         _hpReady = false;
@@ -40303,12 +40312,12 @@
     const seq = ++_obHandleSeq;
     _obHandleDebounce = setTimeout(async () => {
       const _obExisting = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
-      const { data } = await sb.from('ravers').select('id')
-        .ilike('handle', handle)
-        .neq('id', _obExisting?.id || '00000000-0000-0000-0000-000000000000')
-        .maybeSingle();
+      const available = await isHandleAvailable(handle, _obExisting?.id);
       if (seq !== _obHandleSeq) return; // stale response — a newer check superseded this one
-      if (data) {
+      if (available === null) {
+        if (status) { status.textContent = "Couldn't check that handle. Try again"; status.className = 'ob-handle-status ob-err'; }
+        _obHandleValid = false;
+      } else if (!available) {
         if (status) { status.textContent = `@${handle} is taken 😔`; status.className = 'ob-handle-status ob-err'; }
         if (input)  input.className = 'ob-inline-field ob-invalid';
         _obHandleValid = false;
@@ -40376,8 +40385,18 @@
 
     if (error) {
       console.error('obStep2Next save error', error);
-      toastError('Could not save. Try again');
-      if (btn) { btn.disabled = false; btn.textContent = "I'm Ready →"; }
+      if (error.code === '23505') {
+        // Handle got claimed between the check and the save — say so instead of a generic retry loop.
+        const status = document.getElementById('ob-handle-status');
+        const input  = document.getElementById('ob-handle-input');
+        if (status) { status.textContent = `@${handle} is taken 😔`; status.className = 'ob-handle-status ob-err'; }
+        if (input)  input.className = 'ob-inline-field ob-invalid';
+        _obHandleValid = false;
+        toastError('That handle was just taken. Try another', error);
+      } else {
+        toastError(isContentBlocked(error) ? "That name or handle isn't allowed. Try another" : 'Could not save. Try again', error);
+      }
+      if (btn) { btn.disabled = !_obHandleValid; btn.textContent = "I'm Ready →"; }
       return;
     }
     addNotification(PROFILE_LOCKED_IN_MSG);
