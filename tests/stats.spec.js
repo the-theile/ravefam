@@ -25,7 +25,7 @@ test.describe('stats', () => {
     await bootAuthedApp(page); // seed has only future raves
     await page.evaluate(() => { switchTab('stats'); loadStatsPage(); });
     const heroNumbers = page.locator('#stats-content .stats-hero-number');
-    await expect(heroNumbers.nth(0)).toHaveText('0');       // 0 Raves Logged
+    await expect(heroNumbers.nth(0)).toHaveText('—');       // no Raves Logged → same — placeholder as sibling tiles
   });
 
   test('Vibe DNA shows on Stats without its own share card; Wrapped carries the genres and vibes', async ({ page }) => {
