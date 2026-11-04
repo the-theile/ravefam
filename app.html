@@ -2577,6 +2577,27 @@
   /* Outfit: photo cards */
   .game-plan-outfit-photo { width: 100%; max-height: 240px; object-fit: cover; border-radius: 8px; display: block; }
 
+  /* Lineup: set rows with crew picks + per-set meetup */
+  .gp-lineup-list { display: flex; flex-direction: column; gap: 6px; }
+  .gp-lineup-row { padding: 10px 12px; border-radius: 10px; background: var(--surface); border: 1px solid rgba(var(--surface2-rgb),0.08); }
+  .gp-lineup-row.picked { border-color: rgba(var(--neon-pink-rgb),0.3); }
+  .gp-lineup-main { display: flex; align-items: center; gap: 10px; }
+  .gp-lineup-time { flex: 0 0 64px; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.72rem; color: var(--muted); }
+  .gp-lineup-name { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 0.88rem; }
+  .gp-lineup-name b { font-family: 'Outfit', sans-serif; font-weight: 700; overflow-wrap: anywhere; }
+  .gp-lineup-name span { font-size: 0.7rem; color: var(--muted); }
+  .gp-lineup-row .lineup-plan-btn { width: 36px; height: 36px; flex-shrink: 0; background: rgba(var(--surface2-rgb),0.07); }
+  .gp-lineup-row .lineup-plan-btn.planned { color: var(--white); background: var(--paper-ink); }
+  .gp-lineup-whos { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 0 74px; }
+  .gp-lineup-who { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.62rem; padding: 2px 7px; border-radius: 100px; background: rgba(var(--surface2-rgb),0.08); }
+  .gp-lineup-who.whole { background: var(--paper-ink); color: var(--white); letter-spacing: 0.06em; }
+  .gp-lineup-meet { margin: 6px 0 0 74px; font-size: 0.78rem; font-weight: 600; }
+  .gp-lineup-link { margin: 6px 0 0 74px; background: none; border: none; padding: 4px 0; cursor: pointer; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.74rem; color: var(--paper-ink); }
+  .gp-lineup-meet .gp-lineup-link { margin: 0 0 0 6px; padding: 0; }
+  .gp-lineup-meet-form { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+  .gp-lineup-meet-acts { display: flex; gap: 6px; }
+  .gp-lineup-meet-acts .btn { flex: 1; }
+
   /* ── Rave Plan: cream "credential paper" treatment for its planning
      sections (Tasks/Roles/Rides/Stay/Outfit) — matches the Backstage Pass
      hero card. Scoped to the tile's panel and excludes the embedded
@@ -10984,7 +11005,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.30.1';
+  const APP_VERSION = '2.31.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -19111,6 +19132,11 @@
   // the items for whichever rave is currently selected.
   let gamePlans = [];
   let gamePlanItems = [];
+  // Lineup tab: the crew's meet spots per set (set_meetups) for the open plan,
+  // and set times per rave (festId -> artist_festival_appearances rows), which
+  // the shared artistAppearances cache doesn't carry. Briefing reads it too.
+  let setMeetups = [];
+  const _festSetTimes = {};
   let _gamePlanActiveCrewId = null;
   let _gamePlanActiveFestivalId = null;
   let _gamePlanActiveSection = 'checklist';
@@ -19173,6 +19199,7 @@
     _archiveFilters = { festivalId: null };
     gamePlans = [];
     gamePlanItems = [];
+    setMeetups = [];
     _gamePlanActiveFestivalId = null;
     _gamePlanActiveSection = 'checklist';
     crewAchievements = [];
@@ -21156,7 +21183,8 @@
     const n = (k) => gamePlanItems.filter(it => it.kind === k).length;
     return {
       checklist: gamePlanItems.filter(it => it.kind === 'task' && !it.is_done).length,
-      roles: n('role'), logistics: n('carpool_driver'), stay: n('lodging_host'), outfit: n('outfit')
+      roles: n('role'), logistics: n('carpool_driver'), stay: n('lodging_host'), outfit: n('outfit'),
+      lineup: gamePlanLineupPickedCount()
     };
   }
 
@@ -21650,6 +21678,7 @@
     if (!crewId || !sb || typeof sb.channel !== 'function') return;
     _crewPlanChannel = sb.channel(`crew-plan-${crewId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'game_plan_items', filter: `crew_id=eq.${crewId}` }, handleCrewPlanItemRealtime)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'set_meetups', filter: `crew_id=eq.${crewId}` }, handleSetMeetupRealtime)
       .subscribe();
   }
   function teardownCrewPlanLive() {
@@ -21705,6 +21734,7 @@
       rerenderGamePlanLogistics(crewId);
       rerenderGamePlanStay(crewId);
       rerenderGamePlanOutfit(crewId);
+      rerenderGamePlanLineup(crewId);
     }, 250);
   }
 
@@ -25253,9 +25283,15 @@
   async function loadGamePlanForFestival(crewId, festivalId) {
     _gamePlanActiveCrewId = crewId;
     _gamePlanActiveFestivalId = festivalId;
+    _gamePlanLineupEditing = null;
     const gp = await dbGetOrCreateGamePlan(crewId, festivalId);
     gamePlanItems = [];
-    if (gp) await dbLoadGamePlanItems(gp.id);
+    setMeetups = [];
+    await Promise.all([
+      gp ? dbLoadGamePlanItems(gp.id) : null,
+      dbLoadSetMeetups(crewId, festivalId),
+      loadFestSetTimes(festivalId)
+    ]);
   }
 
   async function switchGamePlanFestival(crewId, festivalId) {
@@ -25338,7 +25374,8 @@
       { key: 'roles', emoji: '🎭', label: 'Roles' },
       { key: 'logistics', emoji: '🚗', label: 'Rides' },
       { key: 'stay', emoji: '🏠', label: 'Stay' },
-      { key: 'outfit', emoji: '✨', label: 'Outfit' }
+      { key: 'outfit', emoji: '✨', label: 'Outfit' },
+      { key: 'lineup', emoji: '🎤', label: 'Lineup' }
     ];
     const activeSection = sections.some(s => s.key === _gamePlanActiveSection)
       ? _gamePlanActiveSection : 'checklist';
@@ -25352,7 +25389,8 @@
       <div id="game-plan-section-roles" class="game-plan-section" style="${activeSection === 'roles' ? '' : 'display:none;'}">${buildGamePlanRolesHTML(crew.id)}</div>
       <div id="game-plan-section-logistics" class="game-plan-section" style="${activeSection === 'logistics' ? '' : 'display:none;'}">${buildGamePlanLogisticsHTML(crew.id)}</div>
       <div id="game-plan-section-stay" class="game-plan-section" style="${activeSection === 'stay' ? '' : 'display:none;'}">${buildGamePlanStayHTML(crew.id)}</div>
-      <div id="game-plan-section-outfit" class="game-plan-section" style="${activeSection === 'outfit' ? '' : 'display:none;'}">${buildGamePlanOutfitHTML(crew.id)}</div>`;
+      <div id="game-plan-section-outfit" class="game-plan-section" style="${activeSection === 'outfit' ? '' : 'display:none;'}">${buildGamePlanOutfitHTML(crew.id)}</div>
+      <div id="game-plan-section-lineup" class="game-plan-section" style="${activeSection === 'lineup' ? '' : 'display:none;'}">${buildGamePlanLineupHTML(crew.id)}</div>`;
 
     // New crew page: the ticket above is the rave switcher and carries
     // Briefing + the rave's chat, and Huddle/Jams/Archive are a tap away
@@ -26243,6 +26281,182 @@
     rerenderGamePlanOutfit(_gamePlanActiveCrewId);
   }
 
+  // ── Lineup ──
+  // The rave's tagged lineup in set-time order, with who in the crew picked
+  // each set (the same raver_artist_plans 📋 picks as the rave's Lineup tab
+  // and the Briefing — see crewLineupRows) and an optional crew meet spot per
+  // set (set_meetups). Tagging artists stays in the rave's own Lineup tab.
+
+  let _gamePlanLineupEditing = null; // artist id whose meetup form is open
+
+  async function dbLoadSetMeetups(crewId, festivalId) {
+    const { data, error } = await sb.from('set_meetups')
+      .select('*').eq('crew_id', crewId).eq('festival_id', festivalId);
+    if (error) { console.error('set meetups load error', error); setMeetups = []; return; }
+    setMeetups = data || [];
+  }
+
+  async function dbSaveSetMeetup(crewId, festivalId, artistId, spot, meetAt) {
+    const { data, error } = await sb.from('set_meetups')
+      .upsert({ crew_id: crewId, festival_id: festivalId, artist_id: artistId, spot, meet_at: meetAt, set_by: currentUser.id },
+        { onConflict: 'crew_id,festival_id,artist_id' })
+      .select().single();
+    if (error) { toastError('Could not save the meetup. Try again', error); return null; }
+    const idx = setMeetups.findIndex(m => m.id === data.id);
+    if (idx >= 0) setMeetups[idx] = data; else setMeetups.push(data);
+    return data;
+  }
+
+  async function dbClearSetMeetup(meetupId) {
+    const { error } = await sb.from('set_meetups').delete().eq('id', meetupId);
+    if (error) { toastError('Could not clear the meetup. Try again', error); return false; }
+    setMeetups = setMeetups.filter(m => m.id !== meetupId);
+    return true;
+  }
+
+  function setMeetupFor(festivalId, artistId) {
+    return setMeetups.find(m => String(m.festival_id) === String(festivalId) && String(m.artist_id) === String(artistId)) || null;
+  }
+
+  // datetime-local wants local wall time, no zone.
+  function toLocalDateTimeInput(d) {
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  // Sets on the open plan the crew has 📋 picked (the tab's count chip).
+  function gamePlanLineupPickedCount() {
+    const festId = _gamePlanActiveFestivalId;
+    if (!festId || !_gamePlanActiveCrewId) return 0;
+    const goingIds = new Set(mbGoingFor(_gamePlanActiveCrewId, festId).map(p => String(p.id)));
+    return crewLineupRows(festId, goingIds, null).rows.length;
+  }
+
+  function rerenderGamePlanLineup(crewId) {
+    const el = document.getElementById('game-plan-section-lineup');
+    if (el) el.innerHTML = buildGamePlanLineupHTML(crewId);
+    refreshCrewPlanChrome();
+  }
+
+  function buildGamePlanLineupHTML(crewId) {
+    const festId = _gamePlanActiveFestivalId;
+    const f = getFestival(festId);
+    if (!f) return '';
+    const going = mbGoingFor(crewId, festId);
+    const goingIds = new Set(going.map(p => String(p.id)));
+    const me = squad.find(r => r.isYou);
+    const achieved = isFestAchieved(f);
+    const canAct = !achieved && canEditFestLineup(festId);
+    const { rows: allRows } = crewLineupRows(festId, goingIds, _festSetTimes[String(festId)], true);
+    const rows = allRows.filter(r => r.artist);
+    const whoChip = id => {
+      const p = going.find(g => String(g.id) === String(id)) || getRaver(id);
+      const name = p ? displayName(p) : 'Someone';
+      return `<span class="gp-lineup-who" title="${escHtml(name)}">${escHtml(p ? initials(name).toUpperCase() : '?')}</span>`;
+    };
+
+    const rowHTML = r => {
+      const mine = !!(me && r.who.includes(String(me.id)));
+      const whole = r.who.length > 1 && r.who.length === goingIds.size;
+      const who = whole ? `<span class="gp-lineup-who whole">WHOLE CREW</span>` : r.who.map(whoChip).join('');
+      const mu = setMeetupFor(festId, r.aid);
+      const editing = canAct && String(_gamePlanLineupEditing) === String(r.aid);
+      let meetHTML = '';
+      if (editing) {
+        const def = mu && mu.meet_at ? new Date(mu.meet_at)
+          : (r.ap && r.ap.start_at ? new Date(new Date(r.ap.start_at).getTime() - 10 * 60000) : null);
+        meetHTML = `
+          <div class="gp-lineup-meet-form">
+            <input class="form-input" id="gp-meet-spot" maxlength="120" aria-label="Meet spot for ${escHtml(r.artist.name)}" placeholder="Meet spot, e.g. left of the sound booth" value="${mu ? escHtml(mu.spot) : ''}">
+            <input class="form-input" type="datetime-local" id="gp-meet-when" aria-label="Meet time (optional)" value="${def ? toLocalDateTimeInput(def) : ''}">
+            <div class="gp-lineup-meet-acts">
+              <button type="button" class="btn btn-primary" onclick="saveGamePlanSetMeetup('${escJsAttr(crewId)}','${escJsAttr(r.aid)}')">Save</button>
+              <button type="button" class="btn btn-ghost" onclick="editGamePlanSetMeetup('${escJsAttr(crewId)}', null)">Cancel</button>
+              ${mu ? `<button type="button" class="btn btn-ghost" onclick="clearGamePlanSetMeetup('${escJsAttr(crewId)}','${escJsAttr(mu.id)}')">Clear</button>` : ''}
+            </div>
+          </div>`;
+      } else if (mu) {
+        meetHTML = `<div class="gp-lineup-meet">📍 ${escHtml(mu.spot)}${mu.meet_at ? ` · ${mbSetLabel({ start_at: mu.meet_at }, f.timezone)}` : ''}${canAct ? ` <button type="button" class="gp-lineup-link" onclick="editGamePlanSetMeetup('${escJsAttr(crewId)}','${escJsAttr(r.aid)}')">Edit</button>` : ''}</div>`;
+      } else if (canAct && r.who.length) {
+        meetHTML = `<button type="button" class="gp-lineup-link" onclick="editGamePlanSetMeetup('${escJsAttr(crewId)}','${escJsAttr(r.aid)}')">📍 Set meetup</button>`;
+      }
+      return `
+        <div class="gp-lineup-row${r.who.length ? ' picked' : ''}">
+          <div class="gp-lineup-main">
+            <span class="gp-lineup-time">${mbSetLabel(r.ap, f.timezone)}</span>
+            <span class="gp-lineup-name"><b>${escHtml(r.artist.name)}</b>${r.ap && r.ap.stage ? `<span>${escHtml(r.ap.stage)}</span>` : ''}</span>
+            ${canAct ? `<button type="button" class="lineup-plan-btn${mine ? ' planned' : ''}" aria-pressed="${mine}" aria-label="${mine ? 'Remove from my picks' : 'Add to my picks'}: ${escHtml(r.artist.name)}" title="${mine ? "Planning to catch them — tap to unmark" : 'Tap if you plan to catch their set'}" onclick="toggleGamePlanLineupPick('${escJsAttr(crewId)}','${escJsAttr(r.aid)}')">${mine ? PICK_ICON_ON : PICK_ICON_OFF}</button>` : ''}
+          </div>
+          ${r.who.length ? `<div class="gp-lineup-whos">${who}</div>` : ''}
+          ${meetHTML}
+        </div>`;
+    };
+
+    const body = rows.length
+      ? `<div class="gp-lineup-list">${rows.map(rowHTML).join('')}</div>`
+      : `<div class="archive-empty es-block"><div class="es-icon">🎤</div><div class="es-headline">No lineup tagged yet</div><div class="es-sub">Add the artists on the rave's Lineup tab, then pick the sets you're catching here.</div></div>`;
+    const hint = achieved
+      ? `<div class="text-hint-xs" style="margin-top:10px;">This rave's done. Mark who you actually caught on the rave's Lineup tab.</div>`
+      : (canAct && rows.length ? `<div class="text-hint-xs" style="margin-top:10px;">📋 Tap to mark the sets you're catching. Set a meetup so nobody gets lost in the crowd.</div>` : '');
+    return `
+      <div class="form-group">
+        <div class="section-banner"><span class="banner-inner">🎤 Lineup <span class="banner-subtitle">· who's catching what</span></span></div>
+        ${body}
+        ${hint}
+        <button type="button" class="btn btn-ghost" style="margin-top:10px;" onclick="openRaveSightings('${escJsAttr(festId)}')">${rows.length ? 'Edit the lineup' : 'Add artists →'}</button>
+      </div>`;
+  }
+
+  async function toggleGamePlanLineupPick(crewId, artistId) {
+    hapticImpact('LIGHT');
+    await dbToggleArtistPlan(_gamePlanActiveFestivalId, artistId);
+    rerenderGamePlanLineup(crewId);
+  }
+
+  function editGamePlanSetMeetup(crewId, artistId) {
+    _gamePlanLineupEditing = artistId;
+    rerenderGamePlanLineup(crewId);
+    if (artistId) document.getElementById('gp-meet-spot')?.focus();
+  }
+
+  async function saveGamePlanSetMeetup(crewId, artistId) {
+    const festId = _gamePlanActiveFestivalId;
+    const spot = (document.getElementById('gp-meet-spot')?.value || '').trim();
+    const whenVal = document.getElementById('gp-meet-when')?.value;
+    if (!spot) { showToast('Add a meet spot first'); return; }
+    const meetAt = whenVal ? new Date(whenVal).toISOString() : null;
+    const saved = await dbSaveSetMeetup(crewId, festId, artistId, spot, meetAt);
+    if (!saved) return;
+    _gamePlanLineupEditing = null;
+    rerenderGamePlanLineup(crewId);
+    const artist = findArtistById(artistId);
+    const f = getFestival(festId);
+    const when = meetAt ? ` · ${new Intl.DateTimeFormat(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: (f && f.timezone) || undefined }).format(new Date(meetAt))}` : '';
+    postGamePlanActivity(crewId, festId, `📍 ${activityWho()} set the meetup for ${artist ? artist.name : 'a set'}: ${spot}${when}`);
+  }
+
+  async function clearGamePlanSetMeetup(crewId, meetupId) {
+    if (!(await dbClearSetMeetup(meetupId))) return;
+    _gamePlanLineupEditing = null;
+    rerenderGamePlanLineup(crewId);
+  }
+
+  // Live: a crewmate's meetup change (subscribeCrewPlanLive). DELETEs only
+  // carry the id, so those match on the local row.
+  function handleSetMeetupRealtime(payload) {
+    const row = payload && payload.new && payload.new.id ? payload.new : null;
+    const oldId = payload && payload.old && payload.old.id;
+    if (payload.eventType === 'DELETE') {
+      if (!oldId || !setMeetups.some(m => m.id === oldId)) return;
+      setMeetups = setMeetups.filter(m => m.id !== oldId);
+    } else {
+      if (!row || String(row.crew_id) !== String(activeDetailId) || String(row.festival_id) !== String(_gamePlanActiveFestivalId)) return;
+      const idx = setMeetups.findIndex(m => m.id === row.id);
+      if (idx >= 0) setMeetups[idx] = row; else setMeetups.push(row);
+    }
+    scheduleCrewPlanLiveRerender();
+  }
+
   // ===== MISSION BRIEFING =====
   // Full-screen, swipeable case-file deck over one crew + rave's Rave Plan:
   // eight pages (cover, lineup, orders, logistics, meetup, kit, ledger,
@@ -26361,8 +26575,9 @@
     const session = _mb;
     overlay.innerHTML = `<div class="mb-loading">Opening case file…</div>`;
     overlay.classList.add('open');
-    await Promise.all([loadGamePlanForFestival(crewId, festivalId), mbLoadAppearances(festivalId)]);
+    await loadGamePlanForFestival(crewId, festivalId); // also loads set times (_festSetTimes)
     if (_mb !== session) return; // closed or reopened while loading
+    _mb.appearances = _festSetTimes[String(festivalId)] || [];
     if (!mbPlan()) { closeMissionBriefing({ quiet: true }); toastError('Could not open the briefing. Try again'); return; }
     mbRenderShell();
     mbSubscribe();
@@ -26401,12 +26616,12 @@
   // ── Loading extras (set times, the live meetup pin, weather) ──
 
   // The shared artistAppearances cache doesn't carry set times; fetch them
-  // for just this rave.
-  async function mbLoadAppearances(festivalId) {
+  // for just this rave into _festSetTimes (Briefing + Rave Plan Lineup tab).
+  async function loadFestSetTimes(festivalId) {
     const { data, error } = await sb.from('artist_festival_appearances')
       .select('artist_id,start_at,end_at,stage,night').eq('festival_id', festivalId);
-    if (error) { console.error('briefing set times load error', error); return; }
-    if (_mb && String(_mb.festivalId) === String(festivalId)) _mb.appearances = data || [];
+    if (error) { console.error('set times load error', error); return null; }
+    return (_festSetTimes[String(festivalId)] = data || []);
   }
 
   async function mbLoadMeetupPin(session) {
@@ -26637,18 +26852,28 @@
     }
   }
 
+  // Shared by the Briefing's "Who we're seeing" and the Rave Plan's Lineup
+  // tab: the crew's 📋 picks for one rave, grouped per artist (who = raver
+  // ids of the goingIds who picked it), in set-time order. withLineup also
+  // lists the tagged lineup artists nobody has picked yet (who = []).
+  function crewLineupRows(festId, goingIds, appearances, withLineup = false) {
+    const picks = raverArtistPlans.filter(p => String(p.festival_id) === String(festId) && goingIds.has(String(p.raver_id)));
+    const byArtist = {};
+    if (withLineup) lineupArtistsFor(festId).forEach(a => { byArtist[String(a.artist_id)] = byArtist[String(a.artist_id)] || []; });
+    picks.forEach(p => { (byArtist[String(p.artist_id)] = byArtist[String(p.artist_id)] || []).push(String(p.raver_id)); });
+    const apBy = {};
+    (appearances || []).forEach(a => { apBy[String(a.artist_id)] = a; });
+    const startKey = r => (r.ap && r.ap.start_at) || '~';
+    const rows = Object.keys(byArtist).map(aid => ({ aid, artist: findArtistById(aid), ap: apBy[aid], who: byArtist[aid].sort() }))
+      .sort((a, b) => startKey(a) < startKey(b) ? -1 : startKey(a) > startKey(b) ? 1 : (a.artist?.name || '').localeCompare(b.artist?.name || ''));
+    return { picks, rows };
+  }
+
   function mbBuildLineup() {
     const f = mbFest(), me = mbMe();
     const going = mbGoing();
     const goingIds = new Set(going.map(p => String(p.id)));
-    const picks = raverArtistPlans.filter(p => String(p.festival_id) === String(_mb.festivalId) && goingIds.has(String(p.raver_id)));
-    const byArtist = {};
-    picks.forEach(p => { (byArtist[String(p.artist_id)] = byArtist[String(p.artist_id)] || []).push(String(p.raver_id)); });
-    const apBy = {};
-    _mb.appearances.forEach(a => { apBy[String(a.artist_id)] = a; });
-    const startKey = r => (r.ap && r.ap.start_at) || '~';
-    const rows = Object.keys(byArtist).map(aid => ({ aid, artist: findArtistById(aid), ap: apBy[aid], who: byArtist[aid].sort() }))
-      .sort((a, b) => startKey(a) < startKey(b) ? -1 : startKey(a) > startKey(b) ? 1 : (a.artist?.name || '').localeCompare(b.artist?.name || ''));
+    const { picks, rows } = crewLineupRows(_mb.festivalId, goingIds, _mb.appearances);
     const mine = new Set(picks.filter(p => me && String(p.raver_id) === String(me.id)).map(p => String(p.artist_id)));
     const whoLabel = who => who.length === goingIds.size && goingIds.size > 1 ? 'WHOLE CREW' : who.map(mbInitials).join(' ');
 
@@ -39079,6 +39304,9 @@
       keywords: ['lodging', 'hotel', 'airbnb', 'host', 'guest'] },
     { id: 'game-plan-outfit', category: 'game-plan', q: "What's Outfit for?",
       a: 'Coordinate looks and themes with your crew before the rave — drop photo references so everyone knows the vibe.' },
+    { id: 'game-plan-lineup', category: 'game-plan', q: 'How does the Lineup tab work?',
+      a: "It's the rave's lineup in set-time order, with who in the crew is catching each set. Tap 📋 to add a set to your picks (the same picks as the rave's own Lineup tab and the Briefing). On a set someone picked, tap 📍 Set meetup to post a meet spot and time for the crew. Anyone going can change or clear it.",
+      keywords: ['lineup', 'sets', 'picks', 'artists', 'meetup', 'meet spot', 'schedule'] },
     { id: 'huddle-intro', category: 'huddle', q: 'What is Huddle?',
       a: "Your crew's real-time group chat — one for the crew overall, plus a dedicated one per rave inside its Rave Plan." },
     { id: 'beacon-intro', category: 'huddle', q: "What's a Beacon?",
