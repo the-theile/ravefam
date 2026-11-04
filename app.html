@@ -17419,6 +17419,94 @@
     if (IS_NATIVE_APP) location.href = url;
     else window.open(url, '_blank');
   }
+  // ===== Set reminders from the app (fest-week card) =====
+  // Builds the same list the explorer's reminderList() sends to
+  // set_set_reminders, from the database instead of the page: your 📋 picks
+  // and closed-vote ⭐ Fam Faves with a set time, minus the sets you dropped in
+  // a clash Split / keep-one choice. A b2b set is the artists sharing a start
+  // and stage. The explorer re-syncs its own list whenever it's opened, so any
+  // b2b naming drift corrects itself there.
+  async function buildSetReminderList(f) {
+    const me = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
+    const slug = f.slug || (getLineupExplorerUrl(f) || '').split('/').pop();
+    if (!me || !slug) return [];
+    const [st, cv, cc] = await Promise.all([
+      sb.rpc('get_lineup_set_times', { p_slug: slug }),
+      sb.rpc('get_lineup_crew_votes', { p_festival_id: f.id }),
+      sb.from('raver_clash_choices').select('choices').eq('raver_id', me.id).eq('festival_id', f.id),
+    ]);
+    if (!st?.data?.ok) throw new Error('set_times');
+    const picks = myLineupPlanIds(f.id);
+    const faves = new Set();
+    (cv?.data?.ok ? cv.data.votes || [] : []).forEach(v => {
+      if (v.closed && Array.isArray(v.faves)) v.faves.forEach(id => faves.add(String(id)));
+    });
+    const choices = (cc?.data?.[0]?.choices && typeof cc.data[0].choices === 'object') ? cc.data[0].choices : {};
+
+    // Group rows into acts: same start + stage = one b2b set.
+    const acts = new Map();
+    (st.data.sets || []).forEach(x => {
+      if (!x || !x.start_at) return;
+      const key = x.stage ? `${x.start_at}|${x.stage}` : `${x.start_at}|#${x.artist_id}`;
+      const a = acts.get(key) || { names: [], ids: [], start_at: x.start_at, end_at: x.end_at || null, stage: x.stage || null };
+      a.names.push(x.name); a.ids.push(String(x.artist_id));
+      acts.set(key, a);
+    });
+    const items = [...acts.values()].map(a => ({
+      name: a.names.join(' b2b '), stage: a.stage,
+      s: +new Date(a.start_at), e: a.end_at ? +new Date(a.end_at) : +new Date(a.start_at) + 3600000,
+      mine: a.ids.every(id => picks.has(id)), fam: a.ids.some(id => faves.has(id)),
+    })).filter(x => x.mine || x.fam);
+
+    // Explorer clashPairs() + skipMap(): an overlapping pair keyed "A|B"
+    // (sorted names); a choice of one name skips the other.
+    const skipped = {};
+    for (let i = 0; i < items.length; i++) {
+      for (let j = i + 1; j < items.length; j++) {
+        const a = items[i], b = items[j];
+        if (!(a.s < b.e && b.s < a.e)) continue;
+        const [n1, n2] = [a.name, b.name].sort();
+        const c = choices[`${n1}|${n2}`];
+        if (c === n1) skipped[n2] = true;
+        else if (c === n2) skipped[n1] = true;
+      }
+    }
+    const seen = new Set();
+    return items.filter(x => !skipped[x.name])
+      .sort((p, q) => p.s - q.s || (p.name < q.name ? -1 : 1))
+      .filter(x => { const k = `${x.name}|${x.s}`; if (seen.has(k)) return false; seen.add(k); return true; })
+      .slice(0, 150)
+      .map(x => ({ name: x.name, stage: x.stage, start_at: new Date(x.s).toISOString(), kind: x.mine ? 'pick' : 'fam' }));
+  }
+
+  // 🔔 on the fest-week card: push permission, then the list, then the RPC.
+  // No timed sets yet → the explorer, where picks and set times live.
+  let _remindBusy = false;
+  async function turnOnSetRemindersInApp(festId) {
+    const f = getFestival(festId);
+    if (!f || _remindBusy) return;
+    _remindBusy = true;
+    try {
+      try { await ensurePushSubscription(); } catch (e) { return; }  // already toasted why
+      let list;
+      try { list = await buildSetReminderList(f); }
+      catch (e) { toastError("Couldn't load set times. Try again."); return; }
+      if (!list.length) {
+        showToast('None of your picks have set times yet. Opening the lineup');
+        const url = getLineupExplorerUrl(f);
+        if (url) openLineupExplorer(url + '?remind=1');
+        return;
+      }
+      const { data, error } = await sb.rpc('set_set_reminders', { p_festival_id: f.id, p_on: true, p_sets: list });
+      if (error || !data?.ok) { toastError("Couldn't turn on set reminders. Try again.", error); return; }
+      _reminderOptinFestIds.add(String(f.id));
+      showToast(`🔔 We'll ping you 15 min before ${list.length === 1 ? 'your set' : `each of your ${list.length} sets`}`);
+      renderEvents();
+    } finally {
+      _remindBusy = false;
+    }
+  }
+
   if (IS_NATIVE_APP) {
     // Capture phase: some explorer buttons stopPropagation() to keep row taps out.
     document.addEventListener('click', (e) => {
@@ -36291,7 +36379,7 @@
         const hasPicks = myLineupPlanIds(f.id).size > 0;
         return timelineNudgeHTML({ color: '#FFE600', eyebrow: 'FEST WEEK', title: 'Turn on set reminders',
           body: hasPicks ? 'A push 15 minutes before each set you’ve picked. The lineup keeps working offline once you’ve opened it.' : 'Pick the sets you can’t miss, then get a push 15 minutes before each one.',
-          cta: hasPicks ? '🔔 Set up reminders' : 'Pick my sets', ctaAttr: `${stop}openLineupExplorer('${escJsAttr(hasPicks ? lineupUrl + '?remind=1' : lineupUrl)}')`, laterAttr: later, also: village, alsoAttr: villageAttr });
+          cta: hasPicks ? '🔔 Remind me' : 'Pick my sets', ctaAttr: hasPicks ? `${stop}turnOnSetRemindersInApp('${id}')` : `${stop}openLineupExplorer('${escJsAttr(lineupUrl)}')`, laterAttr: later, also: village, alsoAttr: villageAttr });
       }
       if (withCrew && !planOff) return planCard();
       return '';
