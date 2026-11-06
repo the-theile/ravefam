@@ -31,6 +31,16 @@ async function forceTabletBlock(page) {
   expect(found).toBe(2);
 }
 
+// The page's fadeIn entry animation (translateY) can still be running after
+// the tab switch, and a fractional transform makes getBoundingClientRect
+// report a 44px control as 43.9999. Wait for finite animations to finish
+// (infinite pulses never do) so sizes are measured at rest.
+async function settleAnimations(page) {
+  await page.evaluate(() => Promise.all(document.getAnimations()
+    .filter(a => a.effect && a.effect.getComputedTiming().iterations !== Infinity)
+    .map(a => a.finished.catch(() => {}))));
+}
+
 // Visible, tappable controls under Apple's 44pt minimum.
 function smallControls() {
   const out = [];
@@ -63,6 +73,7 @@ for (const [name, viewport] of [['portrait', { width: 820, height: 1180 }], ['la
       for (const tab of TABS) {
         await page.locator(`.nav-tab.c-${tab}`).click();
         await page.waitForTimeout(300);
+        await settleAnimations(page);
         expect(await page.evaluate(smallControls), `undersized controls on ${tab}`).toEqual([]);
       }
       expect(errors).toEqual([]);

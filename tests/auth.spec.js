@@ -2,12 +2,49 @@ const { test, expect } = require('@playwright/test');
 const { installSupabaseStub, makeSession, seedData, collectPageErrors } = require('./helpers');
 
 test.describe('auth flows', () => {
+  test('a sign-in code needs the Terms agreement ticked first, and the tick is remembered', async ({ page }) => {
+    const errors = collectPageErrors(page);
+    await installSupabaseStub(page, { session: null, loginSession: makeSession(), data: seedData() });
+    await page.goto('/app.html');
+    await page.evaluate(() => {
+      window.__otpCalls = [];
+      const orig = sb.auth.signInWithOtp.bind(sb.auth);
+      sb.auth.signInWithOtp = (args) => { window.__otpCalls.push(args); return orig(args); };
+    });
+    const terms = page.locator('#auth-terms');
+    await expect(terms).toBeVisible();
+    await expect(terms.locator('a[href="/terms.html"]')).toBeVisible();
+    await expect(page.locator('#auth-agree')).not.toBeChecked();
+
+    // Email and phone both stop at the agreement without sending anything.
+    for (const id of ['tester@ravefam.test', '(415) 555-0134']) {
+      await page.fill('#login-id', id);
+      await page.locator('#login-btn').click();
+      await expect(page.locator('#auth-error')).toContainText('agree to the Terms');
+      await expect(terms).toHaveClass(/needs-agree/);
+      await expect(page.locator('#auth-login-form')).toBeVisible();
+    }
+    expect(await page.evaluate(() => window.__otpCalls.length)).toBe(0);
+
+    await page.fill('#login-id', 'tester@ravefam.test');
+    await page.locator('#auth-agree').check();
+    await expect(terms).not.toHaveClass(/needs-agree/);
+    await page.locator('#login-btn').click();
+    await expect(page.locator('#auth-code-form')).toBeVisible();
+    expect(await page.evaluate(() => window.__otpCalls.length)).toBe(1);
+
+    await page.reload();
+    await expect(page.locator('#auth-agree')).toBeChecked();
+    expect(errors).toEqual([]);
+  });
+
   test('logging in with an emailed code transitions from the auth screen to the main app', async ({ page }) => {
     await installSupabaseStub(page, { session: null, loginSession: makeSession(), data: seedData() });
     await page.goto('/app.html');
     await expect(page.locator('#auth-screen')).toBeVisible();
 
     await page.fill('#login-id', 'tester@ravefam.test');
+    await page.check('#auth-agree');
     await page.evaluate(() => doLogin());
     await expect(page.locator('#auth-code-form')).toBeVisible();
     await expect(page.locator('#auth-code-email')).toHaveText('tester@ravefam.test');
@@ -29,6 +66,7 @@ test.describe('auth flows', () => {
       sb.auth.signInWithOtp = (args) => { window.__otpCalls.push(args); return orig(args); };
     });
     await page.fill('#login-id', 'new@ravefam.test');
+    await page.check('#auth-agree');
     await page.evaluate(() => doLogin());
     await expect(page.locator('#auth-code-form')).toBeVisible();
     const calls = await page.evaluate(() => window.__otpCalls);
@@ -49,6 +87,7 @@ test.describe('auth flows', () => {
         Promise.resolve({ data: {}, error: { code: 'otp_disabled', message: 'Signups not allowed for otp' } });
     });
     await page.fill('#login-id', 'nobody@ravefam.test');
+    await page.check('#auth-agree');
     await page.evaluate(() => doLogin());
     await expect(page.locator('#auth-error')).toHaveClass(/show/);
     await expect(page.locator('#auth-error')).toContainText('paused');
@@ -68,6 +107,7 @@ test.describe('auth flows', () => {
     });
     await page.fill('#login-id', '(415) 555-0134');
     await expect(page.locator('#login-id-hint')).toContainText("We'll text +1 (415) 555-0134");
+    await page.check('#auth-agree');
     await page.evaluate(() => doLogin());
     await expect(page.locator('#auth-sms-code-form')).toBeVisible();
     await expect(page.locator('#auth-sms-phone')).toHaveText('+1 (415) 555-0134');
@@ -92,6 +132,7 @@ test.describe('auth flows', () => {
       sb.auth.signInWithOtp = (args) => { window.__otpCalls.push(args); return Promise.resolve({ data: {}, error: null }); };
     });
     await page.fill('#login-id', '555-12');
+    await page.check('#auth-agree');
     await page.evaluate(() => doLogin());
     await expect(page.locator('#login-id-error')).toHaveClass(/show/);
     await expect(page.locator('#login-id-error')).toContainText('phone number');
@@ -134,6 +175,7 @@ test.describe('auth flows', () => {
     await installSupabaseStub(page, { session: null });
     await page.goto('/app.html');
     await expect(page.locator('#auth-screen')).toBeVisible();
+    await page.check('#auth-agree');
     await page.evaluate(() => doLogin());
     await expect(page.locator('#login-id-error')).toHaveClass(/show/);
   });
@@ -143,6 +185,7 @@ test.describe('auth flows', () => {
     await page.goto('/app.html');
     await expect(page.locator('#auth-screen')).toBeVisible();
     await page.fill('#login-id', 'tester@ravefam.test');
+    await page.check('#auth-agree');
     await page.evaluate(() => doLogin());
     await expect(page.locator('#auth-code-form')).toBeVisible();
     await page.fill('#auth-code', '123');

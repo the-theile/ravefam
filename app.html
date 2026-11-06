@@ -6687,6 +6687,16 @@
   .auth-flow-note { text-align: center; margin-top: 12px; font-size: 0.75rem; color: var(--muted); line-height: 1.45; }
   .auth-terms { text-align: center; margin-top: 14px; font-size: 0.72rem; color: var(--muted); line-height: 1.45; }
   .auth-terms a { color: var(--muted); text-decoration: underline; }
+  /* 44pt hit area (iPad tap-target rule), 22px box drawn inside it. */
+  .auth-agree { display: flex; align-items: flex-start; gap: 4px; text-align: left; margin: 0 0 12px; cursor: pointer; }
+  .auth-agree > span { padding-top: 12px; }
+  .auth-agree input { -webkit-appearance: none; appearance: none; flex: none; position: relative; width: 44px; height: 44px; margin: 0 0 0 -11px; border: 0; background: none; cursor: pointer; }
+  .auth-agree input::before { content: ''; position: absolute; inset: 11px; border: 2px solid var(--muted); border-radius: 6px; transition: background .15s, border-color .15s; }
+  .auth-agree input:checked::before { background: var(--neon-pink); border-color: var(--neon-pink); }
+  .auth-agree input:checked::after { content: '✓'; position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-size: 14px; font-weight: 800; }
+  .auth-agree input:focus-visible::before { outline: 2px solid var(--neon-pink); outline-offset: 2px; }
+  .auth-agree.needs-agree { color: var(--neon-pink); }
+  .auth-agree.needs-agree input::before { border-color: var(--neon-pink); box-shadow: 0 0 10px rgba(var(--neon-pink-rgb), 0.5); }
   .auth-btn {
     width: 100%; padding: 14px;
     background: linear-gradient(135deg, var(--neon-pink), var(--neon-purple));
@@ -9659,13 +9669,15 @@
         <div class="auth-field-hint" id="login-id-hint"></div>
         <div class="auth-phone-error" id="login-id-error"></div>
       </div>
+      <!-- Required before sign-in or sign-up (App Store guideline 1.2: users
+           agree to the Terms of Use, with its zero-tolerance clause, first). -->
+      <label class="auth-terms auth-agree" id="auth-terms" for="auth-agree">
+        <input type="checkbox" id="auth-agree" onchange="onAuthAgreeChange(this)">
+        <span>I agree to the <a href="/terms.html">Terms of Use</a> and <a href="/privacy.html">Privacy Policy</a>, including zero tolerance for abusive content or users, and I'm 18+.</span>
+      </label>
       <button class="auth-btn" id="login-btn" onclick="doLogin()">Send My Code 🔥</button>
       <p class="auth-flow-note">New here or coming back, same button. Msg &amp; data rates may apply for texts.</p>
     </div>
-
-    <p class="auth-terms" id="auth-terms">
-      By continuing you agree to our <a href="/terms.html">Terms</a> and <a href="/privacy.html">Privacy Policy</a>. You must be 18+ to use RaveFAM.
-    </p>
 
     <!-- ── Enter the emailed 6-digit code ── -->
     <div id="auth-code-form" style="display:none;">
@@ -11018,7 +11030,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.32.0';
+  const APP_VERSION = '2.34.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -11241,7 +11253,7 @@
     if (!uid || !currentUser || uid === currentUser.id) return;
     showConfirm(
       `🚫 Block ${blockedRaverName(uid)}?`,
-      "You won't see their Huddle messages or get notifications from them. They won't be told. You can unblock anytime in Settings.",
+      "Their posts disappear from your feed and you won't get notifications from them. Our moderators are notified to review them. They won't be told. You can unblock anytime in Settings.",
       '🚫 Block',
       async () => { if (await dbBlockUser(uid) && onDone) onDone(); }
     );
@@ -11262,6 +11274,13 @@
   // Re-render everything a block filters, so a change shows immediately.
   function refreshBlockedViews() {
     renderHuddleUI();
+    if (activeDetailId) {
+      rerenderDreamBoard(activeDetailId);
+      rerenderArchive(activeDetailId);
+      rerenderPolls(activeDetailId);
+      rerenderJams(activeDetailId);
+    }
+    renderEvents();
     if (_huddleSearchState && _huddleSearchState.results.length) {
       _huddleSearchState.results = _huddleSearchState.results.filter(m => !isBlockedUser(m.sender_id));
       renderHuddleSearchResults();
@@ -12091,15 +12110,42 @@
     document.getElementById('login-id-error').classList.remove('show');
   }
 
+  // Terms agreement gates sending a sign-in code. Remembered per device once
+  // ticked, so a returning raver isn't asked again after signing out.
+  const AUTH_AGREE_KEY = 'rf_terms_agreed';
+  function initAuthAgree() {
+    const box = document.getElementById('auth-agree');
+    if (!box) return;
+    try { box.checked = localStorage.getItem(AUTH_AGREE_KEY) === '1'; } catch (e) { /* storage blocked */ }
+  }
+  function onAuthAgreeChange(box) {
+    document.getElementById('auth-terms')?.classList.remove('needs-agree');
+    if (box.checked) clearAuthMessages();
+    try {
+      if (box.checked) localStorage.setItem(AUTH_AGREE_KEY, '1');
+      else localStorage.removeItem(AUTH_AGREE_KEY);
+    } catch (e) { /* storage blocked */ }
+  }
+  function requireAuthAgree() {
+    const box = document.getElementById('auth-agree');
+    if (!box || box.checked) return true;
+    document.getElementById('auth-terms')?.classList.add('needs-agree');
+    authError('Please agree to the Terms of Use to continue.');
+    box.focus();
+    return false;
+  }
+  initAuthAgree();
+
   async function doLogin() {
     const id = parseLoginId(document.getElementById('login-id').value);
-    if (id.kind === 'phone') { doSendSmsCode(id.value); return; }
-    if (id.kind !== 'email') {
+    if (id.kind !== 'phone' && id.kind !== 'email') {
       loginIdError(!id.kind ? 'Enter your email or mobile number.'
         : id.kind === 'partial-phone' ? "That doesn't look like a full phone number. Check the digits."
         : "That doesn't look like an email address. Check it and try again.");
       return;
     }
+    if (!requireAuthAgree()) return;
+    if (id.kind === 'phone') { doSendSmsCode(id.value); return; }
     const email = id.value;
     setAuthBusy(true); clearAuthMessages();
     const { error } = await sendLoginCode(email);
@@ -15196,7 +15242,7 @@
     let html = '';
     for (const vibe of vibes) {
       const r = squad.find(r2 => String(r2.id) === String(vibe.raverId));
-      if (!r) continue;
+      if (!r || isBlockedUser(r.claimedBy)) continue;
       const isMine = me && String(r.id) === String(me.id);
       const firstName = escHtml(displayName(r).split(' ')[0]);
       const captionHtml = vibe.caption ? `<span class="fest-vibe-caption">${escHtml(vibe.caption)}</span>` : '';
@@ -21326,7 +21372,8 @@
       ...archiveLinks.map(l => item('archive', l, l.added_by)),
       ...crewFeedEvents.map(ev => item('badge', ev, null)),
       ...crewPlanCheckoffs.map(r => ({ kind: 'checkoff', id: r.id, at: r.done_at || now, actor: r.done_by, row: r }))
-    ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+    ].filter(it => !isBlockedUser(it.actor))
+      .sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
   }
 
   // New = posted by someone else after this feature's read watermark as of
@@ -27610,7 +27657,7 @@
     const uid = currentUser?.id;
     const canManage = crewPerms(crew).canEdit;
 
-    const pinCards = dreamPins.map(pin => {
+    const pinCards = dreamPins.filter(pin => !isBlockedUser(pin.added_by)).map(pin => {
       const hyped = (pin.hyped_by || []).includes(uid);
       const hypeCount = (pin.hyped_by || []).length;
       const canDelete = ownerOrManager(pin.added_by, uid, canManage);
@@ -27772,7 +27819,7 @@
     }).join('');
     const filterBar = festPills ? `<div class="jam-filter-bar">${festPills}</div>` : '';
 
-    const cards = visible.map(link => {
+    const cards = visible.filter(link => !isBlockedUser(link.added_by)).map(link => {
       const canDelete = ownerOrManager(link.added_by, uid, canManage);
       let addedByLabel = '';
       if (link.added_by) {
@@ -28161,6 +28208,7 @@
   }
 
   function renderPollCard(poll, accentColor, uid) {
+    if (isBlockedUser(poll.created_by)) return '';
     const votes = crewPollVotes[poll.id] || [];
     const myVote = votes.find(v => v.voter_user_id === uid);
     const hasVoted = !!myVote;
@@ -28948,6 +28996,7 @@
   }
 
   function renderJamCard(jam, uid, canManage, crewId) {
+    if (isBlockedUser(jam.added_by)) return '';
     const escId   = escJsAttr(jam.id);
     const escCrew = escJsAttr(crewId);
     const canDelete = ownerOrManager(jam.added_by, uid, canManage);
@@ -30470,6 +30519,7 @@
   }
 
   function vendorReviewRowHTML(review, vendorId) {
+    if (isBlockedUser(review.raver_id)) return '';
     const escRid = escJsAttr(String(review.id));
     const escVid = escJsAttr(String(vendorId));
     const isMine = currentUser && review.raver_id === currentUser.id;
@@ -30575,6 +30625,7 @@
   }
 
   function vendorSpotRowHTML(spot) {
+    if (isBlockedUser(spot.spotted_by)) return '';
     const escSid = escJsAttr(String(spot.id));
     const escVid = escJsAttr(String(spot.vendor_id));
     const isMine = currentUser && spot.spotted_by === currentUser.id;
@@ -31250,6 +31301,7 @@
   }
 
   function venueReviewRowHTML(review, venueId) {
+    if (isBlockedUser(review.raver_id)) return '';
     const escRid = escJsAttr(String(review.id));
     const escVid = escJsAttr(String(venueId));
     const isMine = currentUser && review.raver_id === currentUser.id;

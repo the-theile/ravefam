@@ -77,6 +77,7 @@ test.describe('auth-screen Enter key', () => {
   test('Enter in the email field still sends the code', async ({ page }) => {
     await openSignedOut(page, '/app.html', seedData());
     await page.fill('#login-id', 'new@example.com');
+    await page.check('#auth-agree');
     await page.locator('#login-id').press('Enter');
     await expect(page.locator('#auth-code-form')).toBeVisible();
   });
