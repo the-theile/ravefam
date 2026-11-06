@@ -11018,7 +11018,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.32.0';
+  const APP_VERSION = '2.33.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -11241,7 +11241,7 @@
     if (!uid || !currentUser || uid === currentUser.id) return;
     showConfirm(
       `🚫 Block ${blockedRaverName(uid)}?`,
-      "You won't see their Huddle messages or get notifications from them. They won't be told. You can unblock anytime in Settings.",
+      "Their posts disappear from your feed and you won't get notifications from them. Our moderators are notified to review them. They won't be told. You can unblock anytime in Settings.",
       '🚫 Block',
       async () => { if (await dbBlockUser(uid) && onDone) onDone(); }
     );
@@ -11262,6 +11262,13 @@
   // Re-render everything a block filters, so a change shows immediately.
   function refreshBlockedViews() {
     renderHuddleUI();
+    if (activeDetailId) {
+      rerenderDreamBoard(activeDetailId);
+      rerenderArchive(activeDetailId);
+      rerenderPolls(activeDetailId);
+      rerenderJams(activeDetailId);
+    }
+    renderEvents();
     if (_huddleSearchState && _huddleSearchState.results.length) {
       _huddleSearchState.results = _huddleSearchState.results.filter(m => !isBlockedUser(m.sender_id));
       renderHuddleSearchResults();
@@ -15196,7 +15203,7 @@
     let html = '';
     for (const vibe of vibes) {
       const r = squad.find(r2 => String(r2.id) === String(vibe.raverId));
-      if (!r) continue;
+      if (!r || isBlockedUser(r.claimedBy)) continue;
       const isMine = me && String(r.id) === String(me.id);
       const firstName = escHtml(displayName(r).split(' ')[0]);
       const captionHtml = vibe.caption ? `<span class="fest-vibe-caption">${escHtml(vibe.caption)}</span>` : '';
@@ -21326,7 +21333,8 @@
       ...archiveLinks.map(l => item('archive', l, l.added_by)),
       ...crewFeedEvents.map(ev => item('badge', ev, null)),
       ...crewPlanCheckoffs.map(r => ({ kind: 'checkoff', id: r.id, at: r.done_at || now, actor: r.done_by, row: r }))
-    ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+    ].filter(it => !isBlockedUser(it.actor))
+      .sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
   }
 
   // New = posted by someone else after this feature's read watermark as of
@@ -27610,7 +27618,7 @@
     const uid = currentUser?.id;
     const canManage = crewPerms(crew).canEdit;
 
-    const pinCards = dreamPins.map(pin => {
+    const pinCards = dreamPins.filter(pin => !isBlockedUser(pin.added_by)).map(pin => {
       const hyped = (pin.hyped_by || []).includes(uid);
       const hypeCount = (pin.hyped_by || []).length;
       const canDelete = ownerOrManager(pin.added_by, uid, canManage);
@@ -27772,7 +27780,7 @@
     }).join('');
     const filterBar = festPills ? `<div class="jam-filter-bar">${festPills}</div>` : '';
 
-    const cards = visible.map(link => {
+    const cards = visible.filter(link => !isBlockedUser(link.added_by)).map(link => {
       const canDelete = ownerOrManager(link.added_by, uid, canManage);
       let addedByLabel = '';
       if (link.added_by) {
@@ -28161,6 +28169,7 @@
   }
 
   function renderPollCard(poll, accentColor, uid) {
+    if (isBlockedUser(poll.created_by)) return '';
     const votes = crewPollVotes[poll.id] || [];
     const myVote = votes.find(v => v.voter_user_id === uid);
     const hasVoted = !!myVote;
@@ -28948,6 +28957,7 @@
   }
 
   function renderJamCard(jam, uid, canManage, crewId) {
+    if (isBlockedUser(jam.added_by)) return '';
     const escId   = escJsAttr(jam.id);
     const escCrew = escJsAttr(crewId);
     const canDelete = ownerOrManager(jam.added_by, uid, canManage);
@@ -30470,6 +30480,7 @@
   }
 
   function vendorReviewRowHTML(review, vendorId) {
+    if (isBlockedUser(review.raver_id)) return '';
     const escRid = escJsAttr(String(review.id));
     const escVid = escJsAttr(String(vendorId));
     const isMine = currentUser && review.raver_id === currentUser.id;
@@ -30575,6 +30586,7 @@
   }
 
   function vendorSpotRowHTML(spot) {
+    if (isBlockedUser(spot.spotted_by)) return '';
     const escSid = escJsAttr(String(spot.id));
     const escVid = escJsAttr(String(spot.vendor_id));
     const isMine = currentUser && spot.spotted_by === currentUser.id;
@@ -31250,6 +31262,7 @@
   }
 
   function venueReviewRowHTML(review, venueId) {
+    if (isBlockedUser(review.raver_id)) return '';
     const escRid = escJsAttr(String(review.id));
     const escVid = escJsAttr(String(venueId));
     const isMine = currentUser && review.raver_id === currentUser.id;
