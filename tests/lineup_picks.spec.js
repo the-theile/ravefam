@@ -200,6 +200,8 @@ test.describe('Lineup Explorer hub — Your picks', () => {
   });
 
   test('lists picks by festival, marks picked cards, and saves from the latest rave', async ({ page }) => {
+    // Pin "today" before EDC Orlando 2026 (Nov 6–8) so it still counts as upcoming.
+    await page.clock.setFixedTime(new Date('2026-10-01T18:00:00Z'));
     await page.addInitScript(() => {
       if (sessionStorage.getItem('seeded')) return;
       sessionStorage.setItem('seeded', '1');
@@ -298,6 +300,8 @@ test.describe('Lineup Explorer hub — members (For You)', () => {
   test.beforeEach(async ({ page }) => { await blockExternal(page); });
 
   test('shows Your season, artists on tour and card badges', async ({ page }) => {
+    // Pin "today" before EDC Orlando 2026 (Nov 6–8) so it still counts as upcoming.
+    await page.clock.setFixedTime(new Date('2026-10-01T18:00:00Z'));
     await installSupabaseStub(page, {
       session: makeSession(),
       data: memberData({
