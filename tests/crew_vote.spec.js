@@ -91,6 +91,8 @@ test('change my vote while the crew vote is open', async ({ page }) => {
 });
 
 test('Crew vote on a lineup links to upcoming raves with a lineup page', async ({ page }) => {
+  // Pin "today" before EDC Orlando 2026 (Nov 6–8) so it still counts as upcoming.
+  await page.clock.setFixedTime(new Date('2026-10-01T18:00:00Z'));
   const d = voteData();
   d.festivals.push({ id: 'f9', name: 'EDC Orlando 2026', date: '2026-11-06', location: 'Orlando, FL', slug: 'edc-orlando-2026', deleted_at: null });
   d.raver_festivals.push({ raver_id: 'r-sam', festival_id: 'f9' });
