@@ -842,7 +842,6 @@ window.ARTIST_INDEX = [
   { name: "Smoakland", name_lower: "smoakland", slug: "smoakland", festivals: [{ slug: "bass-canyon-2026", title: "Bass Canyon 2026" }, { slug: "cyclops-cove-4-2026", title: "Cyclops Cove 4" }, { slug: "dancefestopia-2026", title: "Dancefestopia 2026" }] },
   { name: "Sneezy", name_lower: "sneezy", slug: "sneezy", festivals: [{ slug: "hulaween-2026", title: "Hulaween 2026" }] },
   { name: "Snow Strippers", name_lower: "snow strippers", slug: "snow-strippers", festivals: [{ slug: "hard-summer-2026", title: "Hard Summer 2026" }] },
-  { name: "Soaplab", name_lower: "soaplab", slug: "soaplab", festivals: [{ slug: "dusk-arizona-2026", title: "DUSK Arizona 2026" }] },
   { name: "Soar", name_lower: "soar", slug: "soar", festivals: [{ slug: "breakaway-houston-2026", title: "Breakaway Houston 2026" }] },
   { name: "Sober Rob", name_lower: "sober rob", slug: "sober-rob", festivals: [{ slug: "lost-in-dreams-los-angeles-2026", title: "Lost In Dreams LA 2026" }] },
   { name: "Sofi Tukker", name_lower: "sofi tukker", slug: "sofi-tukker", festivals: [{ slug: "breakaway-philadelphia-2026", title: "Breakaway Philadelphia 2026" }] },
