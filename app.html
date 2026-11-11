@@ -11030,7 +11030,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.34.1';
+  const APP_VERSION = '2.34.2';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -11116,6 +11116,7 @@
 
   let currentUser = null;  // holds the logged-in Supabase user object
   let _feedbackPromptsShown = {};  // local mirror of user_metadata.feedback_prompts_shown — micro-feedback asks already shown
+  let _feedbackPromptsQueued = {};  // local mirror of user_metadata.feedback_prompts_queued — { milestone: crewId } held back on day one / over budget
   // local mirror of user_metadata.guidance — 2.0 guidance state (places found,
   // zone intros, help level, setup, quests, Rave mode). Flags and counts only,
   // so user_metadata stays small. See GUIDANCE KIT / REALMS.
@@ -11918,6 +11919,10 @@
     const { receive } = await NativePush.checkPermissions();
     if (receive !== 'prompt' && receive !== 'prompt-with-rationale') return;
     if (document.getElementById('confirm-overlay')?.classList.contains('open')) return;
+    // Shares the guidance interruption budget (and Rave mode). Not marked
+    // offered when held back, so the next login's 4s retry can still ask.
+    if (!gkCanInterrupt({ kind: 'nudge' })) return;
+    gkSpend();
     try { localStorage.setItem(NATIVE_PUSH_OFFERED_KEY, '1'); } catch (e) {}
     showConfirm(
       '🔔 Stay in the loop',
@@ -12718,6 +12723,7 @@
     currentUser = user;
     try { localStorage.setItem('rf_has_logged_in', '1'); } catch (e) { /* per-device nicety only */ }
     _feedbackPromptsShown = { ...(user?.user_metadata?.feedback_prompts_shown || {}) };
+    _feedbackPromptsQueued = { ...(user?.user_metadata?.feedback_prompts_queued || {}) };
     const savedGuidance = user?.user_metadata?.guidance;
     _guidance = savedGuidance?.v === 2
       ? { ...defaultGuidance(user?.user_metadata), ...savedGuidance }
@@ -14395,6 +14401,8 @@
     Promise.all([dbLoadNotifications(), _postfestDataReady]).then(queuePostfestBellNudges).catch(() => {});
     setupRealtimeSync();
     initNativePushAfterLogin();
+    // After the push offer's 4s slot, so the two never stack (both are budgeted).
+    setTimeout(flushQueuedMicroFeedback, 9000);
     // A push notification opened us cold — go to the room it was about before
     // anything else claims the screen.
     const deepLink = _pendingHuddleDeepLink;
@@ -17520,6 +17528,7 @@
     { match: /lights\s*all\s*night/i, year: 2026, url: '/lineup-explorer/lights-all-night-2026' },
     { match: /sacred\s*meadows/i, year: 2026, url: '/lineup-explorer/sacred-meadows-2026' },
     { match: /sunset\s*on\s*the\s*river/i, year: 2027, url: '/lineup-explorer/sunset-on-the-river-music-arts-festival-2027' },
+    { match: /florida\s*groves/i, year: 2027, url: '/lineup-explorer/florida-groves-2027' },
   ];
   function getLineupExplorerUrl(f) {
     const d = festDate(f);
@@ -41628,33 +41637,67 @@
   // shown, not on submit, so a skip/dismiss never re-asks. Responses land in
   // micro_feedback_responses via the submit_micro_feedback RPC — see
   // ANALYTICS.md.
+  //
+  // Never on day one (gkIsDayOne): a brand-new raver isn't bombarded mid-signup.
+  // Milestones hit then — or when the guidance interruption budget is spent,
+  // Rave mode is on, or another card is up — are parked in
+  // user_metadata.feedback_prompts_queued and asked once, as a look back, by
+  // flushQueuedMicroFeedback on a later session's load.
   const MICRO_FEEDBACK_QUESTIONS = [
     'What almost stopped you?',
     'What would make you bring your full crew here?',
     'Anything confusing so far?',
   ];
+  const MICRO_FEEDBACK_LOOKBACK = {
+    crew_created: 'starting your crew',
+    invite_sent: 'sending your first invite',
+    claim_made: 'claiming your spot',
+    event_added: 'adding your first event',
+  };
   let _microFeedbackShowing = false;
 
   function maybeAskMicroFeedback(milestone, crewId) {
-    if (!currentUser || _feedbackPromptsShown[milestone] || _microFeedbackShowing) return;
-    _feedbackPromptsShown[milestone] = true;
-    sb.auth.updateUser({ data: { feedback_prompts_shown: _feedbackPromptsShown } }).catch(() => {});
-    const question = MICRO_FEEDBACK_QUESTIONS[Math.floor(Math.random() * MICRO_FEEDBACK_QUESTIONS.length)];
+    if (!currentUser || _feedbackPromptsShown[milestone]) return;
+    if (_microFeedbackShowing || gkIsDayOne() || !gkCanInterrupt({ kind: 'nudge' })) {
+      if (_feedbackPromptsQueued[milestone] !== undefined) return;
+      _feedbackPromptsQueued[milestone] = crewId || null;
+      sb.auth.updateUser({ data: { feedback_prompts_queued: _feedbackPromptsQueued } }).catch(() => {});
+      return;
+    }
     // Small delay so it doesn't visually collide with the success toast/screen
     // that just fired (the toast auto-dismisses at 2500ms).
-    setTimeout(() => _renderMicroFeedbackCard(milestone, question, crewId), 1500);
+    _askMicroFeedback(milestone, crewId, false, 1500);
   }
 
-  function _renderMicroFeedbackCard(milestone, question, crewId) {
+  // Once per session load: ask the oldest still-unasked queued milestone.
+  function flushQueuedMicroFeedback() {
+    if (!currentUser || _microFeedbackShowing || gkIsDayOne()) return;
+    const milestone = Object.keys(_feedbackPromptsQueued).find(m => !_feedbackPromptsShown[m] && MICRO_FEEDBACK_LOOKBACK[m]);
+    if (!milestone || !gkCanInterrupt({ kind: 'nudge' })) return;
+    _askMicroFeedback(milestone, _feedbackPromptsQueued[milestone], true, 0);
+  }
+
+  // Marked shown the moment it's asked (not on submit) so skip never re-asks.
+  function _askMicroFeedback(milestone, crewId, lookBack, delay) {
+    gkSpend();
+    _feedbackPromptsShown[milestone] = true;
+    delete _feedbackPromptsQueued[milestone];
+    sb.auth.updateUser({ data: { feedback_prompts_shown: _feedbackPromptsShown, feedback_prompts_queued: _feedbackPromptsQueued } }).catch(() => {});
+    const question = MICRO_FEEDBACK_QUESTIONS[Math.floor(Math.random() * MICRO_FEEDBACK_QUESTIONS.length)];
+    setTimeout(() => _renderMicroFeedbackCard(milestone, question, crewId, lookBack), delay);
+  }
+
+  function _renderMicroFeedbackCard(milestone, question, crewId, lookBack) {
     const card = document.getElementById('micro-feedback-card');
     if (!card) return;
     _microFeedbackShowing = true;
     card.dataset.milestone = milestone;
-    card.dataset.question = question;
+    card.dataset.question = lookBack ? `${question} (asked later)` : question;  // tag so PM can tell look-backs apart
     card.dataset.crewId = (crewId && !String(crewId).startsWith('temp_')) ? crewId : '';
+    const eyebrow = lookBack ? `👀 thinking back to ${MICRO_FEEDBACK_LOOKBACK[milestone]} —` : '👀 real quick —';
     card.innerHTML = `
       <button type="button" class="micro-feedback-close" onclick="dismissMicroFeedback()" title="Not now" aria-label="Dismiss this question">✕</button>
-      <div class="micro-feedback-eyebrow">👀 real quick —</div>
+      <div class="micro-feedback-eyebrow">${escHtml(eyebrow)}</div>
       <div class="micro-feedback-q">${escHtml(question)}</div>
       <div class="micro-feedback-input"><input type="text" class="form-input" id="micro-feedback-input" aria-label="Your feedback" maxlength="500" placeholder="keep it real…"></div>
       <div class="micro-feedback-actions">
@@ -41700,6 +41743,10 @@
     if (!slot) return;
     if (_npsSlotChecked) return;  // already asked (or dismissed) this session
     _npsSlotChecked = true;
+    // "Would you recommend us?" means nothing in week one — wait until the
+    // account is 7+ days old (auth created_at; guidance first_seen as fallback).
+    const joinedAt = Date.parse(currentUser?.created_at || '') || _guidance?.first_seen || Date.now();
+    if (Date.now() - joinedAt < 7 * 24 * 60 * 60 * 1000) return;
     try {
       const { data: eligible, error } = await sb.rpc('nps_eligible');
       if (error) console.warn('nps_eligible check failed', error);
