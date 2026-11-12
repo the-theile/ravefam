@@ -1689,6 +1689,33 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .profile-handle { color: var(--muted); font-size: 0.88rem; margin: 2px 0 6px; }
+  .founding-badge {
+    display: inline-flex; align-items: center; gap: 4px; margin: 0 0 6px;
+    padding: 3px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 700;
+    color: var(--neon-green); background: rgba(var(--neon-green-rgb), 0.1);
+    border: 1px solid rgba(var(--neon-green-rgb), 0.45);
+    box-shadow: 0 0 10px rgba(var(--neon-green-rgb), 0.25);
+  }
+  /* Android beta waitlist card (Crews page, Android web only) */
+  .abeta-card {
+    position: relative; margin-bottom: 14px; padding: 14px 40px 14px 16px;
+    border-radius: 16px; background: var(--surface);
+    border: 1px solid rgba(var(--neon-green-rgb), 0.4);
+    box-shadow: 0 0 18px rgba(var(--neon-green-rgb), 0.12);
+  }
+  .abeta-card[hidden] { display: none; }
+  .abeta-title { font-weight: 800; font-size: 0.95rem; margin-bottom: 4px; }
+  .abeta-sub, .abeta-hint { color: var(--muted); font-size: 0.82rem; line-height: 1.45; }
+  .abeta-sub strong { color: var(--text); }
+  .abeta-hint { margin: 6px 0 10px; font-size: 0.75rem; }
+  .abeta-card .form-label { display: block; margin: 8px 0 6px; }
+  .abeta-agree { display: flex; gap: 8px; align-items: flex-start; font-size: 0.8rem; line-height: 1.4; cursor: pointer; }
+  .abeta-agree input { margin-top: 2px; flex-shrink: 0; accent-color: var(--neon-green); }
+  .abeta-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .abeta-close {
+    position: absolute; top: 8px; right: 8px; width: 32px; height: 32px;
+    background: none; border: none; color: var(--muted); font-size: 0.9rem; cursor: pointer;
+  }
   .profile-base-line { font-size: 0.82rem; color: var(--text); }
   /* Keep old .profile-hero for EDIT mode only */
   .profile-hero {
@@ -9872,6 +9899,7 @@
           </svg>
         </button>
       </div>
+      <div class="abeta-card" id="abeta-card" hidden><!-- renderAndroidBetaCard() --></div>
       <div class="crew-search-row">
         <div class="crew-search-wrap">
           <span class="crew-search-icon">🔍</span>
@@ -10369,6 +10397,12 @@
           <span class="settings-nav-text"><span class="poll-setting-label">Haptics</span><span class="poll-setting-hint">Taps when you RSVP, vote, react and more</span></span>
           <button class="poll-anon-toggle" id="haptics-settings-toggle" onclick="toggleHapticsEnabled(this)"></button>
         </div>
+        <!-- Android web only; shown by loadAndroidBetaState() -->
+        <button type="button" class="settings-nav-row" id="abeta-settings-row" style="display:none;" onclick="openAndroidBetaFromSettings()">
+          <span class="settings-nav-ico" style="background:rgba(var(--neon-green-rgb),0.12);">🤖</span>
+          <span class="settings-nav-text"><span class="poll-setting-label">Android beta</span><span class="poll-setting-hint" id="abeta-settings-hint">Test the Google Play app first</span></span>
+          <span class="settings-nav-chev">›</span>
+        </button>
         <div class="settings-nav-row">
           <span class="settings-nav-ico" style="background:rgba(var(--neon-purple-rgb),0.14);">🧪</span>
           <span class="settings-nav-text"><span class="poll-setting-label">New crew page <span class="text-hint" style="font-weight:400;">beta</span></span><span class="poll-setting-hint">Huddle up top, your next rave as a ticket, roster in one tap</span></span>
@@ -11138,7 +11172,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.36.0';
+  const APP_VERSION = '2.37.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -12213,6 +12247,161 @@
   async function forgetNativePushToken() {
     if (!_nativePushToken || !currentUser) return;
     try { await sb.from('device_push_tokens').delete().eq('token', _nativePushToken.toLowerCase()); } catch (e) {}
+  }
+
+  // ===== ANDROID BETA WAITLIST =====
+  // Google Play won't publish a new personal-account app until 12+ testers
+  // have stayed in a closed test for 14 days, so Android web users (not the
+  // iOS shell, not a future Android build) get a dismissible card on the
+  // Crews page; Settings → Android beta brings it back. Rows live in
+  // android_beta_signups (RPCs only). Ravers marked 'tester' from the PM
+  // dashboard get the Founding Tester badge on their profile.
+  const IS_ANDROID_WEB = /Android/i.test(navigator.userAgent) && !IS_NATIVE_APP;
+  const ABETA_DISMISS_KEY = 'rf_abeta_dismissed';
+  let _abetaState = null;              // my_android_beta(): { joined, status, play_email }; null = not loaded
+  let _abetaOpen = false;              // card expanded into the join form
+  let foundingTesterIds = new Set();   // auth uids from get_founding_testers()
+
+  function abetaDismissed() {
+    try { return localStorage.getItem(ABETA_DISMISS_KEY) === '1'; } catch (e) { return false; }
+  }
+  function abetaSetDismissed(on) {
+    try { on ? localStorage.setItem(ABETA_DISMISS_KEY, '1') : localStorage.removeItem(ABETA_DISMISS_KEY); } catch (e) {}
+  }
+
+  async function loadAndroidBetaState() {
+    if (!currentUser) return;
+    _abetaState = null;
+    const [testers, mine] = await Promise.all([
+      sb.rpc('get_founding_testers'),
+      IS_ANDROID_WEB ? sb.rpc('my_android_beta') : Promise.resolve(null)
+    ]);
+    if (testers && !testers.error && Array.isArray(testers.data)) {
+      foundingTesterIds = new Set(testers.data.map(x => String(typeof x === 'string' ? x : x.get_founding_testers)));
+    }
+    if (mine && !mine.error && mine.data) _abetaState = mine.data;
+    const row = document.getElementById('abeta-settings-row');
+    if (row) row.style.display = IS_ANDROID_WEB ? '' : 'none';
+    renderAndroidBetaCard();
+  }
+
+  function foundingTesterBadgeHTML(r) {
+    if (!r || !r.claimedBy || !foundingTesterIds.has(String(r.claimedBy))) return '';
+    return `<div class="founding-badge" title="Helped get RaveFAM onto Google Play">🤖 Founding Tester</div>`;
+  }
+
+  function renderAndroidBetaCard() {
+    const el = document.getElementById('abeta-card');
+    if (!el) return;
+    const s = _abetaState;
+    const hint = document.getElementById('abeta-settings-hint');
+    if (hint) hint.textContent = s && s.joined ? "You're on the list" : 'Test the Google Play app first';
+    if (!IS_ANDROID_WEB || !currentUser || !s || (!_abetaOpen && abetaDismissed())) {
+      el.hidden = true; el.innerHTML = ''; return;
+    }
+    el.hidden = false;
+    const close = `<button type="button" class="abeta-close" aria-label="Hide Android beta card" onclick="dismissAndroidBetaCard()">✕</button>`;
+    if (s.joined && !_abetaOpen) {
+      const tester = s.status === 'tester';
+      el.innerHTML = `${close}
+        <div class="abeta-title">${tester ? '🏅 You\'re a Founding Tester' : '✅ You\'re on the Android beta list 🤙'}</div>
+        <div class="abeta-sub">${tester
+          ? 'Thanks for helping get RaveFAM onto Google Play. Keep the beta installed!'
+          : `We'll email the invite for <strong>${escHtml(s.play_email || '')}</strong> when the Google Play beta opens.`}</div>
+        ${tester ? '' : `<div class="abeta-actions">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="openAndroidBetaForm()">Change email</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="leaveAndroidBeta()">Leave list</button>
+        </div>`}`;
+      return;
+    }
+    if (!_abetaOpen) {
+      el.innerHTML = `${close}
+        <div class="abeta-title">🤖 RaveFAM is coming to Google Play</div>
+        <div class="abeta-sub">Be a <strong>Founding Tester</strong>: get the Android app before anyone else, plus a Founding Tester badge on your profile.</div>
+        <div class="abeta-actions">
+          <button type="button" class="btn btn-primary btn-sm" onclick="openAndroidBetaForm()">Count me in</button>
+        </div>`;
+      return;
+    }
+    const prefill = s.play_email || currentUser.email || '';
+    el.innerHTML = `${close}
+      <div class="abeta-title">🤖 Join the Android beta</div>
+      <label class="form-label" for="abeta-email">Google account on this phone</label>
+      <input class="form-input" id="abeta-email" type="email" inputmode="email" autocomplete="email" maxlength="254" value="${escHtml(prefill)}" placeholder="you@gmail.com">
+      <div class="abeta-hint">Use the account your Play Store is signed in with (usually a Gmail). Google only lets that account into the test.</div>
+      <label class="abeta-agree" for="abeta-agree">
+        <input type="checkbox" id="abeta-agree">
+        <span>I'll keep the beta installed and open it now and then for at least 14 days.</span>
+      </label>
+      <div class="abeta-actions">
+        <button type="button" class="btn btn-primary btn-sm" id="abeta-submit" onclick="submitAndroidBeta()">${s.joined ? 'Save' : 'Join the beta'}</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="closeAndroidBetaForm()">Not now</button>
+      </div>`;
+  }
+
+  function openAndroidBetaForm() {
+    _abetaOpen = true;
+    renderAndroidBetaCard();
+    document.getElementById('abeta-email')?.focus();
+  }
+  function closeAndroidBetaForm() {
+    _abetaOpen = false;
+    renderAndroidBetaCard();
+  }
+  function dismissAndroidBetaCard() {
+    _abetaOpen = false;
+    abetaSetDismissed(true);
+    renderAndroidBetaCard();
+    showToast('Hidden. Find it again in ⚙️ Settings → Android beta');
+  }
+
+  function openAndroidBetaFromSettings() {
+    closePrivacySettingsModal();
+    abetaSetDismissed(false);
+    _abetaOpen = !(_abetaState && _abetaState.joined);
+    switchTab('crews');
+    renderAndroidBetaCard();
+    document.getElementById('abeta-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  async function submitAndroidBeta() {
+    const input = document.getElementById('abeta-email');
+    const agree = document.getElementById('abeta-agree');
+    const btn = document.getElementById('abeta-submit');
+    const email = (input?.value || '').trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toastError('Enter the Google account email on this phone'); input?.focus(); return; }
+    if (!agree?.checked) { toastError('Tick the 14-day box so we can count you in'); return; }
+    if (btn) btn.disabled = true;
+    const me = raverByAuthUid(currentUser?.id);
+    const { data, error } = await sb.rpc('join_android_beta', {
+      p_play_email: email, p_consent: true, p_name: me ? me.name : null,
+      p_source: 'app', p_device: navigator.userAgent.slice(0, 160)
+    });
+    if (error || !data || !data.ok) {
+      const msg = {
+        email_taken: 'That Google account is already on the list under another RaveFAM account.',
+        bad_email: 'That email doesn\'t look right. Check it and try again.'
+      }[data?.error] || "Couldn't join right now. Try again in a bit.";
+      toastError(msg, error);
+      if (btn) btn.disabled = false;
+      return;
+    }
+    const status = _abetaState && _abetaState.status && _abetaState.status !== 'left' ? _abetaState.status : 'waitlist';
+    _abetaState = { joined: true, status, play_email: email.toLowerCase() };
+    _abetaOpen = false;
+    abetaSetDismissed(false);
+    renderAndroidBetaCard();
+    showToast("You're on the Android beta list 🤙");
+  }
+
+  function leaveAndroidBeta() {
+    showConfirm('Leave the Android beta?', "We'll take you off the list. You can join again any time from Settings.", 'Leave', async () => {
+      const { data, error } = await sb.rpc('leave_android_beta');
+      if (error || !data || !data.ok) { toastError("Couldn't update the list. Try again.", error); return; }
+      _abetaState = { ..._abetaState, joined: false, status: 'left' };
+      renderAndroidBetaCard();
+      showToast("You're off the Android beta list");
+    });
   }
 
   // ===== CAPTCHA (Cloudflare Turnstile) =====
@@ -14977,6 +15166,8 @@
     // only matter once a detail view is opened, not for first-paint cards.
     loadPrivatePhones().catch(reportBackgroundFailure('loadPrivatePhones'));
     loadViewerNotes().catch(reportBackgroundFailure('loadViewerNotes'));
+    // Android beta card + Founding Tester badges (non-blocking)
+    loadAndroidBetaState().catch(reportBackgroundFailure('loadAndroidBetaState'));
   }
 
   // ===== WELCOME BACK POPUP =====
@@ -20501,6 +20692,7 @@
   let pmExplorerData = null;  // get_explorer_metrics() — Lineup Explorer → member funnel; null if it failed
   let pmBriefingData = null;  // get_mission_briefing_metrics() — night-before nudge funnel; null if it failed
   let pmSupportData = null;   // get_support_inbox() — Contact us messages; null if it failed
+  let pmAndroidBetaData = null;  // get_admin_android_beta() — Google Play beta waitlist; null if it failed
   let pmDashCharts = {};
   let _chartJsPromise = null;
   function loadChartJs() {
@@ -20542,13 +20734,15 @@
       <div class="text-hint-lg" style="margin-bottom:18px;">Live numbers straight from the database — visible to you only.</div>
       <div id="pm-dash-body" class="es-block" style="padding:40px 24px;"><div class="es-icon">⏳</div><div class="es-headline">Loading metrics…</div></div>
     `;
-    const [{ data, error }, explorerRes, briefingRes, supportRes] = await Promise.all([
+    const [{ data, error }, explorerRes, briefingRes, supportRes, abetaRes] = await Promise.all([
       sb.rpc('get_pm_dashboard_metrics'),
       sb.rpc('get_explorer_metrics'),
       sb.rpc('get_mission_briefing_metrics'),
-      sb.rpc('get_support_inbox')
+      sb.rpc('get_support_inbox'),
+      sb.rpc('get_admin_android_beta')
     ]);
     pmSupportData = supportRes && supportRes.data && supportRes.data.ok ? supportRes.data : null;
+    pmAndroidBetaData = abetaRes && abetaRes.data && abetaRes.data.ok ? abetaRes.data.rows : null;
     pmExplorerData = explorerRes && explorerRes.data && explorerRes.data.ok ? explorerRes.data : null;
     pmBriefingData = briefingRes && briefingRes.data && briefingRes.data.ok ? briefingRes.data : null;
     if (error || !data || !data.ok) {
@@ -20638,6 +20832,12 @@
         <div class="pm-section-title">📬 Contact inbox${pmSupportData && pmSupportData.open_count ? ` <span class="pm-pill">${pmFmt(pmSupportData.open_count)} new</span>` : ''}</div>
         <div class="pm-section-sub">Bugs, ideas and help requests from the 💬 Contact us sheet. Each one is also emailed to you; reply from there.</div>
         <div id="pm-support-rows">${pmSupportRows(pmSupportData)}</div>
+      </div>
+
+      <div class="pm-section">
+        <div class="pm-section-title">🤖 Android beta waitlist</div>
+        <div class="pm-section-sub">Google Play needs 12+ testers opted in for 14 days straight. Set each raver to Tester once they've opted in on Play (that gives them the Founding Tester badge).</div>
+        <div id="pm-abeta-body">${pmAndroidBetaSection(pmAndroidBetaData)}</div>
       </div>
 
       <div class="pm-section">
@@ -20817,6 +21017,51 @@
       ${skipped || pmEmptyNote('Every nudge went out')}
       <div class="pm-section-sub" style="margin-top:12px;">All briefing opens by entry point (30d)</div>
       ${sources || pmEmptyNote('No briefings opened yet')}`;
+  }
+
+  const PM_ABETA_STATUSES = ['waitlist', 'invited', 'tester', 'dropped'];
+  function pmAndroidBetaSection(rows) {
+    if (!rows) return pmEmptyNote('Android beta list unavailable right now');
+    const active = rows.filter(r => r.status !== 'left' && r.status !== 'dropped');
+    const count = st => rows.filter(r => r.status === st).length;
+    const kpis = `<div class="pm-kpi-grid">
+        ${pmKpiCard('On the list', pmFmt(active.length), `${pmFmt(rows.filter(r => r.source === 'landing').length)} from the landing page`)}
+        ${pmKpiCard('Testers', `${pmFmt(count('tester'))} / 12`, `${pmFmt(count('invited'))} invited · ${pmFmt(count('dropped') + count('left'))} dropped or left`)}
+      </div>`;
+    const list = rows.slice().reverse().map(r => `
+      <div class="pm-row">
+        <span class="pm-row-label">${escHtml(r.play_email)}${r.name ? ` <span class="text-hint-xs">${escHtml(r.name)}</span>` : ''} <span class="pm-pill">${escHtml(r.source)}</span></span>
+        <span class="pm-row-value">${r.status === 'left' ? 'left' : `<select aria-label="Status for ${escHtml(r.play_email)}" onchange="pmSetAndroidBetaStatus('${escJsAttr(r.id)}', this)">
+          ${PM_ABETA_STATUSES.map(st => `<option value="${st}"${st === r.status ? ' selected' : ''}>${st}</option>`).join('')}
+        </select>`}</span>
+      </div>`).join('');
+    return `${kpis}
+      <div class="pm-section-sub" style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <span>Signups (newest first)</span>
+        ${active.length ? '<button type="button" class="btn btn-ghost btn-sm" onclick="pmCopyAndroidBetaEmails()">Copy emails</button>' : ''}
+      </div>
+      ${list || pmEmptyNote('No signups yet')}`;
+  }
+  async function pmSetAndroidBetaStatus(id, sel) {
+    const row = (pmAndroidBetaData || []).find(r => String(r.id) === String(id));
+    const prev = row ? row.status : null;
+    sel.disabled = true;
+    const { data, error } = await sb.rpc('set_android_beta_status', { p_id: id, p_status: sel.value });
+    sel.disabled = false;
+    if (error || !data || !data.ok) { if (prev) sel.value = prev; toastError("Couldn't update that status", error); return; }
+    if (row) row.status = sel.value;
+    const body = document.getElementById('pm-abeta-body');
+    if (body) body.innerHTML = pmAndroidBetaSection(pmAndroidBetaData);
+  }
+  // Comma-separated, ready to paste into the Google Group / Play Console tester list.
+  async function pmCopyAndroidBetaEmails() {
+    const emails = (pmAndroidBetaData || []).filter(r => r.status !== 'left' && r.status !== 'dropped').map(r => r.play_email);
+    try {
+      await navigator.clipboard.writeText(emails.join(', '));
+      showToast(`Copied ${emails.length} email${emails.length === 1 ? '' : 's'}`);
+    } catch (e) {
+      toastError("Couldn't copy. Long-press to select instead.");
+    }
   }
 
   function pmTopCrewsRows(crews) {
@@ -34509,6 +34754,7 @@
               </span>
             </div>` : ''}
           <div class="profile-handle">${escHtml(r.handle)}</div>
+          ${foundingTesterBadgeHTML(r)}
           ${perms.editLocation
             ? `<div class="profile-base-line">📍 <span id="ief-wrap-${r.id}-base" class="ief-wrap">${inlineEditDisplay(r.id, 'base', r.base)}</span></div>`
             : perms.baseVisible

@@ -426,6 +426,26 @@
   }
   .qrs-manual-link:hover { color: var(--cyan); }
 
+  /* Android beta waitlist — only revealed on Android (see script under the section) */
+  .abeta{padding-top:40px;padding-bottom:40px}
+  .abeta-box{max-width:560px;margin:0 auto;padding:28px 24px;border-radius:20px;background:var(--surface);
+    border:1px solid rgba(57,255,20,.35);box-shadow:0 0 34px rgba(57,255,20,.1)}
+  .abeta-box .h2{font-size:clamp(1.7rem,5vw,2.3rem);margin-bottom:12px}
+  .abeta-box .lede{margin-bottom:20px}
+  .abeta-form{display:flex;flex-direction:column;gap:12px}
+  .abeta-form label.abeta-lbl{font-size:.8rem;color:var(--muted)}
+  .abeta-form input[type=email],.abeta-form input[type=text]{width:100%;padding:13px 14px;border-radius:12px;
+    border:1px solid var(--line2);background:var(--surface2);color:var(--text);font:inherit;font-size:16px}
+  .abeta-form input:focus{outline:none;border-color:var(--green)}
+  .abeta-hint{font-size:.76rem;color:var(--muted2);line-height:1.45}
+  .abeta-agree{display:flex;gap:10px;align-items:flex-start;font-size:.84rem;color:var(--muted);line-height:1.45;cursor:pointer}
+  .abeta-agree input{margin-top:3px;accent-color:var(--green);flex-shrink:0}
+  .abeta-agree a{color:var(--text);text-decoration:underline}
+  .abeta-form .btn-go{justify-content:center;padding:14px 24px}
+  .abeta-hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+  .abeta-msg{font-size:.86rem;min-height:1.2em}
+  .abeta-msg.err{color:var(--pink)}
+  .abeta-done{text-align:center;font-size:1rem;line-height:1.55}
 </style>
 </head>
 <body>
@@ -705,6 +725,65 @@
     </div>
   </section>
 
+  <!-- ANDROID BETA WAITLIST (Android visitors only; join_android_beta RPC) -->
+  <section class="section abeta" id="android-beta" hidden>
+    <div class="wrap">
+      <div class="abeta-box">
+        <div class="kicker">Android beta</div>
+        <h2 class="h2">RaveFAM is coming to Google Play.</h2>
+        <p class="lede">Be a Founding Tester: get the Android app before anyone else, plus a Founding Tester badge on your profile.</p>
+        <form class="abeta-form" id="abeta-form" novalidate>
+          <label class="abeta-lbl" for="abeta-email">Google account on this phone</label>
+          <input id="abeta-email" type="email" inputmode="email" autocomplete="email" maxlength="254" placeholder="you@gmail.com" required>
+          <div class="abeta-hint">Use the account your Play Store is signed in with (usually a Gmail). Google only lets that account into the test.</div>
+          <label class="abeta-lbl" for="abeta-name">First name (optional)</label>
+          <input id="abeta-name" type="text" autocomplete="given-name" maxlength="80">
+          <div class="abeta-hp" aria-hidden="true"><label for="abeta-site">Leave this empty</label><input id="abeta-site" type="text" tabindex="-1" autocomplete="off"></div>
+          <label class="abeta-agree" for="abeta-agree">
+            <input type="checkbox" id="abeta-agree">
+            <span>I'll keep the beta installed and open it now and then for at least 14 days. I'm 18+ and agree to the <a href="/terms">Terms</a> and <a href="/privacy">Privacy Policy</a>.</span>
+          </label>
+          <button class="btn btn-go" type="submit" id="abeta-submit" data-cta="android-beta-join">Join the Android beta</button>
+          <div class="abeta-msg" id="abeta-msg" role="status" aria-live="polite"></div>
+        </form>
+      </div>
+    </div>
+  </section>
+  <script>
+    (function () {
+      if (!/Android/i.test(navigator.userAgent)) return;
+      var sec = document.getElementById('android-beta');
+      var form = document.getElementById('abeta-form');
+      var msg = document.getElementById('abeta-msg');
+      var btn = document.getElementById('abeta-submit');
+      sec.hidden = false;
+      function say(text, isErr) { msg.textContent = text; msg.className = 'abeta-msg' + (isErr ? ' err' : ''); }
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var email = document.getElementById('abeta-email').value.trim();
+        if (document.getElementById('abeta-site').value) return;
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { say('Enter the Google account email on this phone.', true); return; }
+        if (!document.getElementById('abeta-agree').checked) { say('Tick the box so we can count you in.', true); return; }
+        if (!window.rfWithSupabase) { say("Couldn't connect. Try again in a moment.", true); return; }
+        btn.disabled = true; say('Adding you…');
+        window.rfWithSupabase(function (sb) {
+          sb.rpc('join_android_beta', {
+            p_play_email: email, p_consent: true,
+            p_name: document.getElementById('abeta-name').value.trim() || null,
+            p_source: 'landing', p_device: navigator.userAgent.slice(0, 160)
+          }).then(function (res) {
+            if (res.error || !res.data || !res.data.ok) {
+              btn.disabled = false;
+              say(res.data && res.data.error === 'bad_email' ? "That email doesn't look right." : "Couldn't add you right now. Try again in a bit.", true);
+              return;
+            }
+            form.outerHTML = '<div class="abeta-done">✅ <strong>You\'re on the list 🤙</strong><br>We\'ll email you when the Google Play beta opens. Meanwhile, <a href="app.html?tab=signup">start your crew</a> in the browser.</div>';
+          }, function () { btn.disabled = false; say("Couldn't add you right now. Try again in a bit.", true); });
+        });
+      });
+    })();
+  </script>
+
   <!-- FINAL CTA -->
   <section class="section final">
     <div class="wrap">
@@ -953,6 +1032,7 @@
       if (sbClient) { fn(sbClient); return; }
       sbReadyCallbacks.push(fn);
     }
+    window.rfWithSupabase = withClient;  // Android beta form (#android-beta)
 
     var s = document.createElement('script');
     s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3';
