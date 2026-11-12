@@ -74,8 +74,10 @@ Deno.serve(async (req) => {
     const kind = KIND_LABEL[msg.kind] ?? msg.kind;
     const snippet = msg.message.replace(/\s+/g, " ").slice(0, 60);
     const subject = `${kind} from ${raver?.name ?? "a raver"}: ${snippet}${msg.message.length > 60 ? "…" : ""}`;
+    // Label stacked above value: a two-column table squeezes the label
+    // column to one letter wide on phone mail clients.
     const row = (k: string, v: string | null) =>
-      v ? `<tr><td style="padding:2px 12px 2px 0;color:#6b6b8a;">${k}</td><td>${escapeHtml(v)}</td></tr>` : "";
+      v ? `<div style="margin:0 0 10px;"><div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:1px;color:#6b6b8a;">${k}</div><div style="font-size:0.85rem;word-break:break-word;">${escapeHtml(v)}</div></div>` : "";
 
     const html = `<!doctype html>
 <html><body style="margin:0;background:#0a0a0f;font-family:Outfit,Arial,sans-serif;color:#e8e8f0;">
@@ -86,7 +88,7 @@ Deno.serve(async (req) => {
   <h1 style="font-size:1.25rem;margin:0 0 12px;">${escapeHtml(kind)} from ${name}</h1>
   <div style="white-space:pre-wrap;font-size:1rem;line-height:1.5;background:#12121a;border:1px solid #1e1e2e;border-radius:12px;padding:16px;">${escapeHtml(msg.message)}</div>
   ${screenshotHtml}
-  <table style="margin-top:20px;font-size:0.8rem;border-collapse:collapse;">
+  <div style="margin-top:20px;padding-top:16px;border-top:1px solid #1e1e2e;">
     ${row("Reply to", msg.reply_email)}
     ${row("Version", msg.app_version)}
     ${row("Platform", msg.platform)}
@@ -94,7 +96,7 @@ Deno.serve(async (req) => {
     ${row("Device", msg.user_agent)}
     ${row("User ID", msg.user_id)}
     ${row("Sent", new Date(msg.created_at).toUTCString())}
-  </table>
+  </div>
   <p style="margin-top:24px;font-size:0.8rem;color:#6b6b8a;">Hit Reply to answer them directly. Triage it in <a href="${APP_ORIGIN}/app.html" style="color:#6b6b8a;">Product Metrics → Contact inbox</a>.</p>
 </div>
 </body></html>`;
