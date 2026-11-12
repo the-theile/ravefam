@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#050509">
+<!-- iOS Safari's Smart App Banner (Open / Get). WKWebView in the native app ignores it. -->
+<meta name="apple-itunes-app" content="app-id=6817959631">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="icon" type="image/x-icon" href="/favicon.ico">
 <link rel="manifest" href="/manifest.json">
@@ -48,6 +50,8 @@
   // Flag the Capacitor iOS shell early so CSS can swap web-only bits (Ko-fi, BETA)
   // for native ones before first paint. The native bridge is injected at document start.
   if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) document.documentElement.classList.add('is-native-app');
+  // Flag iPhone/iPad in a browser (not the native shell) so .ios-web-only can point them to the App Store.
+  else if (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) document.documentElement.classList.add('is-ios-web');
 </script>
 <!-- Pinned: @2 floats to whatever shipped last. Bump on purpose and run the suite. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3"></script>
@@ -166,6 +170,7 @@
      a BETA label (2.2): .web-only hides in the iOS app, .native-only shows only there. */
   .is-native-app .web-only { display: none !important; }
   :root:not(.is-native-app) .native-only { display: none !important; }
+  :root:not(.is-ios-web) .ios-web-only { display: none !important; }
   header {
     display: flex;
     align-items: center;
@@ -3860,6 +3865,32 @@
   #update-banner-btn:hover { filter: brightness(1.1); }
   #update-banner-btn:active { transform: scale(0.96); }
   #update-banner-btn:disabled { opacity: 0.7; cursor: default; }
+  /* iOS App Store nudge: same slide-down as #update-banner, pink instead of green. */
+  #ios-app-banner {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    background: var(--surface2);
+    border-bottom: 1px solid rgba(var(--neon-pink-rgb),0.4);
+    color: var(--white);
+    font-family: 'Outfit', sans-serif; font-size: 0.82rem; font-weight: 600;
+    padding: calc(9px + env(safe-area-inset-top, 0px)) 16px 9px;
+    transform: translateY(-100%);
+    transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  #ios-app-banner.visible { transform: translateY(0); }
+  #ios-app-banner a {
+    background: var(--neon-pink); color: #fff; text-decoration: none;
+    border-radius: 100px; padding: 5px 15px; font-weight: 700; font-size: 0.78rem;
+    white-space: nowrap; flex-shrink: 0;
+  }
+  #ios-app-banner button { background: none; border: none; color: var(--muted); font-size: 1rem; cursor: pointer; padding: 2px 4px; flex-shrink: 0; }
+  .ob-ios-app {
+    display: flex; align-items: center; gap: 10px; margin-top: 18px; padding: 12px 14px;
+    border-radius: 14px; text-decoration: none; text-align: left;
+    background: rgba(var(--neon-pink-rgb),0.08); border: 1px solid rgba(var(--neon-pink-rgb),0.3);
+    color: var(--white); font-size: 0.85rem; line-height: 1.35;
+  }
+  .ob-ios-app b { color: var(--neon-pink); }
 
   /* Pulse dot */
   .pulse-dot {
@@ -10362,6 +10393,7 @@
           <button id="eruda-toggle-btn" onclick="toggleErudaVisibility()" class="btn btn-ghost" style="font-size:0.78rem;padding:4px 12px;min-width:56px;">Show</button>
         </div>
       </div>
+      <a class="ios-web-only btn btn-ghost btn-wide" href="https://apps.apple.com/us/app/ravefam/id6817959631" target="_blank" rel="noopener" style="margin-top:14px;padding:10px;font-size:0.82rem;text-decoration:none;">📱 Get the iPhone app</a>
       <button class="text-hint-xs" type="button" id="app-version-label" style="display:block;width:100%;background:none;border:none;padding:0;font-family:inherit;text-align:center;opacity:0.6;margin-top:16px;user-select:none;cursor:default;" onclick="settingsVersionTap()"></button>
     </div>
 
@@ -10725,6 +10757,9 @@
 <!-- Update-available banner -->
 <div id="update-banner"><span>✨ A new version of RaveFAM is ready</span><button id="update-banner-btn">Update now</button></div>
 
+<!-- iOS App Store nudge (initIosAppBanner) -->
+<div id="ios-app-banner" role="status"><span>📱 RaveFAM is on the App Store</span><a href="https://apps.apple.com/us/app/ravefam/id6817959631" target="_blank" rel="noopener" onclick="dismissIosAppBanner()">Get the app</a><button type="button" aria-label="Dismiss" onclick="dismissIosAppBanner()">✕</button></div>
+
 <!-- Toast -->
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
@@ -10983,6 +11018,10 @@
     <div class="onboard-sub" id="ob-step3-sub">We’ll show you around as you find new stuff, or you can explore on your own. Change it anytime from ❔.</div>
     <button class="auth-btn" id="ob-step3-primary-btn" onclick="obChooseHelp('guide')">Show me around</button>
     <button class="btn btn-ghost btn-wide" onclick="obChooseHelp('hints')" style="margin-top:10px;padding:12px;font-size:0.85rem;">I’ll figure it out</button>
+    <a class="ob-ios-app ios-web-only" href="https://apps.apple.com/us/app/ravefam/id6817959631" target="_blank" rel="noopener">
+      <span style="font-size:1.4rem;">📱</span>
+      <span><b>RaveFAM is on the App Store.</b> Get the iPhone app and log in with this same account. Your crews come with you.</span>
+    </a>
   </div>
 </div>
 
@@ -11030,7 +11069,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.34.2';
+  const APP_VERSION = '2.35.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -11741,6 +11780,33 @@
          : pendingJoin  ? `${base}?join=${encodeURIComponent(pendingJoin)}`
          : base;
   }
+
+  // ===== IOS APP STORE NUDGE =====
+  // Safari tabs get Apple's Smart App Banner (apple-itunes-app meta). It never
+  // shows in home-screen web apps, Chrome/Firefox/Edge on iOS, or in-app
+  // browsers (Instagram, Facebook), so those get our own banner, once per device.
+  const IOS_APP_BANNER_KEY = 'rf_ios_app_banner_dismissed';
+  function dismissIosAppBanner() {
+    document.getElementById('ios-app-banner')?.classList.remove('visible');
+    try { localStorage.setItem(IOS_APP_BANNER_KEY, '1'); } catch (e) {}
+  }
+  (function initIosAppBanner() {
+    if (!document.documentElement.classList.contains('is-ios-web')) return;
+    const noSmartBanner = navigator.standalone === true
+      || /CriOS|FxiOS|EdgiOS|OPiOS|GSA\/|Instagram|FBAN|FBAV/.test(navigator.userAgent);
+    if (!noSmartBanner) return;
+    try { if (localStorage.getItem(IOS_APP_BANNER_KEY) === '1') return; } catch (e) {}
+    // Wait for login + any onboarding so it never lands on the auth screen or the wizard.
+    // Needs two ticks in a row logged in, so profile loading can open the wizard first.
+    let tries = 0, readyTicks = 0;
+    const timer = setInterval(() => {
+      if (++tries > 40) return clearInterval(timer);
+      readyTicks = (currentUser && !isOnboarding) ? readyTicks + 1 : 0;
+      if (readyTicks < 2) return;
+      clearInterval(timer);
+      document.getElementById('ios-app-banner')?.classList.add('visible');
+    }, 3000);
+  })();
 
   // ===== NATIVE APP (Capacitor iOS shell) =====
   // The iOS app loads this page from myravefam.com. When a Universal Link
