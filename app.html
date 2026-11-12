@@ -10596,6 +10596,13 @@
   </div>
 </div>
 
+<!-- Share to Huddle Modal (iOS share sheet → RaveFAM; see checkShareInbox) -->
+<div class="modal-overlay" id="share-inbox-overlay" onclick="if(event.target===this)closeShareInboxPicker()">
+  <div class="modal modal-scroll-sm" id="share-inbox-modal">
+    <!-- filled by JS -->
+  </div>
+</div>
+
 <!-- Invite Prompt Modal (shown after the Crew Pick step for a new raver) -->
 <div class="modal-overlay" id="invite-prompt-overlay" onclick="if(event.target===this)closeInvitePrompt()">
   <div class="modal" id="invite-prompt-modal"><!-- filled by JS --></div>
@@ -11069,7 +11076,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.35.1';
+  const APP_VERSION = '2.36.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -11883,6 +11890,118 @@
       try { sessionStorage.setItem('nativeLaunchUrl', launch.url); } catch (e) {}
       openNativeAppUrl(launch.url);
     }).catch((e) => console.error('native app: getLaunchUrl failed', e));
+  }
+
+  // ===== NATIVE SHARE INBOX (iOS share sheet) =====
+  // "Share → RaveFAM" from Instagram, TikTok, Safari etc. runs the iOS Share
+  // Extension (ios/App/ShareExtension), which saves the link/text for us to
+  // pick up here via the local ShareInbox plugin (ShareInboxPlugin.swift).
+  // On boot and every return to the app we read it, ask which Huddle it goes
+  // to, then open that room with it waiting in the composer, so sending stays
+  // the normal path (mentions, content filter, restrictions all apply).
+  // Older app builds have no plugin: everything here no-ops.
+  const SHARE_INBOX_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000;
+  let _shareInboxReady = false;   // set once bootApp has crews loaded
+  let _shareInboxBusy = false;
+  let _shareInboxText = '';
+  let _shareInboxNoCrewAt = null; // the item we already told "join a crew first" about
+
+  function shareInboxPlugin() {
+    return (IS_NATIVE_APP && window.Capacitor.Plugins && window.Capacitor.Plugins.ShareInbox) || null;
+  }
+
+  // Link + caption as one message. Instagram/TikTok often put the link inside
+  // the text already, so don't repeat it.
+  function shareInboxMessageText(item) {
+    const url = String(item.url || '').trim();
+    const text = String(item.text || '').trim();
+    if (!url) return text;
+    if (!text || text.includes(url)) return text || url;
+    return `${text}\n${url}`;
+  }
+
+  async function checkShareInbox() {
+    const plugin = shareInboxPlugin();
+    if (!plugin || !_shareInboxReady || !currentUser || _shareInboxBusy) return;
+    if (document.getElementById('share-inbox-overlay')?.classList.contains('open')) return;
+    _shareInboxBusy = true;
+    try {
+      const item = await plugin.read();
+      if (!item || (!item.url && !item.text)) return;
+      if (item.at && Date.now() - item.at > SHARE_INBOX_MAX_AGE_MS) { await plugin.clear(); return; }
+      const text = shareInboxMessageText(item).slice(0, 1000);
+      if (!text) { await plugin.clear(); return; }
+      // No crew yet: keep it for after they join one, and only say so once.
+      if (!crews.length) {
+        if (_shareInboxNoCrewAt !== item.at) showToast('Join or start a crew to share that into a Huddle');
+        _shareInboxNoCrewAt = item.at;
+        return;
+      }
+      await plugin.clear();
+      _shareInboxText = text;
+      openShareInboxPicker();
+    } catch (e) {
+      console.error('share inbox: read failed', e);
+    } finally {
+      _shareInboxBusy = false;
+    }
+  }
+
+  function openShareInboxPicker() {
+    const modal = document.getElementById('share-inbox-modal');
+    if (!modal) return;
+    const preview = _shareInboxText.length > 140 ? _shareInboxText.slice(0, 140) + '…' : _shareInboxText;
+    const items = crews.map(c => {
+      const raves = deriveCrewFestivalRooms(c).slice(0, 3).map(entry => `
+        <div class="crew-pick-item" style="margin-left:22px" onclick="pickShareInboxTarget('${escJsAttr(c.id)}', '${escJsAttr(entry.festival.id)}')">
+          <div class="crew-pick-info">
+            <div class="crew-pick-name">🎪 ${escHtml(entry.festival.name)} Huddle</div>
+          </div>
+        </div>`).join('');
+      return `
+        <div class="crew-pick-item" onclick="pickShareInboxTarget('${escJsAttr(c.id)}')">
+          <div class="crew-pick-dot" style="background:${safeColor(c.color)}"></div>
+          <div class="crew-pick-info">
+            <div class="crew-pick-name">${escHtml(c.name)}</div>
+            <div class="crew-pick-count">Main Huddle</div>
+          </div>
+        </div>${raves}`;
+    }).join('');
+    modal.innerHTML = `
+      <div style="font-size:2.8rem;text-align:center;margin-bottom:10px;filter:drop-shadow(0 0 14px rgba(var(--neon-pink-rgb),0.7))">🕊️</div>
+      <div class="modal-title" style="text-align:center;margin-bottom:6px">Share to a Huddle</div>
+      <p style="text-align:center;font-size:0.83rem;color:var(--muted);margin:0 0 2px;line-height:1.5;word-break:break-word">${escHtml(preview)}</p>
+      <div class="crew-pick-list">${items}</div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeShareInboxPicker()">Not now</button>
+      </div>`;
+    document.getElementById('share-inbox-overlay').classList.add('open');
+  }
+
+  function closeShareInboxPicker() {
+    document.getElementById('share-inbox-overlay')?.classList.remove('open');
+    _shareInboxText = '';
+  }
+
+  // Opens the picked room with the share waiting in the composer — they add a
+  // note (or not) and hit send themselves.
+  async function pickShareInboxTarget(crewId, festivalId) {
+    const text = _shareInboxText;
+    closeShareInboxPicker();
+    if (!text || !getCrew(crewId)) return;
+    switchTab('crews');
+    await openDetail(crewId);
+    await openHuddle(crewId, festivalId ? { festivalId } : {});
+    const input = document.getElementById('huddle-text-input');
+    if (!input) return;
+    input.value = input.value.trim() ? `${input.value.trim()}\n${text}` : text;
+    autoGrowHuddleTextarea(input);
+    input.focus();
+    input.setSelectionRange(0, 0);
+  }
+
+  if (IS_NATIVE_APP) {
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) checkShareInbox(); });
   }
 
   // ===== NATIVE PUSH (iOS app) =====
@@ -14474,6 +14593,9 @@
     const deepLink = _pendingHuddleDeepLink;
     _pendingHuddleDeepLink = null;
     if (deepLink) await openHuddleDeepLink(deepLink);
+    // Something shared to RaveFAM from the iOS share sheet while we were closed.
+    _shareInboxReady = true;
+    if (!deepLink) checkShareInbox();
     initRealms();
     // Launch first-time setup (genre/handle wizard) unless a claim/join is still
     // pending — in that case the claim preview is showing and setup runs after

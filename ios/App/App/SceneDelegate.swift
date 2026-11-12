@@ -37,6 +37,9 @@ class RaveBridgeViewController: CAPBridgeViewController {
 
     override func capacitorDidLoad() {
         super.capacitorDidLoad()
+        // Local plugin (not an npm package): links shared to RaveFAM from the
+        // iOS share sheet. See ShareInboxPlugin.swift.
+        bridge?.registerPluginInstance(ShareInboxPlugin())
         urlObservation = webView?.observe(\.url, options: [.initial, .new]) { webView, _ in
             let path = webView.url?.path ?? "/app"
             webView.allowsBackForwardNavigationGestures = !(path == "/app" || path.hasPrefix("/app.html") || path.hasPrefix("/app/"))
