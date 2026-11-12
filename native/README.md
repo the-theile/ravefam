@@ -6,6 +6,7 @@ only native changes (plugins, permissions, icons) need a new build.
 
 - `native/www/` — offline fallback page bundled into the app (shown when the site can't load).
 - `ios/` — Xcode project (Swift Package Manager, no CocoaPods). Bundle ID `com.myravefam.app`.
+  `ios/App/ShareExtension` is the share-sheet extension (see "Share to RaveFAM" below).
 - `.well-known/apple-app-site-association` — Universal Links (`/app`, `/app.html`, `/rave/*`).
   Team ID: `49RV4NFK6S`.
 
@@ -23,6 +24,14 @@ Set these Supabase Edge Function secrets (Dashboard -> Edge Functions -> Secrets
 - `APNS_TEAM_ID`: `49RV4NFK6S`
 
 Without them, web push keeps working and iOS pushes are skipped.
+
+## Share to RaveFAM (share sheet)
+`ShareExtension` (iOS share sheet → RaveFAM) accepts one web link and/or text, writes
+`share-inbox.json` (`{ url?, text?, at }`, newest share wins) to the App Group container and shows
+a "Saved" card. `App/ShareInboxPlugin.swift` (registered in `SceneDelegate.swift`) exposes it as
+`Capacitor.Plugins.ShareInbox.read()` / `.clear()`. `app.html` checks on boot and whenever the app
+comes back to the foreground, asks which Huddle, and opens that room with the share in the composer.
+Instagram, TikTok and Facebook share a post link, not the media.
 
 ## Builds
 Run **Actions -> iOS TestFlight -> Run workflow** on `main`.
@@ -59,6 +68,13 @@ Each native PR adds a line here; **After release** holds web changes that wait o
   (2.1(a), iPad Air 11" on iPadOS 27: "unresponsive when tapping anywhere")
 - Privacy manifest declares Search History (Huddle GIF search terms sent to GIPHY, not linked);
   add the same to App Store Connect's App Privacy answers
+- Share to RaveFAM from the iOS share sheet: new `ShareExtension` target (`ios/App/ShareExtension`,
+  bundle ID `com.myravefam.app.ShareExtension`) saves a shared link/text to the App Group
+  `group.com.myravefam.app`; the local `ShareInboxPlugin` hands it to the web side, which asks which
+  Huddle to drop it in (`checkShareInbox` in `app.html`, since 2.36.0; no-ops on older builds)
+  - Both App IDs need the App Groups capability with `group.com.myravefam.app`. Automatic signing in the
+    TestFlight workflow should register them; if the archive fails on provisioning, add the group under
+    Certificates, IDs & Profiles → Identifiers → App Groups and tick it on both App IDs, then re-run
 
 **After release**
 - Re-add `/lineup-explorer` and `/lineup-explorer/*` to `.well-known/apple-app-site-association`
