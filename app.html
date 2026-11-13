@@ -4702,6 +4702,10 @@
     transition: opacity 0.2s, transform 0.2s;
   }
   .huddle-screen.open { opacity: 1; pointer-events: all; transform: none; }
+  /* iOS: 100dvh ignores the keyboard, so syncHuddleViewport() sizes the
+     screen to the visual viewport instead and the composer rides above it. */
+  .huddle-screen.vv-sized .huddle-screen-inner { height: 100%; }
+  .huddle-screen.kb-open .hd-composer { padding-bottom: 11px; }
   .huddle-screen-inner {
     position: relative; /* anchors the search overlay (.hd-search-panel) */
     display: flex; flex-direction: column;
@@ -11232,7 +11236,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.38.4';
+  const APP_VERSION = '2.38.5';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -23203,14 +23207,40 @@
     if (stream) stream.addEventListener('scroll', handleHuddleStreamScroll);
     const input = document.getElementById('huddle-text-input');
     if (input) setTimeout(() => input.focus(), 220);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', syncHuddleViewport);
+      window.visualViewport.addEventListener('scroll', syncHuddleViewport);
+      syncHuddleViewport();
+    }
     _huddleTypingSweeper = setInterval(sweepHuddleTyping, 1500);
     updateCrewPresence();
+  }
+
+  // iOS keeps the layout viewport full-height when the keyboard opens and
+  // just pans the visible part, so a fixed 100dvh screen leaves the composer
+  // under the keyboard. Pin the screen to the visual viewport instead, and
+  // keep the stream on the latest message if that's where you were.
+  function syncHuddleViewport() {
+    const screen = document.getElementById('huddle-screen');
+    const vv = window.visualViewport;
+    if (!screen || !vv) return;
+    const wasAtBottom = huddleAtBottom();
+    screen.classList.add('vv-sized');
+    screen.style.top = vv.offsetTop + 'px';
+    screen.style.bottom = 'auto';
+    screen.style.height = vv.height + 'px';
+    screen.classList.toggle('kb-open', window.innerHeight - vv.height > 120);
+    if (wasAtBottom) huddleScrollMessagesToBottom(false);
   }
 
   function closeHuddleScreen() {
     // Removed synchronously rather than faded out, so nothing below reads a
     // merely transparent Huddle screen as still visible.
     document.getElementById('huddle-screen')?.remove();
+    if (window.visualViewport) {
+      window.visualViewport.removeEventListener('resize', syncHuddleViewport);
+      window.visualViewport.removeEventListener('scroll', syncHuddleViewport);
+    }
     _huddleScreenOpen = false;
     document.body.style.overflow = '';
     if (_huddleTypingSweeper) { clearInterval(_huddleTypingSweeper); _huddleTypingSweeper = null; }
