@@ -6,7 +6,9 @@ import SwiftUI
 // app.html); the widget reads it, and refreshes it from
 // myravefam.com/countdown/<token>?json=1 when the app hasn't been opened.
 // Keep the file format in step with both.
-//   { "token": "<personal countdown token>"?, "savedAt": ms, "crews": [Crew] }
+//   { "token": "<personal countdown token>"?, "savedAt": ms, "crews": [Crew], "raves": [Rave]? }
+// `crews`: each crew's next raves (2+ members going). `raves`: one row per
+// rave for the large widget and the "Soonest" default (since 2.39.1).
 enum CountdownStore {
     static let appGroup = "group.com.myravefam.app"
     static let fileName = "countdown.json"
@@ -27,9 +29,9 @@ enum CountdownStore {
         try? data.write(to: url, options: .atomic)
     }
 
-    // Fresh crews from the countdown page's JSON mode; nil on any failure
+    // Fresh payload from the countdown page's JSON mode; nil on any failure
     // (offline, revoked link, server trouble), so the cached file stays.
-    static func fetch(token: String) async -> [CountdownCrew]? {
+    static func fetch(token: String) async -> CountdownPayload? {
         guard let url = URL(string: "\(site)/countdown/\(token)?json=1") else { return nil }
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -39,7 +41,7 @@ enum CountdownStore {
               let payload = try? JSONDecoder().decode(CountdownPayload.self, from: data),
               payload.ok
         else { return nil }
-        return payload.crews ?? []
+        return payload
     }
 }
 
@@ -47,11 +49,58 @@ struct CountdownFile: Codable {
     var token: String?
     var savedAt: Double?
     var crews: [CountdownCrew]
+    var raves: [CountdownRave]?
 }
 
 struct CountdownPayload: Decodable {
     let ok: Bool
     let crews: [CountdownCrew]?
+    let raves: [CountdownRave]?
+}
+
+// One rave in a raver's "Next up" list (raves they RSVP'd to): `others` =
+// crewmates going (raver excluded), `crews` = crews with a crewmate going.
+// `me` is always true from the server since 2.39.1; rows with me == false
+// (an older payload) are skipped by the widget.
+struct CountdownRave: Codable, Hashable {
+    let name: String
+    let date: String
+    let days: Int?
+    let location: String?
+    let me: Bool?
+    let others: Int?
+    let crews: [CountdownRaveCrew]?
+
+    var fest: CountdownFest {
+        CountdownFest(name: name, date: date, days: days, location: location,
+                      going: (others ?? 0) + 1)
+    }
+
+    private var crewNames: String {
+        let list = crews ?? []
+        let shown = list.prefix(2).map { $0.name }.joined(separator: ", ")
+        return list.count > 2 ? "\(shown) +\(list.count - 2)" : shown
+    }
+
+    // Mirrors raveCrews() in api/countdown.js.
+    var subline: String {
+        let n = others ?? 0
+        if n == 0 { return "Just you so far" }
+        return crewNames.isEmpty ? "You + \(n)" : "You + \(n) · \(crewNames)"
+    }
+
+    // The crew shape the small / medium views already draw.
+    var asCrew: CountdownCrew {
+        let lead = crews?.first
+        let tag = (others ?? 0) == 0 ? "Your next rave" : crewNames
+        return CountdownCrew(id: lead?.id ?? "", name: tag, color: lead?.color, fests: [fest])
+    }
+}
+
+struct CountdownRaveCrew: Codable, Hashable {
+    let id: String
+    let name: String
+    let color: String?
 }
 
 struct CountdownCrew: Codable, Hashable {
@@ -67,6 +116,33 @@ struct CountdownFest: Codable, Hashable {
     let days: Int?
     let location: String?
     let going: Int?
+
+    // "Sat, Nov 14" or "Thu, Oct 29–Nov 1" for multi-day raves.
+    func whenLine(_ calendar: Calendar = .current) -> String {
+        guard let start = startDate(calendar) else { return "" }
+        let fmt = DateFormatter()
+        fmt.calendar = calendar
+        fmt.dateFormat = "EEE, MMM d"
+        var line = fmt.string(from: start)
+        let length = max(1, days ?? 1)
+        if length > 1, let end = calendar.date(byAdding: .day, value: length - 1, to: start) {
+            fmt.dateFormat = calendar.isDate(start, equalTo: end, toGranularity: .month) ? "d" : "MMM d"
+            line += "–" + fmt.string(from: end)
+        }
+        return line
+    }
+
+    // "Miami, Florida, United States" -> "Miami, Florida".
+    var shortLocation: String? {
+        guard let location = location, !location.isEmpty else { return nil }
+        return location.split(separator: ",").prefix(2)
+            .map { $0.trimmingCharacters(in: .whitespaces) }.joined(separator: ", ")
+    }
+
+    // Date + place on one line for the medium widget.
+    var detailLine: String {
+        [whenLine(), shortLocation ?? ""].filter { !$0.isEmpty }.joined(separator: " · ")
+    }
 
     func startDate(_ calendar: Calendar) -> Date? {
         let parts = date.split(separator: "-").compactMap { Int($0) }
@@ -108,10 +184,20 @@ struct CountdownState {
 
     var unit: String {
         switch phase {
-        case .countdown(let days): return days == 1 ? "DAY · PACK TONIGHT" : "DAYS"
+        case .countdown(let days): return days == 1 ? "TOMORROW" : "DAYS"
         case .today: return "IT'S ON"
-        case .live(_, let of): return "OF \(of) · LIVE NOW"
+        case .live(_, let of): return "OF \(of) · LIVE"
         case .empty: return "NOTHING LOCKED IN"
+        }
+    }
+
+    // Extra line where there's room (medium): the hype for the last stretch.
+    var hype: String? {
+        switch phase {
+        case .countdown(let days) where days == 1: return "Pack tonight 🎒"
+        case .today: return "It's on today 🎉"
+        case .live: return "Live now 🔊"
+        default: return nil
         }
     }
 
@@ -139,6 +225,7 @@ extension CountdownCrew {
     var accent: Color { Color(hex: color) }
 
     var appURL: URL? {
+        if id.isEmpty { return URL(string: "\(CountdownStore.site)/app") }
         var parts = URLComponents(string: "\(CountdownStore.site)/app")
         parts?.queryItems = [URLQueryItem(name: "crew", value: id)]
         return parts?.url
