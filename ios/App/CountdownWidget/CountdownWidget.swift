@@ -63,16 +63,15 @@ struct CountdownEntry: TimelineEntry {
     let pinnedID: String?      // nil = soonest across crews
     let hasData: Bool          // false until the app has synced once
 
-    // Merged rows that haven't ended yet (by local date), soonest first.
+    // Your raves that haven't ended yet (by local date), soonest first.
     var upcomingRaves: [CountdownRave] {
-        raves.filter { $0.asCrew.state(at: date).phase != .empty }
+        raves.filter { $0.me != false && $0.asCrew.state(at: date).phase != .empty }
     }
 
     var selected: CountdownCrew? {
         if let id = pinnedID, let crew = crews.first(where: { $0.id == id }) { return crew }
-        // Default: your own next rave, else the next crew-shared one.
-        let upcoming = upcomingRaves
-        if let rave = upcoming.first(where: { $0.me == true }) ?? upcoming.first { return rave.asCrew }
+        // Default: your own next rave.
+        if let rave = upcomingRaves.first { return rave.asCrew }
         return sortedCrews(crews, at: date).first
     }
 
@@ -320,7 +319,7 @@ struct LargeView: View {
         if !entry.hasData || (entry.crews.isEmpty && entry.raves.isEmpty) {
             NoDataView()
         } else if entry.pinnedID == nil && !entry.upcomingRaves.isEmpty {
-            // One row per rave: who from your crews is going.
+            // One row per rave you're going to, with who from your crews is coming.
             let raves = Array(entry.upcomingRaves.prefix(5))
             VStack(alignment: .leading, spacing: 8) {
                 Text("Next up 🔊").font(heavy(22)).foregroundStyle(.white)

@@ -76,27 +76,25 @@ function sortCrews(crews, now) {
   return [...(crews || [])].sort((a, b) => rank(a) - rank(b) || String(a.name).localeCompare(String(b.name)));
 }
 
-// Personal links carry `raves` (one row per rave, see get_countdown): turn
-// each into the crew shape countdownState/clientRender already use, with the
-// subline built in. Self-contained: shipped to the browser via toString().
-//   me + crewmates  -> "You + 3 · AKPsi, Florida FAM +1"
-//   only me         -> "Just you so far"
-//   only crewmates  -> "4 from Busch Garden Bros"
+// Personal links carry `raves`: one row per rave you RSVP'd to (see
+// get_countdown). Turn each into the crew shape countdownState/clientRender
+// already use, with the subline built in. Self-contained: shipped to the
+// browser via toString().
+//   you + crewmates -> "You + 3 · AKPsi, Florida FAM +1"
+//   just you        -> "Just you so far"
 function raveCrews(raves) {
-  return (raves || []).map((r) => {
+  return (raves || []).filter((r) => r.me !== false).map((r) => {
     const crews = r.crews || [];
     const lead = crews[0] || {};
     const names = crews.slice(0, 2).map((c) => c.name).join(', ') + (crews.length > 2 ? ` +${crews.length - 2}` : '');
     const others = r.others || 0;
-    const sub = r.me
-      ? (others ? `You + ${others}${names ? ' · ' + names : ''}` : 'Just you so far')
-      : `${others} from ${names}`;
+    const sub = others ? `You + ${others}${names ? ' · ' + names : ''}` : 'Just you so far';
     return {
       id: lead.id || '',
-      name: r.me && !others ? 'Your next rave' : names,
+      name: others ? names : 'Your next rave',
       color: lead.color,
       sub,
-      fests: [{ name: r.name, date: r.date, days: r.days, location: r.location, going: others + (r.me ? 1 : 0) }],
+      fests: [{ name: r.name, date: r.date, days: r.days, location: r.location, going: others + 1 }],
     };
   });
 }

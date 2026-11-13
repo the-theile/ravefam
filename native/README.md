@@ -87,8 +87,8 @@ Each native PR adds a line here; **After release** holds web changes that wait o
 - Rave Countdown widget: new `CountdownWidget` target (`ios/App/CountdownWidget`, bundle ID
   `com.myravefam.app.CountdownWidget`, iOS 17+; the app itself stays on iOS 15). Home small / medium /
   large, lock screen circular / rectangular / inline, StandBy; long-press → Edit Widget → Crew pins a crew
-  (a crew's next rave needs 2+ members going). Default and large size use the merged `raves` list
-  (one row per rave: "You + 3 · AKPsi, …", "Just you so far", "4 from …"; since 2.39.1).
+  (a crew's next rave needs 2+ members going). Default and large size use `raves`: your RSVP'd raves,
+  one row each ("You + 3 · AKPsi, …" or "Just you so far"; since 2.39.1).
   The local `CountdownWidgetPlugin` writes `countdown.json` to the App Group (`syncCountdownWidget` in
   `app.html`, since 2.39.0; no-ops on older builds); the widget refreshes from
   `/countdown/<token>?json=1` every few hours and rolls the count over at local midnight

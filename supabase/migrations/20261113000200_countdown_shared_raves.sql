@@ -7,7 +7,8 @@
 --      a crew link doesn't know its viewer, so it's a member count, not "you".
 --   2. Personal links get `raves`: one row per rave (not per crew), soonest
 --      first, max 8: raves the owner is going to, plus raves 2+ of their
---      crewmates are going to. Each row has `me` (owner going), `others`
+--      crewmates are going to (narrowed to the owner's raves only by
+--      20261113000300_countdown_raves_mine_only). Each row has `me` (owner going), `others`
 --      (visible crewmates going, owner excluded) and `crews` (crews with a
 --      crewmate going, most going first). `crews` stays in the payload so
 --      older widget builds keep working.

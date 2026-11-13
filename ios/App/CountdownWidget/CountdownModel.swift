@@ -58,8 +58,10 @@ struct CountdownPayload: Decodable {
     let raves: [CountdownRave]?
 }
 
-// One rave in a raver's merged list: `me` = the raver is going, `others` =
+// One rave in a raver's "Next up" list (raves they RSVP'd to): `others` =
 // crewmates going (raver excluded), `crews` = crews with a crewmate going.
+// `me` is always true from the server since 2.39.1; rows with me == false
+// (an older payload) are skipped by the widget.
 struct CountdownRave: Codable, Hashable {
     let name: String
     let date: String
@@ -71,7 +73,7 @@ struct CountdownRave: Codable, Hashable {
 
     var fest: CountdownFest {
         CountdownFest(name: name, date: date, days: days, location: location,
-                      going: (others ?? 0) + (me == true ? 1 : 0))
+                      going: (others ?? 0) + 1)
     }
 
     private var crewNames: String {
@@ -83,17 +85,14 @@ struct CountdownRave: Codable, Hashable {
     // Mirrors raveCrews() in api/countdown.js.
     var subline: String {
         let n = others ?? 0
-        if me == true {
-            if n == 0 { return "Just you so far" }
-            return crewNames.isEmpty ? "You + \(n)" : "You + \(n) · \(crewNames)"
-        }
-        return "\(n) from \(crewNames)"
+        if n == 0 { return "Just you so far" }
+        return crewNames.isEmpty ? "You + \(n)" : "You + \(n) · \(crewNames)"
     }
 
     // The crew shape the small / medium views already draw.
     var asCrew: CountdownCrew {
         let lead = crews?.first
-        let tag = (me == true && (others ?? 0) == 0) ? "Your next rave" : crewNames
+        let tag = (others ?? 0) == 0 ? "Your next rave" : crewNames
         return CountdownCrew(id: lead?.id ?? "", name: tag, color: lead?.color, fests: [fest])
     }
 }

@@ -69,7 +69,7 @@ test.describe('countdown day maths (countdownState)', () => {
     expect(state(crew([{ name: 'x', date: null }]), at(2026, 11, 13)).state).toBe('empty');
   });
 
-  test('merged raves: sublines for you + crewmates, just you, and crewmates only', () => {
+  test('merged raves: sublines for you + crewmates and just you; non-RSVP rows dropped', () => {
     const { _raveCrews: raveCrews } = require('../api/countdown.js');
     const C = (id, name) => ({ id, name, color: '#00f5ff' });
     const [both, solo, theirs] = raveCrews([
@@ -77,13 +77,13 @@ test.describe('countdown day maths (countdownState)', () => {
       { name: '710 Dab Day', date: '2026-11-21', days: 1, me: true, others: 0, crews: [] },
       { name: 'EDC Orlando', date: '2026-11-14', days: 3, me: false, others: 4, crews: [C('d', 'Busch Garden Bros')] },
     ]);
+    expect(theirs).toBeUndefined();
     expect(both.sub).toBe('You + 1 · AKPsi, Florida FAM +1');
     expect(both.id).toBe('a');
     expect(both.fests[0].going).toBe(2);
     expect(solo.sub).toBe('Just you so far');
     expect(solo.name).toBe('Your next rave');
     expect(solo.id).toBe('');
-    expect(theirs.sub).toBe('4 from Busch Garden Bros');
   });
 
   test('all-crews list sorts soonest first, nothing-booked last', () => {
