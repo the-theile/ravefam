@@ -11292,7 +11292,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.39.1';
+  const APP_VERSION = '2.40.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -44694,6 +44694,24 @@
         </div>` : `
         <div class="fest-empty">No ${escHtml(filter)} artists caught yet</div>`;
 
+    // Top 5 sits alongside the Most Seen hero (not instead of it); follows the genre filter.
+    const top5 = seen.slice(0, 5);
+    const top5Html = top5.length > 1 ? `
+      <div class="stats-section-card">
+        <div class="stats-section-title">🔥 Top 5 Most Seen</div>
+        <div class="rlog-list">
+          ${top5.map(({ artist, count }, i) => `
+            <div class="rlog-item" style="cursor:pointer;" role="button" tabindex="0" aria-label="Edit which raves you caught ${escHtml(artist.name)} at" onclick="openArtistSightingsModal('${escJsAttr(artist.id)}')">
+              <span style="font-family:'Orbitron',sans-serif;font-weight:900;font-size:0.9rem;width:22px;text-align:center;color:${['var(--neon-yellow)', '#C0C0C0', '#CD7F32'][i] || 'var(--muted)'};">${i + 1}</span>
+              <div class="rlog-item-main">
+                <div class="rlog-item-name">${escHtml(artist.name)}</div>
+                <div class="rlog-item-sub">${(artist.genres || []).map(titleCaseGenre).join(', ')}</div>
+              </div>
+              <span style="font-family:'Orbitron',sans-serif;font-weight:700;font-size:0.78rem;color:var(--neon-purple);">${count}x</span>
+            </div>`).join('')}
+        </div>
+      </div>` : '';
+
     page.innerHTML = `
       <button class="profile-back cyan" onclick="backToStats()">← Rave Life</button>
       <div class="section-header" style="margin-bottom:14px;">${titleHtml}</div>
@@ -44702,6 +44720,7 @@
         <div class="stats-hero-card"><div class="stats-hero-number">${seen.length}</div><div class="stats-hero-label">${filter ? escHtml(filter) + ' Artists' : 'Distinct Artists'}</div></div>
         ${seen.length ? `<div class="stats-hero-card"><div class="stats-hero-number" style="font-size:1.3rem;">${escHtml(seen[0].artist.name)}</div><div class="stats-hero-label">Most Seen (${seen[0].count}x)${(() => { const tied = seen.filter(x => x.count === seen[0].count).length - 1; return tied > 0 ? ` · +${tied} tied` : ''; })()}</div></div>` : ''}
       </div>
+      ${top5Html}
       ${_statsRange === 'all' ? milestoneBarHTML('🎤', 'Artists Seen', allSeen.length, [10, 25, 50, 100, 250, 500], 'artists') : ''}
       ${genreRows.length ? `
       <div class="stats-section-card">
