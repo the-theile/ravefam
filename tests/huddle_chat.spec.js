@@ -10,6 +10,9 @@ const { bootAuthedApp, collectPageErrors, seedData, TEST_UID } = require('./help
 const now = Date.now();
 const minsAgo = (m) => new Date(now - m * 60000).toISOString();
 const daysAgo = (d, m = 0) => new Date(now - d * 86400000 - m * 60000).toISOString();
+// Yesterday at 12:MM local time. "1 day + N minutes ago" crossed midnight
+// when the suite ran in the small hours, splitting one sender's group.
+const yesterdayAt = (m) => { const d = new Date(now); d.setDate(d.getDate() - 1); d.setHours(12, m, 0, 0); return d.toISOString(); };
 
 function seedWithChat(over = {}) {
   const data = seedData();
@@ -17,9 +20,9 @@ function seedWithChat(over = {}) {
     { id: 'room-main', crew_id: 'c1', room_key: 'main', kind: 'main', name: 'Main Huddle', festival_id: null, created_by: TEST_UID, created_at: '2024-01-01T00:00:00Z' },
   ];
   data.huddle_messages = [
-    { id: 'm1', room_id: 'room-main', crew_id: 'c1', sender_id: 'kai-uid', kind: 'text', body: 'who is driving tomorrow', reactions: {}, created_at: daysAgo(1, 90), deleted_at: null, mentions: [] },
-    { id: 'm2', room_id: 'room-main', crew_id: 'c1', sender_id: 'kai-uid', kind: 'text', body: 'i can take four', reactions: {}, created_at: daysAgo(1, 89), deleted_at: null, mentions: [] },
-    { id: 'm3', room_id: 'room-main', crew_id: 'c1', sender_id: TEST_UID, kind: 'text', body: 'riding with you', reactions: {}, created_at: daysAgo(1, 87), deleted_at: null, mentions: [] },
+    { id: 'm1', room_id: 'room-main', crew_id: 'c1', sender_id: 'kai-uid', kind: 'text', body: 'who is driving tomorrow', reactions: {}, created_at: yesterdayAt(0), deleted_at: null, mentions: [] },
+    { id: 'm2', room_id: 'room-main', crew_id: 'c1', sender_id: 'kai-uid', kind: 'text', body: 'i can take four', reactions: {}, created_at: yesterdayAt(1), deleted_at: null, mentions: [] },
+    { id: 'm3', room_id: 'room-main', crew_id: 'c1', sender_id: TEST_UID, kind: 'text', body: 'riding with you', reactions: {}, created_at: yesterdayAt(3), deleted_at: null, mentions: [] },
     { id: 'm4', room_id: 'room-main', crew_id: 'c1', sender_id: 'kai-uid', kind: 'text', body: 'do not be late', reactions: {}, created_at: minsAgo(5), deleted_at: null, mentions: [] },
   ];
   data.huddle_room_reads = [{ room_id: 'room-main', user_id: TEST_UID, last_read_at: minsAgo(30) }];
