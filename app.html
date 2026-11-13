@@ -4802,6 +4802,9 @@
     cursor: pointer; text-align: left; width: 100%; border-left: none; border-right: none; border-top: none;
   }
   .hd-pinned-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hd-pinned-gif { flex-shrink: 0; height: 40px; max-width: 72px; border-radius: 6px; overflow: hidden; display: inline-flex; background: rgba(var(--white-rgb),0.05); }
+  .hd-pinned-gif img, .hd-pinned-gif video { height: 100%; width: auto; max-width: 72px; object-fit: cover; display: block; pointer-events: none; }
+  .hd-pinned-text .hd-gif-via { position: static; background: none; padding: 0; margin-left: 6px; font-size: 0.68rem; color: var(--muted); }
 
   .huddle-beacon-banner {
     flex-shrink: 0;
@@ -11228,7 +11231,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.38.1';
+  const APP_VERSION = '2.38.2';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -23369,9 +23372,18 @@
     const pinnedSlot = document.getElementById('hd-pinned-slot');
     if (pinnedSlot) {
       const pinned = huddleMessages.find(m => m.room_id === _huddleActiveRoomId && m.pinned_at);
+      // GIF pins show a small live thumb instead of the bare "🎞️ GIF" label
+      const pinMeta = pinned?.media_meta || {};
+      const pinGif = pinned?.kind === 'gif' && HUDDLE_GIF_HOST.test(pinned.media_url || '');
+      const pinGifThumb = pinGif
+        ? `<span class="hd-pinned-gif">${huddleGifMediaHTML(pinned.media_url, HUDDLE_GIF_HOST.test(pinMeta.still || '') ? pinMeta.still : '', pinMeta.title || 'GIF', !huddleGifReducedMotion())}</span>`
+        : '';
+      const pinText = pinGif
+        ? `${escHtml(pinned.body || pinMeta.title || 'GIF')}${pinMeta.src === 'giphy' ? `<span class="hd-gif-via">via${HUDDLE_GIPHY_MARK}GIPHY</span>` : ''}`
+        : escHtml(pinned?.body || huddleMessageSnippetText(pinned));
       pinnedSlot.innerHTML = pinned
         ? `<button type="button" class="hd-pinned" onclick="scrollToHuddleMessage('${escJsAttr(pinned.id)}')">
-             <span>📌</span><span class="hd-pinned-text">${escHtml(pinned.body || huddleMessageSnippetText(pinned))}</span>
+             <span>📌</span>${pinGifThumb}<span class="hd-pinned-text">${pinText}</span>
            </button>` : '';
     }
 
