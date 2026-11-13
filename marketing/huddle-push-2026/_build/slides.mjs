@@ -80,9 +80,9 @@ function frame(s, idx, count) {
   const dots = Array.from({ length: count }, (_, i) => `<i class="${i === idx ? 'on' : ''}"></i>`).join('');
   return `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}</style></head><body>
 <div class="bg"></div><div class="rings"></div>
-<div class="top"><div class="brand"><img src="../brand-mark.svg" alt=""><span>Rave<span class="g">FAM</span></span></div><div class="tag">COMING TO iOS</div></div>
+<div class="top"><div class="brand"><img src="../brand-mark.svg" alt=""><span>Rave<span class="g">FAM</span></span></div><div class="tag">NOW ON iOS</div></div>
 ${s.body}
-<div class="foot"><span>Push notifications · <b>RaveFAM iOS app</b> · link in bio</span><span class="dots">${dots}</span></div>
+<div class="foot"><span>Now on the <b>App Store</b> · link in bio</span><span class="dots">${dots}</span></div>
 </body></html>`;
 }
 const phone = (shot, top, h, pos = 'top') => `<div class="phone" style="top:${top}px"><div class="screen" style="height:${h}px"><img src="../shots/${shot}" style="object-position:${pos}"></div></div>`;
@@ -116,9 +116,9 @@ slide('slide4', `<div class="copy"><div class="eyebrow">📍 Someone found the s
   ${phone('huddle-spot.png', 450, 740)}`);
 
 // 5 · CTA
-slide('slide5', `<div class="copy" style="top:180px"><div class="eyebrow">Push notifications · RaveFAM iOS</div>
+slide('slide5', `<div class="copy" style="top:180px"><div class="eyebrow">Out now · RaveFAM for iPhone</div>
   <h1 style="font-size:104px">Nobody gets<br>left behind.</h1>
-  <div class="sub">Crew pings straight to your lock screen. <b>Coming to the RaveFAM iOS app.</b></div>
+  <div class="sub">Crew pings straight to your lock screen. <b>Get the RaveFAM iOS app, out now.</b></div>
   <div class="bubbles">
     <div class="bub" style="--c:#39FF14"><small>JESS</small>did anyone tell Marcus about the pre-fest spot</div>
     <div class="bub" style="--c:#00F5FF"><small>KAI</small>he never checks the group chat 💀</div>

@@ -1,6 +1,6 @@
-# Huddle push notifications: "coming to iOS" teaser
+# Huddle push notifications: RaveFAM iOS app is out
 
-One feed carousel teasing push notifications in the RaveFAM iOS app.
+One feed carousel announcing the RaveFAM iOS app (now on the App Store) through its Huddle push notifications.
 
 - **Format:** 4:5 feed carousel, 1080×1350 PNG: `slide1.png` … `slide5.png`
 - **Screens:** real app screens captured with demo data (`_build/capture.spec.js`): demo crew "Bass Syndicate" (Sam, Kai, Jess) planning Eternal NYE. Slide 1's notification cards use the real push titles from `send-beacon-push` (📣 Beacon from {crew}) and `send-mention-push` (💬 {name} mentioned you in {crew}).
@@ -10,10 +10,10 @@ One feed carousel teasing push notifications in the RaveFAM iOS app.
 
 > Huddle pings hit different when the whole crew is on the same page 💖
 > New plan drop? Poll results? Someone found the pre-fest spot? You'll know first.
-> Push notifications are coming to the RaveFAM iOS app, so nobody gets left behind.
+> The RaveFAM iOS app is out now with push notifications, so nobody gets left behind.
 > Link in bio, and tag the friend who never checks the group chat 👇
 
-**Hashtags:** #RaveFAM #RaveFam #PLUR #RaveCrew #FestivalFriends #EternalNYE #FloridaRaves #OrlandoRaves #FestivalSeason #RaveSquad #GroupChat
+**Hashtags:** #RaveFAM #RaveFam #NowOnTheAppStore #PLUR #RaveCrew #FestivalFriends #EternalNYE #FloridaRaves #OrlandoRaves #FestivalSeason #RaveSquad #GroupChat
 
 ## Slides
 1. **Hook:** "Huddle pings hit different 💖" over a lock screen with a Beacon and an @mention push.
