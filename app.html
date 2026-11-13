@@ -4802,8 +4802,10 @@
     cursor: pointer; text-align: left; width: 100%; border-left: none; border-right: none; border-top: none;
   }
   .hd-pinned-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .hd-pinned-gif { flex-shrink: 0; height: 40px; max-width: 72px; border-radius: 6px; overflow: hidden; display: inline-flex; background: rgba(var(--white-rgb),0.05); }
-  .hd-pinned-gif img, .hd-pinned-gif video { height: 100%; width: auto; max-width: 72px; object-fit: cover; display: block; pointer-events: none; }
+  /* GIF / photo thumbs in one-line previews (pin banner, crew card, Huddle dock) */
+  .hd-media-thumb { display: inline-flex; vertical-align: middle; height: 22px; max-width: 40px; margin: -3px 6px -3px 0; border-radius: 5px; overflow: hidden; background: rgba(var(--white-rgb),0.05); }
+  .hd-media-thumb img, .hd-media-thumb video { height: 100%; width: auto; max-width: inherit; object-fit: cover; display: block; pointer-events: none; }
+  .hd-media-thumb.hd-pinned-media { flex-shrink: 0; height: 40px; max-width: 72px; margin: 0; border-radius: 6px; }
   .hd-pinned-text .hd-gif-via { position: static; background: none; padding: 0; margin-left: 6px; font-size: 0.68rem; color: var(--muted); }
 
   .huddle-beacon-banner {
@@ -11231,7 +11233,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.38.2';
+  const APP_VERSION = '2.38.3';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -14859,7 +14861,7 @@
     const entry = _huddleActivityCache[row.crew_id];
     if (entry) {
       entry.lastMessageAt = row.created_at;
-      entry.lastMessage = { sender_id: row.sender_id, kind: row.kind, body: row.body };
+      entry.lastMessage = { sender_id: row.sender_id, kind: row.kind, body: row.body, media_url: row.media_url, media_meta: row.media_meta };
       if (row.kind === 'beacon' && row.expires_at && row.expires_at > new Date().toISOString()) entry.hasBeacon = true;
     }
     renderCrews();
@@ -19474,8 +19476,9 @@
 
     const last = _huddleActivityCache && _huddleActivityCache[crew.id]?.lastMessage;
     const lastSnippet = last ? huddleMessageSnippetText(last) : '';
+    const lastThumb = last ? huddleMediaThumbHTML(last, false) : '';
     const lastHTML = lastSnippet
-      ? `<button type="button" class="crew-row-last" onclick="openDetail('${jsId}', {tab:'huddle'})"><b>${escHtml(huddleSenderName(last.sender_id))}:</b> ${escHtml(lastSnippet)}</button>`
+      ? `<button type="button" class="crew-row-last" onclick="openDetail('${jsId}', {tab:'huddle'})"><b>${escHtml(huddleSenderName(last.sender_id))}:</b> ${lastThumb}${escHtml(lastThumb ? huddleMediaThumbLabel(last) : lastSnippet)}</button>`
       : '';
 
     const eye = crew.status === 'secret'
@@ -19532,7 +19535,7 @@
       _huddleReadMap = readMap;
 
       const { data } = await sb.from('huddle_messages')
-        .select('crew_id, room_id, sender_id, created_at, kind, expires_at, body, about')
+        .select('crew_id, room_id, sender_id, created_at, kind, expires_at, body, about, media_url, media_meta')
         .in('crew_id', ids)
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
@@ -19545,7 +19548,7 @@
         const c = cache[row.crew_id];
         if (!c) return;
         if (!c.lastMessageAt) c.lastMessageAt = row.created_at;
-        if (!c.lastMessage && !isBlockedUser(row.sender_id)) c.lastMessage = { sender_id: row.sender_id, kind: row.kind, body: row.body };
+        if (!c.lastMessage && !isBlockedUser(row.sender_id)) c.lastMessage = { sender_id: row.sender_id, kind: row.kind, body: row.body, media_url: row.media_url, media_meta: row.media_meta };
         if (row.kind === 'beacon' && row.expires_at && row.expires_at > nowIso) c.hasBeacon = true;
         roomCrewMap[row.room_id] = row.crew_id;
         if (row.sender_id === currentUser.id || isBlockedUser(row.sender_id)) return;
@@ -22993,8 +22996,9 @@
       // Crew feed page: "now playing" dock with the latest line of chat.
       const last = entry?.lastMessage;
       const lastSnippet = last ? huddleMessageSnippetText(last) : '';
+      const lastThumb = last ? huddleMediaThumbHTML(last, true) : '';
       const snippetHTML = lastSnippet
-        ? `<b>${escHtml(huddleSenderName(last.sender_id))}:</b> ${escHtml(lastSnippet)}`
+        ? `<b>${escHtml(huddleSenderName(last.sender_id))}:</b> ${lastThumb}${escHtml(lastThumb ? huddleMediaThumbLabel(last) : lastSnippet)}`
         : escHtml(subtitle);
       root.innerHTML = `
         <button type="button" class="hd-dock${unread || quiet ? ' is-live' : ''}" data-crew-id="${escHtml(String(crewId))}" onclick="openHuddle(this.dataset.crewId)" aria-label="Open Huddle${unread ? `, ${unread} unread` : ''}">
@@ -23372,18 +23376,14 @@
     const pinnedSlot = document.getElementById('hd-pinned-slot');
     if (pinnedSlot) {
       const pinned = huddleMessages.find(m => m.room_id === _huddleActiveRoomId && m.pinned_at);
-      // GIF pins show a small live thumb instead of the bare "🎞️ GIF" label
-      const pinMeta = pinned?.media_meta || {};
-      const pinGif = pinned?.kind === 'gif' && HUDDLE_GIF_HOST.test(pinned.media_url || '');
-      const pinGifThumb = pinGif
-        ? `<span class="hd-pinned-gif">${huddleGifMediaHTML(pinned.media_url, HUDDLE_GIF_HOST.test(pinMeta.still || '') ? pinMeta.still : '', pinMeta.title || 'GIF', !huddleGifReducedMotion())}</span>`
-        : '';
-      const pinText = pinGif
-        ? `${escHtml(pinned.body || pinMeta.title || 'GIF')}${pinMeta.src === 'giphy' ? `<span class="hd-gif-via">via${HUDDLE_GIPHY_MARK}GIPHY</span>` : ''}`
+      // GIF / photo pins show a small thumb instead of the bare "🎞️ GIF" label
+      const pinThumb = huddleMediaThumbHTML(pinned, true, 'hd-pinned-media');
+      const pinText = pinThumb
+        ? `${escHtml(huddleMediaThumbLabel(pinned))}${pinned.kind === 'gif' && pinned.media_meta?.src === 'giphy' ? `<span class="hd-gif-via">via${HUDDLE_GIPHY_MARK}GIPHY</span>` : ''}`
         : escHtml(pinned?.body || huddleMessageSnippetText(pinned));
       pinnedSlot.innerHTML = pinned
         ? `<button type="button" class="hd-pinned" onclick="scrollToHuddleMessage('${escJsAttr(pinned.id)}')">
-             <span>📌</span>${pinGifThumb}<span class="hd-pinned-text">${pinText}</span>
+             <span>📌</span>${pinThumb}<span class="hd-pinned-text">${pinText}</span>
            </button>` : '';
     }
 
@@ -23581,6 +23581,30 @@
   // GIPHY's five-colour frame mark, inline so attribution needs no extra fetch.
   const HUDDLE_GIPHY_MARK = '<svg class="hd-giphy-mark" viewBox="0 0 28 35" aria-hidden="true"><path d="M0 3h4v29H0z" fill="#04ff8e"/><path d="M24 11h4v21h-4z" fill="#8e2eff"/><path d="M0 31h28v4H0z" fill="#00c5ff"/><path d="M0 0h16v4H0z" fill="#fff152"/><path d="M24 8V4h-4V0h-4v12h12V8" fill="#ff5b5b"/><path d="M24 16v-4h4" fill="#551c99"/><path d="M16 0v4h-4" fill="#999131"/></svg>';
   const HUDDLE_GIF_HOST = /^https:\/\/((media[0-9]?|i)\.giphy\.com|tvpgopciioqbqmjjjigh\.supabase\.co\/storage\/v1\/object\/public\/huddle-gifs)\//;
+
+  // Small thumb for one-line previews (pin banner, crew card, Huddle dock).
+  // Returns '' for anything that isn't a renderable GIF/photo, so callers fall
+  // back to huddleMessageSnippetText. animate=false prefers the still frame.
+  function huddleMediaThumbHTML(m, animate, extraClass) {
+    if (!m || !m.media_url) return '';
+    const cls = `hd-media-thumb${extraClass ? ' ' + extraClass : ''}`;
+    if (m.kind === 'photo') {
+      return `<span class="${cls}"><img src="${escHtml(m.media_url)}" alt="Photo" loading="lazy"></span>`;
+    }
+    if (m.kind !== 'gif' || !HUDDLE_GIF_HOST.test(m.media_url)) return '';
+    const meta = m.media_meta || {};
+    const still = HUDDLE_GIF_HOST.test(meta.still || '') ? meta.still : '';
+    const live = animate && !huddleGifReducedMotion();
+    const media = !live && still
+      ? `<img src="${escHtml(still)}" alt="${escHtml(meta.title || 'GIF')}" loading="lazy">`
+      : huddleGifMediaHTML(m.media_url, still, meta.title || 'GIF', live);
+    return `<span class="${cls}">${media}</span>`;
+  }
+  function huddleMediaThumbLabel(m) {
+    if (m?.kind === 'gif') return m.body || m.media_meta?.title || 'GIF';
+    if (m?.kind === 'photo') return m.body || 'Photo';
+    return huddleMessageSnippetText(m);
+  }
 
   function huddleGifHTML(m) {
     const meta = m.media_meta || {};
