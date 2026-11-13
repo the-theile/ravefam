@@ -141,3 +141,98 @@ test.describe('countdown page (api/countdown.js)', () => {
     expect(r.headers['Cache-Control']).toBe('no-store');
   });
 });
+
+// ── In the app: the crew page / Settings sheet, and the iOS widget sync ──
+const { bootAuthedApp, seedData } = require('./helpers');
+
+const COUNTDOWN_PAYLOAD = { ok: true, kind: 'raver', crews: [{ id: 'c1', name: 'Bass Fam', color: '#ff2d78', fests: [{ name: 'Hulaween', date: '2099-10-29', days: 4, going: 3 }] }] };
+
+function countdownSeed() {
+  const data = seedData();
+  data.__rpc = { create_countdown_link: TOKEN, get_countdown: COUNTDOWN_PAYLOAD, revoke_countdown_link: true };
+  return data;
+}
+const rpcCalls = (page, fn) => page.evaluate((f) => (window.__store.__rpcCalls || []).filter((c) => c.fn === f), fn);
+
+test.describe('countdown sheet (app.html)', () => {
+  test('the crew page button makes a crew link and shows it', async ({ page }) => {
+    await bootAuthedApp(page, { data: countdownSeed() });
+    await page.evaluate(() => openDetail('c1'));
+    await page.getByRole('button', { name: '⏳ Countdown on your home screen' }).click();
+    const overlay = page.locator('#countdown-overlay');
+    await expect(overlay).toHaveClass(/open/);
+    await expect(overlay.locator('input[aria-label="Countdown link"]')).toHaveValue(new RegExp(`/countdown/${TOKEN}$`));
+    await expect(overlay.locator('a', { hasText: 'How to put it on your home screen' })).toHaveAttribute('href', `/countdown-guide?t=${TOKEN}`);
+    expect((await rpcCalls(page, 'create_countdown_link'))[0].args).toEqual({ p_crew_id: 'c1' });
+  });
+
+  test('turning a link off asks first, then revokes it', async ({ page }) => {
+    await bootAuthedApp(page, { data: countdownSeed() });
+    await page.evaluate(() => openCountdownSheet('c1'));
+    await page.locator('#countdown-overlay').getByRole('button', { name: 'Turn off this link' }).click();
+    await expect(page.locator('#confirm-overlay')).toHaveClass(/open/);
+    await page.locator('#confirm-ok-btn').click();
+    await expect(page.locator('#countdown-sheet-body')).toContainText('Link turned off');
+    expect((await rpcCalls(page, 'revoke_countdown_link'))[0].args).toEqual({ p_token: TOKEN });
+  });
+
+  test('Settings opens the personal all-crews link; Escape closes it', async ({ page }) => {
+    await bootAuthedApp(page, { data: countdownSeed() });
+    await page.evaluate(() => openMyCountdownSheet());
+    await expect(page.locator('#countdown-sheet-title')).toHaveText('📲 Home screen countdown');
+    await expect(page.locator('#countdown-sheet-body')).toContainText('Every crew you');
+    expect((await rpcCalls(page, 'create_countdown_link'))[0].args).toEqual({});
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#countdown-overlay')).not.toHaveClass(/open/);
+  });
+});
+
+test.describe('iOS countdown widget sync (app.html)', () => {
+  async function installCapacitorStub(page) {
+    await page.addInitScript(() => {
+      const native = window.__native = { calls: [] };
+      const addListener = () => Promise.resolve({ remove() {} });
+      window.Capacitor = {
+        isNativePlatform: () => true,
+        Plugins: {
+          App: { addListener, getLaunchUrl: async () => undefined },
+          PushNotifications: { addListener, checkPermissions: async () => ({ receive: 'denied' }) },
+          CountdownWidget: {
+            save: async (arg) => { native.calls.push({ name: 'save', arg }); },
+            clear: async () => { native.calls.push({ name: 'clear' }); },
+          },
+        },
+      };
+    });
+  }
+
+  test('boot hands the personal countdown to the widget; sign-out clears it', async ({ page }) => {
+    await installCapacitorStub(page);
+    await bootAuthedApp(page, { data: countdownSeed() });
+    await expect.poll(() => page.evaluate(() => window.__native.calls.filter((c) => c.name === 'save').length)).toBeGreaterThan(0);
+    const saved = await page.evaluate(() => JSON.parse(window.__native.calls.find((c) => c.name === 'save').arg.json));
+    expect(saved.token).toBe(TOKEN);
+    expect(saved.crews).toEqual(COUNTDOWN_PAYLOAD.crews);
+    expect((await rpcCalls(page, 'get_countdown'))[0].args).toEqual({ p_token: TOKEN });
+
+    await page.evaluate(() => doLogout());
+    await expect.poll(() => page.evaluate(() => window.__native.calls.some((c) => c.name === 'clear'))).toBe(true);
+    expect(await page.evaluate(() => localStorage.getItem('countdownWidgetToken'))).toBeNull();
+  });
+
+  test('a turned-off saved token is replaced once, and the retry stops there', async ({ page }) => {
+    await installCapacitorStub(page);
+    const data = countdownSeed();
+    await page.addInitScript((uid) => {
+      localStorage.setItem('countdownWidgetToken', JSON.stringify({ uid, token: 'OldTokenOldTokenOldTok' }));
+    }, require('./helpers').TEST_UID);
+    // get_countdown keeps answering "revoked": the old token is dropped, one
+    // new link is made and tried, and then it gives up (no retry loop).
+    data.__rpc.get_countdown = { ok: false, reason: 'revoked' };
+    await bootAuthedApp(page, { data });
+    await expect.poll(() => rpcCalls(page, 'create_countdown_link').then((c) => c.length)).toBe(1);
+    const gets = await rpcCalls(page, 'get_countdown');
+    expect(gets[0].args.p_token).toBe('OldTokenOldTokenOldTok');
+    expect(gets[1].args.p_token).toBe(TOKEN);
+  });
+});
