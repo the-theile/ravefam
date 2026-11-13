@@ -4806,7 +4806,6 @@
   .hd-media-thumb { display: inline-flex; vertical-align: middle; height: 22px; max-width: 40px; margin: -3px 6px -3px 0; border-radius: 5px; overflow: hidden; background: rgba(var(--white-rgb),0.05); }
   .hd-media-thumb img, .hd-media-thumb video { height: 100%; width: auto; max-width: inherit; object-fit: cover; display: block; pointer-events: none; }
   .hd-media-thumb.hd-pinned-media { flex-shrink: 0; height: 40px; max-width: 72px; margin: 0; border-radius: 6px; }
-  .hd-pinned-text .hd-gif-via { position: static; background: none; padding: 0; margin-left: 6px; font-size: 0.68rem; color: var(--muted); }
 
   .huddle-beacon-banner {
     flex-shrink: 0;
@@ -11233,7 +11232,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.38.3';
+  const APP_VERSION = '2.38.4';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -23378,11 +23377,13 @@
       const pinned = huddleMessages.find(m => m.room_id === _huddleActiveRoomId && m.pinned_at);
       // GIF / photo pins show a small thumb instead of the bare "🎞️ GIF" label
       const pinThumb = huddleMediaThumbHTML(pinned, true, 'hd-pinned-media');
-      const pinText = pinThumb
-        ? `${escHtml(huddleMediaThumbLabel(pinned))}${pinned.kind === 'gif' && pinned.media_meta?.src === 'giphy' ? `<span class="hd-gif-via">via${HUDDLE_GIPHY_MARK}GIPHY</span>` : ''}`
+      // GIF pins are just the thumb — no caption beside it
+      const pinIsGifThumb = !!pinThumb && pinned.kind === 'gif';
+      const pinText = pinIsGifThumb ? ''
+        : pinThumb ? escHtml(huddleMediaThumbLabel(pinned))
         : escHtml(pinned?.body || huddleMessageSnippetText(pinned));
       pinnedSlot.innerHTML = pinned
-        ? `<button type="button" class="hd-pinned" onclick="scrollToHuddleMessage('${escJsAttr(pinned.id)}')">
+        ? `<button type="button" class="hd-pinned"${pinIsGifThumb ? ' aria-label="Pinned GIF"' : ''} onclick="scrollToHuddleMessage('${escJsAttr(pinned.id)}')">
              <span>📌</span>${pinThumb}<span class="hd-pinned-text">${pinText}</span>
            </button>` : '';
     }
