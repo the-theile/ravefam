@@ -5438,7 +5438,6 @@
       radial-gradient(60% 22% at 80% 92%, rgba(91,110,255,0.20), transparent 70%);
   }
   .crew-feed .crew-feature-panel,
-  .crew-feed-huddle .huddle-tile-preview,
   .crew-feed-filters,
   .crew-feed-faces,
   .crew-feed-share {
@@ -5450,7 +5449,6 @@
   }
   @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
     .crew-feed .crew-feature-panel,
-    .crew-feed-huddle .huddle-tile-preview,
     .crew-feed-filters,
     .crew-feed-faces,
     .crew-feed-share { background: var(--surface2); }
@@ -5478,15 +5476,43 @@
   .crew-feed-chev { color: var(--cf-soft); }
   .crew-feed-share { width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0; cursor: pointer; font-size: 0.95rem; display: grid; place-items: center; }
 
-  /* Huddle pill (rerenderHuddleTilePreview fills it) */
-  .crew-feed-huddle { margin-bottom: 12px; }
-  .crew-feed-huddle .huddle-tile-preview { border-radius: 100px; padding: 9px 16px 9px 12px; }
-  .crew-feed-huddle .huddle-tile-preview:hover { background: rgba(var(--neon-cyan-rgb),0.08); }
+  /* Huddle "now playing" dock (rerenderHuddleTilePreview fills it) — pinned
+     above the bottom nav so the crew chat is one tap away while scrolling.
+     Fixed inside .page, so it hides with the page; the wrap reserves room. */
+  .crew-feed-wrap:has(.crew-feed-huddle) { padding-bottom: 96px; }
+  .crew-feed-huddle {
+    position: fixed; z-index: 90; left: 0; right: 0; bottom: 16px; margin: 0 auto;
+    width: min(496px, calc(100% - 24px));
+  }
+  @media (max-width: 640px) { .crew-feed-huddle { bottom: calc(78px + env(safe-area-inset-bottom, 0px)); } }
+  .crew-feed-huddle:empty { display: none; }
+  .hd-dock {
+    display: block; width: 100%; padding: 1.5px; border: none; border-radius: 20px; cursor: pointer; text-align: left;
+    background: linear-gradient(90deg, var(--neon-green), var(--neon-cyan), var(--neon-pink));
+    box-shadow: 0 10px 30px rgba(var(--black-rgb),0.6), 0 0 22px rgba(var(--neon-cyan-rgb),0.25);
+  }
+  .hd-dock-in { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 19px; background: rgba(20,17,28,0.97); }
+  .hd-dock-eq { display: flex; gap: 2px; align-items: flex-end; height: 18px; flex-shrink: 0; }
+  .hd-dock-eq i { width: 3px; border-radius: 2px; background: var(--neon-green); transform-origin: bottom; opacity: 0.45; }
+  .hd-dock-eq i:nth-child(1) { height: 40%; } .hd-dock-eq i:nth-child(2) { height: 90%; }
+  .hd-dock-eq i:nth-child(3) { height: 60%; } .hd-dock-eq i:nth-child(4) { height: 80%; }
+  .hd-dock.is-live .hd-dock-eq i { opacity: 1; animation: hdDockEq 1s ease-in-out infinite; }
+  .hd-dock.is-live .hd-dock-eq i:nth-child(2) { animation-delay: 0.2s; }
+  .hd-dock.is-live .hd-dock-eq i:nth-child(3) { animation-delay: 0.4s; }
+  .hd-dock.is-live .hd-dock-eq i:nth-child(4) { animation-delay: 0.1s; }
+  @keyframes hdDockEq { 50% { transform: scaleY(0.4); } }
+  @media (prefers-reduced-motion: reduce) { .hd-dock.is-live .hd-dock-eq i { animation: none; } }
+  .hd-dock-body { flex: 1; min-width: 0; }
+  .hd-dock-title { display: flex; align-items: center; gap: 6px; font-family: 'Urbanist', 'Outfit', sans-serif; font-weight: 900; font-size: 0.9rem; color: var(--white); }
+  .hd-dock-title .hd-dock-time { margin-left: auto; font-family: var(--hd-mono); font-weight: 400; font-size: 0.6rem; color: var(--muted); }
+  .hd-dock-snippet { display: block; font-size: 0.74rem; color: var(--muted); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hd-dock-snippet b { color: var(--white); font-weight: 600; }
+  .hd-dock-up { width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center; font-size: 0.75rem; color: var(--white); background: rgba(var(--white-rgb),0.08); }
 
   /* Rave Plan tickets — paper, with notches cut by a mask so the glow shows
      through them. Several tickets swipe sideways with the next one peeking. */
   .crew-feed .cnf-block { transform: none; margin-bottom: 14px; }
-  .crew-ticket-stack { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin-bottom: 6px; padding-bottom: 8px; }
+  .crew-ticket-stack { display: flex; align-items: flex-start; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin-bottom: 6px; padding-bottom: 8px; }
   .crew-ticket-stack::-webkit-scrollbar { display: none; }
   .crew-ticket-stack.is-multi .crew-ticket { flex-basis: calc(100% - 28px); }
   .crew-ticket {
@@ -11172,7 +11198,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.37.0';
+  const APP_VERSION = '2.38.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -22910,6 +22936,26 @@
       ? `${unread} unread message${unread === 1 ? '' : 's'}`
       : quiet ? 'New crew activity'
       : entry?.lastMessageAt ? 'Tap to open the crew chat' : 'No messages yet — start the conversation';
+    if (root.classList.contains('crew-feed-huddle')) {
+      // Crew feed page: "now playing" dock with the latest line of chat.
+      const last = entry?.lastMessage;
+      const lastSnippet = last ? huddleMessageSnippetText(last) : '';
+      const snippetHTML = lastSnippet
+        ? `<b>${escHtml(huddleSenderName(last.sender_id))}:</b> ${escHtml(lastSnippet)}`
+        : escHtml(subtitle);
+      root.innerHTML = `
+        <button type="button" class="hd-dock${unread || quiet ? ' is-live' : ''}" data-crew-id="${escHtml(String(crewId))}" onclick="openHuddle(this.dataset.crewId)" aria-label="Open Huddle${unread ? `, ${unread} unread` : ''}">
+          <span class="hd-dock-in">
+            <span class="hd-dock-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+            <span class="hd-dock-body">
+              <span class="hd-dock-title">🕊️ Huddle${unread ? `<span class="huddle-cta-count">${unread > 99 ? '99+' : unread}</span>` : quiet ? '<span class="huddle-quiet-dot" aria-hidden="true"></span>' : ''}${when ? `<span class="hd-dock-time">${escHtml(when)}</span>` : ''}</span>
+              <span class="hd-dock-snippet">${snippetHTML}</span>
+            </span>
+            <span class="hd-dock-up" aria-hidden="true">⌃</span>
+          </span>
+        </button>`;
+      return;
+    }
     root.innerHTML = `
       <button type="button" class="huddle-tile-preview" data-crew-id="${escHtml(String(crewId))}" onclick="openHuddle(this.dataset.crewId)">
         <span class="huddle-tile-preview-icon">🕊️</span>
