@@ -201,7 +201,7 @@ test.describe('stats', () => {
     await expect(heroNumbers.nth(4)).toHaveText('1'); // Artists Seen — only the checked-off one
 
     await page.evaluate(() => openArtistsSeenPage());
-    await expect(page.locator('#page-artists-seen .rlog-item-name')).toHaveText('Charlotte de Witte');
+    await expect(page.locator('#page-artists-seen .artists-full-list .rlog-item-name')).toHaveText('Charlotte de Witte');
     await expect(page.locator('#page-artists-seen')).toContainText('Distinct Artists');
   });
 
@@ -218,25 +218,25 @@ test.describe('stats', () => {
     ];
     await bootAuthedApp(page, { data: d });
     await page.evaluate(() => { switchTab('stats'); openArtistsSeenPage(); });
-    await expect(page.locator('#page-artists-seen .rlog-item-name')).toHaveCount(2);
+    await expect(page.locator('#page-artists-seen .artists-full-list .rlog-item-name')).toHaveCount(2);
 
     // Tap the Techno breakdown pill — Full List narrows to just Charlotte de Witte,
     // and the page title/hero swap to reflect the active filter.
     await page.locator('#page-artists-seen .stats-pill.cyan', { hasText: 'Techno' }).click();
     await expect(page.locator('#page-artists-seen .section-title')).toHaveText('Techno Artists 🎤');
-    await expect(page.locator('#page-artists-seen .rlog-item-name')).toHaveCount(1);
-    await expect(page.locator('#page-artists-seen .rlog-item-name')).toHaveText('Charlotte de Witte');
+    await expect(page.locator('#page-artists-seen .artists-full-list .rlog-item-name')).toHaveCount(1);
+    await expect(page.locator('#page-artists-seen .artists-full-list .rlog-item-name')).toHaveText('Charlotte de Witte');
     await expect(page.locator('#page-artists-seen .stats-pill.cyan', { hasText: 'Techno' })).toHaveClass(/active/);
 
     // Both breakdown pills stay visible while filtered, so switching genres
     // doesn't require clearing first.
     await page.locator('#page-artists-seen .stats-pill.cyan', { hasText: 'House' }).click();
-    await expect(page.locator('#page-artists-seen .rlog-item-name')).toHaveText('Peggy Gou');
+    await expect(page.locator('#page-artists-seen .artists-full-list .rlog-item-name')).toHaveText('Peggy Gou');
 
     // Clearing goes back to the full unfiltered list.
     await page.locator('#page-artists-seen .profile-back', { hasText: 'all artists' }).click();
     await expect(page.locator('#page-artists-seen .section-title')).toHaveText('Artists Seen Live 🎤');
-    await expect(page.locator('#page-artists-seen .rlog-item-name')).toHaveCount(2);
+    await expect(page.locator('#page-artists-seen .artists-full-list .rlog-item-name')).toHaveCount(2);
   });
 
   test('Artists Seen Live: genre pills stay clickable even when Chart.js loads (statsChartOrFallback swaps in a canvas)', async ({ page }) => {
@@ -314,8 +314,8 @@ test.describe('stats', () => {
     await bootAuthedApp(page, { data: d });
     await page.evaluate(() => { switchTab('stats'); openArtistsSeenPage(); });
 
-    await expect(page.locator('#page-artists-seen .rlog-item-name')).toHaveText('Charlotte de Witte');
-    await page.locator('#page-artists-seen .rlog-item', { hasText: 'Charlotte de Witte' }).click();
+    await expect(page.locator('#page-artists-seen .artists-full-list .rlog-item-name')).toHaveText('Charlotte de Witte');
+    await page.locator('#page-artists-seen .artists-full-list .rlog-item', { hasText: 'Charlotte de Witte' }).click();
 
     const modal = page.locator('#artist-sightings-modal');
     await expect(modal).toContainText('Past Fest');
@@ -334,7 +334,7 @@ test.describe('stats', () => {
 
     await page.locator('#artist-sightings-modal .modal-actions button', { hasText: 'Close' }).click();
     await expect(page.locator('#artist-sightings-overlay')).not.toHaveClass(/open/);
-    await expect(page.locator('#page-artists-seen .rlog-item', { hasText: 'Charlotte de Witte' })).toContainText('2x');
+    await expect(page.locator('#page-artists-seen .artists-full-list .rlog-item', { hasText: 'Charlotte de Witte' })).toContainText('2x');
   });
 
   test('Distance Traveled tile prompts to set a location, then shows miles once one is set', async ({ page }) => {
@@ -389,6 +389,41 @@ test.describe('stats', () => {
     const milestoneCard = page.locator('#page-artists-seen .stats-section-card', { has: page.locator('.stats-section-title', { hasText: 'Artists Seen Milestones' }) });
     await expect(milestoneCard.locator('.milestone-badge.unlocked')).toHaveCount(0);
     await expect(milestoneCard).toContainText('9 more artists to unlock 🥉 Bronze');
+  });
+
+  test('Artists Seen milestones slide past 100 instead of maxing out', async ({ page }) => {
+    await bootAuthedApp(page, { data: statsData() });
+    const html = await page.evaluate(() => milestoneBarHTML('🎤', 'Artists Seen', 110, [10, 25, 50, 100, 250, 500], 'artists'));
+    await page.evaluate(h => { document.body.insertAdjacentHTML('beforeend', `<div id="ms-test">${h}</div>`); }, html);
+    const card = page.locator('#ms-test');
+    await expect(card.locator('.milestone-badge-label')).toHaveText(['50', '100', '250', '500']);
+    await expect(card.locator('.milestone-badge.unlocked')).toHaveCount(2);
+    await expect(card).toContainText('140 more artists to unlock 👑 Legend');
+    await expect(card).not.toContainText('milestones unlocked');
+  });
+
+  test('Artists Seen Live shows a Top 5 Most Seen card alongside the Most Seen hero', async ({ page }) => {
+    const d = statsData();
+    d.festivals.push({ id: 'f-past2', name: 'Past Fest 2', date: '2021-06-01', location: 'Detroit, US', color: '#39FF14', days: 1, deleted_at: null });
+    d.raver_festivals.push({ raver_id: 'r-you', festival_id: 'f-past2' });
+    d.artists.push({ id: 'a2', name: 'Peggy Gou', genres: ['house'] }, { id: 'a3', name: 'Amelie Lens', genres: ['techno'] });
+    d.artist_festival_appearances = [
+      { artist_id: 'a1', festival_id: 'f-past' }, { artist_id: 'a1', festival_id: 'f-past2' },
+      { artist_id: 'a2', festival_id: 'f-past' }, { artist_id: 'a3', festival_id: 'f-past2' },
+    ];
+    d.raver_artist_sightings = [
+      { raver_id: 'r-you', artist_id: 'a1', festival_id: 'f-past' },
+      { raver_id: 'r-you', artist_id: 'a1', festival_id: 'f-past2' },
+      { raver_id: 'r-you', artist_id: 'a2', festival_id: 'f-past' },
+      { raver_id: 'r-you', artist_id: 'a3', festival_id: 'f-past2' },
+    ];
+    await bootAuthedApp(page, { data: d });
+    await page.evaluate(() => { switchTab('stats'); openArtistsSeenPage(); });
+
+    await expect(page.locator('#page-artists-seen')).toContainText('Most Seen (2x)');
+    await expect(page.locator('#page-artists-seen .artists-top5-list .rlog-item-name'))
+      .toHaveText(['Charlotte de Witte', 'Amelie Lens', 'Peggy Gou']);
+    await expect(page.locator('#page-artists-seen .artists-full-list .rlog-item-name')).toHaveCount(3);
   });
 
   test('Crew Stats surfaces a Most Vibes Left award for the member with the most reactions', async ({ page }) => {
