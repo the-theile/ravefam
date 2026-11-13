@@ -2,7 +2,11 @@
 <!-- iOS app icon source: the header logo-mark burst over "FAM", matching the
      web icon-512.png layout. vmin-scaled so it renders crisp at any square
      size. Rendered by scripts/render-ios-icon.js; #splash renders the
-     launch screen (burst only, smaller, centered). -->
+     launch screen (burst only, smaller, centered).
+     Android modes (scripts/render-android-icon.js): #fg adaptive foreground
+     (art scaled into the 66/108 safe zone, transparent), #bg adaptive
+     background, #mono themed-icon silhouette, #round and #legacy pre-adaptive
+     launcher shapes. -->
 <html>
 <head>
 <meta charset="utf-8">
@@ -20,13 +24,30 @@
     font-size: 20vmin; line-height: 1; letter-spacing: 0.12em; text-indent: 0.12em;
     text-shadow: 0 0 2.4vmin rgba(57,255,20,0.35);
   }
+  .art { position: absolute; inset: 0; }
   .splash svg { top: 50%; width: 22vmin; height: 22vmin; }
   .splash .word { display: none; }
   .splash body { background: #050509; }
+  /* Android adaptive layers: the launcher masks a 108dp square to any shape and
+     only guarantees the centre 66dp circle, so the art shrinks to fit inside it. */
+  html.fg, html.fg body, html.mono, html.mono body, html.round, html.legacy { background: transparent; }
+  .fg .art, .mono .art { transform: scale(0.66); }
+  .mono .art { filter: brightness(0) invert(1); }
+  .bg .art { display: none; }
+  /* The body's background paints the whole canvas (clip-path can't trim it), so
+     the round/legacy shapes carry it on .art instead. */
+  .round body, .legacy body { background: none; }
+  .round .art, .legacy .art { background: radial-gradient(circle at 50% 40%, #0d1f0d 0%, #07110a 38%, #050509 72%); }
+  .round .art { clip-path: circle(50%); }
+  .legacy .art { clip-path: inset(0 round 12%); }
 </style>
-<script>if (location.hash === '#splash') document.documentElement.className = 'splash';</script>
+<script>
+  const mode = location.hash.slice(1);
+  if (['splash', 'fg', 'bg', 'mono', 'round', 'legacy'].includes(mode)) document.documentElement.className = mode;
+</script>
 </head>
 <body>
+  <div class="art">
   <svg viewBox="0 0 72 72" fill="none" aria-hidden="true">
     <defs><filter id="glow" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
     <g stroke-width="2.2" stroke-linecap="round">
@@ -61,5 +82,6 @@
     <circle cx="36" cy="36" r="34" stroke="rgba(57,255,20,0.2)" stroke-width="0.8"/>
   </svg>
   <div class="word">FAM</div>
+  </div>
 </body>
 </html>

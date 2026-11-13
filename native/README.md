@@ -33,6 +33,14 @@ a "Saved" card. `App/ShareInboxPlugin.swift` (registered in `SceneDelegate.swift
 comes back to the foreground, asks which Huddle, and opens that room with the share in the composer.
 Instagram, TikTok and Facebook share a post link, not the media.
 
+## Android icons
+`node scripts/render-android-icon.js` renders `native/icon-source.html` into Android launcher
+icons: adaptive foreground/background/monochrome layers (Android 8+, themed icons on 13+) and legacy
+square/round PNGs for every density, plus `native/android/play-store-icon-512.png` for the Play
+Console listing. Until the Capacitor Android project exists they land in `native/android/res`;
+after `npx cap add android`, copy that `res` folder over `android/app/src/main/res` (or just re-run
+the script, which then writes there directly). Set `CHROME_PATH` to use an installed Chromium.
+
 ## Builds
 Run **Actions -> iOS TestFlight -> Run workflow** on `main`.
 
