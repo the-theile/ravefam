@@ -8220,6 +8220,46 @@
     box-shadow: 0 0 18px -3px rgba(var(--neon-cyan-rgb),0.75), 0 0 0 1px rgba(var(--neon-cyan-rgb),0.4);
   }
 
+  /* Stats range filter — chip row (All Time / Last 12 mo / years) shared by My Stats,
+     the drill-down pages, Crew Stats and PLUR. Cyan to match the Stats accent. */
+  .stats-range-chips {
+    display: flex; gap: 6px;
+    overflow-x: auto; scrollbar-width: none;
+    padding: 2px 2px 4px; margin-bottom: 4px;
+  }
+  .stats-range-chips::-webkit-scrollbar { display: none; }
+  .stats-range-chip {
+    flex: 0 0 auto;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.74rem; letter-spacing: 0.3px;
+    color: var(--muted); background: transparent;
+    border: 1px solid rgba(var(--white-rgb),0.14); border-radius: 999px;
+    padding: 6px 13px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: color 0.15s, border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  }
+  .stats-range-chip:hover { color: var(--text); border-color: rgba(var(--neon-cyan-rgb),0.5); }
+  .stats-range-chip:focus-visible { outline: 2px solid var(--neon-cyan); outline-offset: 2px; }
+  .stats-range-chip.active {
+    color: var(--neon-cyan); border-color: var(--neon-cyan);
+    background: rgba(var(--neon-cyan-rgb),0.1);
+    box-shadow: 0 0 14px -4px rgba(var(--neon-cyan-rgb),0.8);
+  }
+  .stats-range-cap {
+    font-family: 'Outfit', sans-serif; font-size: 0.66rem; color: var(--muted);
+    margin: 0 2px 14px;
+  }
+  .stats-range-cap b { color: var(--neon-cyan); font-weight: 700; }
+  .stats-hero-delta {
+    font-family: 'Outfit', sans-serif; font-size: 0.6rem; color: var(--muted); margin-top: 5px;
+  }
+  .stats-hero-delta .up { color: var(--neon-green); }
+  .stats-hero-delta .down { color: var(--neon-pink); }
+  .stats-alltime-tag {
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.52rem;
+    letter-spacing: 1px; text-transform: uppercase; color: var(--muted);
+    border: 1px solid rgba(var(--white-rgb),0.15); border-radius: 4px; padding: 1px 5px;
+  }
+
   .stats-hero-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -11236,7 +11276,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.38.5';
+  const APP_VERSION = '2.39.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -17883,6 +17923,7 @@
     document.querySelectorAll('.modal-overlay.open').forEach(o => o.classList.remove('open'));
     editingId = null;
     _pendingAddToCrew = null;
+    if (page !== 'stats') _statsRange = 'all'; // Stats range sticks inside Stats only, then lands back on All Time
     const nd = document.getElementById('notif-drawer-overlay');
     if (nd) nd.classList.remove('open');
     const so = document.getElementById('scanner-overlay');
@@ -42161,6 +42202,101 @@
   let _wrappedStarTaps   = 0;
   let _wrappedUnlocked   = false;
 
+  // ===== Stats range filter (All Time / Last 12 mo / calendar year) =====
+  // One range drives My Stats, the drill-down pages, Crew Stats and PLUR. It
+  // sticks while moving around inside Stats and resets to All Time when you
+  // leave the Stats tab (see switchTab). Unlock gates, badges and tiers stay
+  // lifetime; only the numbers being reported narrow to the range.
+  let _statsRange = 'all';
+
+  // { start, end } (end exclusive) for a range key, or null for All Time.
+  function statsRangeBounds(range) {
+    if (!range || range === 'all') return null;
+    if (range === 'l12') {
+      const end = new Date(TODAY); end.setDate(end.getDate() + 1);
+      const start = new Date(TODAY); start.setFullYear(start.getFullYear() - 1);
+      return { start, end };
+    }
+    const y = Number(range);
+    return { start: new Date(y, 0, 1), end: new Date(y + 1, 0, 1) };
+  }
+  // The period right before a range (prior year / prior 12 months), for deltas.
+  function statsPrevBounds(range) {
+    const b = statsRangeBounds(range);
+    if (!b) return null;
+    if (range === 'l12') {
+      const start = new Date(b.start); start.setFullYear(start.getFullYear() - 1);
+      return { start, end: b.start };
+    }
+    return statsRangeBounds(String(Number(range) - 1));
+  }
+  function statsRangeLabel(range) { return range === 'all' ? 'All Time' : range === 'l12' ? 'Last 12 mo' : String(range); }
+  function statsPrevLabel(range) { return range === 'l12' ? 'prior 12 mo' : String(Number(range) - 1); }
+  function festInBounds(f, b) {
+    if (!b) return true;
+    const d = festDate(f);
+    return !!d && d >= b.start && d < b.end;
+  }
+  function festsInStatsRange(fests, range = _statsRange) {
+    const b = statsRangeBounds(range);
+    return b ? fests.filter(f => festInBounds(f, b)) : fests;
+  }
+  // Previous-period fests for deltas — null (no delta) when nothing in `lifetime`
+  // predates the range, so a first year reads as a first year rather than "+N".
+  function festsInStatsPrev(lifetime, range = _statsRange) {
+    const pb = statsPrevBounds(range);
+    if (!pb) return null;
+    if (!lifetime.some(f => { const d = festDate(f); return d && d < pb.end; })) return null;
+    return lifetime.filter(f => festInBounds(f, pb));
+  }
+
+  // Chip row: All Time · Last 12 mo · years present in `fests` (newest first).
+  // The selected year always keeps its chip, even if this list (e.g. a crew's) lacks it.
+  function statsRangeChipsHTML(fests) {
+    const years = new Set(fests.map(f => festDate(f)?.getFullYear()).filter(Boolean));
+    if (/^\d{4}$/.test(_statsRange)) years.add(Number(_statsRange));
+    if (!years.size && _statsRange === 'all') return '';
+    const opts = [['all', 'All Time'], ['l12', 'Last 12 mo'], ...[...years].sort((a, b) => b - a).map(y => [String(y), String(y)])];
+    return `<div class="stats-range-chips" role="tablist" aria-label="Stats date range">${opts.map(([k, l]) =>
+      `<button type="button" role="tab" class="stats-range-chip${k === _statsRange ? ' active' : ''}" aria-selected="${k === _statsRange}" onclick="setStatsRange('${k}')">${l}</button>`).join('')}</div>`;
+  }
+  function statsRangeCaptionHTML(shown, total, noun) {
+    if (_statsRange === 'all') return `<div class="stats-range-cap">All ${total} ${noun} to date</div>`;
+    return `<div class="stats-range-cap"><b>${statsRangeLabel(_statsRange)}</b> · ${shown} of ${total} ${noun}</div>`;
+  }
+  // "▲ +4 vs 2025" under a hero number; '' when there's no previous period.
+  function statsDeltaHTML(cur, prev) {
+    if (prev == null) return '';
+    const d = Math.round(cur - prev);
+    const txt = d > 0 ? `<span class="up">▲ +${d.toLocaleString()}</span>` : d < 0 ? `<span class="down">▼ ${Math.abs(d).toLocaleString()}</span>` : '± 0';
+    return `<div class="stats-hero-delta">${txt} vs ${escHtml(statsPrevLabel(_statsRange))}</div>`;
+  }
+
+  function setStatsRange(range) {
+    if (range === _statsRange) return;
+    _statsRange = range;
+    loadStatsPage(); // keeps My Stats current underneath any drill-down page
+    const active = document.querySelector('.page.active')?.id;
+    if (active === 'page-stats') {
+      if (document.getElementById('stats-crew-panel').style.display !== 'none') renderCrewStats();
+      if (document.getElementById('stats-plur-panel').style.display !== 'none') renderStatsPlur();
+    } else {
+      const subpage = {
+        'page-raves-logged': renderRavesLoggedPage,
+        'page-ticket-mix': renderTicketMixPage,
+        'page-days-stats': renderDaysStatsPage,
+        'page-cities-map': renderCitiesMapPage,
+        'page-artists-seen': renderArtistsSeenPage,
+      }[active];
+      if (subpage) subpage();
+    }
+    // Re-renders reset the chip row's scroll — bring the selected chip back into view.
+    requestAnimationFrame(() => document.querySelectorAll('.stats-range-chip.active').forEach(b => {
+      const row = b.parentElement;
+      if (row) row.scrollLeft = Math.max(0, b.offsetLeft - row.offsetLeft - 40);
+    }));
+  }
+
   // ===== Stats charts (Chart.js) — same destroy-before-create pattern as the PM
   // dashboard's pmDashCharts, kept in its own registry so the two features never collide. =====
   let _statsCharts = {};
@@ -42278,11 +42414,14 @@
 
   function statsBadgeGroups(me) {
     const raves = myAchievedFests().length;
+    // Rave-count badges are dated by your Nth rave (so the range filter can flag
+    // ones earned in-range). Explorer badges don't store an earned date.
+    const raveDates = myAchievedFests().map(festDate).filter(Boolean).sort((a, b) => a - b);
     const found = Object.values(_guidance?.realms || {}).filter(v => v === 'found' || v === 'saved').length;
     const q = _guidance?.quests || {};
-    const tile = (name, earned, how) => ({ name, earned, how });
+    const tile = (name, earned, how, date = null) => ({ name, earned, how, date });
     return [
-      { title: 'YOUR RAVES', color: '#39FF14', items: [1, 5, 10, 25, 50, 100].map(n => tile(n === 1 ? 'First Rave' : `${n} Raves`, raves >= n, n === 1 ? 'Log your first rave with a check-off.' : `Log ${n} raves.`)) },
+      { title: 'YOUR RAVES', color: '#39FF14', items: [1, 5, 10, 25, 50, 100].map(n => tile(n === 1 ? 'First Rave' : `${n} Raves`, raves >= n, n === 1 ? 'Log your first rave with a check-off.' : `Log ${n} raves.`, raves >= n ? (raveDates[n - 1] || null) : null)) },
       { title: 'EXPLORER', color: GK_COLORS.stats, items: [
         tile('Crew Founder', crews.some(c => c.isLead), 'Name your own crew.'),
         tile('Trailblazer', found >= 3, `Find 3 of the 5 on Rave World · ${Math.min(found, 3)} of 3`),
@@ -42293,47 +42432,69 @@
     ];
   }
 
+  let _plurRenderSeq = 0; // drops stale renders when the range changes mid-load
   async function renderStatsPlur() {
     const el = document.getElementById('stats-plur-content');
     const me = squad.find(r => r.isYou && !String(r.id).startsWith('temp_'));
     if (!el || !me) return;
+    const seq = ++_plurRenderSeq;
     el.innerHTML = '<div class="fest-empty" style="padding:12px 0;">Loading…</div>';
-    const [totals, tiers, eventTypes, recent] = await Promise.all([
+    // Range: tiers stay lifetime; the range adds per-track gains and narrows the earn log.
+    const rangeB = statsRangeBounds(_statsRange);
+    const [totals, tiers, eventTypes, recent, ranged] = await Promise.all([
       loadPlurTotals(me.id), loadPlurTiers(), loadPlurEventTypes(),
-      sb.from('point_events').select('event_type, track, amount, created_at').eq('raver_id', me.id).order('created_at', { ascending: false }).limit(12)
+      sb.from('point_events').select('event_type, track, amount, created_at').eq('raver_id', me.id).order('created_at', { ascending: false }).limit(12),
+      rangeB ? sb.from('point_events').select('event_type, track, amount, created_at').eq('raver_id', me.id)
+        .gte('created_at', rangeB.start.toISOString()).lt('created_at', rangeB.end.toISOString())
+        .order('created_at', { ascending: false }).limit(1000) : Promise.resolve(null)
     ]);
-    const log = recent?.data || [];
+    if (seq !== _plurRenderSeq) return;
+    if (ranged?.error) console.warn('ranged point_events load failed', ranged.error);
+    const rangedRows = rangeB ? (ranged?.data || []) : null;
+    const rangeGains = {};
+    (rangedRows || []).forEach(e => { rangeGains[e.track] = (rangeGains[e.track] || 0) + (Number(e.amount) || 0); });
+    const log = rangedRows ? rangedRows.slice(0, 12) : (recent?.data || []);
     const descByType = Object.fromEntries((eventTypes || []).map(e => [e.event_type, e.description]));
     const trackRows = ['peace', 'love', 'unity', 'respect'].map(t => {
       const total = totals?.[`${t}_points`] || 0;
       const next = (tiers || []).filter(x => x.track === t && x.threshold > total).sort((a, b) => a.threshold - b.threshold)[0];
       const current = (tiers || []).filter(x => x.track === t && x.threshold <= total).sort((a, b) => b.threshold - a.threshold)[0];
       const pct = next ? Math.round(total / next.threshold * 100) : 100;
+      const gainHtml = rangeB ? `<span style="color:var(--neon-green);font-weight:700;">+${rangeGains[t] || 0}</span> · ` : '';
       return `<div class="archive-link-card" style="display:flex;flex-direction:column;gap:6px;">
-        <div style="display:flex;justify-content:space-between;"><span class="archive-link-label">${PLUR_TRACK_META[t].emoji} ${GK_TRACKS[t]} · ${escHtml(current?.name || 'Newcomer')}</span><span class="archive-link-meta">${total}${next ? ` / ${next.threshold}` : ''}</span></div>
+        <div style="display:flex;justify-content:space-between;"><span class="archive-link-label">${PLUR_TRACK_META[t].emoji} ${GK_TRACKS[t]} · ${escHtml(current?.name || 'Newcomer')}</span><span class="archive-link-meta">${gainHtml}${total}${next ? ` / ${next.threshold}` : ''}</span></div>
         <div class="game-plan-progress-track"><div class="game-plan-progress-fill" style="width:${pct}%;"></div></div>
         <div class="archive-link-meta">${next ? `${next.threshold - total} to ${escHtml(next.name)}` : 'Top tier reached'}</div>
       </div>`;
     }).join('');
     const logRows = log.length ? log.map(e => `<div class="plur-ledger-row"><div class="plur-ledger-row-text"><strong style="color:var(--neon-yellow);">+${e.amount} ${GK_TRACKS[e.track] || ''}</strong> · ${escHtml(descByType[e.event_type] || e.event_type)}<div class="plur-ledger-row-ts">${relativeTime(new Date(e.created_at).getTime())}</div></div></div>`).join('')
-      : '<div class="fest-empty">No points yet. Go make some memories 🎪</div>';
+      : `<div class="fest-empty">${rangeB ? `No points earned in ${escHtml(statsRangeLabel(_statsRange))}` : 'No points yet. Go make some memories 🎪'}</div>`;
     // Ways to earn next: event types you haven't earned recently, emptiest tracks first.
-    const earned = new Set(log.map(e => e.event_type));
+    // Always from the latest (unranged) log — it's about what to do now.
+    const earned = new Set((recent?.data || []).map(e => e.event_type));
     const byTotal = t => totals?.[`${t}_points`] || 0;
     const next = (eventTypes || []).filter(e => !earned.has(e.event_type))
       .sort((a, b) => byTotal(a.track) - byTotal(b.track) || b.points - a.points).slice(0, 4)
       .map(e => `<div class="plur-ledger-row"><div class="plur-ledger-row-text"><strong style="color:var(--neon-yellow);">+${e.points} ${GK_TRACKS[e.track]}</strong> · ${escHtml(e.description)}</div></div>`).join('');
     const badges = statsBadgeGroups(me).map(g => `
       <div class="gk-eyebrow" style="--gk-color:${g.color};margin:16px 0 8px;">${g.title}</div>
-      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;">${g.items.map(b => `
-        <div class="archive-link-card" title="${escHtml(b.how)}" style="text-align:center;opacity:${b.earned ? 1 : 0.55};${b.earned ? `border-color:${g.color};box-shadow:0 0 12px ${g.color}55;` : 'border-style:dashed;'}">
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;">${g.items.map(b => {
+        // In a range: dated badges earned in-range glow with a NEW tag; earlier ones dim slightly.
+        const inRange = rangeB && b.earned && b.date && b.date >= rangeB.start && b.date < rangeB.end;
+        const dimmed = rangeB && b.earned && b.date && !inRange;
+        return `
+        <div class="archive-link-card" title="${escHtml(b.how)}" style="position:relative;flex-direction:column;align-items:center;justify-content:flex-start;gap:2px;text-align:center;opacity:${!b.earned ? 0.55 : dimmed ? 0.7 : 1};${b.earned ? (dimmed ? `border-color:${g.color}66;` : `border-color:${g.color};box-shadow:0 0 12px ${g.color}55;`) : 'border-style:dashed;'}">
+          ${inRange ? `<span style="position:absolute;top:-7px;left:50%;transform:translateX(-50%);background:${g.color};color:var(--black);font-family:'Outfit',sans-serif;font-size:0.5rem;font-weight:800;letter-spacing:1px;padding:1px 6px;border-radius:4px;white-space:nowrap;">NEW · ${escHtml(statsRangeLabel(_statsRange).toUpperCase())}</span>` : ''}
           <div style="font-size:1.4rem;">${b.earned ? '🏅' : '🔒'}</div>
           <div class="archive-link-label" style="font-size:0.78rem;">${escHtml(b.name)}</div>
-          ${b.earned ? '' : `<div class="archive-link-meta" style="font-size:0.66rem;">${escHtml(b.how)}</div>`}
-        </div>`).join('')}</div>`).join('');
+          ${b.earned ? (b.date ? `<div class="archive-link-meta" style="font-size:0.6rem;">${b.date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</div>` : '') : `<div class="archive-link-meta" style="font-size:0.66rem;">${escHtml(b.how)}</div>`}
+        </div>`;
+      }).join('')}</div>`).join('');
+    const plurChips = statsRangeChipsHTML(myAchievedFests());
     el.innerHTML = `
+      ${plurChips ? plurChips + `<div class="stats-range-cap">${rangeB ? `Tiers are lifetime · <b>gains shown for ${escHtml(statsRangeLabel(_statsRange))}</b>` : 'Lifetime points and badges'}</div>` : ''}
       <div style="display:flex;flex-direction:column;gap:8px;">${trackRows}</div>
-      <div class="gk-eyebrow" style="--gk-color:var(--neon-yellow);margin:18px 0 6px;">EARN LOG</div>
+      <div class="gk-eyebrow" style="--gk-color:var(--neon-yellow);margin:18px 0 6px;">EARN LOG${rangeB ? ` · ${escHtml(statsRangeLabel(_statsRange).toUpperCase())}` : ''}</div>
       <div class="plur-ledger-list" style="display:flex;">${logRows}</div>
       ${next ? `<div class="gk-eyebrow" style="--gk-color:var(--neon-yellow);margin:18px 0 6px;">WAYS TO EARN NEXT</div><div class="plur-ledger-list" style="display:flex;">${next}</div>` : ''}
       ${badges}
@@ -42367,10 +42528,11 @@
   // once per achieved festival where this raver personally checked them off as seen
   // (raver_artist_sightings) — not simply every artist on a lineup they attended, since
   // attending a rave doesn't mean you caught every set.
-  function myArtistsSeen() {
+  // Optional `fests` narrows it (e.g. to the Stats range); defaults to all achieved raves.
+  function myArtistsSeen(fests) {
     const you = squad.find(r => r.isYou);
     if (!you) return [];
-    const achievedIds = new Set(myAchievedFests().map(f => String(f.id)));
+    const achievedIds = new Set((fests || myAchievedFests()).map(f => String(f.id)));
     const counts = new Map(); // artistId -> # of achieved fests this raver marked them seen at
     raverArtistSightings.forEach(s => {
       if (String(s.raver_id) !== String(you.id)) return;
@@ -42393,10 +42555,10 @@
   // (rf_user_geo, device-local) to every achieved festival with resolvable coords.
   // Returns null (not 0) when no location is set yet, so callers can distinguish
   // "haven't set a location" from "legitimately 0 miles."
-  function myTravelDistance() {
+  function myTravelDistance(festsIn) {
     const userLoc = loadUserGeo();
     if (!userLoc) return null;
-    const fests = myAchievedFests();
+    const fests = festsIn || myAchievedFests();
     let total = 0, counted = 0;
     fests.forEach(f => {
       const d = festivalDistance(f, userLoc);
@@ -42707,20 +42869,30 @@
       return;
     }
 
-    const myFests = myAchievedFests();
+    // Range filter: myFests = raves in the selected range; lifetimeFests keeps
+    // unlock gates (Vibe DNA, Wrapped) and Raving Since on all-time counts.
+    const lifetimeFests = myAchievedFests();
+    const myFests = festsInStatsRange(lifetimeFests);
+    const prevFests = festsInStatsPrev(lifetimeFests); // null on All Time / first year
+    const isRanged = _statsRange !== 'all';
     const now = new Date();
     const thisYear = now.getFullYear();
     const totalRaves = myFests.length;
-    const totalDays = myFests.reduce((sum, f) => sum + (Number(f.days) || 1), 0);
+    const lifetimeRaves = lifetimeFests.length;
+    const sumDays = list => list.reduce((sum, f) => sum + (Number(f.days) || 1), 0);
+    const countCities = list => new Set(list.map(f => f.location).filter(Boolean).map(l => l.split(',')[0].trim())).size;
+    const totalDays = sumDays(myFests);
+    const cityCount = countCities(myFests);
 
-    const cities = [...new Set(myFests.map(f => f.location).filter(Boolean).map(l => l.split(',')[0].trim()))];
-    const cityCount = cities.length;
+    // festDate() parses YYYY-MM-DD as local time — new Date('2025-01-01') is UTC
+    // midnight, which reads as Dec 31 2024 in US timezones.
+    const lifetimeDates = lifetimeFests.map(festDate).filter(Boolean).sort((a, b) => a - b);
+    const ravingSince = lifetimeDates.length ? lifetimeDates[0].getFullYear() : null;
 
-    const sortedByDate = [...myFests].filter(f => f.date).sort((a,b) => new Date(a.date) - new Date(b.date));
-    const ravingSince = sortedByDate.length ? new Date(sortedByDate[0].date).getFullYear() : null;
-
+    const rangedIds = new Set(myFests.map(f => String(f.id)));
     const emojiCounts = {};
     Object.keys(festVibesCache).forEach(fid => {
+      if (isRanged && !rangedIds.has(String(fid))) return;
       const mine = (festVibesCache[fid] || []).find(v => String(v.raverId) === String(you.id));
       if (mine?.emoji) emojiCounts[mine.emoji] = (emojiCounts[mine.emoji] || 0) + 1;
     });
@@ -42730,17 +42902,38 @@
     const personality = getPersonalityLabel(you.genres || [], allTags);
 
     const STAMP_ICONS = ['🎪','🎟️','🎧','🪩','🔥','⚡','🌊','💫','✨','🌙','🦋','🎶'];
-    const passportFests = [...myFests].filter(f => f.date).sort((a,b) => new Date(b.date) - new Date(a.date));
+    const passportFests = [...myFests].filter(f => f.date).sort((a,b) => festDate(b) - festDate(a));
     const PASSPORT_SLOTS = 9;
-    const emptySlots = Math.max(0, PASSPORT_SLOTS - passportFests.length);
+    // "Add a rave" placeholders only on All Time — in a year view they'd read as missing raves.
+    const emptySlots = isRanged ? 0 : Math.max(0, PASSPORT_SLOTS - passportFests.length);
 
-    const artistsSeenCount = myArtistsSeen().length;
-    const travelDist = myTravelDistance();
+    const artistsSeenCount = myArtistsSeen(myFests).length;
+    const travelDist = myTravelDistance(myFests);
+    const prevTravel = prevFests && travelDist ? myTravelDistance(prevFests) : null;
+    const dl = (cur, prevFn) => prevFests ? statsDeltaHTML(cur, prevFn(prevFests)) : '';
 
     const upcomingFests = myUpcomingFests().filter(f => f.date).sort((a,b) => festDate(a) - festDate(b));
     const nextUp = upcomingFests[0] || null;
 
-    let html = '';
+    let html = statsRangeChipsHTML(lifetimeFests);
+    if (html) html += statsRangeCaptionHTML(totalRaves, lifetimeRaves, `rave${lifetimeRaves !== 1 ? 's' : ''}`);
+
+    // Raving Since only means something on All Time — a range swaps in "vs <prev>".
+    const rangeDiff = prevFests ? totalRaves - prevFests.length : 0;
+    const sinceTileHtml = !isRanged ? `
+      <div class="stats-hero-card">
+        <div class="stats-hero-number">${ravingSince || '—'}</div>
+        <div class="stats-hero-label">Raving Since</div>
+      </div>` : prevFests ? `
+      <div class="stats-hero-card">
+        <div class="stats-hero-number">${rangeDiff > 0 ? '+' : ''}${rangeDiff}</div>
+        <div class="stats-hero-label">vs ${escHtml(statsPrevLabel(_statsRange))}</div>
+        <div class="stats-hero-delta">${prevFests.length} → ${totalRaves} rave${totalRaves !== 1 ? 's' : ''}</div>
+      </div>` : `
+      <div class="stats-hero-card">
+        <div class="stats-hero-number">🌱</div>
+        <div class="stats-hero-label">First Year Raving</div>
+      </div>`;
 
     // Hero numbers
     html += `<div class="stats-hero-grid">
@@ -42748,25 +42941,26 @@
         <span class="stats-hero-chevron">›</span>
         <div class="stats-hero-number">${totalRaves || '—'}</div>
         <div class="stats-hero-label">Raves Logged</div>
+        ${dl(totalRaves, l => l.length)}
       </div>
       <div class="stats-hero-card tappable" onclick="openDaysStatsPage()" role="button" tabindex="0" aria-label="View your day and month rave stats">
         <span class="stats-hero-chevron">›</span>
         <div class="stats-hero-number">${totalDays || '—'}</div>
         <div class="stats-hero-label">Days Raved</div>
+        ${dl(totalDays, sumDays)}
       </div>
       <div class="stats-hero-card tappable" onclick="openCitiesMapPage()" role="button" tabindex="0" aria-label="View a map of cities you've raved in">
         <span class="stats-hero-chevron">›</span>
         <div class="stats-hero-number">${cityCount || '—'}</div>
         <div class="stats-hero-label">Cities Hit</div>
+        ${dl(cityCount, countCities)}
       </div>
-      <div class="stats-hero-card">
-        <div class="stats-hero-number">${ravingSince || '—'}</div>
-        <div class="stats-hero-label">Raving Since</div>
-      </div>
+      ${sinceTileHtml}
       <div class="stats-hero-card tappable" onclick="openArtistsSeenPage()" role="button" tabindex="0" aria-label="View artists you've seen live">
         <span class="stats-hero-chevron">›</span>
         <div class="stats-hero-number">${artistsSeenCount || '—'}</div>
         <div class="stats-hero-label">Artists Seen</div>
+        ${dl(artistsSeenCount, l => myArtistsSeen(l).length)}
       </div>
       ${travelDist === null ? `
       <div class="stats-hero-card tappable" onclick="promptLocationForStats()" role="button" tabindex="0" aria-label="Set your location to see distance traveled">
@@ -42776,17 +42970,24 @@
       <div class="stats-hero-card">
         <div class="stats-hero-number">${Math.round(travelDist.total).toLocaleString()}</div>
         <div class="stats-hero-label">Miles Raved</div>
+        ${prevTravel ? statsDeltaHTML(travelDist.total, prevTravel.total) : ''}
       </div>`}
     </div>`;
     if (travelDist && travelDist.skipped > 0) {
       html += `<div style="font-size:0.62rem;color:var(--muted);margin:-10px 0 14px;">📍 ${travelDist.skipped} rave${travelDist.skipped!==1?'s':''} couldn't be mapped yet</div>`;
     }
-    if (travelDist) {
+    if (travelDist && !isRanged) { // milestones are lifetime achievements
       html += milestoneBarHTML('✈️', 'Miles Raved', Math.round(travelDist.total), [500, 1000, 2500, 5000], 'miles');
     }
 
-    // Raves on Your Radar — upcoming RSVPs, shown regardless of achieved-rave count
-    html += `<div class="stats-section-card">
+    // Raves on Your Radar — upcoming RSVPs, shown regardless of achieved-rave count.
+    // Not range-filtered; in a range view it collapses to one line so it doesn't
+    // push the filtered stats down.
+    if (isRanged && nextUp) {
+      html += `<div class="stats-section-card tappable" style="padding:12px 16px;" onclick="openRavesRadarPage()" role="button" tabindex="0" aria-label="View your upcoming raves">
+        <div style="display:flex;align-items:center;gap:10px;font-family:'Outfit',sans-serif;font-size:0.78rem;color:var(--text);">📡 <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Next up: <strong style="color:var(--neon-purple);">${escHtml(nextUp.name)}</strong> · ${(() => { const days = Math.ceil((festDate(nextUp) - TODAY) / 86400000); return `in ${days} day${days!==1?'s':''}`; })()}</span><span class="rlog-item-chevron" style="margin-left:auto;">›</span></div>
+      </div>`;
+    } else if (!isRanged) html += `<div class="stats-section-card">
       <div class="stats-section-title">📡 Raves on Your Radar <span style="font-size:0.68rem;color:var(--muted);font-weight:400;margin-left:auto;">${upcomingFests.length} upcoming</span>${upcomingFests.length ? `<button class="radarmap-replay-btn" onclick="openRadarShareCard()" title="Share your radar" aria-label="Share your radar">📲 Share</button>` : ''}</div>
       ${nextUp ? `
         <div class="stats-personality" style="background:linear-gradient(135deg, rgba(var(--neon-purple-rgb),0.14), rgba(var(--neon-purple-rgb),0.04));border-color:rgba(var(--neon-purple-rgb),0.3);">
@@ -42807,18 +43008,23 @@
     </div>`;
 
     // Rave Wrapped button (5+ raves, December only) or lock/unlock gate
+    // Gates count lifetime raves so narrowing the range never re-locks a card.
+    // Wrapped is a this-year card, so it only shows on All Time and the current year.
     const isDecember = now.getMonth() === 11;
-    if (totalRaves >= 5 && (isDecember || _wrappedUnlocked)) {
+    const showWrapped = !isRanged || _statsRange === String(thisYear);
+    if (!showWrapped) {
+      // no Wrapped card for past years / Last 12 mo
+    } else if (lifetimeRaves >= 5 && (isDecember || _wrappedUnlocked)) {
       html += `<button class="stats-wrapped-btn" onclick="openWrapped()">✨ See My Rave Wrapped ${thisYear}</button>`;
-    } else if (totalRaves >= 5) {
+    } else if (lifetimeRaves >= 5) {
       html += `<div class="stats-locked stats-locked-wrapped">
         <div class="stats-locked-icon" onclick="wrappedStarTap()" style="cursor:pointer;" title="✨" role="button" tabindex="0" aria-label="Unlock Rave Wrapped">✨</div>
         <div class="stats-locked-title">Rave Wrapped ${thisYear}</div>
         <div class="stats-locked-sub">🔒 Opens in December. Your year-in-review card is ready and waiting</div>
       </div>`;
     } else {
-      const needed = 5 - totalRaves;
-      const pct = Math.round((totalRaves / 5) * 100);
+      const needed = 5 - lifetimeRaves;
+      const pct = Math.round((lifetimeRaves / 5) * 100);
       html += `<div class="stats-locked">
         <div class="stats-locked-icon">✨</div>
         <div class="stats-locked-title">Rave Wrapped ${thisYear}</div>
@@ -42828,8 +43034,9 @@
     }
 
     // Vibe DNA (3+ raves to unlock)
-    if (totalRaves >= 3) {
+    if (lifetimeRaves >= 3) {
       const genres = you.genres || [];
+      const allTimeTag = isRanged ? ' <span class="stats-alltime-tag">all-time</span>' : '';
       const topTags = allTags.slice(0, 6);
       html += `<div class="stats-section-card">
         <div class="stats-section-title">🧬 Vibe DNA</div>
@@ -42840,13 +43047,13 @@
             <div class="stats-personality-sub">${escHtml(personality.sub || '')}</div>
           </div>
         </div>
-        ${genres.length ? `<div style="margin-top:12px;margin-bottom:3px;font-size:0.67rem;color:var(--muted);font-family:'Outfit',sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Genres</div><div>${genres.map(g => `<button type="button" class="stats-pill" style="cursor:pointer;" onclick="openArtistsSeenPage('${escJsAttr(g)}')" title="See artists you've seen live in ${escHtml(g)}">${escHtml(g)}</button>`).join('')}</div>` : ''}
-        ${topTags.length ? `<div style="margin-top:9px;margin-bottom:3px;font-size:0.67rem;color:var(--muted);font-family:'Outfit',sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Your Vibes</div><div>${topTags.map(t => { const p = getPreset(t); return `<span class="stats-pill cyan">${escHtml(p ? `${p.icon} ${p.label}` : t)}</span>`; }).join('')}</div>` : ''}
-        ${topEmoji ? `<div style="margin-top:9px;margin-bottom:4px;font-size:0.67rem;color:var(--muted);font-family:'Outfit',sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Signature Emoji</div><span style="font-size:1.9rem;">${topEmoji}</span>` : ''}
+        ${genres.length ? `<div style="margin-top:12px;margin-bottom:3px;font-size:0.67rem;color:var(--muted);font-family:'Outfit',sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Genres${allTimeTag}</div><div>${genres.map(g => `<button type="button" class="stats-pill" style="cursor:pointer;" onclick="openArtistsSeenPage('${escJsAttr(g)}')" title="See artists you've seen live in ${escHtml(g)}">${escHtml(g)}</button>`).join('')}</div>` : ''}
+        ${topTags.length ? `<div style="margin-top:9px;margin-bottom:3px;font-size:0.67rem;color:var(--muted);font-family:'Outfit',sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Your Vibes${allTimeTag}</div><div>${topTags.map(t => { const p = getPreset(t); return `<span class="stats-pill cyan">${escHtml(p ? `${p.icon} ${p.label}` : t)}</span>`; }).join('')}</div>` : ''}
+        ${topEmoji ? `<div style="margin-top:9px;margin-bottom:4px;font-size:0.67rem;color:var(--muted);font-family:'Outfit',sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Signature Emoji${isRanged ? ` · ${escHtml(statsRangeLabel(_statsRange))}` : ''}</div><span style="font-size:1.9rem;">${topEmoji}</span>` : ''}
       </div>`;
     } else {
-      const needed = 3 - totalRaves;
-      const pct = Math.round((totalRaves / 3) * 100);
+      const needed = 3 - lifetimeRaves;
+      const pct = Math.round((lifetimeRaves / 3) * 100);
       html += `<div class="stats-locked">
         <div class="stats-locked-icon">🧬</div>
         <div class="stats-locked-title">Vibe DNA</div>
@@ -42887,8 +43094,8 @@
       html += `
         <div class="stats-empty-state" style="padding:20px 0;">
           <div class="stats-empty-icon">🎫</div>
-          <div class="stats-empty-title">No ticket types logged yet</div>
-          <div class="stats-empty-sub">${ticketMixTappable ? 'Tap here to set a ticket type for your past raves.' : "Set your ticket type from a rave's RSVP to start tracking your mix."}</div>
+          <div class="stats-empty-title">${isRanged && !myFests.length ? `No raves in ${escHtml(statsRangeLabel(_statsRange))}` : 'No ticket types logged yet'}</div>
+          <div class="stats-empty-sub">${ticketMixTappable ? 'Tap here to set a ticket type for your past raves.' : isRanged ? 'Try a different range to see your ticket mix.' : "Set your ticket type from a rave's RSVP to start tracking your mix."}</div>
         </div>`;
     }
     html += `</div>`;
@@ -42898,7 +43105,7 @@
       <div class="stats-section-title">🛂 Rave Passport <span style="font-size:0.68rem;color:var(--muted);font-weight:400;margin-left:auto;">${totalRaves} stamp${totalRaves!==1?'s':''}</span></div>
       <div class="stats-passport-grid">
         ${passportFests.slice(0, PASSPORT_SLOTS).map((f, i) => {
-          const year = f.date ? new Date(f.date + 'T12:00:00').getFullYear() : '';
+          const year = festDate(f)?.getFullYear() || '';
           return `<div class="stats-stamp" style="cursor:pointer;" onclick="openRaveFocus('${escJsAttr(f.id)}')" role="button" tabindex="0" title="Tap to view ${escHtml(f.name)}">
             <div class="stats-stamp-icon">${STAMP_ICONS[i % STAMP_ICONS.length]}</div>
             <div class="stats-stamp-name" title="${escHtml(f.name)}">${escHtml(f.name)}</div>
@@ -42911,6 +43118,8 @@
           <div class="stats-stamp-year">—</div>
         </div>`).join('')}
       </div>
+      ${passportFests.length > PASSPORT_SLOTS ? `<button class="profile-back cyan" style="margin-top:10px;" onclick="openRavesLoggedPage()">See all ${passportFests.length} stamps →</button>` : ''}
+      ${isRanged && !passportFests.length ? `<div class="stats-empty-sub" style="text-align:center;padding:8px 0;">No stamps in ${escHtml(statsRangeLabel(_statsRange))}</div>` : ''}
     </div>`;
 
     document.getElementById('stats-content').innerHTML = html;
@@ -42940,22 +43149,30 @@
     const crewFestIds = new Set();
     crewMembers.forEach(m => (m.festIds || []).forEach(fid => crewFestIds.add(String(fid))));
     // Crew stats reflect only raves that have actually happened — future RSVPs are excluded.
-    const crewFests = festivals.filter(f => crewFestIds.has(String(f.id)) && isFestAchieved(f));
+    // crewFests is narrowed to the Stats range; everything derived from it
+    // (leaderboard, shared raves, cities, ticket mix, raved-with) follows.
+    const crewFestsLifetime = festivals.filter(f => crewFestIds.has(String(f.id)) && isFestAchieved(f));
+    const crewFests = festsInStatsRange(crewFestsLifetime);
+    const crewPrevFests = festsInStatsPrev(crewFestsLifetime); // null on All Time / crew's first year
+    const isRanged = _statsRange !== 'all';
     const achievedFestIds = new Set(crewFests.map(f => String(f.id)));
 
-    const sharedFests = crewFests.filter(f =>
+    const sharedOf = list => list.filter(f =>
       crewMembers.filter(m => (m.festIds || []).some(fid => String(fid) === String(f.id))).length >= 2
     );
+    const citiesOf = list => [...new Set(list.map(f => f.location).filter(Boolean).map(l => l.split(',')[0].trim()))];
+    const sharedFests = sharedOf(crewFests);
 
-    const sharedSorted = [...sharedFests].filter(f => f.date).sort((a,b) => new Date(a.date) - new Date(b.date));
-    const crewRavingSince = sharedSorted.length ? new Date(sharedSorted[0].date + 'T12:00:00').getFullYear() : null;
+    const sharedDates = sharedOf(crewFestsLifetime).map(festDate).filter(Boolean).sort((a, b) => a - b);
+    const crewRavingSince = sharedDates.length ? sharedDates[0].getFullYear() : null;
 
-    const crewCities = [...new Set(crewFests.map(f => f.location).filter(Boolean).map(l => l.split(',')[0].trim()))];
+    const crewCities = citiesOf(crewFests);
 
     const lb = crewMembers.map(m => ({
       ...m,
       raveCount: (m.festIds || []).filter(fid => achievedFestIds.has(String(fid))).length,
-      vibeCount: Object.values(festVibesCache).filter(vibes => vibes.some(v => String(v.raverId) === String(m.id))).length
+      vibeCount: Object.entries(festVibesCache).filter(([fid, vibes]) =>
+        (!isRanged || achievedFestIds.has(String(fid))) && vibes.some(v => String(v.raverId) === String(m.id))).length
     })).sort((a,b) => b.raveCount - a.raveCount);
 
     const ogMember = crewMembers[0];
@@ -42977,6 +43194,8 @@
 
     // Crew year-over-year trend — everyone's achieved raves (not just shared ones), so
     // this stays meaningful even for a single-member crew or one with no shared raves yet.
+    // A single-year range swaps to month-by-month (Jan–Dec) for that year.
+    const crewYearView = /^\d{4}$/.test(_statsRange);
     const crewYoyCounts = {};
     crewFests.forEach(f => {
       const d = festDate(f);
@@ -42984,7 +43203,12 @@
       const y = d.getFullYear();
       crewYoyCounts[y] = (crewYoyCounts[y] || 0) + 1;
     });
-    const crewYoyRows = Object.entries(crewYoyCounts).sort((a, b) => Number(a[0]) - Number(b[0]));
+    let crewYoyRows = Object.entries(crewYoyCounts).sort((a, b) => Number(a[0]) - Number(b[0]));
+    if (crewYearView && crewFests.length) {
+      const mc = Array(12).fill(0);
+      crewFests.forEach(f => { const d = festDate(f); if (d) mc[d.getMonth()]++; });
+      crewYoyRows = mc.map((c, i) => [MONTH_NAMES[i].slice(0, 3), c]);
+    }
 
     // Crew genre mix — squad genres are already Title Case, no normalization needed.
     const crewGenreCounts = {};
@@ -43011,7 +43235,7 @@
       });
       const youTicketMixCounts = {};
       let youTotalTicketed = 0;
-      myAchievedFests().forEach(f => {
+      festsInStatsRange(myAchievedFests()).forEach(f => {
         const type = ((you.ticketTypes || {})[f.id] || {}).type;
         if (type) { youTicketMixCounts[type] = (youTicketMixCounts[type] || 0) + 1; youTotalTicketed++; }
       });
@@ -43058,8 +43282,23 @@
       </select>
     </div>` : '';
 
+    const crewRangeChips = statsRangeChipsHTML(crewFestsLifetime);
+    const crewAllTimeTag = isRanged ? '<span class="stats-alltime-tag">all-time</span>' : '';
+    // Raving Since only on All Time; a range shows the crew's raves in it vs the prior period.
+    const crewFourthTile = !isRanged ? `
+        <div class="stats-hero-card">
+          <div class="stats-hero-number">${crewRavingSince || '—'}</div>
+          <div class="stats-hero-label">Raving Since</div>
+        </div>` : `
+        <div class="stats-hero-card">
+          <div class="stats-hero-number">${crewFests.length || '—'}</div>
+          <div class="stats-hero-label">Crew Raves</div>
+          ${crewPrevFests ? statsDeltaHTML(crewFests.length, crewPrevFests.length) : ''}
+        </div>`;
+
     content.innerHTML = `
       ${crewPickerHtml}
+      ${crewRangeChips ? crewRangeChips + statsRangeCaptionHTML(crewFests.length, crewFestsLifetime.length, 'crew raves') : ''}
       <div class="stats-hero-grid">
         <div class="stats-hero-card">
           <div class="stats-hero-number">${crewMembers.length}</div>
@@ -43068,18 +43307,17 @@
         <div class="stats-hero-card">
           <div class="stats-hero-number">${sharedFests.length || '—'}</div>
           <div class="stats-hero-label">Shared Raves</div>
+          ${crewPrevFests ? statsDeltaHTML(sharedFests.length, sharedOf(crewPrevFests).length) : ''}
         </div>
         <div class="stats-hero-card">
           <div class="stats-hero-number">${crewCities.length || '—'}</div>
           <div class="stats-hero-label">Cities Hit</div>
+          ${crewPrevFests ? statsDeltaHTML(crewCities.length, citiesOf(crewPrevFests).length) : ''}
         </div>
-        <div class="stats-hero-card">
-          <div class="stats-hero-number">${crewRavingSince || '—'}</div>
-          <div class="stats-hero-label">Raving Since</div>
-        </div>
+        ${crewFourthTile}
       </div>
       <div class="stats-section-card">
-        <div class="stats-section-title">🏆 Rave Leaderboard</div>
+        <div class="stats-section-title">🏆 Rave Leaderboard${isRanged ? `<span style="font-size:0.68rem;color:var(--muted);font-weight:400;margin-left:auto;">${escHtml(statsRangeLabel(_statsRange))}</span>` : ''}</div>
         ${lb.some(m => m.raveCount > 0) ? lb.map((m, i) => {
           const isYou = you && String(m.id) === String(you.id);
           const isOG = ogMember && String(m.id) === String(ogMember.id);
@@ -43090,17 +43328,17 @@
             <div class="stats-lb-name${isYou ? ' you' : ''}">${escHtml(m.name)}${isOG ? `<span class="stats-lb-og">OG</span>` : ''}</div>
             <div class="stats-lb-val">${m.raveCount} rave${m.raveCount!==1?'s':''}</div>
           </div>`;
-        }).join('') : '<div class="archive-empty" style="padding:16px 0;">No raves logged yet. Add some to see who leads the pack 🏆</div>'}
+        }).join('') : `<div class="archive-empty" style="padding:16px 0;">${isRanged ? `No crew raves in ${escHtml(statsRangeLabel(_statsRange))}` : 'No raves logged yet. Add some to see who leads the pack 🏆'}</div>`}
       </div>
       ${vibeAwardHtml}
       ${crewYoyRows.length ? `
       <div class="stats-section-card">
-        <div class="stats-section-title">📈 Crew Raves Over Time</div>
+        <div class="stats-section-title">📈 ${crewYearView ? `Crew Raves in ${_statsRange}` : 'Crew Raves Over Time'}</div>
         ${statsChartOrFallback('crew-chart-yoy', crewYoyRows.map(([y, c]) => `<span class="stats-pill">${escHtml(y)} · ${c}</span>`).join(''), Math.max(140, crewYoyRows.length * 34))}
       </div>` : ''}
       ${crewGenreRows.length ? `
       <div class="stats-section-card">
-        <div class="stats-section-title">🧬 Crew Genre Mix</div>
+        <div class="stats-section-title">🧬 Crew Genre Mix ${crewAllTimeTag}</div>
         ${statsChartOrFallback('crew-chart-genre', crewGenreRows.map(([g, c]) => `<span class="stats-pill cyan">${escHtml(g)} · ${c}</span>`).join(''), Math.max(140, crewGenreRows.length * 34))}
       </div>` : ''}
       <div id="plur-leaderboard-wrap">${plurLeaderboardCardHTML([], null, true)}</div>
@@ -43162,7 +43400,7 @@
     return `
       <div class="stats-section-card">
         <div class="stats-section-title" style="display:flex;justify-content:space-between;align-items:center;">
-          <span>✨ PLUR Leaderboard</span>
+          <span>✨ PLUR Leaderboard${_statsRange !== 'all' ? ' <span class="stats-alltime-tag">all-time</span>' : ''}</span>
           <span style="font-size:0.6rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;opacity:0.6;">Crew · 🔒 Global soon</span>
         </div>
         ${body}
@@ -43446,7 +43684,8 @@
   }
 
   function renderRavesLoggedPage() {
-    const myFests = myAchievedFests().filter(f => f.date);
+    const lifetimeFests = myAchievedFests();
+    const myFests = festsInStatsRange(lifetimeFests).filter(f => f.date);
     const sorted = [...myFests].sort((a, b) => festDate(b) - festDate(a));
 
     const body = sorted.length
@@ -43464,15 +43703,17 @@
         }).join('')}</div>`
       : `<div class="stats-empty-state">
           <div class="stats-empty-icon">🎧</div>
-          <div class="stats-empty-title">No raves logged yet</div>
-          <div class="stats-empty-sub">Add a rave with a date to start building your rave history.</div>
+          <div class="stats-empty-title">${_statsRange !== 'all' ? `No raves in ${escHtml(statsRangeLabel(_statsRange))}` : 'No raves logged yet'}</div>
+          <div class="stats-empty-sub">${_statsRange !== 'all' ? 'Try a different range.' : 'Add a rave with a date to start building your rave history.'}</div>
         </div>`;
 
+    const rangeHtml = statsRangeChipsHTML(lifetimeFests);
     document.getElementById('page-raves-logged').innerHTML = `
       <button class="profile-back cyan" onclick="backToStats()">← Rave Life</button>
       <div class="section-header" style="margin-bottom:14px;">
         <div class="section-title">Raves Logged 🎟️</div>
       </div>
+      ${rangeHtml ? rangeHtml + statsRangeCaptionHTML(myFests.length, lifetimeFests.length, 'raves') : ''}
       ${body}
     `;
   }
@@ -43489,7 +43730,8 @@
   // change type" for any festival) rather than building a second editor.
   function renderTicketMixPage() {
     const you = squad.find(r => r.isYou);
-    const myFests = myAchievedFests().filter(f => f.date);
+    const lifetimeFests = myAchievedFests();
+    const myFests = festsInStatsRange(lifetimeFests).filter(f => f.date);
     const sorted = [...myFests].sort((a, b) => festDate(b) - festDate(a));
 
     const body = sorted.length
@@ -43512,15 +43754,17 @@
         }).join('')}</div>`
       : `<div class="stats-empty-state">
           <div class="stats-empty-icon">🎫</div>
-          <div class="stats-empty-title">No raves logged yet</div>
-          <div class="stats-empty-sub">Add a rave with a date to start tracking your ticket types.</div>
+          <div class="stats-empty-title">${_statsRange !== 'all' ? `No raves in ${escHtml(statsRangeLabel(_statsRange))}` : 'No raves logged yet'}</div>
+          <div class="stats-empty-sub">${_statsRange !== 'all' ? 'Try a different range.' : 'Add a rave with a date to start tracking your ticket types.'}</div>
         </div>`;
 
+    const rangeHtml = statsRangeChipsHTML(lifetimeFests);
     document.getElementById('page-ticket-mix').innerHTML = `
       <button class="profile-back cyan" onclick="backToStatsFromTicketMix()">← Rave Life</button>
       <div class="section-header" style="margin-bottom:14px;">
         <div class="section-title">Ticket Mix 🎫</div>
       </div>
+      ${rangeHtml ? rangeHtml + statsRangeCaptionHTML(myFests.length, lifetimeFests.length, 'raves') : ''}
       ${body}
     `;
   }
@@ -44200,17 +44444,23 @@
 
   async function renderArtistsSeenPage() {
     const page = document.getElementById('page-artists-seen');
-    const allSeen = myArtistsSeen();
+    const lifetimeFests = myAchievedFests();
+    const lifetimeSeenCount = myArtistsSeen(lifetimeFests).length;
+    const allSeen = myArtistsSeen(festsInStatsRange(lifetimeFests));
+    const rangeChips = statsRangeChipsHTML(lifetimeFests);
+    const rangeHtml = rangeChips ? rangeChips + statsRangeCaptionHTML(allSeen.length, lifetimeSeenCount, 'artists') : '';
 
     if (!allSeen.length) {
       _artistsSeenGenreFilter = null;
+      const ranged = _statsRange !== 'all' && lifetimeSeenCount > 0;
       page.innerHTML = `
         <button class="profile-back cyan" onclick="backToStats()">← Rave Life</button>
         <div class="section-header" style="margin-bottom:14px;"><div class="section-title">Artists Seen Live 🎤</div></div>
+        ${rangeHtml}
         <div class="stats-empty-state">
           <div class="stats-empty-icon">🎤</div>
-          <div class="stats-empty-title">No lineup data yet</div>
-          <div class="stats-empty-sub">Tag artists on your past raves and check off who you caught. They'll show up here.</div>
+          <div class="stats-empty-title">${ranged ? `No artists caught in ${escHtml(statsRangeLabel(_statsRange))}` : 'No lineup data yet'}</div>
+          <div class="stats-empty-sub">${ranged ? 'Try a different range.' : "Tag artists on your past raves and check off who you caught. They'll show up here."}</div>
         </div>`;
       return;
     }
@@ -44257,11 +44507,12 @@
     page.innerHTML = `
       <button class="profile-back cyan" onclick="backToStats()">← Rave Life</button>
       <div class="section-header" style="margin-bottom:14px;">${titleHtml}</div>
+      ${rangeHtml}
       <div class="stats-hero-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:18px;">
         <div class="stats-hero-card"><div class="stats-hero-number">${seen.length}</div><div class="stats-hero-label">${filter ? escHtml(filter) + ' Artists' : 'Distinct Artists'}</div></div>
         ${seen.length ? `<div class="stats-hero-card"><div class="stats-hero-number" style="font-size:1.3rem;">${escHtml(seen[0].artist.name)}</div><div class="stats-hero-label">Most Seen (${seen[0].count}x)</div></div>` : ''}
       </div>
-      ${milestoneBarHTML('🎤', 'Artists Seen', allSeen.length, [10, 25, 50, 100], 'artists')}
+      ${_statsRange === 'all' ? milestoneBarHTML('🎤', 'Artists Seen', allSeen.length, [10, 25, 50, 100], 'artists') : ''}
       ${genreRows.length ? `
       <div class="stats-section-card">
         <div class="stats-section-title">🧬 Genre Breakdown</div>
@@ -44436,17 +44687,25 @@
   }
 
   async function renderDaysStatsPage() {
-    const myFests = myAchievedFests().filter(f => f.date);
+    const lifetimeFests = myAchievedFests();
+    const myFests = festsInStatsRange(lifetimeFests).filter(f => f.date);
     const page = document.getElementById('page-days-stats');
+    const isYearView = /^\d{4}$/.test(_statsRange);
+    const rangeChips = statsRangeChipsHTML(lifetimeFests);
+    const lifetimeDays = lifetimeFests.filter(f => f.date).reduce((sum, f) => sum + (Number(f.days) || 1), 0);
+    const rangedDays = myFests.reduce((sum, f) => sum + (Number(f.days) || 1), 0);
+    const rangeHtml = rangeChips ? rangeChips + statsRangeCaptionHTML(rangedDays, lifetimeDays, 'days') : '';
 
     if (!myFests.length) {
+      const ranged = _statsRange !== 'all';
       page.innerHTML = `
         <button class="profile-back cyan" onclick="backToStats()">← Rave Life</button>
         <div class="section-header" style="margin-bottom:14px;"><div class="section-title">Days Raved 📅</div></div>
+        ${rangeHtml}
         <div class="stats-empty-state">
           <div class="stats-empty-icon">📅</div>
-          <div class="stats-empty-title">No dated raves yet</div>
-          <div class="stats-empty-sub">Log a rave with a date to see your day & month breakdown.</div>
+          <div class="stats-empty-title">${ranged ? `No raves in ${escHtml(statsRangeLabel(_statsRange))}` : 'No dated raves yet'}</div>
+          <div class="stats-empty-sub">${ranged ? 'Try a different range.' : 'Log a rave with a date to see your day & month breakdown.'}</div>
         </div>`;
       return;
     }
@@ -44473,11 +44732,16 @@
     const bestMonthEntry = Object.values(monthKeyCounts).sort((a, b) => b.count - a.count)[0];
 
     const dayRows = dayCounts.map((c, i) => ({ label: DAY_NAMES[i], count: c })).filter(r => r.count > 0).sort((a, b) => b.count - a.count);
-    const monthRows = monthNameCounts.map((c, i) => ({ label: MONTH_NAMES[i], count: c })).filter(r => r.count > 0).sort((a, b) => b.count - a.count);
+    // A single-year view reads as that year's calendar (Jan–Dec, zeros included);
+    // All Time / Last 12 mo rank months by popularity across every year.
+    const monthRows = isYearView
+      ? monthNameCounts.map((c, i) => ({ label: MONTH_NAMES[i], count: c }))
+      : monthNameCounts.map((c, i) => ({ label: MONTH_NAMES[i], count: c })).filter(r => r.count > 0).sort((a, b) => b.count - a.count);
 
     page.innerHTML = `
       <button class="profile-back cyan" onclick="backToStats()">← Rave Life</button>
       <div class="section-header" style="margin-bottom:14px;"><div class="section-title">Days Raved 📅</div></div>
+      ${rangeHtml}
 
       <div class="stats-hero-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:18px;">
         <div class="stats-hero-card"><div class="stats-hero-number" style="font-size:1.4rem;">${escHtml(DAY_NAMES[topDayIdx].slice(0, 3))}</div><div class="stats-hero-label">Top Day</div></div>
@@ -44491,13 +44755,13 @@
       </div>
 
       <div class="stats-section-card">
-        <div class="stats-section-title">🗓️ Most Popular Month</div>
+        <div class="stats-section-title">🗓️ ${isYearView ? `${_statsRange} by Month` : 'Most Popular Month'}</div>
         ${statsChartOrFallback('days-chart-month', statBarRows(monthRows, monthNameCounts[topMonthNameIdx]), Math.max(140, monthRows.length * 34))}
       </div>
 
       ${bestMonthEntry ? `
       <div class="stats-section-card">
-        <div class="stats-section-title">🔥 Biggest Month Ever</div>
+        <div class="stats-section-title">🔥 ${_statsRange === 'all' ? 'Biggest Month Ever' : 'Biggest Month'}</div>
         <div class="stats-personality" style="background:linear-gradient(135deg, rgba(var(--neon-cyan-rgb),0.14), rgba(var(--neon-cyan-rgb),0.04));border-color:rgba(var(--neon-cyan-rgb),0.3);">
           <div class="stats-personality-emoji">🔥</div>
           <div>
@@ -44522,7 +44786,8 @@
   }
 
   async function renderCitiesMapPage() {
-    const myFests = myAchievedFests();
+    const lifetimeFests = myAchievedFests();
+    const myFests = festsInStatsRange(lifetimeFests);
     // Key by the full "City, State/Country" string, not just the city name — otherwise
     // e.g. "St Petersburg, FL" and "St Petersburg, Russia" would collapse into one bucket
     // and geocode ambiguously.
@@ -44548,15 +44813,20 @@
       return { city, location: v.location, count: v.count };
     }).sort((a, b) => b.count - a.count);
     const page = document.getElementById('page-cities-map');
+    const rangeChips = statsRangeChipsHTML(lifetimeFests);
+    const lifetimeCityCount = new Set(lifetimeFests.map(f => (f.location || '').trim().toLowerCase()).filter(Boolean)).size;
+    const rangeHtml = rangeChips ? rangeChips + statsRangeCaptionHTML(cityList.length, lifetimeCityCount, 'cities') : '';
 
     if (!cityList.length) {
+      const ranged = _statsRange !== 'all' && lifetimeCityCount > 0;
       page.innerHTML = `
         <button class="profile-back cyan" onclick="backToStats()">← Rave Life</button>
         <div class="section-header" style="margin-bottom:14px;"><div class="section-title">Cities Hit 🗺️</div></div>
+        ${rangeHtml}
         <div class="stats-empty-state">
           <div class="stats-empty-icon">🗺️</div>
-          <div class="stats-empty-title">No cities yet</div>
-          <div class="stats-empty-sub">Log a rave with a location to start filling in your map.</div>
+          <div class="stats-empty-title">${ranged ? `No cities in ${escHtml(statsRangeLabel(_statsRange))}` : 'No cities yet'}</div>
+          <div class="stats-empty-sub">${ranged ? 'Try a different range.' : 'Log a rave with a location to start filling in your map.'}</div>
         </div>`;
       return;
     }
@@ -44568,16 +44838,17 @@
     page.innerHTML = `
       <button class="profile-back cyan" onclick="backToStats()">← Rave Life</button>
       <div class="section-header" style="margin-bottom:14px;"><div class="section-title">Cities Hit 🗺️</div></div>
+      ${rangeHtml}
       <div class="stats-section-card">
         <div class="stats-personality" style="margin-bottom:0;background:linear-gradient(135deg, rgba(var(--neon-cyan-rgb),0.14), rgba(var(--neon-cyan-rgb),0.04));border-color:rgba(var(--neon-cyan-rgb),0.3);">
           <div class="stats-personality-emoji">🏆</div>
           <div>
             <div class="stats-personality-label">${escHtml(topCity.city)}</div>
-            <div class="stats-personality-sub">Your most-raved city — ${topCity.count} rave${topCity.count !== 1 ? 's' : ''}</div>
+            <div class="stats-personality-sub">Your most-raved city${_statsRange !== 'all' ? ` in ${escHtml(statsRangeLabel(_statsRange))}` : ''} — ${topCity.count} rave${topCity.count !== 1 ? 's' : ''}</div>
           </div>
         </div>
       </div>
-      ${milestoneBarHTML('🗺️', 'Cities Hit', cityList.length, [5, 10, 25, 50], 'cities')}
+      ${_statsRange === 'all' ? milestoneBarHTML('🗺️', 'Cities Hit', cityList.length, [5, 10, 25, 50], 'cities') : ''}
       <div id="citymap" class="citymap"><div class="citymap-loading">📍 Mapping your cities…</div></div>
       <div class="stats-section-card">
         <div class="stats-section-title">🌆 City Breakdown</div>
@@ -44618,6 +44889,9 @@
   }
 
   async function geocodeAndRenderCityMap(cityList) {
+    // The page re-renders (fresh #citymap) when the Stats range changes — a stale
+    // run must not draw into the new container.
+    const startMapEl = document.getElementById('citymap');
     // As in renderRavesRadarMap: overlap the library fetch with the geocoding.
     const leafletReady = loadLeaflet().catch(() => {});
     const cache = loadGeocodeCache();
@@ -44639,7 +44913,7 @@
     // Bail if the user navigated away while we were geocoding.
     if (!document.getElementById('page-cities-map').classList.contains('active')) return;
     const mapEl = document.getElementById('citymap');
-    if (!mapEl) return;
+    if (!mapEl || mapEl !== startMapEl) return;
 
     if (!points.length || typeof L === 'undefined') {
       mapEl.innerHTML = `<div class="citymap-loading">Couldn't place any pins right now — see the breakdown below.</div>`;
