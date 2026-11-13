@@ -2605,6 +2605,7 @@
   .game-plan-seat-badge { font-size: 0.68rem; font-weight: 700; color: var(--neon-cyan); background: rgba(var(--neon-cyan-rgb),0.1); border-radius: 6px; padding: 1px 6px; }
   .game-plan-seat-badge.full { color: var(--neon-pink); background: rgba(var(--neon-pink-rgb),0.12); }
   .game-plan-seat-badge.muted { color: var(--muted); background: rgba(var(--white-rgb),0.06); }
+  .game-plan-stay-place { font-size: 0.82rem; color: var(--text); line-height: 1.4; word-break: break-word; }
 
   /* Outfit: photo cards */
   .game-plan-outfit-photo { width: 100%; max-height: 240px; object-fit: cover; border-radius: 8px; display: block; }
@@ -2704,6 +2705,22 @@
   #crew-feature-panel-raveplan .game-plan-section .btn-ghost:hover {
     background: rgba(var(--surface2-rgb),0.09);
   }
+  /* Stay / Rides cards: lift off the paper and keep links + badges legible
+     (neon cyan/pink wash out on cream). */
+  #crew-feature-panel-raveplan .game-plan-section .archive-link-card {
+    background: rgba(255,255,255,0.7);
+  }
+  #crew-feature-panel-raveplan .game-plan-section .archive-link-card > .archive-link-main > .archive-link-label {
+    font-weight: 700;
+  }
+  #crew-feature-panel-raveplan .game-plan-section .archive-link-url {
+    color: #006066; opacity: 1; font-weight: 700; font-size: 0.78rem; text-decoration: underline; text-underline-offset: 2px;
+  }
+  #crew-feature-panel-raveplan .game-plan-section .archive-link-meta { opacity: 1; }
+  #crew-feature-panel-raveplan .game-plan-section .game-plan-seat-badge { color: #006066; background: rgba(0,196,204,0.16); }
+  #crew-feature-panel-raveplan .game-plan-section .game-plan-seat-badge.full { color: #a3123f; background: rgba(var(--neon-pink-rgb),0.14); }
+  #crew-feature-panel-raveplan .game-plan-section .game-plan-seat-badge.muted { color: rgba(var(--surface2-rgb),0.7); background: rgba(var(--surface2-rgb),0.07); }
+  #crew-feature-panel-raveplan .game-plan-section .archive-link-meta .jam-filter-pill { color: rgb(var(--surface2-rgb)); }
 
   /* FAM Poll */
   .fam-poll-section { margin-bottom: 0; }
@@ -5525,7 +5542,7 @@
   /* Rave Plan tickets — paper, with notches cut by a mask so the glow shows
      through them. Several tickets swipe sideways with the next one peeking. */
   .crew-feed .cnf-block { transform: none; margin-bottom: 14px; }
-  .crew-ticket-stack { display: flex; align-items: flex-start; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin-bottom: 6px; padding-bottom: 8px; }
+  .crew-ticket-stack { display: flex; align-items: flex-start; gap: 10px; overflow-x: auto; overflow-y: hidden; transition: height 0.2s; scroll-snap-type: x mandatory; scrollbar-width: none; margin-bottom: 6px; padding-bottom: 8px; }
   .crew-ticket-stack::-webkit-scrollbar { display: none; }
   .crew-ticket-stack.is-multi .crew-ticket { flex-basis: calc(100% - 28px); }
   .crew-ticket {
@@ -5715,7 +5732,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     .modal.crew-manifest-sheet, .crew-ticket-dots span { transition: none; }
-    .crew-ticket-stack { scroll-behavior: auto; }
+    .crew-ticket-stack { scroll-behavior: auto; transition: none; }
   }
 
   /* ===== PHOTO FEATURES ===== */
@@ -11211,7 +11228,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.38.0';
+  const APP_VERSION = '2.38.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -21834,6 +21851,23 @@
     stack.style.scrollBehavior = 'auto';
     stack.scrollLeft = next.offsetLeft - stack.offsetLeft;
     stack.style.scrollBehavior = prev;
+    fitCrewTicketStack(stack);
+  }
+
+  // A flex row is as tall as its tallest ticket, which left dead space under
+  // a shorter one. Size the stack to the ticket in view (+8px bottom padding).
+  function fitCrewTicketStack(stack) {
+    stack = stack || document.querySelector('#page-crew-detail .crew-ticket-stack');
+    const first = stack && stack.children[0];
+    if (!first) return;
+    const i = Math.round(stack.scrollLeft / (first.offsetWidth + 10));
+    const ticket = stack.children[i] || first;
+    stack.style.height = (ticket.offsetHeight + 8) + 'px';
+    // Re-fit if a ticket reflows later (web fonts, rotation) so none clips.
+    if (!stack._fitObserver && window.ResizeObserver) {
+      stack._fitObserver = new ResizeObserver(() => fitCrewTicketStack(stack));
+      Array.from(stack.children).forEach(c => stack._fitObserver.observe(c));
+    }
   }
 
   // Swiping the ticket stack moves the dots and, when Plan is showing,
@@ -21848,6 +21882,7 @@
       const ticket = el.children[i];
       if (!ticket) return;
       document.querySelectorAll('#page-crew-detail .crew-ticket-dots span').forEach((dot, j) => dot.classList.toggle('on', j === i));
+      fitCrewTicketStack(el);
       if (_crewFeedFilter === 'raveplan' && ticket.dataset.fest && String(_gamePlanActiveFestivalId) !== String(ticket.dataset.fest)) {
         switchGamePlanFestival(activeDetailId, ticket.dataset.fest);
       }
@@ -21897,6 +21932,7 @@
         ? `<span class="crew-ticket-track"><i style="width:${Math.round(done / tasks.length * 100)}%"></i></span><span>${done}/${tasks.length} done${mine ? ` · <b>${mine} ${mine === 1 ? 'is' : 'are'} yours</b>` : ''}</span>`
         : 'No tasks yet. Add the first one below.';
     });
+    fitCrewTicketStack();
   }
 
   // Shows the panels a chip covers and hides the rest. `quiet` is for
@@ -21916,6 +21952,7 @@
     if (list) list.style.display = filter.key === 'all' ? '' : 'none';
     // Plan mode: the tickets swap their barcode stub for progress + actions.
     document.querySelector('#page-crew-detail .crew-feed-wrap')?.classList.toggle('is-plan', filter.key === 'raveplan');
+    fitCrewTicketStack();
     const chip = document.querySelector(`#page-crew-detail .crew-feed-filter[data-filter="${filter.key}"]`);
     const row = chip && chip.parentElement;
     if (row) row.scrollLeft = Math.max(0, chip.offsetLeft - (row.clientWidth - chip.offsetWidth) / 2);
@@ -26843,7 +26880,8 @@
       return `
         <div class="archive-link-card" style="flex-direction:column;align-items:stretch;">
           <div class="archive-link-main">
-            <span class="archive-link-label">${typeInfo ? typeInfo.emoji : '🏠'} ${host ? escHtml(displayName(host).split(' ')[0]) : 'Someone'} is staying${typeInfo ? ` in ${typeInfo.article} ${typeInfo.label.toLowerCase()}` : ''}${h.text ? ` at ${escHtml(h.text)}` : ''}</span>
+            <span class="archive-link-label">${typeInfo ? typeInfo.emoji : '🏠'} ${host ? escHtml(displayName(host).split(' ')[0]) : 'Someone'} is staying${typeInfo ? ` in ${typeInfo.article} ${typeInfo.label.toLowerCase()}` : ''}</span>
+            ${h.text ? `<span class="game-plan-stay-place">📍 ${escHtml(h.text)}</span>` : ''}
             ${urlDisplay ? `<a class="archive-link-url" href="${escHtml(h.link_url)}" target="_blank" rel="noopener noreferrer">${escHtml(urlDisplay)} ↗</a>` : ''}
             <div class="archive-link-meta" style="flex-wrap:wrap;gap:6px;margin-top:4px;">${spaceBadge}${guestChips}</div>
           </div>
