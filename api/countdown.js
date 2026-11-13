@@ -76,6 +76,31 @@ function sortCrews(crews, now) {
   return [...(crews || [])].sort((a, b) => rank(a) - rank(b) || String(a.name).localeCompare(String(b.name)));
 }
 
+// Personal links carry `raves` (one row per rave, see get_countdown): turn
+// each into the crew shape countdownState/clientRender already use, with the
+// subline built in. Self-contained: shipped to the browser via toString().
+//   me + crewmates  -> "You + 3 · AKPsi, Florida FAM +1"
+//   only me         -> "Just you so far"
+//   only crewmates  -> "4 from Busch Garden Bros"
+function raveCrews(raves) {
+  return (raves || []).map((r) => {
+    const crews = r.crews || [];
+    const lead = crews[0] || {};
+    const names = crews.slice(0, 2).map((c) => c.name).join(', ') + (crews.length > 2 ? ` +${crews.length - 2}` : '');
+    const others = r.others || 0;
+    const sub = r.me
+      ? (others ? `You + ${others}${names ? ' · ' + names : ''}` : 'Just you so far')
+      : `${others} from ${names}`;
+    return {
+      id: lead.id || '',
+      name: r.me && !others ? 'Your next rave' : names,
+      color: lead.color,
+      sub,
+      fests: [{ name: r.name, date: r.date, days: r.days, location: r.location, going: others + (r.me ? 1 : 0) }],
+    };
+  });
+}
+
 const STYLE = `
 :root{--bg:#050509;--surface:#0E0E16;--text:#F0EEFF;--muted:#8585A5;color-scheme:dark}
 *{box-sizing:border-box}
@@ -147,14 +172,18 @@ function clientRender(data, mode) {
     return { big: 'No rave locked in yet', cls: 'quiet', unit: '' };
   };
   const now = new Date();
-  const crews = data.crews || [];
+  const appHref = (c) => (c.id ? `/app?crew=${encodeURIComponent(c.id)}` : '/app');
+  // Personal links: one row per rave; drop any that just ended locally.
+  const crews = data.raves
+    ? raveCrews(data.raves).filter((c) => countdownState(c, now).state !== 'empty')
+    : data.crews || [];
 
   if (mode === 'tile' || (data.kind === 'crew' && mode !== 'stack')) {
     const crew = data.kind === 'crew' ? crews[0] : sortCrews(crews, now)[0];
     if (!crew) return '<div class="dead"><h1>No crews yet</h1><p>Join a crew in RaveFAM to start a countdown.</p></div>';
     const s = countdownState(crew, now); const b = bigFor(s);
     if (mode === 'tile') {
-      return `<a class="tile" style="${vars(crew.color)}" href="/app?crew=${encodeURIComponent(crew.id)}" target="_top">
+      return `<a class="tile" style="${vars(crew.color)}" href="${appHref(crew)}" target="_top">
         <div class="crew"><i></i>${e(crew.name)}</div>
         <div class="big ${b.cls}">${b.big}</div>${b.unit ? `<div class="unit">${e(b.unit)}</div>` : ''}
         <div class="fest">${s.fest ? e(s.fest.name) : 'Tap → Dream Board'}</div></a>`;
@@ -170,7 +199,7 @@ function clientRender(data, mode) {
       ${s.fest ? `<div class="fest">${e(s.fest.name)}</div><div class="when">${e(whenLine(s.fest))}</div>` : ''}
       <div class="big ${b.cls}">${b.big}</div>${b.unit ? `<div class="unit">${e(b.unit)}</div>` : ''}${hms}
       <div class="going">${e(going(s.fest))}</div>
-      <a class="open" href="/app?crew=${encodeURIComponent(crew.id)}">${s.fest ? 'Open the crew in RaveFAM →' : 'Pick the next rave on the Dream Board →'}</a>
+      <a class="open" href="${appHref(crew)}">${s.fest ? 'Open the crew in RaveFAM →' : 'Pick the next rave on the Dream Board →'}</a>
       <div class="foot"><a href="/countdown-guide">Put this on your home screen</a></div>
     </div>`;
   }
@@ -180,8 +209,9 @@ function clientRender(data, mode) {
     const n = s.state === 'countdown' || s.state === 'tomorrow' ? `${s.days}<small>${s.days === 1 ? 'DAY' : 'DAYS'}</small>`
       : s.state === 'today' ? 'NOW<small>TODAY</small>'
       : s.state === 'live' ? `D${s.day}<small>OF ${s.of}</small>` : '—';
-    const sub = s.fest ? `${e(c.name)}${s.fest.going ? ' · ' + s.fest.going + ' going' : ''}` : e(c.name);
-    return `<a class="srow${s.fest ? '' : ' none'}" style="${vars(c.color)}" href="/app?crew=${encodeURIComponent(c.id)}">
+    const sub = c.sub != null ? e(c.sub)
+      : s.fest ? `${e(c.name)}${s.fest.going ? ' · ' + s.fest.going + ' going' : ''}` : e(c.name);
+    return `<a class="srow${s.fest ? '' : ' none'}" style="${vars(c.color)}" href="${appHref(c)}">
       <div class="n">${n}</div><div class="t"><b>${s.fest ? e(s.fest.name) : 'Nothing locked in'}</b><span>${sub}</span></div></a>`;
   }).join('');
   return `<div class="stack"><h1>Next up 🔊</h1>${rows || '<p class="when">Join a crew in RaveFAM to start a countdown.</p>'}
@@ -190,7 +220,7 @@ function clientRender(data, mode) {
 
 function titleFor(data) {
   const now = new Date();
-  const crews = (data && data.crews) || [];
+  const crews = data.raves ? raveCrews(data.raves) : (data.crews || []);
   const crew = data.kind === 'crew' ? crews[0] : sortCrews(crews, now)[0];
   if (!crew) return { title: 'RaveFAM countdown', short: 'Countdown', desc: 'Days until the next rave with your crew.' };
   const s = countdownState(crew, now);
@@ -278,12 +308,13 @@ module.exports = async (req, res) => {
 
   const mode = q.w ? 'tile' : '';
   const meta = titleFor(data);
-  const first = (data.kind === 'crew' ? data.crews[0] : sortCrews(data.crews, new Date())[0]) || {};
+  const first = (data.kind === 'crew' ? data.crews[0] : sortCrews(data.raves ? raveCrews(data.raves) : data.crews, new Date())[0]) || {};
   // Re-render each second (only "tomorrow" shows seconds; cheap either way),
   // refetch every 30 min while open: a home-screen icon can sit for days.
   const script = `<script>
 ${countdownState.toString()}
 ${sortCrews.toString()}
+${raveCrews.toString()}
 ${clientRender.toString()}
 (function () {
   var data = ${JSON.stringify(data).replace(/</g, '\\u003c')};
@@ -312,4 +343,5 @@ ${clientRender.toString()}
 
 module.exports._countdownState = countdownState;
 module.exports._sortCrews = sortCrews;
+module.exports._raveCrews = raveCrews;
 module.exports._clientRender = clientRender;

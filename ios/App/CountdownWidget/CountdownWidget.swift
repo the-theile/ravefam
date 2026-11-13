@@ -5,8 +5,9 @@ import AppIntents
 // ===== RAVE COUNTDOWN WIDGET =====
 // Days until a crew's next rave: home screen (small / medium / large), lock
 // screen (circular / rectangular / inline) and StandBy (small). Each widget
-// can pin a crew (long-press → Edit Widget → Crew); the default follows
-// whichever crew's rave is soonest. Data: CountdownModel.swift.
+// can pin a crew (long-press → Edit Widget → Crew; a crew's next rave needs
+// 2+ members going). The default is the raver's own next rave, and the large
+// size lists one row per rave (`raves`). Data: CountdownModel.swift.
 
 // MARK: - Crew picker
 
@@ -58,11 +59,20 @@ struct SelectCrewIntent: WidgetConfigurationIntent {
 struct CountdownEntry: TimelineEntry {
     let date: Date
     let crews: [CountdownCrew]
+    let raves: [CountdownRave]  // empty on files from builds before 2.39.1
     let pinnedID: String?      // nil = soonest across crews
     let hasData: Bool          // false until the app has synced once
 
+    // Merged rows that haven't ended yet (by local date), soonest first.
+    var upcomingRaves: [CountdownRave] {
+        raves.filter { $0.asCrew.state(at: date).phase != .empty }
+    }
+
     var selected: CountdownCrew? {
         if let id = pinnedID, let crew = crews.first(where: { $0.id == id }) { return crew }
+        // Default: your own next rave, else the next crew-shared one.
+        let upcoming = upcomingRaves
+        if let rave = upcoming.first(where: { $0.me == true }) ?? upcoming.first { return rave.asCrew }
         return sortedCrews(crews, at: date).first
     }
 
@@ -86,6 +96,7 @@ struct CountdownEntry: TimelineEntry {
                 days: 4, location: "Live Oak, FL", going: 6
             )]
         )],
+        raves: [],
         pinnedID: nil,
         hasData: true
     )
@@ -105,7 +116,8 @@ struct CountdownProvider: AppIntentTimelineProvider {
     func timeline(for configuration: SelectCrewIntent, in context: Context) async -> Timeline<CountdownEntry> {
         var file = CountdownStore.load()
         if let token = file?.token, let fresh = await CountdownStore.fetch(token: token) {
-            file?.crews = fresh
+            file?.crews = fresh.crews ?? []
+            file?.raves = fresh.raves
             file?.savedAt = Date().timeIntervalSince1970 * 1000
             if let updated = file { CountdownStore.save(updated) }
         }
@@ -130,6 +142,7 @@ struct CountdownProvider: AppIntentTimelineProvider {
         return CountdownEntry(
             date: date,
             crews: file?.crews ?? [],
+            raves: file?.raves ?? [],
             pinnedID: pinned == CrewEntity.soonestID ? nil : pinned,
             hasData: file != nil
         )
@@ -304,8 +317,24 @@ struct LargeView: View {
     let entry: CountdownEntry
 
     var body: some View {
-        if !entry.hasData || entry.crews.isEmpty {
+        if !entry.hasData || (entry.crews.isEmpty && entry.raves.isEmpty) {
             NoDataView()
+        } else if entry.pinnedID == nil && !entry.upcomingRaves.isEmpty {
+            // One row per rave: who from your crews is going.
+            let raves = Array(entry.upcomingRaves.prefix(5))
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Next up 🔊").font(heavy(22)).foregroundStyle(.white)
+                ForEach(raves, id: \.self) { rave in
+                    let crew = rave.asCrew
+                    if let url = crew.appURL {
+                        Link(destination: url) { LargeRow(crew: crew, date: entry.date, sub: rave.subline) }
+                    } else {
+                        LargeRow(crew: crew, date: entry.date, sub: rave.subline)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else {
             let crews = Array(pinnedFirst.prefix(5))
             VStack(alignment: .leading, spacing: 8) {
@@ -334,6 +363,7 @@ struct LargeView: View {
 private struct LargeRow: View {
     let crew: CountdownCrew
     let date: Date
+    var sub: String? = nil     // merged rows bring their own subline
 
     var body: some View {
         let state = crew.state(at: date)
@@ -377,6 +407,7 @@ private struct LargeRow: View {
     }
 
     private func rowSub(_ s: CountdownState) -> String {
+        if let sub = sub { return sub }
         guard let going = s.fest?.going, going > 0 else { return crew.name }
         return "\(crew.name) · \(going) going"
     }

@@ -69,6 +69,23 @@ test.describe('countdown day maths (countdownState)', () => {
     expect(state(crew([{ name: 'x', date: null }]), at(2026, 11, 13)).state).toBe('empty');
   });
 
+  test('merged raves: sublines for you + crewmates, just you, and crewmates only', () => {
+    const { _raveCrews: raveCrews } = require('../api/countdown.js');
+    const C = (id, name) => ({ id, name, color: '#00f5ff' });
+    const [both, solo, theirs] = raveCrews([
+      { name: 'Odesza', date: '2026-11-14', days: 1, me: true, others: 1, crews: [C('a', 'AKPsi'), C('b', 'Florida FAM'), C('c', 'JKYL FAM')] },
+      { name: '710 Dab Day', date: '2026-11-21', days: 1, me: true, others: 0, crews: [] },
+      { name: 'EDC Orlando', date: '2026-11-14', days: 3, me: false, others: 4, crews: [C('d', 'Busch Garden Bros')] },
+    ]);
+    expect(both.sub).toBe('You + 1 · AKPsi, Florida FAM +1');
+    expect(both.id).toBe('a');
+    expect(both.fests[0].going).toBe(2);
+    expect(solo.sub).toBe('Just you so far');
+    expect(solo.name).toBe('Your next rave');
+    expect(solo.id).toBe('');
+    expect(theirs.sub).toBe('4 from Busch Garden Bros');
+  });
+
   test('all-crews list sorts soonest first, nothing-booked last', () => {
     const now = at(2026, 11, 13);
     const sorted = sortCrews([
@@ -102,6 +119,19 @@ test.describe('countdown page (api/countdown.js)', () => {
     expect(r.body).toContain('&lt;img src=x onerror=alert(1)&gt;');
     // The embedded payload can't close the script tag either.
     expect(r.body).not.toMatch(/var data = [^\n]*<img/);
+  });
+
+  test('personal token with raves shows one row per rave, ended ones dropped', async () => {
+    const r = await render({ t: TOKEN }, { ok: true, kind: 'raver', crews: [], raves: [
+      { name: 'Gone Fest', date: iso(-5), days: 1, me: true, others: 2, crews: [{ id: 'c2', name: 'Day Ones', color: '#ffe600' }] },
+      { name: 'Odesza', date: iso(1), days: 1, me: true, others: 1, crews: [{ id: 'c2', name: 'Day Ones', color: '#ffe600' }, { id: 'c3', name: 'Neon Nomads', color: '#00ffcc' }] },
+      { name: 'Solo Fest', date: iso(8), days: 1, me: true, others: 0, crews: [] },
+    ] });
+    expect(r.body).toContain('<title>1 day to Odesza · Day Ones, Neon Nomads</title>');
+    expect(r.body).toContain('You + 1 · Day Ones, Neon Nomads');
+    expect(r.body).toContain('Just you so far');
+    expect(r.body).not.toContain('Gone Fest</b>');
+    expect(r.body.split('Odesza</b>').length - 1).toBe(1);
   });
 
   test('personal token lists every crew', async () => {
@@ -145,7 +175,11 @@ test.describe('countdown page (api/countdown.js)', () => {
 // ── In the app: the crew page / Settings sheet, and the iOS widget sync ──
 const { bootAuthedApp, seedData } = require('./helpers');
 
-const COUNTDOWN_PAYLOAD = { ok: true, kind: 'raver', crews: [{ id: 'c1', name: 'Bass Fam', color: '#ff2d78', fests: [{ name: 'Hulaween', date: '2099-10-29', days: 4, going: 3 }] }] };
+const COUNTDOWN_PAYLOAD = {
+  ok: true, kind: 'raver',
+  crews: [{ id: 'c1', name: 'Bass Fam', color: '#ff2d78', fests: [{ name: 'Hulaween', date: '2099-10-29', days: 4, going: 3 }] }],
+  raves: [{ name: 'Hulaween', date: '2099-10-29', days: 4, me: true, others: 2, crews: [{ id: 'c1', name: 'Bass Fam', color: '#ff2d78' }] }],
+};
 
 function countdownSeed() {
   const data = seedData();
@@ -213,6 +247,7 @@ test.describe('iOS countdown widget sync (app.html)', () => {
     const saved = await page.evaluate(() => JSON.parse(window.__native.calls.find((c) => c.name === 'save').arg.json));
     expect(saved.token).toBe(TOKEN);
     expect(saved.crews).toEqual(COUNTDOWN_PAYLOAD.crews);
+    expect(saved.raves).toEqual(COUNTDOWN_PAYLOAD.raves);
     expect((await rpcCalls(page, 'get_countdown'))[0].args).toEqual({ p_token: TOKEN });
 
     await page.evaluate(() => doLogout());

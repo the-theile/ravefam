@@ -6,7 +6,9 @@ import SwiftUI
 // app.html); the widget reads it, and refreshes it from
 // myravefam.com/countdown/<token>?json=1 when the app hasn't been opened.
 // Keep the file format in step with both.
-//   { "token": "<personal countdown token>"?, "savedAt": ms, "crews": [Crew] }
+//   { "token": "<personal countdown token>"?, "savedAt": ms, "crews": [Crew], "raves": [Rave]? }
+// `crews`: each crew's next raves (2+ members going). `raves`: one row per
+// rave for the large widget and the "Soonest" default (since 2.39.1).
 enum CountdownStore {
     static let appGroup = "group.com.myravefam.app"
     static let fileName = "countdown.json"
@@ -27,9 +29,9 @@ enum CountdownStore {
         try? data.write(to: url, options: .atomic)
     }
 
-    // Fresh crews from the countdown page's JSON mode; nil on any failure
+    // Fresh payload from the countdown page's JSON mode; nil on any failure
     // (offline, revoked link, server trouble), so the cached file stays.
-    static func fetch(token: String) async -> [CountdownCrew]? {
+    static func fetch(token: String) async -> CountdownPayload? {
         guard let url = URL(string: "\(site)/countdown/\(token)?json=1") else { return nil }
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -39,7 +41,7 @@ enum CountdownStore {
               let payload = try? JSONDecoder().decode(CountdownPayload.self, from: data),
               payload.ok
         else { return nil }
-        return payload.crews ?? []
+        return payload
     }
 }
 
@@ -47,11 +49,59 @@ struct CountdownFile: Codable {
     var token: String?
     var savedAt: Double?
     var crews: [CountdownCrew]
+    var raves: [CountdownRave]?
 }
 
 struct CountdownPayload: Decodable {
     let ok: Bool
     let crews: [CountdownCrew]?
+    let raves: [CountdownRave]?
+}
+
+// One rave in a raver's merged list: `me` = the raver is going, `others` =
+// crewmates going (raver excluded), `crews` = crews with a crewmate going.
+struct CountdownRave: Codable, Hashable {
+    let name: String
+    let date: String
+    let days: Int?
+    let location: String?
+    let me: Bool?
+    let others: Int?
+    let crews: [CountdownRaveCrew]?
+
+    var fest: CountdownFest {
+        CountdownFest(name: name, date: date, days: days, location: location,
+                      going: (others ?? 0) + (me == true ? 1 : 0))
+    }
+
+    private var crewNames: String {
+        let list = crews ?? []
+        let shown = list.prefix(2).map { $0.name }.joined(separator: ", ")
+        return list.count > 2 ? "\(shown) +\(list.count - 2)" : shown
+    }
+
+    // Mirrors raveCrews() in api/countdown.js.
+    var subline: String {
+        let n = others ?? 0
+        if me == true {
+            if n == 0 { return "Just you so far" }
+            return crewNames.isEmpty ? "You + \(n)" : "You + \(n) · \(crewNames)"
+        }
+        return "\(n) from \(crewNames)"
+    }
+
+    // The crew shape the small / medium views already draw.
+    var asCrew: CountdownCrew {
+        let lead = crews?.first
+        let tag = (me == true && (others ?? 0) == 0) ? "Your next rave" : crewNames
+        return CountdownCrew(id: lead?.id ?? "", name: tag, color: lead?.color, fests: [fest])
+    }
+}
+
+struct CountdownRaveCrew: Codable, Hashable {
+    let id: String
+    let name: String
+    let color: String?
 }
 
 struct CountdownCrew: Codable, Hashable {
@@ -139,6 +189,7 @@ extension CountdownCrew {
     var accent: Color { Color(hex: color) }
 
     var appURL: URL? {
+        if id.isEmpty { return URL(string: "\(CountdownStore.site)/app") }
         var parts = URLComponents(string: "\(CountdownStore.site)/app")
         parts?.queryItems = [URLQueryItem(name: "crew", value: id)]
         return parts?.url
