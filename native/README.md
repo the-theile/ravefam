@@ -37,7 +37,7 @@ Instagram, TikTok and Facebook share a post link, not the media.
 `CountdownWidget` (WidgetKit, iOS 17+) shows days until a crew's next rave. `app.html`
 (`syncCountdownWidget`) sends each crew's next raves to `App/CountdownWidgetPlugin.swift`
 (`Capacitor.Plugins.CountdownWidget.save({ json })` / `.clear()`), which writes `countdown.json`
-(`{ token?, savedAt, crews }`) to the App Group and reloads the widget. Between app opens the widget
+(`{ token?, savedAt, crews, raves? }`) to the App Group and reloads the widget. Between app opens the widget
 refetches with the raver's personal countdown token from `/countdown/<token>?json=1`
 (`api/countdown.js`, `get_countdown` RPC). Day maths lives in `CountdownModel.swift` and mirrors
 `countdownState()` in `api/countdown.js`. Keep the two in step.
@@ -86,7 +86,9 @@ Each native PR adds a line here; **After release** holds web changes that wait o
     Certificates, IDs & Profiles → Identifiers → App Groups and tick it on both App IDs, then re-run
 - Rave Countdown widget: new `CountdownWidget` target (`ios/App/CountdownWidget`, bundle ID
   `com.myravefam.app.CountdownWidget`, iOS 17+; the app itself stays on iOS 15). Home small / medium /
-  large, lock screen circular / rectangular / inline, StandBy; long-press → Edit Widget → Crew pins a crew.
+  large, lock screen circular / rectangular / inline, StandBy; long-press → Edit Widget → Crew pins a crew
+  (a crew's next rave needs 2+ members going). Default and large size use `raves`: your RSVP'd raves,
+  one row each ("You + 3 · AKPsi, …" or "Just you so far"; since 2.39.1).
   The local `CountdownWidgetPlugin` writes `countdown.json` to the App Group (`syncCountdownWidget` in
   `app.html`, since 2.39.0; no-ops on older builds); the widget refreshes from
   `/countdown/<token>?json=1` every few hours and rolls the count over at local midnight
