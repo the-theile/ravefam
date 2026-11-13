@@ -10512,6 +10512,11 @@
           <span class="settings-nav-text"><span class="poll-setting-label">New crew page <span class="text-hint" style="font-weight:400;">beta</span></span><span class="poll-setting-hint">Huddle up top, your next rave as a ticket, roster in one tap</span></span>
           <button class="poll-anon-toggle" id="crew-feed-settings-toggle" aria-label="New crew page" onclick="toggleCrewFeedEnabled(this)"></button>
         </div>
+        <button type="button" class="settings-nav-row" onclick="closePrivacySettingsModal();openMyCountdownSheet()">
+          <span class="settings-nav-ico" style="background:rgba(var(--neon-pink-rgb),0.12);">📲</span>
+          <span class="settings-nav-text"><span class="poll-setting-label">Home screen countdown</span><span class="poll-setting-hint">Days until every crew's next rave</span></span>
+          <span class="settings-nav-chev">›</span>
+        </button>
         <button type="button" class="settings-nav-row" onclick="openSupportSheet();closePrivacySettingsModal()">
           <span class="settings-nav-ico" style="background:rgba(var(--neon-cyan-rgb),0.12);">💬</span>
           <span class="settings-nav-text"><span class="poll-setting-label">Contact us</span><span class="poll-setting-hint">Report a bug, share an idea, or ask for help</span></span>
@@ -10735,6 +10740,17 @@
     <div class="modal-actions">
       <button class="btn btn-primary" style="flex:1;" onclick="closeAppGuide()">Done</button>
     </div>
+  </div>
+</div>
+
+<!-- Home Screen Countdown Sheet — a crew's /countdown/<token> link (or the
+     raver's all-crews link) with copy / open / guide / turn off. Filled by
+     renderCountdownSheet(); opened from the crew page and Settings. -->
+<div class="modal-overlay" id="countdown-overlay" onclick="if(event.target===this)closeCountdownSheet()">
+  <div class="modal modal-scroll-sm" style="max-width:420px;text-align:left;">
+    <div class="modal-title" id="countdown-sheet-title">📲 Home screen countdown</div>
+    <div id="countdown-sheet-body"></div>
+    <button class="btn btn-ghost btn-wide" style="margin-top:10px;" onclick="closeCountdownSheet()">Done</button>
   </div>
 </div>
 
@@ -12204,6 +12220,74 @@
     document.addEventListener('visibilitychange', () => { if (!document.hidden) checkShareInbox(); });
   }
 
+  // ===== NATIVE COUNTDOWN WIDGET (iOS home/lock screen) =====
+  // Keeps the Rave Countdown widget (ios/App/CountdownWidget) fed. On boot
+  // and each return to the app, fetch the raver's personal countdown (the
+  // same get_countdown payload the /countdown page uses, so the server's
+  // next-rave and RSVP-privacy rules apply) and hand it to the local
+  // CountdownWidget plugin, which writes it to the App Group. Between opens
+  // the widget refetches with the same token. Older builds have no plugin:
+  // everything here no-ops.
+  const COUNTDOWN_WIDGET_TOKEN_KEY = 'countdownWidgetToken';
+  const COUNTDOWN_WIDGET_MIN_GAP_MS = 10 * 60 * 1000;
+  let _countdownWidgetSyncedAt = 0;
+  let _countdownWidgetBusy = false;
+
+  function countdownWidgetPlugin() {
+    return (IS_NATIVE_APP && window.Capacitor.Plugins && window.Capacitor.Plugins.CountdownWidget) || null;
+  }
+
+  function forgetCountdownWidgetToken() {
+    try { localStorage.removeItem(COUNTDOWN_WIDGET_TOKEN_KEY); } catch (e) {}
+    _countdownWidgetSyncedAt = 0;
+  }
+
+  async function syncCountdownWidget(force) {
+    const plugin = countdownWidgetPlugin();
+    if (!plugin || !currentUser || _countdownWidgetBusy) return;
+    if (!force && Date.now() - _countdownWidgetSyncedAt < COUNTDOWN_WIDGET_MIN_GAP_MS) return;
+    _countdownWidgetBusy = true;
+    try {
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem(COUNTDOWN_WIDGET_TOKEN_KEY) || 'null'); } catch (e) {}
+      let token = saved && saved.uid === currentUser.id ? saved.token : null;
+      // Two tries: a saved token turned off from Settings (or another device)
+      // gets replaced once.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (!token) {
+          const { data, error } = await sb.rpc('create_countdown_link', {});
+          if (error || !data) throw error || new Error('create_countdown_link returned nothing');
+          token = data;
+          try { localStorage.setItem(COUNTDOWN_WIDGET_TOKEN_KEY, JSON.stringify({ uid: currentUser.id, token })); } catch (e) {}
+        }
+        const { data: payload, error } = await sb.rpc('get_countdown', { p_token: token });
+        if (error) throw error;
+        if (payload && payload.ok) {
+          await plugin.save({ json: JSON.stringify({ token, savedAt: Date.now(), crews: payload.crews || [] }) });
+          _countdownWidgetSyncedAt = Date.now();
+          return;
+        }
+        forgetCountdownWidgetToken();
+        token = null;
+      }
+    } catch (e) {
+      console.error('countdown widget: sync failed', e);
+    } finally {
+      _countdownWidgetBusy = false;
+    }
+  }
+
+  // Sign-out: the next person on this phone mustn't see the last one's crews.
+  async function clearCountdownWidget() {
+    forgetCountdownWidgetToken();
+    const plugin = countdownWidgetPlugin();
+    if (plugin) await plugin.clear().catch(() => {});
+  }
+
+  if (IS_NATIVE_APP) {
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) syncCountdownWidget(); });
+  }
+
   // ===== NATIVE PUSH (iOS app) =====
   // In the iOS app, push goes through Apple (APNs), not the browser's web push:
   // @capacitor/push-notifications hands us a device token, register_device_push_token
@@ -13154,6 +13238,7 @@
     localStorage.removeItem('pendingInviteRaver');
     await forgetNativePushToken();
     syncNativeAppBadge(0);
+    await clearCountdownWidget();
     await sb.auth.signOut();
     // onAuthStateChange will fire SIGNED_OUT and flip back to auth screen
   }
@@ -14951,6 +15036,7 @@
     // Something shared to RaveFAM from the iOS share sheet while we were closed.
     _shareInboxReady = true;
     if (!deepLink) checkShareInbox();
+    syncCountdownWidget(true);
     initRealms();
     // Launch first-time setup (genre/handle wizard) unless a claim/join is still
     // pending — in that case the claim preview is showing and setup runs after
@@ -19287,6 +19373,101 @@
     } catch(err) { console.error('[renderCrews]', err); const el = document.getElementById('crew-grid'); if (el) el.innerHTML = sectionErrorHTML('crews'); }
   }
 
+  // ===== HOME SCREEN COUNTDOWN =====
+  // "Days until" links: one per crew (/countdown/<token>, api/countdown.js)
+  // plus each raver's personal all-crews link (Settings). Any crew member can
+  // make or turn off a crew link (create_/revoke_countdown_link RPCs); the
+  // page only shows crew name, next raves and a going count. The personal link
+  // also feeds the iOS widget (see NATIVE COUNTDOWN WIDGET).
+  let _countdownSheet = null; // { crewId (null = all crews), token }
+
+  function countdownUrl(token) {
+    return `${location.origin}/countdown/${encodeURIComponent(token)}`;
+  }
+
+  async function openCountdownSheet(crewId) {
+    if (!currentUser) return;
+    const crew = crewId ? getCrew(crewId) : null;
+    if (crewId && !crew) return;
+    const sheet = { crewId: crewId || null, token: null };
+    _countdownSheet = sheet;
+    renderCountdownSheet('loading');
+    document.getElementById('countdown-overlay').classList.add('open');
+    const { data, error } = await sb.rpc('create_countdown_link', crewId ? { p_crew_id: crewId } : {});
+    if (_countdownSheet !== sheet) return; // closed or reopened meanwhile
+    if (error || !data) {
+      console.error('create_countdown_link error', error);
+      renderCountdownSheet('error');
+      return;
+    }
+    sheet.token = data;
+    renderCountdownSheet('ready');
+  }
+
+  function openMyCountdownSheet() { openCountdownSheet(null); }
+
+  function closeCountdownSheet() {
+    _countdownSheet = null;
+    document.getElementById('countdown-overlay').classList.remove('open');
+  }
+
+  function renderCountdownSheet(state) {
+    const s = _countdownSheet;
+    if (!s) return;
+    const crew = s.crewId ? getCrew(s.crewId) : null;
+    const reopen = `openCountdownSheet(${s.crewId ? `'${escJsAttr(s.crewId)}'` : 'null'})`;
+    document.getElementById('countdown-sheet-title').textContent = crew ? `📲 ${crew.name} countdown` : '📲 Home screen countdown';
+    const body = document.getElementById('countdown-sheet-body');
+    if (state === 'loading') {
+      body.innerHTML = `<div class="text-hint-lg" style="padding:18px 0;text-align:center;">Making your link…</div>`;
+      return;
+    }
+    if (state === 'error') {
+      body.innerHTML = `<div class="text-hint-lg" style="margin-bottom:12px;line-height:1.5;">Couldn't make a countdown link just now.</div>
+        <button class="btn btn-primary btn-wide" onclick="${reopen}">Try again</button>`;
+      return;
+    }
+    if (state === 'off') {
+      body.innerHTML = `<div class="text-hint-lg" style="margin-bottom:12px;line-height:1.5;">Link turned off. Anyone who had it now sees "Link turned off".</div>
+        <button class="btn btn-primary btn-wide" onclick="${reopen}">Make a new link</button>`;
+      return;
+    }
+    const url = countdownUrl(s.token);
+    const who = crew
+      ? `Anyone with this link sees ${escHtml(crew.name)}'s next rave and the day count. Nothing else from the crew is shown.`
+      : `Every crew you're in, soonest rave first. Only people you share it with can see it.`;
+    body.innerHTML = `
+      <div class="text-hint-lg" style="margin-bottom:14px;line-height:1.5;">${who}</div>
+      <iframe src="${escHtml(url)}?w=1" title="Countdown preview" tabindex="-1" loading="lazy"
+        style="display:block;width:150px;height:150px;border:0;border-radius:22px;margin:0 auto 14px;background:#07070c;pointer-events:none;"></iframe>
+      ${IS_NATIVE_APP ? `<div class="text-hint" style="margin-bottom:12px;line-height:1.5;">📱 iPhone widget: long-press your home screen → <b>+</b> → <b>RaveFAM</b>. It picks up all your crews by itself.</div>` : ''}
+      <input class="form-input" readonly value="${escHtml(url)}" aria-label="Countdown link" onclick="this.select()"
+        style="font-family:'Courier Prime',monospace;font-size:0.78rem;margin-bottom:10px;">
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary" style="flex:1;" onclick="copyClaimLink('${escJsAttr(url)}')">📋 Copy link</button>
+        <a class="btn btn-ghost" style="flex:1;text-align:center;" href="${escHtml(url)}" target="_blank" rel="noopener">Open ↗</a>
+      </div>
+      <a class="btn btn-ghost btn-wide" style="margin-top:8px;text-align:center;" href="/countdown-guide?t=${encodeURIComponent(s.token)}" target="_blank" rel="noopener">How to put it on your home screen</a>
+      <button class="btn btn-ghost btn-wide" style="margin-top:8px;color:var(--danger);" onclick="revokeCountdownLink()">Turn off this link</button>`;
+  }
+
+  function revokeCountdownLink() {
+    const s = _countdownSheet;
+    if (!s || !s.token) return;
+    const body = s.crewId
+      ? 'It stops working for everyone in the crew who added it. Anyone in the crew can make a new one.'
+      : 'Anywhere you added it stops updating. You can make a new one any time.';
+    showConfirm('Turn off this countdown link?', body, 'Turn off', async () => {
+      const { error } = await sb.rpc('revoke_countdown_link', { p_token: s.token });
+      if (error) { toastError('Could not turn off the link', error); return; }
+      // The widget shares the personal link: drop it so the next sync makes a fresh one.
+      if (!s.crewId) forgetCountdownWidgetToken();
+      hapticSuccess();
+      s.token = null;
+      if (_countdownSheet === s) renderCountdownSheet('off');
+    });
+  }
+
   // ===== CREW PRESENCE (Crews list "here now" glow) =====
   // One presence channel per crew (crew-presence:<id>). Every member listens,
   // so a crew row can throb while a crewmate is in that crew's Huddle or Rave
@@ -21574,6 +21755,7 @@
       ${crewNextFestBlock(crew)}
       ${crewQuestRowHTML(crew)}
       <button class="btn btn-ghost btn-wide" style="padding:10px;font-size:0.85rem;margin-bottom:16px;" onclick="openCrewShareCard('${escJsAttr(crew.id)}')">📲 Share Crew Card</button>
+      <button class="btn btn-ghost btn-wide" style="padding:10px;font-size:0.85rem;margin:-8px 0 16px;" onclick="openCountdownSheet('${escJsAttr(crew.id)}')">⏳ Countdown on your home screen</button>
       ${buildCrewFeatureTilesHTML(crew, isSecret, hasGamePlan)}
       <div style="margin-top:24px;">
         <button class="btn btn-ghost btn-wide" style="padding:12px;font-size:0.88rem;" onclick="closeDetail()">← Back to My Crews</button>
@@ -21584,6 +21766,7 @@
     const rosterPanelHTML = `
       <div class="crew-invite-row">
         <button class="btn btn-ghost crew-invite-link-btn" onclick="openCrewShareCard('${escJsAttr(crew.id)}')">📲 Share Crew Card</button>
+        <button class="btn btn-ghost crew-invite-link-btn" onclick="openCountdownSheet('${escJsAttr(crew.id)}')">⏳ Countdown</button>
         ${crew.isLead && isRecruiting ? `
         <button class="btn btn-ghost crew-invite-link-btn" onclick="generateAndShareCrewInvite('${escJsAttr(crew.id)}')">🔗 Invite Link</button>
         <span class="crew-invite-hint">Share with anyone — they can join straight from the link</span>` : ''}
