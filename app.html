@@ -11211,7 +11211,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.38.0';
+  const APP_VERSION = '2.38.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -25650,15 +25650,17 @@
   // Per-rave: claiming a role, offering/joining a ride or stay, or
   // completing a task — ties the other Game Plan sections into that rave's
   // Huddle so it reads as the live pulse of the plan.
-  // Also mirrored into the Main Huddle (tagged with the rave's name) so Main
-  // reads as the crew's full activity feed, not just RSVPs.
-  async function postGamePlanActivity(crewId, festivalId, summaryText, about = []) {
+  // Stays in the rave's own Huddle — Main isn't the place for every claimed
+  // ride or stay. Pass mirrorToMain for crew-wide milestones (the plan going
+  // up), which also land in Main tagged with the rave's name.
+  async function postGamePlanActivity(crewId, festivalId, summaryText, about = [], { mirrorToMain = false } = {}) {
     if (!currentUser) return;
     const fest = festivals.find(f => String(f.id) === String(festivalId));
     const roomKey = `festival:${festivalId}`;
     const row = { crew_id: crewId, created_by: currentUser.id, room_key: roomKey, kind: 'festival', name: `${fest ? fest.name : 'Rave'} Huddle`, festival_id: festivalId };
     const link = { k: 'raveplan', festival: festivalId };
     await postHuddleSystemMessage(crewId, roomKey, row, summaryText, link, about);
+    if (!mirrorToMain) return;
     const mainText = fest && !summaryText.includes(fest.name) ? `${summaryText} · ${fest.name} Rave Plan` : summaryText;
     // The Main copy never counts — the rave room's line already does, once.
     await postCrewActivity(crewId, mainText, link);
@@ -26271,7 +26273,7 @@
     await dbUpdateGamePlanHeader(gp.id, { templateKey: key });
     await Promise.all(t.tasks.map(([text, phase]) => dbAddGamePlanTask(gp.id, crewId, text, null, { fromTemplate: true, phase })));
     rerenderGamePlanChecklist(crewId);
-    postGamePlanActivity(crewId, _gamePlanActiveFestivalId, `📋 The Rave Plan is up (${t.name}) — claim what you'll handle`);
+    postGamePlanActivity(crewId, _gamePlanActiveFestivalId, `📋 The Rave Plan is up (${t.name}) — claim what you'll handle`, [], { mirrorToMain: true });
     showToast(firstTemplate ? '+5 Love · plan ready, crew pinged to claim tasks' : 'Plan ready · crew pinged to claim tasks');
   }
 
