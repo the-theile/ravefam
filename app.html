@@ -5093,6 +5093,19 @@
   .hd-meetup-map img { width: 100%; display: block; }
   .huddle-bubble-beacon-text { color: var(--neon-yellow); font-weight: 600; }
   .huddle-link { color: var(--neon-cyan, var(--neon-cyan)); text-decoration: underline; word-break: break-all; }
+  /* Link preview card under a message with a link (see huddleLinkPreviewHTML) */
+  .hd-link-card {
+    display: flex; margin-top: 6px; max-width: 320px; overflow: hidden;
+    border: 1px solid rgba(var(--neon-cyan-rgb),0.28); border-radius: 8px;
+    background: rgba(var(--white-rgb),0.04); color: inherit; text-decoration: none;
+  }
+  .hd-link-card:active { background: rgba(var(--neon-cyan-rgb),0.1); }
+  .hd-link-card.has-img { flex-direction: column; }
+  .hd-link-card-img { width: 100%; max-height: 180px; object-fit: cover; display: block; background: rgba(var(--white-rgb),0.06); }
+  .hd-link-card-text { padding: 7px 10px; min-width: 0; }
+  .hd-link-card-site { font-family: var(--hd-mono); font-size: 0.6rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--neon-cyan); }
+  .hd-link-card-title { font-weight: 700; font-size: 0.82rem; line-height: 1.3; margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .hd-link-card-desc { font-size: 0.74rem; color: var(--muted); margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
   /* ── Typing indicator ── */
   .hd-typing { display: flex; align-items: center; gap: 7px; padding: 2px 2px 8px; flex-shrink: 0; }
@@ -11172,7 +11185,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.37.0';
+  const APP_VERSION = '2.38.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -23350,6 +23363,66 @@
     return escapedText.replace(/(https?:\/\/[^\s<]+)/g, url => `<a href="${url}" target="_blank" rel="noopener noreferrer" class="huddle-link">${url}</a>`);
   }
 
+  // ── Link previews ──
+  // A text message with a link gets a card for its first link (title, image,
+  // site) from the link-preview edge function, which caches per URL server
+  // side. Bubbles render an empty slot; the card fills in when the preview
+  // lands, without re-rendering the stream. Instagram/Facebook often have no
+  // title or image (login wall), so they still get a "📸 Instagram post" card.
+  const _huddleLinkPreviews = new Map(); // url → preview object, null (none), or 'loading'
+  const HUDDLE_LINK_SITE_ICONS = { Instagram: '📸', TikTok: '🎵', YouTube: '▶️', Facebook: '👥', SoundCloud: '🎧', Spotify: '🎧', X: '💬' };
+  const HUDDLE_LINK_SITE_KIND = { Instagram: 'post', TikTok: 'video', YouTube: 'video', Facebook: 'post', SoundCloud: 'track', Spotify: 'link', X: 'post' };
+
+  function huddleFirstUrl(text) {
+    const m = String(text || '').match(/https?:\/\/[^\s<]+/);
+    return m ? m[0].replace(/[).,!?'"]+$/, '') : null;
+  }
+
+  function huddleLinkPreviewHTML(m) {
+    if (m.kind !== 'text') return '';
+    const url = huddleFirstUrl(m.body);
+    if (!url) return '';
+    const p = _huddleLinkPreviews.get(url);
+    if (p === undefined) loadHuddleLinkPreview(url);
+    return `<div class="hd-link-slot" data-preview-url="${escHtml(url)}">${p && p !== 'loading' ? huddleLinkCardHTML(url, p) : ''}</div>`;
+  }
+
+  function huddleLinkCardHTML(url, p) {
+    const site = p.site || (() => { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; } })();
+    const icon = HUDDLE_LINK_SITE_ICONS[site] || '🔗';
+    const title = p.title || (HUDDLE_LINK_SITE_KIND[site] ? `${site} ${HUDDLE_LINK_SITE_KIND[site]}` : '');
+    if (!title && !p.image) return '';
+    const img = p.image && /^https:\/\//.test(p.image)
+      ? `<img class="hd-link-card-img" src="${escHtml(p.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.closest('.hd-link-card').classList.remove('has-img'); this.remove()">` : '';
+    return `<a class="hd-link-card${img ? ' has-img' : ''}" href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">
+        ${img}
+        <div class="hd-link-card-text">
+          <div class="hd-link-card-site">${icon} ${escHtml(site)}</div>
+          ${title ? `<div class="hd-link-card-title">${escHtml(title)}</div>` : ''}
+          ${p.description ? `<div class="hd-link-card-desc">${escHtml(p.description)}</div>` : ''}
+        </div>
+      </a>`;
+  }
+
+  async function loadHuddleLinkPreview(url) {
+    _huddleLinkPreviews.set(url, 'loading');
+    let preview = null;
+    try {
+      const { data, error } = await sb.functions.invoke('link-preview', { body: { url } });
+      if (!error && data && typeof data === 'object') preview = data;
+    } catch (e) {
+      console.error('link preview failed', url, e);
+    }
+    _huddleLinkPreviews.set(url, preview);
+    if (!preview) return;
+    const slots = [...document.querySelectorAll('.hd-link-slot')].filter(el => el.dataset.previewUrl === url);
+    if (!slots.length) return;
+    const wasAtBottom = huddleAtBottom();
+    const html = huddleLinkCardHTML(url, preview);
+    slots.forEach(el => { el.innerHTML = html; });
+    if (wasAtBottom && !_huddleHasNewer) huddleScrollMessagesToBottom();
+  }
+
   // ── @mentions ──
   // Candidates are the crew's claimed members (anyone with an auth uid we can
   // actually notify). Unclaimed placeholder ravers are deliberately excluded.
@@ -23581,6 +23654,7 @@
         <div class="hd-bub${stateClass}${highlightClass}" id="hd-bub-${m.id}">
           ${huddleQuoteHTML(m)}
           <div class="hd-bub-body">${huddleMessageBodyHTML(m, senderRaver, senderName)}</div>
+          ${huddleLinkPreviewHTML(m)}
           ${editedLabel}
           ${reactionRow ? `<div class="hd-rx">${reactionRow}</div>` : ''}
           ${retryBtn}
