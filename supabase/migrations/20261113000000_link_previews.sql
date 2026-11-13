@@ -10,3 +10,6 @@ create table if not exists public.link_previews (
 alter table public.link_previews enable row level security;
 
 grant select, insert, update, delete on public.link_previews to service_role;
+-- Default privileges hand new tables to the client roles too; this one is
+-- edge-function only.
+revoke all on public.link_previews from anon, authenticated;
