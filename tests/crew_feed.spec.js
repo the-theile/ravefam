@@ -36,7 +36,7 @@ test.describe('new crew page · layout', () => {
     // Status sits above the roster + share buttons, not under the name.
     await expect(detail.locator('.crew-feed-side > .crew-status')).toHaveText(/Recruiting/);
     await expect(detail.locator('.crew-feed-title .crew-status')).toHaveCount(0);
-    await expect(detail.locator('#huddle-tile-preview-root .huddle-tile-preview')).toBeVisible();
+    await expect(detail.locator('#huddle-tile-preview-root .hd-dock')).toBeVisible();
     // You and Sam are both going to Tomorrowland, so it gets a Rave Plan ticket.
     await expect(detail.locator('.crew-ticket[data-fest="f1"]')).toContainText('Tomorrowland');
     await expect(detail.locator('.crew-feed-filter')).toHaveText(['All', 'Polls', 'Jams', 'Dreams', 'Plan', 'Memories']);
