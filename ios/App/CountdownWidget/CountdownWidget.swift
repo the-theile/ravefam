@@ -81,6 +81,18 @@ struct CountdownEntry: TimelineEntry {
 
     var accent: Color { selected?.accent ?? Color(hex: nil) }
 
+    // Who's coming, for the medium widget: the merged rave's subline
+    // ("You + 3 · AKPsi, …"), or the crew count for a pinned crew.
+    var whoLine: String? {
+        if let id = pinnedID, crews.contains(where: { $0.id == id }) {
+            guard let going = state.fest?.going, going > 0 else { return nil }
+            return "\(going) of the crew going"
+        }
+        if let rave = upcomingRaves.first { return rave.subline }
+        guard let going = state.fest?.going, going > 0 else { return nil }
+        return "\(going) going"
+    }
+
     static let sample = CountdownEntry(
         date: Date(),
         crews: [CountdownCrew(
@@ -247,20 +259,24 @@ struct SmallView: View {
             NoDataView()
         } else if let crew = entry.selected {
             let state = entry.state
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 0) {
                 CrewTag(name: crew.name, accent: entry.accent)
-                Spacer(minLength: 0)
+                Spacer(minLength: 2)
                 if state.fest == nil {
                     Text("No rave locked in yet")
                         .font(.system(size: 17, weight: .bold, design: .rounded))
                         .foregroundStyle(mutedColor)
                     Text("Tap → Dream Board").font(caps(11)).foregroundStyle(entry.accent)
                 } else {
-                    BigNumber(state: state, accent: entry.accent, size: 64)
-                    Text(state.unit).font(caps(10)).tracking(1.6).foregroundStyle(entry.accent).lineLimit(1)
+                    BigNumber(state: state, accent: entry.accent, size: 70)
+                    Text(state.unit)
+                        .font(caps(11)).tracking(1.4).foregroundStyle(entry.accent)
+                        .lineLimit(1).minimumScaleFactor(0.6)
                     Text(state.fest?.name ?? "")
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white).lineLimit(1).padding(.top, 2)
+                        .font(.system(size: 14, weight: .heavy, design: .rounded))
+                        .foregroundStyle(.white)
+                        .lineLimit(2).minimumScaleFactor(0.8)
+                        .padding(.top, 3)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -276,28 +292,37 @@ struct MediumView: View {
             NoDataView()
         } else if let crew = entry.selected {
             let state = entry.state
-            HStack(alignment: .bottom, spacing: 16) {
-                VStack(alignment: .leading, spacing: 0) {
-                    Spacer(minLength: 0)
-                    BigNumber(state: state, accent: entry.accent, size: 78)
-                    Text(state.fest == nil ? "" : state.unit)
-                        .font(caps(10)).tracking(1.6).foregroundStyle(entry.accent).lineLimit(1)
+            HStack(alignment: .center, spacing: 14) {
+                VStack(alignment: .leading, spacing: 2) {
+                    BigNumber(state: state, accent: entry.accent, size: 96)
+                    if state.fest != nil {
+                        Text(state.unit)
+                            .font(caps(11)).tracking(1.4).foregroundStyle(entry.accent)
+                            .lineLimit(1).minimumScaleFactor(0.6)
+                    }
                 }
-                .frame(width: 128, alignment: .leading)
+                .frame(width: 112, alignment: .leading)
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 3) {
                     CrewTag(name: crew.name, accent: entry.accent)
                     if let fest = state.fest {
                         Text(fest.name)
-                            .font(.system(size: 17, weight: .heavy, design: .rounded))
-                            .foregroundStyle(.white).lineLimit(2)
-                        if let location = fest.location, !location.isEmpty {
-                            Text(location).font(.system(size: 12)).foregroundStyle(mutedColor).lineLimit(1)
-                        }
+                            .font(.system(size: 19, weight: .heavy, design: .rounded))
+                            .foregroundStyle(.white)
+                            .lineLimit(2).minimumScaleFactor(0.8)
+                        Text(fest.detailLine)
+                            .font(.system(size: 12, weight: .medium)).foregroundStyle(mutedColor)
+                            .lineLimit(1).minimumScaleFactor(0.85)
                         Spacer(minLength: 0)
-                        if let going = fest.going, going > 0 {
-                            Text("\(going) of the fam going")
-                                .font(.system(size: 12, weight: .semibold)).foregroundStyle(mutedColor)
+                        if let hype = state.hype {
+                            Text(hype)
+                                .font(.system(size: 12, weight: .bold, design: .rounded)).foregroundStyle(entry.accent)
+                                .lineLimit(1)
+                        }
+                        if let who = entry.whoLine {
+                            Text(who)
+                                .font(.system(size: 12, weight: .semibold)).foregroundStyle(Color.white.opacity(0.75))
+                                .lineLimit(1).minimumScaleFactor(0.8)
                         }
                     } else {
                         Text("No rave locked in yet")

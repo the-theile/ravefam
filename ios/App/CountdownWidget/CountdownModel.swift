@@ -117,6 +117,33 @@ struct CountdownFest: Codable, Hashable {
     let location: String?
     let going: Int?
 
+    // "Sat, Nov 14" or "Thu, Oct 29–Nov 1" for multi-day raves.
+    func whenLine(_ calendar: Calendar = .current) -> String {
+        guard let start = startDate(calendar) else { return "" }
+        let fmt = DateFormatter()
+        fmt.calendar = calendar
+        fmt.dateFormat = "EEE, MMM d"
+        var line = fmt.string(from: start)
+        let length = max(1, days ?? 1)
+        if length > 1, let end = calendar.date(byAdding: .day, value: length - 1, to: start) {
+            fmt.dateFormat = calendar.isDate(start, equalTo: end, toGranularity: .month) ? "d" : "MMM d"
+            line += "–" + fmt.string(from: end)
+        }
+        return line
+    }
+
+    // "Miami, Florida, United States" -> "Miami, Florida".
+    var shortLocation: String? {
+        guard let location = location, !location.isEmpty else { return nil }
+        return location.split(separator: ",").prefix(2)
+            .map { $0.trimmingCharacters(in: .whitespaces) }.joined(separator: ", ")
+    }
+
+    // Date + place on one line for the medium widget.
+    var detailLine: String {
+        [whenLine(), shortLocation ?? ""].filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
     func startDate(_ calendar: Calendar) -> Date? {
         let parts = date.split(separator: "-").compactMap { Int($0) }
         guard parts.count == 3 else { return nil }
@@ -157,10 +184,20 @@ struct CountdownState {
 
     var unit: String {
         switch phase {
-        case .countdown(let days): return days == 1 ? "DAY · PACK TONIGHT" : "DAYS"
+        case .countdown(let days): return days == 1 ? "TOMORROW" : "DAYS"
         case .today: return "IT'S ON"
-        case .live(_, let of): return "OF \(of) · LIVE NOW"
+        case .live(_, let of): return "OF \(of) · LIVE"
         case .empty: return "NOTHING LOCKED IN"
+        }
+    }
+
+    // Extra line where there's room (medium): the hype for the last stretch.
+    var hype: String? {
+        switch phase {
+        case .countdown(let days) where days == 1: return "Pack tonight 🎒"
+        case .today: return "It's on today 🎉"
+        case .live: return "Live now 🔊"
+        default: return nil
         }
     }
 
