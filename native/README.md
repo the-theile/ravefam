@@ -33,6 +33,15 @@ a "Saved" card. `App/ShareInboxPlugin.swift` (registered in `SceneDelegate.swift
 comes back to the foreground, asks which Huddle, and opens that room with the share in the composer.
 Instagram, TikTok and Facebook share a post link, not the media.
 
+## Rave Countdown widget
+`CountdownWidget` (WidgetKit, iOS 17+) shows days until a crew's next rave. `app.html`
+(`syncCountdownWidget`) sends each crew's next raves to `App/CountdownWidgetPlugin.swift`
+(`Capacitor.Plugins.CountdownWidget.save({ json })` / `.clear()`), which writes `countdown.json`
+(`{ token?, savedAt, crews }`) to the App Group and reloads the widget. Between app opens the widget
+refetches with the raver's personal countdown token from `/countdown/<token>?json=1`
+(`api/countdown.js`, `get_countdown` RPC). Day maths lives in `CountdownModel.swift` and mirrors
+`countdownState()` in `api/countdown.js`. Keep the two in step.
+
 ## Builds
 Run **Actions -> iOS TestFlight -> Run workflow** on `main`.
 
@@ -75,6 +84,14 @@ Each native PR adds a line here; **After release** holds web changes that wait o
   - Both App IDs need the App Groups capability with `group.com.myravefam.app`. Automatic signing in the
     TestFlight workflow should register them; if the archive fails on provisioning, add the group under
     Certificates, IDs & Profiles → Identifiers → App Groups and tick it on both App IDs, then re-run
+- Rave Countdown widget: new `CountdownWidget` target (`ios/App/CountdownWidget`, bundle ID
+  `com.myravefam.app.CountdownWidget`, iOS 17+; the app itself stays on iOS 15). Home small / medium /
+  large, lock screen circular / rectangular / inline, StandBy; long-press → Edit Widget → Crew pins a crew.
+  The local `CountdownWidgetPlugin` writes `countdown.json` to the App Group (`syncCountdownWidget` in
+  `app.html`, since 2.39.0; no-ops on older builds); the widget refreshes from
+  `/countdown/<token>?json=1` every few hours and rolls the count over at local midnight
+  - The new App ID needs the same App Groups capability (`group.com.myravefam.app`); same fix as above
+    if the archive fails on provisioning
 
 **After release**
 - Re-add `/lineup-explorer` and `/lineup-explorer/*` to `.well-known/apple-app-site-association`
@@ -82,6 +99,8 @@ Each native PR adds a line here; **After release** holds web changes that wait o
 - Move "Delete my account" from the Settings hub into Settings → Account & login
   (kept on the hub during review), and update the path in `privacy.html` (s8),
   `terms.html`, `contact.html` and the in-app help FAQ (`delete-account`)
+- `countdown-guide.html`: drop the "No RaveFAM in the widget list?" Scriptable card (`#scriptable`)
+  once the countdown widget is out
 
 ### Released
 _Nothing tracked yet. The build in review predates this list._
