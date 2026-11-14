@@ -1,7 +1,7 @@
 // The crew page (formerly the beta "new crew page"). Same panels as the
 // classic tile page, laid out as header + Huddle pill + Rave Plan tickets +
-// filter chips, with the roster in a bottom sheet. These run with the flag on;
-// every other crew spec keeps covering the classic page with it off.
+// filter chips, with the roster in a bottom sheet. It is the only crew page
+// now; bootWithCrewFeed still sets the retired flag, which the app ignores.
 const { test, expect } = require('@playwright/test');
 const { bootAuthedApp, seedData } = require('./helpers');
 
@@ -18,14 +18,6 @@ async function openC1(page, opts) {
 const panel = (page, key) => page.locator(`#crew-feature-panel-${key}`);
 
 test.describe('new crew page · layout', () => {
-  test('flag off keeps the classic tile page', async ({ page }) => {
-    await bootAuthedApp(page);
-    await openC1(page);
-    await expect(page.locator('#page-crew-detail')).not.toHaveClass(/crew-feed/);
-    await expect(page.locator('#page-crew-detail .crew-feature-tile')).not.toHaveCount(0);
-    await expect(page.locator('#page-crew-detail .stats-subtab')).toHaveCount(2);
-  });
-
   test('flag on renders header, Huddle dock, ticket and filters instead of tiles and tabs', async ({ page }) => {
     const errors = await bootWithCrewFeed(page);
     await openC1(page);
