@@ -13375,7 +13375,7 @@
     teardownCrewPresence();
     clearTimeout(_reloadDebounce);
     clearTimeout(_loadRetryTimer);
-    _loadAllDataEverOk = false; _loadRetryDelay = 4000;
+    _loadAllDataEverOk = false; _loadRetryDelay = 4000; _catalogsLoadedAt = 0;
     squad.length = 0; crews.length = 0; festivals.length = 0; dreamPins = []; archiveLinks = [];
     crewPolls = []; crewJams = []; crewJamVibes = [];
     crewAchievements = []; raverAchievements = []; crewFeedEvents = [];
@@ -15176,6 +15176,8 @@
   // (4s, 8s, … capped at 60s) — at a festival the next attempt often works.
   let _loadRetryTimer = null;
   let _loadRetryDelay = 4000;
+  const CATALOG_TTL_MS = 10 * 60 * 1000;
+  let _catalogsLoadedAt = 0;
   function loadAllDataFailed(err) {
     reportBackgroundFailure('loadAllData')(err);
     // Never leave the hardcoded demo rows standing in for a real account.
@@ -15196,24 +15198,32 @@
     // Badges/menus and the artist/venue catalogs don't gate the Crews/Squad
     // first paint (nothing below reads them), so fire them off together
     // without awaiting.
-    dbLoadModerators().catch(reportBackgroundFailure('dbLoadModerators')).then(() => {
+    // The shared catalogs (roles, artists, lineups, venues) don't change when
+    // a crewmate RSVPs or joins, and realtime reloads run this function often.
+    // Re-read them at most every CATALOG_TTL_MS instead of on every reload.
+    const refreshCatalogs = Date.now() - _catalogsLoadedAt > CATALOG_TTL_MS;
+    if (refreshCatalogs) _catalogsLoadedAt = Date.now();
+    const catalogFailure = what => err => { _catalogsLoadedAt = 0; reportBackgroundFailure(what)(err); };
+    if (refreshCatalogs) {
+    dbLoadModerators().catch(catalogFailure('dbLoadModerators')).then(() => {
       updateModBadge();
       return isModerator() ? dbLoadFlags().catch(reportBackgroundFailure('dbLoadFlags')) : null;
     }).then(updateModBadge);
-    dbLoadSuperAdmin().catch(reportBackgroundFailure('dbLoadSuperAdmin')).then(updatePMDashBadge);
+    dbLoadSuperAdmin().catch(catalogFailure('dbLoadSuperAdmin')).then(updatePMDashBadge);
+    }
     dbLoadMyVendorBadges().catch(reportBackgroundFailure('dbLoadMyVendorBadges'));
     dbLoadUserBlocks().catch(reportBackgroundFailure('dbLoadUserBlocks'));
     dbLoadMySanctions().catch(reportBackgroundFailure('dbLoadMySanctions'));
     // Everything postfestPending reads; the bell nudge waits on it (bootApp).
     _postfestDataReady = Promise.all([
-      dbLoadArtists().catch(reportBackgroundFailure('dbLoadArtists')),
-      dbLoadArtistAppearances().catch(reportBackgroundFailure('dbLoadArtistAppearances')),
+      refreshCatalogs ? dbLoadArtists().catch(catalogFailure('dbLoadArtists')) : null,
+      refreshCatalogs ? dbLoadArtistAppearances().catch(catalogFailure('dbLoadArtistAppearances')) : null,
       dbLoadArtistSightings().catch(reportBackgroundFailure('dbLoadArtistSightings')),
       dbLoadArtistPlans().catch(reportBackgroundFailure('dbLoadArtistPlans')),
       dbLoadPostfestCheckoffs().catch(reportBackgroundFailure('dbLoadPostfestCheckoffs')),
       dbLoadTopSets().catch(reportBackgroundFailure('dbLoadTopSets'))
     ]);
-    dbLoadVenues().catch(reportBackgroundFailure('dbLoadVenues'));
+    if (refreshCatalogs) dbLoadVenues().catch(catalogFailure('dbLoadVenues'));
     // "Our Photos" only feeds the profile detail modal (opened on demand,
     // never on first paint) — likewise non-blocking.
     loadAllOurPhotos().catch(reportBackgroundFailure('loadAllOurPhotos'));
