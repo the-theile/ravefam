@@ -110,7 +110,7 @@ Tags: **LIVE** · **BETA** · **iOS** (iOS app only) · **SOON** (not shipped ye
 ## 10. Vendor Village — `#vendor-village`
 | Feature | What it is | Tag | app.html section |
 |---|---|---|---|
-| Browse + save vendors | Crew-sourced directory of local vendors | LIVE | VENDOR VILLAGE — Browse / Saved |
+| Browse + save vendors | Crew-sourced directory of festival vendors | LIVE | VENDOR VILLAGE — Browse / Saved |
 | Add + edit vendors | Submit vendors with vibe tags | LIVE | Add / Edit Vendor |
 | Reviews | Rate and review vendors | LIVE | Detail view + reviews |
 | Crew cosigns | See which crewmates vouch for a vendor | LIVE | Crew cosigns |
