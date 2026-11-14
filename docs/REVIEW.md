@@ -13,9 +13,9 @@ Line numbers refer to `app.html` at 2.40.0 unless another file is named. Section
 
 ## Fix status (2.40.1)
 
-The top 10 were addressed in 2.40.1, one commit per finding. Migrations are written but **not applied**; they are in `supabase/migrations/` for review.
+The top 10 were addressed in 2.40.1, one commit per finding. Five of the six migrations were applied to production on 14 Nov 2026 (C2, C3, H1, H6, M1) and checked with read-only queries. **C1 (`20261114000000_storage_stop_public_listing.sql`) is still not applied**: it contains `DROP POLICY` and has to be pasted into the Supabase SQL editor.
 
-| Finding | Client change | Migration (not applied) |
+| Finding | Client change | Migration |
 |---|---|---|
 | C1 storage listing | none | `20261114000000_storage_stop_public_listing.sql` (has DROPs: paste into the SQL editor) |
 | C2 removed members keep access | none | `20261114000100_membership_helpers_ignore_removed.sql` |
