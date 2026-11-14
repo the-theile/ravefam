@@ -25526,11 +25526,26 @@
     } else {
       reactions[emoji] = [...existing, uid];
     }
+    const before = msg.reactions || {};
     msg.reactions = reactions;
     renderHuddleUI();
-    const { error } = await sb.from('huddle_messages').update({ reactions }).eq('id', messageId);
-    if (error) toastError('Could not save reaction', error);
-    else if (firstReaction && !existing.includes(uid)) notifyHuddleActivityResponse(messageId, { emoji });
+    // The server toggles just this user's emoji under a row lock, so two
+    // people reacting at once no longer overwrite each other. PGRST202 = the
+    // RPC isn't deployed yet: fall back to the old whole-column write.
+    let { data, error } = await sb.rpc('toggle_huddle_reaction', { p_message_id: messageId, p_emoji: emoji });
+    if (error && error.code === 'PGRST202') {
+      ({ error } = await sb.from('huddle_messages').update({ reactions }).eq('id', messageId));
+      data = null;
+    }
+    if (error) {
+      msg.reactions = before;
+      renderHuddleUI();
+      toastError('Could not save reaction', error);
+      return;
+    }
+    // Server truth includes anyone who reacted in the meantime.
+    if (data && typeof data === 'object') { msg.reactions = data; renderHuddleUI(); }
+    if (firstReaction && !existing.includes(uid)) notifyHuddleActivityResponse(messageId, { emoji });
   }
 
   async function dbTogglePinHuddleMessage(messageId, pin) {
