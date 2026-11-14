@@ -46,22 +46,22 @@ function guideData() {
 // Crew extras: a couple of Dream Board pins, a voted poll and a shared jam.
 function guideExtrasData() {
   const data = guideData();
-  const t = '2026-10-01T00:00:00Z';
+  const ago = (h) => new Date(Date.now() - h * 3600000).toISOString();
   data.dream_board_pins = [
-    { id: 'pin-1', crew_id: 'c1', added_by: 'uid-tess', label: 'Tomorrowland 2027', created_at: t },
-    { id: 'pin-2', crew_id: 'c1', added_by: 'uid-kai', label: 'Sunrise set at Lost Lands', created_at: t },
-    { id: 'pin-3', crew_id: 'c1', added_by: 'uid-priya', label: 'Matching LED fits for EDC', created_at: t },
+    { id: 'pin-1', crew_id: 'c1', added_by: 'uid-tess', label: 'Tomorrowland 2027', created_at: ago(5) },
+    { id: 'pin-2', crew_id: 'c1', added_by: 'uid-kai', label: 'Sunrise set at Lost Lands', created_at: ago(26) },
+    { id: 'pin-3', crew_id: 'c1', added_by: 'uid-priya', label: 'Matching LED fits for EDC', created_at: ago(50) },
   ];
   data.crew_polls = [{
     id: 'poll-1', crew_id: 'c1', created_by: 'uid-dani', question: 'Camp together or get separate spots?',
     poll_type: 'choice', options: ['Camp together', 'Separate spots'], is_anonymous: false,
-    expires_at: null, deleted_at: null, created_at: t,
+    expires_at: null, deleted_at: null, created_at: ago(2),
   }];
   data.crew_poll_votes = ['uid-dani', 'uid-kai', 'uid-tess', 'uid-marco'].map((u, i) => ({ poll_id: 'poll-1', voter_user_id: u, vote_value: i === 3 ? '1' : '0' }));
   data.crew_jams = [{
     id: 'jam-1', crew_id: 'c1', added_by: 'uid-tess', url: 'https://open.spotify.com/playlist/example',
     platform: 'spotify', title: 'Lights All Night pregame', cover_url: null, track_count: 32, tag: 'bass',
-    description: 'Warming up for Dallas.', festival_id: null, reactions: {}, created_at: t,
+    description: 'Warming up for Dallas.', festival_id: null, reactions: {}, created_at: ago(8),
   }];
   return data;
 }
@@ -119,6 +119,8 @@ async function main() {
       deviceScaleFactor: 2,
       colorScheme: 'dark',
     });
+    // init: localStorage flags to set before the app boots (e.g. the new crew page).
+    if (opts.init) await context.addInitScript((kv) => { try { Object.entries(kv).forEach(([k, v]) => localStorage.setItem(k, v)); } catch (e) {} }, opts.init);
     try { await shootApp(context, { outDir: OUT_DIR, ...opts }); } finally { await context.close(); }
   };
   fs.mkdirSync(OUT_DIR, { recursive: true });
@@ -157,17 +159,13 @@ async function main() {
       } finally { await context.close(); }
     }
 
-    // Crew extras: the feature tiles with Dream Board open below them
-    // (the crew page shows one panel at a time).
+    // Crew extras: the new crew page's merged feed (polls, jams, dreams,
+    // memories in one stream), with the filter chips in view.
     await shoot({
       name: 'crew-extras',
       data: guideExtrasData(),
-      run: (p) => p.evaluate(() => {
-        openDetail('c1');
-        toggleCrewFeatureTile('dreamboard', document.querySelector('.crew-feature-tile[data-feature="dreamboard"]'));
-      }),
-      scrollTo: '.crew-feature-tile[data-feature="huddle"]',
-      scrollBy: -100,
+      init: { ravefam_crew_feed: '1' },
+      run: (p) => p.evaluate(() => { window.scrollTo(0, 0); openDetail('c1'); }),
     });
 
     // Raves tab.
