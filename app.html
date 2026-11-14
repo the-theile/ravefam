@@ -10263,7 +10263,7 @@
 </div>
 
 <!-- Crew Join Modal (invite link flow) -->
-<div class="modal-overlay" id="crew-join-overlay" onclick="if(event.target===this)closeCrewJoinModal()">
+<div class="modal-overlay" id="crew-join-overlay" onclick="if(event.target===this)laterCrewJoin()">
   <div class="modal" id="crew-join-modal-content" style="overflow:hidden;">
     <!-- filled by JS -->
   </div>
@@ -13251,7 +13251,7 @@
 
   async function doLogout() {
     sessionStorage.removeItem('pendingClaim');
-    sessionStorage.removeItem('pendingCrewJoin');
+    clearPendingCrewJoin();
     localStorage.removeItem('pendingClaimToken');
     localStorage.removeItem('pendingRaveSlug');
     localStorage.removeItem('pendingPicksHandoff');
@@ -13454,10 +13454,10 @@
         // right now. Saying so here beats letting someone create an account
         // and only then toasting "isn't currently recruiting" from bootApp().
         if (data?.error === 'not_recruiting') {
-          sessionStorage.removeItem('pendingCrewJoin');
+          clearPendingCrewJoin();
           showJoinNotRecruiting(data.crew_name);
         } else if (data?.error === 'invalid_token') {
-          sessionStorage.removeItem('pendingCrewJoin');
+          clearPendingCrewJoin();
           showJoinNotRecruiting(null, true);
         }
       }).catch(() => {});
@@ -13553,8 +13553,16 @@
       // (sessionStorage is per-tab). Cleared in commitClaim() / doLogout().
       localStorage.setItem('pendingClaimToken', token);
     }
-    const joinToken = params.get('join');
-    if (joinToken) sessionStorage.setItem('pendingCrewJoin', joinToken);
+    // Same localStorage backup as the claim token: iOS can discard the tab (or
+    // a new one opens) between tapping the invite and finishing sign-in.
+    const urlJoin = params.get('join');
+    const joinToken = urlJoin || localStorage.getItem('pendingCrewJoinToken');
+    if (joinToken) {
+      // A fresh link is a fresh ask: forget any earlier "Maybe later".
+      if (urlJoin && urlJoin !== localStorage.getItem('pendingCrewJoinToken')) localStorage.removeItem('pendingCrewJoinLater');
+      sessionStorage.setItem('pendingCrewJoin', joinToken);
+      localStorage.setItem('pendingCrewJoinToken', joinToken);
+    }
     // ?rave=<slug> from the public /rave/:slug page. localStorage (not
     // session) so it survives the email-verification round trip, same as
     // pendingClaimToken. Consumed by processPendingRave().
@@ -13887,10 +13895,36 @@
     // Keep the token through a network blip so the next launch retries it;
     // every answer the server does give is final, so clear it after that.
     if (error || !data) { toastError('Could not load crew invite. We\'ll try again next time you open the app.', error); return; }
-    sessionStorage.removeItem('pendingCrewJoin');
-    if (data.error === 'invalid_token')    { toastError('This invite link is no longer valid.'); return; }
-    if (data.error === 'not_recruiting')   { toastError(`${data.crew_name || 'This crew'} isn't currently recruiting.`); return; }
+    // Final answers clear the token; a live invite keeps it until the modal
+    // is answered (confirmJoinCrew / laterCrewJoin), so closing the app with
+    // the modal up doesn't lose it.
+    if (data.error === 'invalid_token')    { clearPendingCrewJoin(); toastError('This invite link is no longer valid.'); return; }
+    if (data.error === 'not_recruiting')   { clearPendingCrewJoin(); toastError(`${data.crew_name || 'This crew'} isn't currently recruiting.`); return; }
     showCrewJoinModal(token, data);
+  }
+
+  // The crew-invite token lives in sessionStorage plus a localStorage backup
+  // (see checkClaimParam), with a flag for "Maybe later" already used once.
+  function clearPendingCrewJoin() {
+    sessionStorage.removeItem('pendingCrewJoin');
+    try {
+      localStorage.removeItem('pendingCrewJoinToken');
+      localStorage.removeItem('pendingCrewJoinLater');
+    } catch (e) { /* storage blocked: nothing kept there either */ }
+  }
+
+  // "Maybe later" (button, backdrop or Escape): ask once more on the next app
+  // open, then let the invite go. Previously it was thrown away at once, and
+  // the only way back was finding the original message.
+  function laterCrewJoin() {
+    let askedBefore = false;
+    try {
+      askedBefore = localStorage.getItem('pendingCrewJoinLater') === '1';
+      if (!askedBefore) localStorage.setItem('pendingCrewJoinLater', '1');
+    } catch (e) {}
+    if (askedBefore) clearPendingCrewJoin();
+    else showToast("No worries. We'll ask once more next time you open RaveFAM.");
+    closeCrewJoinModal();
   }
 
   // Build a raver's claim URL — works for both hosted and local file:// contexts.
@@ -14154,6 +14188,7 @@
     if (joinToken) {
       _scanHandled = true;
       sessionStorage.setItem('pendingCrewJoin', joinToken);
+      try { localStorage.setItem('pendingCrewJoinToken', joinToken); } catch (e) {}
       closeScanner();
       if (currentUser) processPendingCrewJoin(); else showAuthScreen();
       return;
@@ -33985,7 +34020,7 @@
       </p>
       ${profileSection}
       <div class="modal-actions" style="margin-top:20px;">
-        <button class="btn btn-ghost" onclick="closeCrewJoinModal()">Maybe later</button>
+        <button class="btn btn-ghost" onclick="laterCrewJoin()">Maybe later</button>
         <button class="btn btn-primary" id="crew-join-confirm-btn" onclick="confirmJoinCrew()">🎉 Claim My Spot</button>
       </div>`;
     document.getElementById('crew-join-overlay').classList.add('open');
@@ -34010,7 +34045,7 @@
     // Guard: already a member of this crew (client-side check before hitting the RPC)
     if (you) {
       const alreadyIn = crews.some(c => (c.squadIds || []).some(id => String(id) === String(you.id)) && c.invite_token === token);
-      if (alreadyIn) { showToast('You\'re already in this crew!'); closeCrewJoinModal(); return; }
+      if (alreadyIn) { clearPendingCrewJoin(); showToast('You\'re already in this crew!'); closeCrewJoinModal(); return; }
     }
     const name   = you ? null : document.getElementById('crew-join-name')?.value.trim();
     const handle = you ? null : document.getElementById('crew-join-handle')?.value.trim();
@@ -34023,6 +34058,9 @@
     if (error || !data) { toastError("Couldn't join the crew. Try again.", error); if (btn) { btn.disabled = false; btn.textContent = '🎉 Claim My Spot'; } return; }
     // The RPC reports this as { already_member: true }, not as an error — the
     // old check never matched and fell through to the welcome screen.
+    // Every answer below is final for this token.
+    if (data.already_member || data.error === 'already_member' || data.error === 'removed_by_lead'
+        || data.error === 'not_recruiting' || data.error === 'invalid_token') clearPendingCrewJoin();
     if (data.already_member || data.error === 'already_member') { showToast('You\'re already in this crew!'); closeCrewJoinModal(); return; }
     if (data.error === 'removed_by_lead') { toastError(`You were removed from ${data.crew_name || 'this crew'}. Ask the crew lead to add you back.`); closeCrewJoinModal(); return; }
     if (data.error === 'not_recruiting')  { toastError(`This crew isn't recruiting right now.`); closeCrewJoinModal(); return; }
@@ -34030,6 +34068,7 @@
     if (data.error === 'name_required')   { toastError('Enter your name to join.'); if (btn) { btn.disabled = false; btn.textContent = '🎉 Claim My Spot'; } return; }
     const crewName = data.crew_name || 'the crew';
     const joinerName = you?.name || name;
+    clearPendingCrewJoin();
     closeCrewJoinModal(false);
     const _joinCrewLink = nlCrew({ id: data.crew_id, name: crewName });
     addNotification(`🎉 You joined ${crewName}! Welcome to the fam — the bassline drops harder with you here.`, [_joinCrewLink]);
