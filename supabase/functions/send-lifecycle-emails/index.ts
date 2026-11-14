@@ -14,6 +14,7 @@
 // which trigger fired): no user gets more than one lifecycle email per 14
 // days, so different triggers don't stack into a flurry of nags.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireServiceRole } from "../_shared/require-service-role.ts";
 import { wrapEmail as wrapEmailShared, button, screenshot as screenshotShared } from "../_shared/email-templates.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -94,7 +95,9 @@ async function markRow(id: number, status: "sent" | "skipped" | "failed", error?
     .eq("id", id);
 }
 
-Deno.serve(async () => {
+Deno.serve(async (req) => {
+  const denied = requireServiceRole(req);
+  if (denied) return denied;
   const { data: dueRows, error: dueError } = await sb
     .from("email_lifecycle_log")
     .select("id, user_id, trigger_type, trigger_ref_id")

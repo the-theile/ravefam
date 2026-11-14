@@ -8,6 +8,7 @@
 // Idempotent: a row whose email_sent_at is already set is skipped, so a
 // repeat call can't spam the inbox.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireServiceRole } from "../_shared/require-service-role.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -34,6 +35,8 @@ function escapeHtml(s: string): string {
 }
 
 Deno.serve(async (req) => {
+  const denied = requireServiceRole(req);
+  if (denied) return denied;
   const { support_message_id: id } = await req.json().catch(() => ({}));
   if (!id) {
     return new Response(JSON.stringify({ error: "support_message_id required" }), { status: 400 });
