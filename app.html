@@ -16622,9 +16622,16 @@
   async function softDeleteRow(table, match, reason) {
     const uid = currentUser?.id;
     if (!uid) return { ok: false, rateLimited: false };
-    const { error } = await sb.from(table)
-      .update({ deleted_at: new Date().toISOString(), deleted_by: uid, delete_reason: reason || null })
+    // count, not select(): RLS can match 0 rows without an error, which read
+    // as success ("Deleted" toast, audit row) while nothing changed. A
+    // returning select would need the deleted row to stay readable.
+    const { error, count } = await sb.from(table)
+      .update({ deleted_at: new Date().toISOString(), deleted_by: uid, delete_reason: reason || null }, { count: 'exact' })
       .match(match);
+    if (!error && count === 0) {
+      console.warn(`${table} soft delete: 0 rows affected (RLS block?)`, match);
+      return { ok: false, rateLimited: false };
+    }
     if (error) {
       console.error(`${table} soft delete error`, error);
       const msg = error.message || '';
