@@ -27,7 +27,8 @@ function briefingData() {
 async function openBriefing(page) {
   await page.evaluate(async () => { await openDetail('c1', { tab: 'gameplan' }); });
   await expect(page.locator('#crew-feature-panel-raveplan')).toBeVisible();
-  await page.locator('#crew-feature-panel-raveplan button', { hasText: 'Mission Briefing' }).click();
+  // The Briefing button rides on the rave's ticket above the filters.
+  await page.locator('.crew-ticket-act[data-fest="f1"]', { hasText: 'Briefing' }).click();
   await expect(page.locator('#mission-briefing-overlay')).toHaveClass(/open/);
   await expect(page.locator('#mission-briefing-overlay .mb-page')).toHaveCount(8);
 }
@@ -119,7 +120,7 @@ test.describe('mission briefing', () => {
 
     await page.locator('.mb-x').click();
     await expect(page.locator('#mission-briefing-overlay')).not.toHaveClass(/open/);
-    await expect(page.locator('#crew-feature-panel-raveplan button', { hasText: 'Mission Briefing' })).toBeVisible();
+    await expect(page.locator('.crew-ticket-act[data-fest="f1"]', { hasText: 'Briefing' })).toBeVisible();
   });
 
   test('Rave Focus offers the briefing for a crew sharing the rave', async ({ page }) => {
@@ -184,7 +185,7 @@ test.describe('mission briefing', () => {
 
   test('each entry point logs briefing_opened with its source', async ({ page }) => {
     await bootAuthedApp(page, { data: briefingData() });
-    await openBriefing(page); // Rave Plan button
+    await openBriefing(page); // ticket's Briefing button
     await page.locator('.mb-x').click();
     await page.evaluate(() => openHuddleDeepLink({ crewId: 'c1', briefing: 'f1' }));
     await expect(page.locator('#mission-briefing-overlay')).toHaveClass(/open/);

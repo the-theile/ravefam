@@ -273,7 +273,7 @@ test.describe('huddle chat · mentions', () => {
 });
 
 test.describe('huddle chat · crew detail entry', () => {
-  test('the crew tile shows a preview with the unread count and launches the chat', async ({ page }) => {
+  test('the Huddle dock shows the unread count and launches the chat', async ({ page }) => {
     await bootAuthedApp(page, {
       data: seedWithChat(),
       sessionOver: { user_metadata: { guidance_dismissed: true, seen_tips: { beacon: true } } },
@@ -281,8 +281,8 @@ test.describe('huddle chat · crew detail entry', () => {
     await page.evaluate(async () => { await openDetail('c1'); await loadHuddleActivityCache(); rerenderHuddleTilePreview('c1'); });
     await page.waitForTimeout(300);
 
-    const preview = page.locator('.huddle-tile-preview');
-    await expect(preview).toContainText('unread');
+    const preview = page.locator('#huddle-tile-preview-root .hd-dock');
+    await expect(preview).toHaveAttribute('aria-label', /1 unread/);
     await expect(preview.locator('.huddle-cta-count')).toHaveText('1');
 
     // The conversation itself is not inlined into crew detail anymore.
@@ -291,14 +291,14 @@ test.describe('huddle chat · crew detail entry', () => {
     await expect(page.locator('#huddle-screen')).toHaveClass(/open/);
   });
 
-  test('tapping the Huddle tile opens the chat in one tap', async ({ page }) => {
+  test('tapping the Huddle dock opens the chat in one tap', async ({ page }) => {
     await bootAuthedApp(page, {
       data: seedWithChat(),
       sessionOver: { user_metadata: { guidance_dismissed: true, seen_tips: { beacon: true } } },
     });
     await page.evaluate(async () => { await openDetail('c1'); });
     await expect(page.locator('#huddle-screen')).toHaveCount(0);
-    await page.locator('.crew-feature-tile[data-feature="huddle"]').click();
+    await page.locator('#huddle-tile-preview-root .hd-dock').click();
     await expect(page.locator('#huddle-screen')).toHaveClass(/open/);
   });
 

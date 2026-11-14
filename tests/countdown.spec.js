@@ -189,10 +189,10 @@ function countdownSeed() {
 const rpcCalls = (page, fn) => page.evaluate((f) => (window.__store.__rpcCalls || []).filter((c) => c.fn === f), fn);
 
 test.describe('countdown sheet (app.html)', () => {
-  test('the crew page button makes a crew link and shows it', async ({ page }) => {
+  test('the roster sheet button makes a crew link and shows it', async ({ page }) => {
     await bootAuthedApp(page, { data: countdownSeed() });
-    await page.evaluate(() => openDetail('c1'));
-    await page.getByRole('button', { name: '⏳ Countdown on your home screen' }).click();
+    await page.evaluate(() => openDetail('c1', { tab: 'roster' }));
+    await page.locator('#crew-manifest-content').getByRole('button', { name: '⏳ Countdown' }).click();
     const overlay = page.locator('#countdown-overlay');
     await expect(overlay).toHaveClass(/open/);
     await expect(overlay.locator('input[aria-label="Countdown link"]')).toHaveValue(new RegExp(`/countdown/${TOKEN}$`));
