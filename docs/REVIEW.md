@@ -32,7 +32,40 @@ The top 10 were addressed in 2.40.1, one commit per finding. All six migrations 
 
 Found while fixing C3: adding a vibe tag to a crewmate went through `dbSaveRaver`, which wrote the whole masked row back and so blanked that person's hidden phone, base and notes. The C3 client change stops it.
 
-Still open from this list: a cold start with no signal now boots but has no data to show (H2 follow-up: cache the last good load), and M4 onwards.
+Still open from this list: a cold start with no signal now boots but has no data to show (H2 follow-up: cache the last good load), and M4 onwards (see 2.40.2 below).
+
+## Fix status (2.40.2)
+
+The remaining Medium findings and most Lows were addressed in 2.40.2, one commit per finding. **The migrations below are not applied, and the edge function change is not deployed.**
+
+| Finding | In the app / repo | Migration (not applied) |
+|---|---|---|
+| M4 badge feed unreadable for claimed members | — | `20261114001000_badge_feed_read_any_member.sql` |
+| M5 leader can unlink any member's account | Disconnect only offered on a profile you created | `20261114001100_disconnect_raver_own_stubs_only.sql` |
+| M6 crew invite lost across tabs / on "Maybe later" | join token backed up in localStorage, kept until answered; "Maybe later" asks once more | — |
+| M7 message lands in the wrong room after a quick switch | `sendHuddleMessage` checks the room before appending | — |
+| M8 batch edge functions accept the anon key | `_shared/require-service-role.ts` gate in the eight functions | — (**needs a redeploy**) |
+| M9 forged / duplicate notifications | points handler shows the toast only | `20261114001200_points_notifications_server_side.sql` (apply before deploying 2.40.2) |
+| M10 heavy first load | html2canvas and Cropper.js load on first use | — |
+| L1 checklist_items policies | — | `20261114001300_checklist_items_policies.sql` |
+| L2 silent soft-delete failures | `softDeleteRow` treats 0 affected rows as failure | — |
+| L4 no feedback while a Huddle photo uploads | pending preview bubble; photo kept in its original room | — |
+| L6 moderator list / restriction lookups readable by anyone | — | `20261114001400_narrow_moderator_and_restriction_reads.sql` |
+| L7 owner email hard-coded | debug console gated on `is_super_admin` | `20261114001500_replace_hardcoded_owner_email.sql` |
+| L8 Telegram webhook unauthenticated | checks `X-Telegram-Bot-Api-Secret-Token` once `TELEGRAM_WEBHOOK_SECRET` is set | — |
+| L9 claim retry after a lost response says "taken" | retry checks whether the first claim landed (tests in `tests/claim_retry.spec.js`) | — |
+| L10 onboarding after a failed load | fixed by H3 in 2.40.1 | — |
+| L11 tall modals cut off on small phones | modal overlays scroll; checked at 375×420 | — |
+| L12 missing indexes | — | `20261114001600_membership_lookup_indexes.sql` |
+
+Still open:
+
+- **H2 follow-up:** a cold start with no signal boots but has no data to show. Needs the last good load cached on the device (and cleared on sign-out).
+- **L3:** the destructive-action rate limit still counts audit rows the browser writes; the audit row should come from the trigger.
+- **L5:** presence and typing channels are still open topics; making them private needs Realtime authorization set up.
+- **L12 (rest):** 193 policies still call `auth.uid()` per row instead of `(select auth.uid())`.
+- **M10 (rest):** the Google Fonts request still asks for six families.
+- Voice notes have the same room-switch race L4 fixed for photos (`stopHuddleVoiceRecording` path).
 
 ---
 
