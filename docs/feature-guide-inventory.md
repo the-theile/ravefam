@@ -97,7 +97,6 @@ Tags: **LIVE** · **BETA** · **iOS** (iOS app only) · **SOON** (not shipped ye
 | Vibe Tags | Preset vibe tags on your profile | LIVE | Vibe Tags |
 | How We Met | Pairwise "how we met" stories | LIVE | HOW WE MET |
 | PLUR Points | Points across Peace/Love/Unity/Respect + milestones | LIVE | PLUR POINTS |
-| Discover places | First visit to each tab unlocks it (+10 Unity) | LIVE | REALMS |
 
 ## 9. Stats — `#stats`
 | Feature | What it is | Tag | app.html section |
@@ -135,4 +134,4 @@ Tags: **LIVE** · **BETA** · **iOS** (iOS app only) · **SOON** (not shipped ye
 ## Excluded (internal / staff only)
 Mod Dashboard, Mod Guide, PM Metrics Dashboard, micro-feedback & NPS prompts,
 iOS App Store nudge, captcha, soft-delete/audit internals, Ko-fi tip jar,
-New crew page (BETA toggle).
+New crew page (BETA toggle), Discover places (tab unlocks, kept as a surprise).
