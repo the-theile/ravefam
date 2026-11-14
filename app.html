@@ -16209,9 +16209,12 @@
     } else {
       row.created_by = uid;
       row.qr_token = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : (Math.random().toString(36).slice(2) + Date.now().toString(36));
-      const { data: inserted, error } = await sb.from('ravers').insert(row).select().single();
+      // Explicit column: phone/notes/qr_token are no longer selectable from
+      // the table directly (they come back through the raver RPCs), so a bare
+      // select() would be refused. The token is the one we just generated.
+      const { data: inserted, error } = await sb.from('ravers').insert(row).select('id').single();
       if (error) { console.error('raver insert error', error); toastError('Could not create profile. Try again', error); }
-      return inserted || null;
+      return inserted ? { id: inserted.id, qr_token: row.qr_token } : null;
     }
   }
 
@@ -41497,7 +41500,7 @@
         base: '', instagram: '', radiate: '', phone: '', met_story: '', notes: '',
         vibe_tags: [], custom_vibe_tags: [], blocked_tags: [],
         updated_at: new Date().toISOString(),
-      }).select().single();
+      }).select('id').single();
       error = err;
       if (!error && inserted) {
         savedId = inserted.id;
