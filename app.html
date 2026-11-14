@@ -10516,11 +10516,6 @@
           <span class="settings-nav-text"><span class="poll-setting-label">Android beta</span><span class="poll-setting-hint" id="abeta-settings-hint">Test the Google Play app first</span></span>
           <span class="settings-nav-chev">›</span>
         </button>
-        <div class="settings-nav-row">
-          <span class="settings-nav-ico" style="background:rgba(var(--neon-purple-rgb),0.14);">🧪</span>
-          <span class="settings-nav-text"><span class="poll-setting-label">New crew page <span class="text-hint" style="font-weight:400;">beta</span></span><span class="poll-setting-hint">Huddle up top, your next rave as a ticket, roster in one tap</span></span>
-          <button class="poll-anon-toggle" id="crew-feed-settings-toggle" aria-label="New crew page" onclick="toggleCrewFeedEnabled(this)"></button>
-        </div>
         <button type="button" class="settings-nav-row" onclick="closePrivacySettingsModal();openMyCountdownSheet()">
           <span class="settings-nav-ico" style="background:rgba(var(--neon-pink-rgb),0.12);">📲</span>
           <span class="settings-nav-text"><span class="poll-setting-label">Home screen countdown</span><span class="poll-setting-hint">Days until every crew's next rave</span></span>
@@ -11301,7 +11296,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.40.4';
+  const APP_VERSION = '2.41.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -12071,12 +12066,10 @@
   function hapticsEnabled() {
     try { return localStorage.getItem(HAPTICS_OFF_KEY) !== '1'; } catch { return true; }
   }
-  // Beta: the redesigned crew page (see CREW FEED). Off unless this device
-  // opted in via Settings → New crew page.
-  const CREW_FEED_KEY = 'ravefam_crew_feed';
-  function crewFeedEnabled() {
-    try { return localStorage.getItem(CREW_FEED_KEY) === '1'; } catch { return false; }
-  }
+  // The redesigned crew page (see CREW FEED) is the only crew page now; the
+  // Settings opt-in is gone. Clear the old per-device flag.
+  try { localStorage.removeItem('ravefam_crew_feed'); } catch {}
+  function crewFeedEnabled() { return true; }
   function nativeHaptics() {
     if (!IS_NATIVE_APP || !hapticsEnabled()) return null;
     return (window.Capacitor.Plugins && window.Capacitor.Plugins.Haptics) || null;
@@ -40257,7 +40250,6 @@
     // Builds without the plugin (App Store build before the haptics release) can't buzz.
     document.getElementById('haptics-settings-row').style.display = window.Capacitor?.Plugins?.Haptics ? '' : 'none';
     document.getElementById('haptics-settings-toggle').classList.toggle('on', hapticsEnabled());
-    document.getElementById('crew-feed-settings-toggle').classList.toggle('on', crewFeedEnabled());
     const loads = [renderShareLinkSettings(), renderLineupAlertSettings()];
     renderBlockedRaversSettings();
     showSettingsPage(page);
@@ -40685,15 +40677,6 @@
     try { on ? localStorage.removeItem(HAPTICS_OFF_KEY) : localStorage.setItem(HAPTICS_OFF_KEY, '1'); } catch {}
     hapticImpact('MEDIUM');
     showToast(on ? 'Haptics turned on' : 'Haptics turned off');
-  }
-
-  function toggleCrewFeedEnabled(btn) {
-    const on = !btn.classList.contains('on');
-    btn.classList.toggle('on', on);
-    try { on ? localStorage.setItem(CREW_FEED_KEY, '1') : localStorage.removeItem(CREW_FEED_KEY); } catch {}
-    showToast(on ? 'New crew page on' : 'Classic crew page back');
-    // An open crew page swaps layouts on the spot.
-    if (activeDetailId) openDetail(activeDetailId);
   }
 
   // Intros, tips and one-time hints come back; places stay found.

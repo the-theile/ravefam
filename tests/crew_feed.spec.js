@@ -1,4 +1,4 @@
-// The new crew page (beta, Settings → New crew page). Same panels as the
+// The crew page (formerly the beta "new crew page"). Same panels as the
 // classic tile page, laid out as header + Huddle pill + Rave Plan tickets +
 // filter chips, with the roster in a bottom sheet. These run with the flag on;
 // every other crew spec keeps covering the classic page with it off.
@@ -172,22 +172,6 @@ test.describe('new crew page · deep links', () => {
     await openC1(page, { tab: 'gameplan', festivalId: 'f1' });
     await expect(page.locator('.crew-feed-filter[data-filter="raveplan"]')).toHaveClass(/active/);
     await expect(panel(page, 'raveplan')).toBeVisible();
-  });
-});
-
-test.describe('new crew page · settings toggle', () => {
-  test('turning it on in Settings swaps an open crew page', async ({ page }) => {
-    await bootAuthedApp(page);
-    await openC1(page);
-    await expect(page.locator('#page-crew-detail')).not.toHaveClass(/crew-feed/);
-    await page.evaluate(() => toggleCrewFeedEnabled(document.getElementById('crew-feed-settings-toggle')));
-    await expect(page.locator('#page-crew-detail')).toHaveClass(/crew-feed/);
-    expect(await page.evaluate(() => localStorage.getItem('ravefam_crew_feed'))).toBe('1');
-
-    await page.evaluate(() => toggleCrewFeedEnabled(document.getElementById('crew-feed-settings-toggle')));
-    await expect(page.locator('#page-crew-detail')).not.toHaveClass(/crew-feed/);
-    await expect(page.locator('#page-crew-detail .stats-subtab')).toHaveCount(2);
-    expect(await page.locator('#add-member-input').count()).toBe(1);
   });
 });
 
