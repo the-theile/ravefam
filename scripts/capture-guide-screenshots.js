@@ -86,14 +86,23 @@ function guideVillageData() {
   return data;
 }
 
-// The profile shot shows the founder's real profile (photo, name, handle, city,
-// Instagram; used with their permission) on the demo crewmate's slot. The
-// how-we-met story is cleared so nothing fictional is attributed to a real
-// person; the vibe tags and sound stay as demo content.
+// The founder's photo (used with their permission) on made-up profile data:
+// the city and Instagram here are invented, not theirs.
+const FOUNDER = { name: 'Theile', handle: 'theile', avatar_url: '/scripts/landing-avatars/theile.jpg', base: 'Orlando, FL', instagram: 'ravefam' };
+
+// Ravers tab: the founder's photo on the demo crewmate's slot.
 function guideProfileData() {
   const data = guideData();
   const r = data.ravers.find((x) => x.id === 'r-dani');
-  if (r) Object.assign(r, { name: 'Theile', handle: 'theile', avatar_url: '/scripts/landing-avatars/theile.jpg', base: 'Lakewood Ranch, FL', instagram: 'the_theile', met_story: '' });
+  if (r) Object.assign(r, { ...FOUNDER, met_story: '' });
+  return data;
+}
+
+// Settings: the signed-in "you" wears the founder's photo too.
+function guideSettingsData() {
+  const data = guideData();
+  const r = data.ravers.find((x) => x.id === 'r-you');
+  if (r) Object.assign(r, FOUNDER);
   return data;
 }
 
@@ -178,7 +187,7 @@ async function main() {
     // Safety & help: Settings > Privacy & Notifications.
     await shoot({
       name: 'privacy',
-      data: guideData(),
+      data: guideSettingsData(),
       run: (p) => p.evaluate(() => { window.scrollTo(0, 0); openPrivacySettingsModal('r-you'); }),
     });
   } finally {
