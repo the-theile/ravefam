@@ -14612,6 +14612,20 @@
   }
 
   // ── Commit claim ──────────────────────────────────────
+  // A claim whose response was lost to the network may still have landed.
+  // Set on a network failure; the retry checks it before saying "claimed".
+  let _claimNetworkFailedToken = null;
+
+  // After "invalid_or_used_token" on a retry: reload and see whether the
+  // earlier, unanswered attempt put you in the crew. Returns your raver id.
+  async function claimLandedEarlier(previewSnap) {
+    const crewId = previewSnap?.crew?.id;
+    if (!crewId || !(await loadAllData())) return null;
+    const me = squad.find(r => r.isYou);
+    const crew = getCrew(crewId);
+    return me && crew && (crew.squadIds || []).some(id => String(id) === String(me.id)) ? me.id : null;
+  }
+
   async function commitClaim() {
     const token = _pendingClaimToken;
     if (!token || !currentUser) return;
@@ -14648,9 +14662,8 @@
     // PLUR from the claim (and the Crews tab found at boot) is read back
     // after it lands, for the success moment's single batched line.
     const claimPlurSince = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-    const { data: result, error } = await sb.rpc('claim_and_merge_raver', params);
+    let { data: result, error } = await sb.rpc('claim_and_merge_raver', params);
     if (error || result?.error) {
-      if (btn) { btn.disabled = false; btn.textContent = btnLabel; }
       let errType;
       if (result?.error === 'invalid_or_used_token' || result?.error === 'already_claimed') {
         errType = 'claimed';
@@ -14661,9 +14674,19 @@
       } else {
         errType = 'unknown';
       }
-      showScannerError(errType, previewSnap);
-      return;
+      if (errType === 'network') _claimNetworkFailedToken = token;
+      const landedId = errType === 'claimed' && _claimNetworkFailedToken === token
+        ? await claimLandedEarlier(previewSnap) : null;
+      if (!landedId) {
+        if (btn) { btn.disabled = false; btn.textContent = btnLabel; }
+        showScannerError(errType, previewSnap);
+        return;
+      }
+      // The first attempt went through; carry on as if this one had.
+      result = { claimed_id: landedId };
+      error = null;
     }
+    _claimNetworkFailedToken = null;
 
     // Claim succeeded — safe to clear the pending token from storage
     sessionStorage.removeItem('pendingClaim');
