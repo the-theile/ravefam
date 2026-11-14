@@ -33973,7 +33973,10 @@
     }
     const { data, error } = await sb.rpc('join_crew_via_invite', { p_token: token, p_name: name || null, p_handle: handle || null });
     if (error || !data) { toastError("Couldn't join the crew. Try again.", error); if (btn) { btn.disabled = false; btn.textContent = '🎉 Claim My Spot'; } return; }
-    if (data.error === 'already_member')  { showToast('You\'re already in this crew!'); closeCrewJoinModal(); return; }
+    // The RPC reports this as { already_member: true }, not as an error — the
+    // old check never matched and fell through to the welcome screen.
+    if (data.already_member || data.error === 'already_member') { showToast('You\'re already in this crew!'); closeCrewJoinModal(); return; }
+    if (data.error === 'removed_by_lead') { toastError(`You were removed from ${data.crew_name || 'this crew'}. Ask the crew lead to add you back.`); closeCrewJoinModal(); return; }
     if (data.error === 'not_recruiting')  { toastError(`This crew isn't recruiting right now.`); closeCrewJoinModal(); return; }
     if (data.error === 'invalid_token')   { toastError('This invite link has expired.'); closeCrewJoinModal(); return; }
     if (data.error === 'name_required')   { toastError('Enter your name to join.'); if (btn) { btn.disabled = false; btn.textContent = '🎉 Claim My Spot'; } return; }
