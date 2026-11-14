@@ -8,9 +8,30 @@
 // real write flows (RSVP, create crew, add/remove member, edit profile) and
 // assert the data round-trips via a fresh loadAllData(), all with no backend.
 
-const SUPABASE_URL = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+const SUPABASE_URL = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3';
 
 const TEST_UID = 'test-user-id';
+
+/**
+ * A raver who has already been through the 2.0 guidance: every tab found,
+ * every intro and one-time hint seen, the 2.0 welcome done, past week one.
+ * The default for makeSession so specs about other features aren't
+ * interrupted by first-visit sheets. Pass `user_metadata: { guidance: null }`
+ * for a fresh 2.0 raver (see guidance.spec.js).
+ */
+const SETTLED_GUIDANCE = {
+  v: 2, first_seen: Date.parse('2024-01-01T00:00:00Z'), help_level: 'guide',
+  realms: { crews: 'found', raves: 'found', ravers: 'found', stats: 'found', village: 'found' },
+  zones: Object.fromEntries(['huddle', 'raveplan', 'pins', 'dreamboard', 'poll', 'jams', 'archive', 'history',
+    'beacon', 'rave_room', 'venues', 'plur_tab'].map(k => [k, 'opened'])),
+  realm_tips_off: {},
+  tips: { raveplan_tasks: { v: 9, s: 'icon' }, raveplan_tasks_lead: { v: 9, s: 'icon' } },
+  hints: Object.fromEntries(['huddle_plus', 'huddle_mention', 'huddle_first_message', 'huddle_reply',
+    'how_we_met', 'dashed_cards'].map(k => [k, true])),
+  setup_items: {},
+  quests: { welcome_2_0: true, first_rsvp: true, first_vendor_save: true, first_vendor_review: true },
+  skips: 0, fewer_tips_offered: true, rave_mode: null, found_during_rave: []
+};
 
 /** Build a fake authenticated session (onboarded → no wizard). */
 function makeSession(over = {}) {
@@ -19,7 +40,7 @@ function makeSession(over = {}) {
     user: {
       id: TEST_UID,
       email: over.email || 'tester@ravefam.test',
-      user_metadata: { onboarded: true, ...(over.user_metadata || {}) },
+      user_metadata: { onboarded: true, guidance: SETTLED_GUIDANCE, ...(over.user_metadata || {}) },
       ...over.user,
     },
   };
@@ -105,7 +126,7 @@ async function installSupabaseStub(page, opts = {}) {
   const session = opts.session ?? null;
   const data = opts.data ?? {};
 
-  // Session produced by signInWithPassword / signUp (defaults to the initial
+  // Session produced by verifyOtp / signInWithPassword / signUp (defaults to the initial
   // session). Pass loginSession explicitly to test the login transition from a
   // signed-out start.
   const loginSession = opts.loginSession !== undefined ? opts.loginSession : session;
@@ -163,16 +184,46 @@ async function installSupabaseStub(page, opts = {}) {
         const UNIQUE_INSERT_KEYS = {
           crew_achievements: ['crew_id', 'badge_id'],
           raver_achievements: ['raver_id', 'crew_id', 'badge_id'],
+          user_blocks: ['blocker_id', 'blocked_id'],
         };
 
+        // PostgREST ilike patterns: '%' is any run, '_' is one character, and
+        // '*' is accepted as an alias for '%'. Compiled to a case-insensitive
+        // regex so the stub matches the server's semantics closely enough for
+        // the Huddle search filters.
+        function ilikeRe(pattern) {
+          let out = '';
+          for (const ch of String(pattern)) {
+            if (ch === '%' || ch === '*') out += '[\\\\s\\\\S]*';
+            else if (ch === '_') out += '[\\\\s\\\\S]';
+            else out += ch.replace(/[.*+?^\${}()|[\\]\\\\]/g, '\\\\$&');
+          }
+          return new RegExp('^' + out + '$', 'i');
+        }
+
         function makeBuilder(table) {
-          const st = { table, op: 'select', sel: '*', payload: null, upsertOpts: null, filters: [], limit: null };
+          const st = { table, op: 'select', sel: '*', payload: null, upsertOpts: null, filters: [], limit: null, orders: [], range: null };
           const pred = row => st.filters.every(f => f(row));
           function exec() {
             const tbl = store[table] || (store[table] = []);
             if (st.op === 'select') {
               let rows = tbl.filter(pred);
+              if (st.orders.length) {
+                rows = rows.slice().sort((x, y) => {
+                  for (const o of st.orders) {
+                    const a = x[o.col], b2 = y[o.col];
+                    if (a === b2) continue;
+                    const cmp = a == null ? -1 : b2 == null ? 1 : (a < b2 ? -1 : 1);
+                    return o.asc ? cmp : -cmp;
+                  }
+                  return 0;
+                });
+              }
               if (st.limit != null) rows = rows.slice(0, st.limit);
+              if (st.range) rows = rows.slice(st.range[0], st.range[1] + 1);
+              // Supabase's max_rows: a response never holds more than 1000
+              // rows, and says nothing when it cuts one short.
+              rows = rows.slice(0, 1000);
               return { data: attach(rows, parseRelations(st.sel)), error: null };
             }
             if (st.op === 'insert') {
@@ -253,7 +304,11 @@ async function installSupabaseStub(page, opts = {}) {
               }));
               return b;
             },
-            order() { return b; }, limit(n) { st.limit = n; return b; }, range() { return b; }, abortSignal() { return b; },
+            ilike(c, pattern) { const re = ilikeRe(pattern); st.filters.push(r => r[c] != null && re.test(String(r[c]))); return b; },
+            order(c, o) { st.orders.push({ col: c, asc: !o || o.ascending !== false }); return b; },
+            limit(n) { st.limit = n; return b; },
+            range(from, to) { st.range = [from, to]; return b; },
+            abortSignal() { return b; },
             single() { const r = exec(); return Promise.resolve({ data: (r.data && r.data[0]) ?? null, error: r.error }); },
             maybeSingle() { const r = exec(); return Promise.resolve({ data: (r.data && r.data[0]) ?? null, error: r.error }); },
             then(f, j) { return Promise.resolve(exec()).then(f, j); },
@@ -267,6 +322,8 @@ async function installSupabaseStub(page, opts = {}) {
           on() { return channel; }, subscribe() { return channel; }, unsubscribe() { return Promise.resolve('ok'); },
           track() { return Promise.resolve('ok'); }, untrack() { return Promise.resolve('ok'); },
           presenceState() { return {}; },
+          // Huddle typing indicators ride the presence channel as broadcasts.
+          send() { return Promise.resolve('ok'); },
         };
 
         // Re-implements the handful of security-definer RPCs the client
@@ -307,6 +364,10 @@ async function installSupabaseStub(page, opts = {}) {
             const festIds = (store.raver_festivals || []).filter(x => String(x.raver_id) === String(r.id)).map(x => x.festival_id);
             const interestedFestIds = (store.raver_festival_interest || []).filter(x => String(x.raver_id) === String(r.id)).map(x => x.festival_id);
             const favArtistIds = (store.raver_favorite_artists || []).filter(x => String(x.raver_id) === String(r.id)).map(x => x.artist_id);
+            const festTickets = {};
+            (store.raver_festivals || []).filter(x => String(x.raver_id) === String(r.id) && x.ticket_type).forEach(x => {
+              festTickets[String(x.festival_id)] = { type: x.ticket_type, other: x.ticket_type_other ?? null };
+            });
             const row = {
               id: r.id, name: r.name, handle: r.handle, created_by: r.created_by, is_you: r.is_you,
               base: baseVisible ? r.base : null,
@@ -314,6 +375,7 @@ async function installSupabaseStub(page, opts = {}) {
               fav_artist_ids: favArtistIds,
               fest_ids: rsvpVisible ? festIds : [],
               interested_fest_ids: rsvpVisible ? interestedFestIds : [],
+              fest_tickets: rsvpVisible ? festTickets : {},
               instagram: r.instagram, radiate: r.radiate,
               phone: (selfOrMod || r.phone_visible) ? r.phone : null,
               phone_visible: r.phone_visible, met_story: r.met_story, claimed_by: r.claimed_by, status: r.status,
@@ -328,9 +390,106 @@ async function installSupabaseStub(page, opts = {}) {
             return row;
           }
           function exec() {
+            // Every call is recorded (store.__rpcCalls) so a spec can check the args.
+            (store.__rpcCalls = store.__rpcCalls || []).push({ fn, args: clone(args || {}) });
+            // Canned RPC results a spec can seed: data.__rpc = { fn_name: result }.
+            if (store.__rpc && Object.prototype.hasOwnProperty.call(store.__rpc, fn)) return { data: clone(store.__rpc[fn]), error: null };
             if (fn === 'get_festival_history') return { data: historyRows('festival', args.p_festival_id, args.p_limit), error: null };
             if (fn === 'get_crew_history') return { data: historyRows('crew', args.p_crew_id, args.p_limit), error: null };
             if (fn === 'get_raver_history') return { data: historyRows('raver', args.p_raver_id, args.p_limit), error: null };
+            // Mirrors the production function: invalid token -> invalid_token,
+            // any non-recruiting status -> not_recruiting (with the crew name so
+            // the UI can say which crew), otherwise the crew plus a count of
+            // members who actually have accounts.
+            if (fn === 'get_crew_by_invite_token') {
+              const crew = (store.crews || []).find(c => c.invite_token === args.p_token && !c.deleted_at);
+              if (!crew) return { data: { error: 'invalid_token' }, error: null };
+              if (crew.status !== 'recruiting') {
+                return { data: { error: 'not_recruiting', crew_name: crew.name, status: crew.status }, error: null };
+              }
+              const count = (store.crew_members || [])
+                .filter(m => String(m.crew_id) === String(crew.id) && !m.deleted_at)
+                .filter(m => {
+                  const r = (store.ravers || []).find(x => String(x.id) === String(m.raver_id));
+                  return r && (r.claimed_by != null || r.status === 'claimed');
+                }).length;
+              return {
+                data: {
+                  id: crew.id, name: crew.name, color: crew.color || '#FF2D78',
+                  gradient: crew.gradient, status: crew.status,
+                  totem_photo_url: crew.totem_photo_url ?? null, member_count: count,
+                }, error: null,
+              };
+            }
+            // Moderation RPCs (20261011000000_mod_tools.sql) — simplified mirrors
+            // of the security-definer functions: mod-gated, close every open
+            // flag on the same target, sanctions live in store.user_sanctions.
+            const isMod = () => (store.moderators || []).some(m => String(m.user_id) === String(uid));
+            const nowIso = () => new Date().toISOString();
+            if (fn === 'mod_resolve_flag') {
+              if (!isMod()) return { data: { ok: false, error: 'FORBIDDEN' }, error: null };
+              const f = (store.flags || []).find(x => x.id === args.p_flag_id);
+              if (!f) return { data: { ok: false, error: 'NOT_FOUND' }, error: null };
+              let removed = false;
+              if (args.p_outcome === 'removed') {
+                const table = { festival: 'festivals', crew: 'crews', raver: 'ravers', jam: 'crew_jams', poll: 'crew_polls',
+                  dream_pin: 'dream_board_pins', archive_link: 'crew_archive_links', huddle_message: 'huddle_messages' }[f.target_type];
+                const row = table && (store[table] || []).find(r => String(r.id) === String(f.target_id));
+                if (!row) return { data: { ok: false, error: 'NOT_REMOVABLE' }, error: null };
+                if (table === 'ravers' && row.claimed_by) return { data: { ok: false, error: 'CLAIMED' }, error: null };
+                if (!row.deleted_at) { Object.assign(row, { deleted_at: nowIso(), deleted_by: uid, delete_reason: args.p_note || null }); removed = true; }
+              }
+              const status = args.p_outcome === 'no_violation' ? 'dismissed' : 'resolved';
+              const closed = (store.flags || []).filter(x => x.id === f.id
+                || (x.target_type === f.target_type && x.target_id === f.target_id && x.status === 'open'));
+              closed.forEach(x => Object.assign(x, { status, resolved_at: nowIso(), resolved_by: uid, resolution_note: args.p_note || null }));
+              return { data: { ok: true, removed, status, target_type: f.target_type, target_id: f.target_id, closed: closed.length }, error: null };
+            }
+            if (fn === 'mod_flag_context') return { data: {}, error: null };
+            // Mirrors the server: checks EVERY raver (no RLS), case-insensitive, like ravers_handle_unique_idx.
+            if (fn === 'handle_available') {
+              const h = String(args.p_handle || '').trim().toLowerCase();
+              const taken = (store.ravers || []).some(r => r.handle && String(r.handle).toLowerCase() === h && String(r.id) !== String(args.p_exclude_id));
+              return { data: !taken, error: null };
+            }
+            if (fn === 'mod_issue_sanction') {
+              if (!isMod()) return { data: { ok: false, error: 'FORBIDDEN' }, error: null };
+              if (String(args.p_user) === String(uid)) return { data: { ok: false, error: 'SELF' }, error: null };
+              if (String(args.p_kind).startsWith('restrict_') && !args.p_hours) return { data: { ok: false, error: 'DURATION_REQUIRED' }, error: null };
+              const row = { id: 'sanction-' + Math.random().toString(36).slice(2), user_id: args.p_user, kind: args.p_kind,
+                rule_code: args.p_rule_code || null, note: args.p_note || null, flag_id: args.p_flag_id || null, issued_by: uid,
+                created_at: nowIso(), expires_at: args.p_hours ? new Date(Date.now() + args.p_hours * 3600e3).toISOString() : null,
+                acknowledged_at: null, revoked_at: null };
+              (store.user_sanctions = store.user_sanctions || []).push(row);
+              return { data: { ok: true, id: row.id, expires_at: row.expires_at }, error: null };
+            }
+            if (fn === 'mod_revoke_sanction') {
+              if (!isMod()) return { data: { ok: false, error: 'FORBIDDEN' }, error: null };
+              const row = (store.user_sanctions || []).find(x => x.id === args.p_id && !x.revoked_at);
+              if (!row) return { data: { ok: false, error: 'NOT_FOUND' }, error: null };
+              row.revoked_at = nowIso();
+              return { data: { ok: true, user_id: row.user_id, kind: row.kind }, error: null };
+            }
+            if (fn === 'my_sanctions') {
+              const now = Date.now();
+              const rows = (store.user_sanctions || []).filter(x => String(x.user_id) === String(uid) && !x.revoked_at
+                && (x.kind === 'warning' ? !x.acknowledged_at : (!x.expires_at || new Date(x.expires_at).getTime() > now)));
+              return { data: clone(rows), error: null };
+            }
+            if (fn === 'ack_sanction') {
+              const row = (store.user_sanctions || []).find(x => x.id === args.p_id && String(x.user_id) === String(uid) && !x.acknowledged_at);
+              if (row) row.acknowledged_at = nowIso();
+              return { data: !!row, error: null };
+            }
+            // Seed data sets phone_profile_match: true to simulate a new phone
+            // login whose verified number is on someone's existing profile.
+            if (fn === 'my_phone_matches_other_profile') {
+              return { data: !!store.phone_profile_match, error: null };
+            }
+            if (fn === 'delete_my_account') {
+              window.__deleteAccountCalls = (window.__deleteAccountCalls || 0) + 1;
+              return { data: { storage_paths: ['profiles/me.jpg'], crews_transferred: 0, crews_deleted: 0 }, error: null };
+            }
             if (fn === 'get_crewmate_ravers') {
               const ids = (args.p_ids || []).map(String);
               const rows = (store.ravers || []).filter(r => ids.includes(String(r.id)) && r.status !== 'merged' && !r.deleted_at);
@@ -405,6 +564,7 @@ async function installSupabaseStub(page, opts = {}) {
             getSession() { return Promise.resolve({ data: { session: SESSION }, error: null }); },
             signInWithPassword() { if (authCb) setTimeout(() => authCb('SIGNED_IN', LOGIN), 0); return Promise.resolve({ data: { session: LOGIN }, error: null }); },
             signInWithOtp() { return Promise.resolve({ data: {}, error: null }); },
+            verifyOtp() { if (authCb) setTimeout(() => authCb('SIGNED_IN', LOGIN), 0); return Promise.resolve({ data: { session: LOGIN }, error: null }); },
             signUp() { if (LOGIN && authCb) setTimeout(() => authCb('SIGNED_IN', LOGIN), 0); return Promise.resolve({ data: { session: LOGIN }, error: null }); },
             signOut() { if (authCb) setTimeout(() => authCb('SIGNED_OUT', null), 0); return Promise.resolve({ error: null }); },
             updateUser() { return Promise.resolve({ data: { user: SESSION?.user ?? null }, error: null }); },
@@ -431,6 +591,13 @@ async function installSupabaseStub(page, opts = {}) {
   await page.route('**/html2canvas*', r => r.fulfill({ contentType: 'text/javascript', body: 'window.html2canvas=function(){return Promise.resolve(document.createElement("canvas"));};' }));
   await page.route('**/fonts.googleapis.com/**', r => r.fulfill({ contentType: 'text/css', body: '' }));
   await page.route('**/fonts.gstatic.com/**', r => r.abort());
+  // Cloudflare Turnstile (auth CAPTCHA): a stand-in that issues a token at once,
+  // so code sends never wait on — or reach — the real challenge.
+  await page.route('**/challenges.cloudflare.com/**', r => r.fulfill({
+    contentType: 'text/javascript',
+    body: 'window.turnstile={render:function(el,o){this._o=o;setTimeout(function(){o.callback("test-captcha-token");},0);return "w";},' +
+          'reset:function(){var o=this._o;if(o)setTimeout(function(){o.callback("test-captcha-token");},0);}};',
+  }));
 }
 
 /**
@@ -463,5 +630,5 @@ function collectPageErrors(page) {
 
 module.exports = {
   installSupabaseStub, collectPageErrors, bootAuthedApp,
-  makeSession, seedData, SUPABASE_URL, TEST_UID,
+  makeSession, seedData, SUPABASE_URL, TEST_UID, SETTLED_GUIDANCE,
 };

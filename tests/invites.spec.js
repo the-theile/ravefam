@@ -123,10 +123,27 @@ test.describe('crew invite link', () => {
     expect(token.length).toBeGreaterThan(0);
   });
 
-  test('copies a join URL containing the crew token to the clipboard', async ({ page }) => {
+  test('opens the crew invite sheet with the join URL, and Copy puts it on the clipboard', async ({ page }) => {
     await bootAuthedApp(page); // c1 already has token 'inv-c1'
     await page.evaluate(async () => { await generateAndShareCrewInvite('c1'); });
+    await expect(page.locator('#qr-overlay')).toHaveClass(/open/);
+    await expect(page.locator('#qr-modal .modal-title')).toContainText('Bass Syndicate');
+    await expect(page.locator('#crew-invite-url')).toHaveValue(/\?join=inv-c1$/);
+    await expect(page.locator('#qr-canvas-wrap canvas')).toHaveCount(1);
+    await page.locator('#qr-modal button', { hasText: 'Copy link' }).click();
     const clip = await page.evaluate(() => navigator.clipboard.readText());
     expect(clip).toContain('?join=inv-c1');
+  });
+
+  test('Share link uses the native share sheet when there is one', async ({ page }) => {
+    await bootAuthedApp(page);
+    await page.evaluate(async () => {
+      window.__shared = null;
+      navigator.share = (d) => { window.__shared = d; return Promise.resolve(); };
+      await generateAndShareCrewInvite('c1');
+    });
+    await page.locator('#qr-modal button', { hasText: 'Share link' }).click();
+    await expect.poll(() => page.evaluate(() => window.__shared && window.__shared.url)).toContain('?join=inv-c1');
+    expect(await page.evaluate(() => window.__shared.title)).toContain('Bass Syndicate');
   });
 });

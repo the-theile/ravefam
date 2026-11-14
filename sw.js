@@ -1,9 +1,12 @@
-const CACHE = 'ravefam-v8';
+const CACHE = 'ravefam-v10';
+// jsQR is no longer precached — the app fetches it on demand, and only on
+// browsers without BarcodeDetector, so precaching it cost every install ~250KB
+// for a decoder most never use. The cache-first handler below still stores it
+// the first time someone actually opens the scanner.
 const PRECACHE = [
   '/',
   '/app.html',
   '/qrcode.min.js',
-  '/jsQR.min.js',
   '/manifest.json',
 ];
 
@@ -21,19 +24,54 @@ self.addEventListener('activate', e => {
   );
 });
 
+function isExplorer(url) {
+  try {
+    const u = new URL(url);
+    return u.origin === self.location.origin && u.pathname.startsWith('/lineup-explorer/');
+  } catch (e) { return false; }
+}
+
+// The Lineup Explorer asks for its page and assets to be kept for offline use
+// once a member opens it (the first visit happens before this worker controls
+// the page, so the fetch handler never saw it). Same-origin paths only.
+self.addEventListener('message', e => {
+  const d = e.data || {};
+  if (d.type !== 'rf-cache-urls' || !Array.isArray(d.urls)) return;
+  const urls = d.urls.filter(u => isExplorer(new URL(u, self.location.origin).href)).slice(0, 10);
+  e.waitUntil(caches.open(CACHE).then(c => Promise.all(urls.map(u =>
+    fetch(u, { credentials: 'same-origin' }).then(res => { if (res.ok) return c.put(u, res); }).catch(() => {})
+  ))));
+});
+
 function isHTMLRequest(req) {
   return req.mode === 'navigate' ||
     (req.headers.get('accept') || '').includes('text/html');
 }
 
+const PASSTHROUGH_HOSTS = [
+  'supabase.co',
+  'challenges.cloudflare.com', // Turnstile — Cloudflare forbids caching api.js
+  'nominatim.openstreetmap.org',
+  'open-meteo.com',
+];
+
+// Always go to network for the Supabase API and external resources — includes
+// Nominatim (rave location autocomplete + geocoding) and Open-Meteo (rave
+// weather chips), whose responses shouldn't be served from the SW cache.
+// Matched on the parsed hostname: testing the whole URL for 'cdn.' also matched
+// same-origin URLs that merely mentioned it in a path or query string, quietly
+// taking them out of the cache.
+function isPassthrough(url) {
+  let host;
+  try { host = new URL(url).hostname; } catch (e) { return false; }
+  if (host.startsWith('fonts.') || host.startsWith('cdn.')) return true;
+  return PASSTHROUGH_HOSTS.some(h => host === h || host.endsWith('.' + h));
+}
+
 self.addEventListener('fetch', e => {
   const req = e.request;
   const url = req.url;
-  // Always go to network for Supabase API and external resources — includes
-  // Nominatim (rave location autocomplete + geocoding) and Open-Meteo (rave
-  // weather chips), whose responses shouldn't be served from the SW cache.
-  if (url.includes('supabase.co') || url.includes('fonts.') || url.includes('cdn.')
-      || url.includes('nominatim.openstreetmap.org') || url.includes('open-meteo.com')) return;
+  if (isPassthrough(url)) return;
   if (req.method !== 'GET') return;
 
   // Network-first for HTML/navigation: the whole app lives in app.html,
@@ -49,9 +87,29 @@ self.addEventListener('fetch', e => {
         return res;
       }).catch(async () =>
         (await caches.match(req)) ||
+        // A Lineup Explorer page opened from a reminder (?view=now) or with any
+        // other query string still has its plain copy cached.
+        (isExplorer(url) && await caches.match(req, { ignoreSearch: true })) ||
         (await caches.match('/app.html')) ||
         (await caches.match('/'))
       )
+    );
+    return;
+  }
+
+  // Network-first for the Lineup Explorer's shared script and styles: they
+  // change with every explorer release but keep the same URL, so cache-first
+  // pinned phones to whatever version they first saw. The cached copy is the
+  // offline fallback (Phase 4b: the page works at the festival without signal).
+  if (isExplorer(url)) {
+    e.respondWith(
+      fetch(req).then(res => {
+        if (res && res.ok) {
+          const clone = res.clone();
+          caches.open(CACHE).then(c => c.put(req, clone));
+        }
+        return res;
+      }).catch(async () => (await caches.match(req)) || Response.error())
     );
     return;
   }
@@ -74,7 +132,8 @@ self.addEventListener('push', e => {
     body: data.body || '',
     icon: '/icon-192.png',
     badge: '/icon-192.png',
-    data: { crewId: data.crewId, roomId: data.roomId, messageId: data.messageId }
+    tag: data.tag,
+    data: { crewId: data.crewId, roomId: data.roomId, messageId: data.messageId, briefing: data.briefing, url: data.url }
   }));
 });
 
@@ -93,12 +152,47 @@ function logPushClick(messageId, crewId) {
 
 self.addEventListener('notificationclick', e => {
   e.notification.close();
-  const url = '/app.html';
-  const { messageId, crewId } = e.notification.data || {};
+  const { messageId, crewId, roomId, briefing, url: target } = e.notification.data || {};
+
+  // Set reminders (send-set-reminders) carry their own page: the explorer's
+  // On deck view. Reuse a tab already on that lineup, else open one.
+  if (target && isExplorer(new URL(target, self.location.origin).href)) {
+    const path = new URL(target, self.location.origin).pathname;
+    e.waitUntil(clients.matchAll({ type: 'window' }).then(list => {
+      for (const c of list) {
+        if (new URL(c.url).pathname === path && 'navigate' in c) return c.navigate(target).then(w => (w || c).focus()).catch(() => clients.openWindow(target));
+      }
+      return clients.openWindow(target);
+    }));
+    return;
+  }
+
+  // Carry the notification's target through to the app. A cold start gets it as
+  // query params; an already-open window gets it by postMessage, because
+  // focusing a client doesn't navigate it — which is why tapping a push used to
+  // drop you wherever you happened to be.
+  // The post-fest push (send-lineup-alerts) opens a rave: /app.html?rave=<slug>.
+  let rave = null;
+  try { if (target) rave = new URL(target, self.location.origin).searchParams.get('rave'); } catch (err) {}
+  const params = new URLSearchParams();
+  if (crewId)    params.set('crew', crewId);
+  if (roomId)    params.set('room', roomId);
+  if (messageId) params.set('msg', messageId);
+  if (briefing)  params.set('briefing', briefing);  // Mission Briefing nudge (send-lineup-alerts)
+  if (rave && !crewId) params.set('rave', rave);
+  const qs = params.toString();
+  const url = qs ? `/app.html?${qs}` : '/app.html';
+
   e.waitUntil(Promise.all([
     logPushClick(messageId, crewId),
     clients.matchAll({ type: 'window' }).then(list => {
-      for (const c of list) if ('focus' in c) return c.focus();
+      for (const c of list) {
+        if ('focus' in c) {
+          if (crewId) c.postMessage({ type: 'rf-huddle-deeplink', crewId, roomId, messageId, briefing });
+          else if (rave) c.postMessage({ type: 'rf-rave-deeplink', slug: rave });
+          return c.focus();
+        }
+      }
       return clients.openWindow(url);
     })
   ]));

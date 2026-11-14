@@ -1,0 +1,142 @@
+name: iOS TestFlight
+
+# Builds the Capacitor iOS shell on a GitHub macOS runner, signs it with Xcode's
+# cloud-managed signing (App Store Connect API key) and uploads it to TestFlight.
+# Run it from the Actions tab → "iOS TestFlight" → Run workflow.
+#
+# Only one secret is needed: APP_STORE_CONNECT_API_KEY — the full text of the
+# AuthKey_<KEY_ID>.p8 file. Team, key and issuer IDs are identifiers, not secrets.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ios-testflight
+  cancel-in-progress: false
+
+env:
+  TEAM_ID: 49RV4NFK6S
+  ASC_KEY_ID: GK73389T2F
+  ASC_ISSUER_ID: c6a2b124-41fc-480f-8a0a-4048f98dce64
+
+jobs:
+  testflight:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      # App Store Connect only accepts builds made with the iOS 26 SDK or later.
+      # Pick the newest Xcode 26 on the runner rather than its default.
+      - name: Select Xcode 26
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$XCODE" ]; then
+            echo "::error::No Xcode 26 found on this runner."; ls -d /Applications/Xcode*.app; exit 1
+          fi
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # capacitor.config.json and the bundled offline page are gitignored inside
+      # ios/, so regenerate them before building.
+      - name: Sync Capacitor iOS project
+        run: npx cap sync ios
+
+      - name: Write App Store Connect API key
+        env:
+          ASC_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+        run: |
+          if [ -z "$ASC_KEY" ]; then
+            echo "::error::Missing APP_STORE_CONNECT_API_KEY secret (contents of the .p8 file)."
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/asc"
+          printf '%s\n' "$ASC_KEY" > "$RUNNER_TEMP/asc/AuthKey.p8"
+          echo "ASC_KEY_PATH=$RUNNER_TEMP/asc/AuthKey.p8" >> "$GITHUB_ENV"
+
+      # Fail fast with Apple's own reason when the API key is rejected — xcodebuild
+      # only says "Authentication failed" without the status or error code.
+      - name: Check App Store Connect API key
+        run: |
+          node -e '
+            const crypto = require("crypto"), fs = require("fs");
+            const b64 = (o) => Buffer.from(typeof o === "string" ? o : JSON.stringify(o)).toString("base64url");
+            const now = Math.floor(Date.now() / 1000);
+            const head = b64({ alg: "ES256", kid: process.env.ASC_KEY_ID, typ: "JWT" });
+            const body = b64({ iss: process.env.ASC_ISSUER_ID, iat: now, exp: now + 600, aud: "appstoreconnect-v1" });
+            let sig;
+            try {
+              sig = crypto.sign("sha256", Buffer.from(head + "." + body),
+                { key: fs.readFileSync(process.env.ASC_KEY_PATH), dsaEncoding: "ieee-p1363" }).toString("base64url");
+            } catch (e) {
+              console.log("::error::The APP_STORE_CONNECT_API_KEY secret is not a valid .p8 private key: " + e.message);
+              process.exit(1);
+            }
+            const auth = { Authorization: "Bearer " + head + "." + body + "." + sig };
+            const get = (path) => fetch("https://api.appstoreconnect.apple.com" + path, { headers: auth })
+              .then(async (r) => ({ status: r.status, json: await r.json().catch(() => null) }));
+            (async () => {
+              const certs = await get("/v1/certificates?limit=200&fields[certificates]=certificateType,displayName,expirationDate");
+              console.log("App Store Connect API: HTTP " + certs.status);
+              if (certs.status !== 200) {
+                console.log(JSON.stringify(certs.json, null, 2));
+                console.log("::error::App Store Connect rejected key " + process.env.ASC_KEY_ID + " (HTTP " + certs.status + ")");
+                process.exit(1);
+              }
+              // Signing inventory, so a provisioning failure in Archive has context.
+              const byType = {};
+              for (const c of certs.json.data) byType[c.attributes.certificateType] = (byType[c.attributes.certificateType] || 0) + 1;
+              console.log("Certificates by type: " + JSON.stringify(byType));
+              for (const id of ["com.myravefam.app", "com.myravefam.app.ShareExtension", "com.myravefam.app.CountdownWidget"]) {
+                const b = await get("/v1/bundleIds?filter[identifier]=" + id + "&include=bundleIdCapabilities");
+                const row = b.json && b.json.data && b.json.data.find((d) => d.attributes.identifier === id);
+                const caps = row && b.json.included ? b.json.included.filter((i) => i.type === "bundleIdCapabilities").map((i) => i.attributes.capabilityType) : [];
+                console.log("Bundle ID " + id + ": HTTP " + b.status + (row ? " registered, capabilities " + JSON.stringify(caps) : " NOT registered"));
+              }
+              const profiles = await get("/v1/profiles?limit=200&fields[profiles]=name,profileType,profileState");
+              console.log("Profiles: HTTP " + profiles.status + (profiles.json && profiles.json.data ? ", " + profiles.json.data.map((p) => p.attributes.profileType + "/" + p.attributes.profileState).join(", ") : " " + JSON.stringify(profiles.json)));
+            })().catch((e) => { console.log("::error::Could not reach App Store Connect: " + e.message); process.exit(1); });
+          '
+
+      # Marketing version tracks APP_VERSION (package.json); build number is the
+      # workflow run number so every upload is unique.
+      - name: Archive
+        run: |
+          APP_VERSION=$(node -p "require('./package.json').version")
+          xcodebuild archive \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/RaveFAM.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            MARKETING_VERSION="$APP_VERSION" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}"
+
+      - name: Upload to TestFlight
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/RaveFAM.xcarchive" \
+            -exportOptionsPlist ios/ExportOptions.plist \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+
+      - name: Remove API key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/asc"

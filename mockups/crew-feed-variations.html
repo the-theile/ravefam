@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crew Feed — Visual Variations</title>
+<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@800;900&family=Outfit:wght@400;500;600;700;800;900&family=DM+Sans:wght@300;400;500&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --neon-pink: #FF2D78; --neon-cyan: #00F5FF; --neon-yellow: #FFE600;
+    --neon-purple: #BF00FF; --neon-green: #39FF14; --neon-indigo: #5B6EFF; --neon-orange: #FF6B35;
+    --bg: #050509; --surface: #0E0E16; --surface2: #16161F;
+    --text: #F0EEFF; --muted: #8585A5;
+    --paper: #F4F1E8; --paper-edge: #E6E1D3; --paper-ink: #D6284B; --ink: #1a1420;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #08080D; color: var(--text); font-family: 'DM Sans', system-ui, sans-serif; padding: 32px 24px 64px; }
+  button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+  svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+
+  .page-head { max-width: 1280px; margin: 0 auto 32px; }
+  .page-head h1 { font-family: 'Urbanist', sans-serif; font-weight: 900; font-size: 1.9rem; margin: 0 0 8px; letter-spacing: -0.5px; }
+  .page-head p { color: var(--muted); margin: 0; font-size: 0.94rem; line-height: 1.5; max-width: 820px; }
+
+  .rail { display: flex; gap: 28px; overflow-x: auto; padding-bottom: 20px; }
+  @media (min-width: 1660px) { .rail { justify-content: center; } }
+  .col { flex: 0 0 auto; width: 372px; }
+  .col-head { margin-bottom: 14px; min-height: 180px; }
+  .col-head .tag { display: inline-block; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.64rem; letter-spacing: 1.2px; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; margin-bottom: 8px; }
+  .col-head h2 { font-family: 'Urbanist', sans-serif; font-weight: 800; font-size: 1.16rem; margin: 0 0 6px; }
+  .col-head p { color: var(--muted); font-size: 0.82rem; margin: 0; line-height: 1.5; }
+  .col-foot { margin-top: 14px; font-size: 0.78rem; color: var(--muted); line-height: 1.55; }
+  .col-foot b { color: var(--text); font-family: 'Outfit', sans-serif; }
+
+  /* ── Phone + real app chrome ── */
+  .phone { position: relative; height: 808px; border-radius: 30px; overflow: hidden; border: 1px solid rgba(255,255,255,0.13); box-shadow: 0 18px 50px rgba(0,0,0,0.6); background: var(--bg); display: flex; flex-direction: column; }
+  .sbar { flex: 0 0 auto; height: 32px; display: flex; justify-content: space-between; align-items: center; padding: 0 24px; font-family: 'Outfit', sans-serif; font-size: 0.74rem; font-weight: 700; background: #1a1a22; }
+  .apphdr { flex: 0 0 auto; height: 52px; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: linear-gradient(180deg, #1a1a22, #121219); border-bottom: 1px solid rgba(255,255,255,0.07); position: relative; z-index: 2; }
+  .apphdr .logo { width: 28px; height: 28px; border-radius: 50%; background: repeating-conic-gradient(var(--neon-green) 0 8deg, transparent 8deg 20deg, var(--neon-pink) 20deg 26deg, transparent 26deg 40deg, var(--neon-cyan) 40deg 46deg, transparent 46deg 60deg); -webkit-mask: radial-gradient(circle, #000 3px, transparent 4px, transparent 6px, #000 7px); mask: radial-gradient(circle, #000 3px, transparent 4px, transparent 6px, #000 7px); }
+  .apphdr .word { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.15rem; letter-spacing: -0.3px; margin-right: auto; }
+  .apphdr .word span { color: var(--neon-green); }
+  .apphdr .hb { width: 34px; height: 28px; border-radius: 9px; border: 1px solid rgba(255,255,255,0.14); display: grid; place-items: center; font-size: 0.78rem; color: var(--muted); }
+  .apphdr .hb:last-child { border-radius: 50%; width: 30px; height: 30px; }
+  .appnav { flex: 0 0 auto; height: 66px; display: flex; justify-content: space-around; align-items: center; padding-bottom: 6px; background: #0b0b11; border-top: 1px solid rgba(255,255,255,0.07); position: relative; z-index: 9; }
+  .appnav span { display: flex; flex-direction: column; align-items: center; gap: 3px; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.58rem; color: var(--ac); }
+  .appnav span i { width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--ac); opacity: .55; display: block; }
+  .appnav span.on i { opacity: 1; box-shadow: 0 0 12px -2px var(--ac); background: rgba(255,45,120,0.12); }
+  .scroll { flex: 1; overflow-y: auto; scrollbar-width: none; position: relative; }
+  .scroll::-webkit-scrollbar { display: none; }
+
+  .crew-top { display: flex; align-items: center; gap: 11px; padding: 12px 16px 14px; position: relative; }
+  .crew-back { color: var(--muted); font-size: 1.2rem; margin-right: -4px; }
+  .totem { width: 42px; height: 42px; border-radius: 13px; background: linear-gradient(135deg, var(--neon-pink), var(--neon-purple)); display: grid; place-items: center; font-size: 1.25rem; flex-shrink: 0; }
+  .crew-name { font-family: 'Urbanist', sans-serif; font-weight: 900; font-size: 1.22rem; letter-spacing: -0.3px; line-height: 1.1; }
+  .crew-sub { font-size: 0.7rem; color: var(--muted); margin-top: 3px; display: flex; align-items: center; gap: 6px; }
+  .status { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.58rem; letter-spacing: 1px; text-transform: uppercase; padding: 2px 7px; border-radius: 20px; color: var(--neon-green); border: 1px solid rgba(57,255,20,0.35); }
+  .share-ic { color: var(--muted); width: 32px; height: 32px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); display: grid; place-items: center; flex-shrink: 0; }
+  .share-ic svg { width: 16px; height: 16px; }
+
+  .avs { display: flex; align-items: center; }
+  .av { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--bg); margin-left: -7px; display: grid; place-items: center; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.54rem; color: #000; flex-shrink: 0; }
+  .avs .av:first-child { margin-left: 0; }
+  .av.solo { margin-left: 0; }
+  .av.more { background: var(--surface2); color: var(--text); }
+  .av.emoji { background: none; border: 0; font-size: 1rem; }
+  .g1 { background: linear-gradient(135deg,#FF2D78,#FFB800); } .g2 { background: linear-gradient(135deg,#00F5FF,#5B6EFF); }
+  .g3 { background: linear-gradient(135deg,#39FF14,#00F5FF); } .g4 { background: linear-gradient(135deg,#BF00FF,#FF2D78); }
+  .g5 { background: linear-gradient(135deg,#FFE600,#FF6B35); } .g6 { background: linear-gradient(135deg,#5B6EFF,#BF00FF); }
+
+  /* shared content atoms — each variant restyles them */
+  .c-title { font-weight: 600; font-size: 0.86rem; line-height: 1.35; }
+  .c-sub { font-size: 0.72rem; opacity: .7; margin-top: 2px; }
+  .c-opt { position: relative; display: flex; justify-content: space-between; font-size: 0.76rem; padding: 7px 10px; margin-top: 5px; overflow: hidden; }
+  .c-opt::before { content: ''; position: absolute; inset: 0 auto 0 0; width: var(--pct); }
+  .c-opt span { position: relative; }
+  .c-jam { display: flex; gap: 10px; align-items: center; }
+  .c-art { width: 46px; height: 46px; flex-shrink: 0; background: linear-gradient(135deg, #39FF14, #00F5FF); }
+  .c-photos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 8px; }
+  .c-photos i { aspect-ratio: 1; display: block; }
+  .c-photos i:nth-child(1) { background: linear-gradient(135deg,#FF2D78,#5B6EFF); }
+  .c-photos i:nth-child(2) { background: linear-gradient(135deg,#00F5FF,#39FF14); }
+  .c-photos i:nth-child(3) { background: linear-gradient(135deg,#BF00FF,#FFE600); }
+  .c-acts { display: flex; gap: 14px; margin-top: 9px; font-size: 0.68rem; font-family: 'Outfit', sans-serif; font-weight: 600; opacity: .75; }
+  .feed .it[hidden] { display: none; }
+
+  /* =========================================================
+     1 · BACKSTAGE PASS — paper stubs, ink, perforations
+     ========================================================= */
+  .v1 .scroll { background: radial-gradient(120% 50% at 50% 0%, #15121c, var(--bg)); }
+  .v1 .hud { margin: 0 16px; display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; background: #0c0c12; border: 1px solid rgba(0,245,255,0.28); font-family: var(--mono); width: calc(100% - 32px); text-align: left; }
+  .v1 .hud .led { width: 9px; height: 9px; border-radius: 50%; background: var(--neon-cyan); box-shadow: 0 0 10px var(--neon-cyan); flex-shrink: 0; animation: blink 1.6s infinite; }
+  .v1 .hud .t { flex: 1; min-width: 0; font-size: 0.66rem; color: var(--muted); }
+  .v1 .hud .t b { color: var(--neon-cyan); letter-spacing: 1px; display: block; font-size: 0.6rem; }
+  .v1 .hud .t span { display: block; color: var(--text); font-family: 'DM Sans'; font-size: 0.78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .v1 .hud .n { font-weight: 700; color: #000; background: var(--neon-cyan); border-radius: 4px; padding: 2px 6px; font-size: 0.66rem; }
+  .v1 .tk { margin: 12px 16px 0; background: var(--paper); color: var(--ink); border-radius: 6px; position: relative; padding: 14px 16px 10px; box-shadow: 0 10px 30px -12px rgba(0,0,0,.8); }
+  .v1 .tk::before, .v1 .tk::after { content: ''; position: absolute; top: 96px; width: 16px; height: 16px; border-radius: 50%; background: #0b0a10; }
+  .v1 .tk::before { left: -8px; } .v1 .tk::after { right: -8px; }
+  .v1 .tk .eye { font-family: var(--mono); font-size: 0.56rem; letter-spacing: 1.6px; color: var(--paper-ink); font-weight: 700; }
+  .v1 .tk .row { display: flex; justify-content: space-between; align-items: flex-start; }
+  .v1 .tk .nm { font-family: 'Urbanist'; font-weight: 900; font-size: 1.3rem; margin-top: 2px; }
+  .v1 .tk .mt { font-size: 0.7rem; color: #5a5060; }
+  .v1 .tk .cd { font-family: 'Urbanist'; font-weight: 900; font-size: 2.2rem; line-height: .9; color: var(--paper-ink); text-align: right; }
+  .v1 .tk .cd small { display: block; font-family: var(--mono); font-size: .52rem; letter-spacing: 1.4px; color: #5a5060; font-weight: 400; }
+  .v1 .tk .perf { border-top: 1.5px dashed rgba(0,0,0,.18); margin: 14px -16px 10px; }
+  .v1 .tk .going { display: flex; align-items: center; gap: 8px; font-size: 0.7rem; color: #5a5060; }
+  .v1 .tk .av { border-color: var(--paper); } .v1 .tk .av.more { background: var(--paper-edge); color: var(--ink); }
+  .v1 .tk .bar { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-family: var(--mono); font-size: 0.58rem; color: #5a5060; }
+  .v1 .tk .bar .code { flex: 1; height: 18px; background: repeating-linear-gradient(90deg, var(--ink) 0 2px, transparent 2px 4px, var(--ink) 4px 5px, transparent 5px 8px, var(--ink) 8px 11px, transparent 11px 12px); opacity: .85; }
+  .v1 .tk .bar b { color: var(--paper-ink); }
+  .v1 .flt { display: flex; gap: 0; margin: 16px 16px 12px; border-bottom: 1px solid rgba(255,255,255,0.12); position: sticky; top: 0; z-index: 3; background: #09080e; overflow-x: auto; scrollbar-width: none; }
+  .v1 .flt button { flex: 0 0 auto; font-family: var(--mono); font-size: 0.6rem; letter-spacing: 1.2px; text-transform: uppercase; padding: 9px 10px 7px; color: var(--muted); border-radius: 6px 6px 0 0; }
+  .v1 .flt button.on { background: var(--paper); color: var(--ink); font-weight: 700; }
+  .v1 .feed { padding: 0 16px 90px; }
+  .v1 .it { display: flex; margin-bottom: 10px; border-radius: 6px; overflow: hidden; position: relative; box-shadow: 0 8px 20px -12px rgba(0,0,0,.9); }
+  .v1 .it .stub { width: 34px; flex-shrink: 0; background: var(--ac); color: #000; display: flex; flex-direction: column; align-items: center; padding: 10px 0; gap: 8px; }
+  .v1 .it .stub svg { width: 16px; height: 16px; stroke-width: 2.2; }
+  .v1 .it .stub span { writing-mode: vertical-rl; transform: rotate(180deg); font-family: var(--mono); font-weight: 700; font-size: 0.56rem; letter-spacing: 2px; text-transform: uppercase; }
+  .v1 .it .main { flex: 1; background: var(--paper); color: var(--ink); padding: 11px 12px; border-left: 2px dashed rgba(0,0,0,.2); min-width: 0; }
+  .v1 .it .meta { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 0.58rem; color: #6a6070; letter-spacing: .4px; margin-bottom: 6px; text-transform: uppercase; }
+  .v1 .it .meta b { color: var(--ink); }
+  .v1 .it .av { width: 18px; height: 18px; font-size: .44rem; border-color: var(--paper); }
+  .v1 .it .stamp { position: absolute; right: 10px; top: 8px; font-family: var(--mono); font-weight: 700; font-size: 0.56rem; letter-spacing: 1.5px; color: var(--paper-ink); border: 1.5px solid var(--paper-ink); padding: 1px 5px; border-radius: 3px; transform: rotate(6deg); opacity: .85; }
+  .v1 .c-title { font-family: 'Outfit'; font-weight: 700; }
+  .v1 .c-opt { background: var(--paper-edge); border-radius: 3px; }
+  .v1 .c-opt::before { background: color-mix(in srgb, var(--ac) 45%, transparent); }
+  .v1 .c-art, .v1 .c-photos i { border-radius: 3px; }
+  .v1 .c-acts { font-family: var(--mono); text-transform: uppercase; font-size: 0.56rem; letter-spacing: 1px; }
+  .v1 .fab { position: absolute; right: 16px; bottom: 80px; background: var(--paper); color: var(--ink); font-family: var(--mono); font-weight: 700; font-size: 0.66rem; letter-spacing: 1px; padding: 11px 14px; border-radius: 6px; box-shadow: 0 8px 22px -6px rgba(0,0,0,.8); z-index: 5; border-left: 4px solid var(--paper-ink); }
+
+  /* =========================================================
+     2 · AURORA GLASS — soft, blurred, rounded
+     ========================================================= */
+  .v2 .scroll { background:
+      radial-gradient(60% 30% at 15% 8%, rgba(255,45,120,0.35), transparent 70%),
+      radial-gradient(55% 28% at 90% 22%, rgba(0,245,255,0.25), transparent 70%),
+      radial-gradient(70% 35% at 40% 60%, rgba(191,0,255,0.25), transparent 70%),
+      radial-gradient(60% 30% at 80% 95%, rgba(91,110,255,0.25), transparent 70%), var(--bg); }
+  .v2 .glass { background: rgba(255,255,255,0.065); border: 1px solid rgba(255,255,255,0.12); backdrop-filter: blur(18px) saturate(140%); -webkit-backdrop-filter: blur(18px) saturate(140%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 10px 30px -14px rgba(0,0,0,.7); }
+  .v2 .share-ic, .v2 .totem { border-radius: 50%; }
+  .v2 .hud { margin: 0 16px; display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 10px; border-radius: 999px; width: calc(100% - 32px); text-align: left; }
+  .v2 .hud .t { flex: 1; min-width: 0; font-size: 0.76rem; }
+  .v2 .hud .t b { font-family: 'Outfit'; font-weight: 700; }
+  .v2 .hud .t span { display: block; color: rgba(240,238,255,.65); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.72rem; }
+  .v2 .hud .typing { display: inline-flex; gap: 3px; margin-left: 6px; vertical-align: middle; }
+  .v2 .hud .typing i { width: 4px; height: 4px; border-radius: 50%; background: var(--neon-cyan); animation: bob 1s infinite; }
+  .v2 .hud .typing i:nth-child(2) { animation-delay: .15s; } .v2 .hud .typing i:nth-child(3) { animation-delay: .3s; }
+  .v2 .hud .go { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, var(--neon-cyan), var(--neon-indigo)); color: #000; display: grid; place-items: center; position: relative; }
+  .v2 .hud .go svg { width: 16px; height: 16px; stroke-width: 2.4; }
+  .v2 .hud .go em { position: absolute; top: -4px; right: -4px; font-style: normal; background: var(--neon-pink); color: #fff; font-family: 'Outfit'; font-weight: 800; font-size: .58rem; min-width: 17px; height: 17px; border-radius: 9px; display: grid; place-items: center; }
+  .v2 .tk { margin: 12px 16px 0; border-radius: 26px; padding: 16px; display: flex; gap: 14px; align-items: center; }
+  .v2 .tk .info { flex: 1; min-width: 0; }
+  .v2 .tk .eye { font-size: 0.66rem; color: rgba(240,238,255,.6); font-family: 'Outfit'; font-weight: 600; }
+  .v2 .tk .nm { font-family: 'Outfit'; font-weight: 800; font-size: 1.2rem; margin: 1px 0 8px; }
+  .v2 .tk .big { font-family: 'Outfit'; font-weight: 900; font-size: 2.4rem; line-height: 1; background: linear-gradient(135deg, #fff, var(--neon-pink)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .v2 .tk .big small { font-size: .8rem; font-weight: 700; color: rgba(240,238,255,.7); -webkit-text-fill-color: rgba(240,238,255,.7); margin-left: 4px; }
+  .v2 .tk .going { display: flex; align-items: center; gap: 6px; font-size: .68rem; color: rgba(240,238,255,.6); margin-top: 8px; }
+  .v2 .tk .av { border-color: rgba(30,20,40,1); }
+  .v2 .tk .ring { width: 78px; height: 78px; border-radius: 50%; background: conic-gradient(var(--neon-pink) 0 58%, rgba(255,255,255,0.1) 58% 100%); display: grid; place-items: center; flex-shrink: 0; position: relative; }
+  .v2 .tk .ring::before { content: ''; position: absolute; inset: 7px; border-radius: 50%; background: rgba(20,14,30,0.92); }
+  .v2 .tk .ring span { position: relative; text-align: center; font-family: 'Outfit'; font-weight: 800; font-size: .9rem; line-height: 1.1; }
+  .v2 .tk .ring small { display: block; font-size: .54rem; font-weight: 600; color: var(--neon-pink); }
+  .v2 .flt.glass { background: rgba(28,18,40,0.82); }
+  .v2 .flt { position: sticky; top: 6px; z-index: 3; margin: 14px 16px 12px; padding: 4px; border-radius: 999px; display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+  .v2 .flt button { flex: 0 0 auto; font-family: 'Outfit'; font-weight: 600; font-size: 0.72rem; padding: 7px 12px; border-radius: 999px; color: rgba(240,238,255,.65); }
+  .v2 .flt button.on { background: rgba(255,255,255,0.92); color: #0b0a12; font-weight: 700; }
+  .v2 .feed { padding: 0 16px 90px; }
+  .v2 .it { border-radius: 24px; padding: 14px; margin-bottom: 10px; position: relative; }
+  .v2 .it .meta { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .v2 .it .av { width: 34px; height: 34px; font-size: .64rem; border: 0; }
+  .v2 .it .who { flex: 1; min-width: 0; font-size: 0.72rem; color: rgba(240,238,255,.6); line-height: 1.3; }
+  .v2 .it .who b { display: block; color: var(--text); font-family: 'Outfit'; font-size: 0.82rem; }
+  .v2 .it .kind { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: var(--ac); background: color-mix(in srgb, var(--ac) 16%, transparent); }
+  .v2 .it .kind svg { width: 15px; height: 15px; }
+  .v2 .it.new::after { content: ''; position: absolute; top: 14px; left: 40px; width: 9px; height: 9px; border-radius: 50%; background: var(--neon-pink); box-shadow: 0 0 10px var(--neon-pink); border: 2px solid #1a1122; }
+  .v2 .c-title { font-family: 'Outfit'; font-weight: 600; font-size: .9rem; }
+  .v2 .c-opt { border-radius: 14px; background: rgba(255,255,255,0.06); padding: 9px 12px; }
+  .v2 .c-opt::before { background: linear-gradient(90deg, color-mix(in srgb, var(--ac) 45%, transparent), color-mix(in srgb, var(--ac) 15%, transparent)); border-radius: 14px; }
+  .v2 .c-art { border-radius: 14px; width: 54px; height: 54px; }
+  .v2 .c-photos i { border-radius: 14px; }
+  .v2 .c-acts span { padding: 5px 10px; border-radius: 999px; background: rgba(255,255,255,0.07); }
+  .v2 .c-acts { gap: 6px; opacity: 1; }
+  .v2 .fab { position: absolute; right: 16px; bottom: 80px; width: 52px; height: 52px; border-radius: 50%; background: linear-gradient(135deg, var(--neon-pink), var(--neon-purple)); display: grid; place-items: center; box-shadow: 0 10px 30px -6px var(--neon-pink); z-index: 5; }
+
+  /* =========================================================
+     3 · FLYER — bold type, flat neon blocks, offset shadows
+     ========================================================= */
+  .v3 .scroll { background: #000; }
+  .v3 .crew-name { font-size: 1.6rem; text-transform: uppercase; letter-spacing: -0.5px; }
+  .v3 .totem { border-radius: 4px; border: 2px solid #fff; }
+  .v3 .share-ic { border-radius: 4px; border: 2px solid #fff; color: #fff; }
+  .v3 .hud { margin: 2px 16px 0; display: block; width: calc(100% - 32px); text-align: left; background: var(--neon-yellow); color: #000; padding: 10px 12px; transform: rotate(-1.2deg); box-shadow: 4px 4px 0 var(--neon-cyan); }
+  .v3 .hud b { font-family: 'Urbanist'; font-weight: 900; font-size: 1rem; text-transform: uppercase; letter-spacing: -.2px; display: flex; justify-content: space-between; }
+  .v3 .hud span { font-size: .76rem; font-weight: 500; display: block; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .v3 .tk { margin: 18px 16px 0; background: var(--neon-pink); color: #000; padding: 12px 14px 12px; position: relative; box-shadow: 4px 4px 0 #fff; transform: rotate(.6deg); overflow: hidden; }
+  .v3 .tk .big { font-family: 'Urbanist'; font-weight: 900; font-size: 5.2rem; line-height: .8; letter-spacing: -4px; float: left; margin: 2px 10px 0 -4px; }
+  .v3 .tk .txt { font-family: 'Urbanist'; font-weight: 900; text-transform: uppercase; font-size: 1.05rem; line-height: 1; padding-top: 6px; }
+  .v3 .tk .txt small { display: block; font-family: 'Outfit'; font-weight: 700; font-size: .66rem; text-transform: none; margin-top: 5px; }
+  .v3 .tk .going { clear: both; display: flex; align-items: center; gap: 8px; padding-top: 10px; font-weight: 700; font-size: .7rem; font-family: 'Outfit'; }
+  .v3 .tk .av { border-color: var(--neon-pink); } .v3 .tk .av.more { background: #000; color: #fff; }
+  .v3 .tk .bar { margin-top: 8px; height: 10px; border: 2px solid #000; }
+  .v3 .tk .bar i { display: block; height: 100%; width: 58%; background: #000; }
+  .v3 .tk .todo { display: flex; justify-content: space-between; font-family: 'Outfit'; font-weight: 800; font-size: .66rem; margin-top: 5px; text-transform: uppercase; }
+  .v3 .flt { position: sticky; top: 0; z-index: 3; background: #000; display: flex; gap: 6px; padding: 18px 16px 12px; overflow-x: auto; scrollbar-width: none; }
+  .v3 .flt button { flex: 0 0 auto; font-family: 'Urbanist'; font-weight: 900; font-size: .74rem; text-transform: uppercase; padding: 5px 10px; border: 2px solid #fff; }
+  .v3 .flt button.on { background: #fff; color: #000; }
+  .v3 .feed { padding: 4px 16px 90px; }
+  .v3 .it { background: var(--ac); color: #000; padding: 12px; margin-bottom: 14px; position: relative; box-shadow: 4px 4px 0 #fff; transform: rotate(var(--rot)); }
+  .v3 .it .meta { display: flex; align-items: center; gap: 6px; font-family: 'Outfit'; font-weight: 700; font-size: .66rem; margin-bottom: 6px; }
+  .v3 .it .meta .k { margin-left: auto; font-family: 'Urbanist'; font-weight: 900; font-size: .9rem; text-transform: uppercase; letter-spacing: -.2px; }
+  .v3 .it .av { border-color: #000; width: 20px; height: 20px; font-size: .48rem; }
+  .v3 .it .sticker { position: absolute; top: -9px; left: -6px; background: #fff; color: #000; font-family: 'Urbanist'; font-weight: 900; font-size: .62rem; padding: 2px 6px; transform: rotate(-8deg); }
+  .v3 .c-title { font-family: 'Urbanist'; font-weight: 900; font-size: 1.05rem; line-height: 1.1; }
+  .v3 .c-sub { opacity: .8; font-weight: 600; }
+  .v3 .c-opt { border: 2px solid #000; font-weight: 700; padding: 5px 8px; }
+  .v3 .c-opt::before { background: rgba(0,0,0,.22); }
+  .v3 .c-art { border: 2px solid #000; background: #000; }
+  .v3 .c-photos i { border: 2px solid #000; }
+  .v3 .c-acts { opacity: 1; font-weight: 800; text-transform: uppercase; font-size: .62rem; }
+  .v3 .c-acts span { border-bottom: 2px solid #000; }
+  .v3 .fab { position: absolute; right: 16px; bottom: 80px; background: #fff; color: #000; font-family: 'Urbanist'; font-weight: 900; font-size: 1rem; padding: 10px 14px; box-shadow: 4px 4px 0 var(--neon-pink); z-index: 5; text-transform: uppercase; }
+
+  /* =========================================================
+     4 · COMMS LOG — minimal mono timeline, no cards
+     ========================================================= */
+  .v4 .crew-top { border-bottom: 1px solid rgba(255,255,255,0.07); }
+  .v4 .hud { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 10px 16px; font-family: var(--mono); font-size: .66rem; border-bottom: 1px solid rgba(255,255,255,0.07); background: rgba(0,245,255,0.04); }
+  .v4 .hud .live { color: var(--neon-cyan); font-weight: 700; letter-spacing: 1px; display: flex; align-items: center; gap: 5px; }
+  .v4 .hud .live::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--neon-cyan); box-shadow: 0 0 8px var(--neon-cyan); animation: blink 1.4s infinite; }
+  .v4 .hud .msg { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+  .v4 .hud .msg b { color: var(--neon-green); }
+  .v4 .hud .n { color: var(--neon-pink); font-weight: 700; }
+  .v4 .tk { margin: 14px 16px 0; padding: 12px 14px; position: relative; }
+  .v4 .tk::before, .v4 .tk::after { content: ''; position: absolute; width: 12px; height: 12px; border: 1.5px solid var(--neon-pink); }
+  .v4 .tk::before { top: 0; left: 0; border-right: 0; border-bottom: 0; }
+  .v4 .tk::after { bottom: 0; right: 0; border-left: 0; border-top: 0; }
+  .v4 .tk .row { display: flex; justify-content: space-between; align-items: baseline; font-family: var(--mono); }
+  .v4 .tk .eye { font-size: .58rem; letter-spacing: 1.4px; color: var(--muted); }
+  .v4 .tk .t { font-size: .8rem; color: var(--neon-pink); font-weight: 700; }
+  .v4 .tk .nm { font-family: 'Outfit'; font-weight: 800; font-size: 1.15rem; margin: 2px 0 8px; }
+  .v4 .tk .going { display: flex; align-items: center; gap: 8px; font-size: .7rem; color: var(--muted); }
+  .v4 .tk .line { height: 2px; background: rgba(255,255,255,0.08); margin-top: 10px; }
+  .v4 .tk .line i { display: block; height: 100%; width: 58%; background: var(--neon-pink); box-shadow: 0 0 8px var(--neon-pink); }
+  .v4 .tk .todo { display: flex; justify-content: space-between; font-family: var(--mono); font-size: .58rem; color: var(--muted); margin-top: 5px; letter-spacing: .5px; }
+  .v4 .tk .todo b { color: var(--neon-pink); }
+  .v4 .flt { position: sticky; top: 0; z-index: 3; display: flex; gap: 14px; padding: 14px 16px 0; background: var(--bg); border-bottom: 1px solid rgba(255,255,255,0.07); overflow-x: auto; scrollbar-width: none; margin-top: 8px; }
+  .v4 .flt button { flex: 0 0 auto; font-family: var(--mono); font-size: .62rem; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); padding-bottom: 9px; border-bottom: 2px solid transparent; }
+  .v4 .flt button.on { color: var(--text); border-color: var(--neon-pink); }
+  .v4 .feed { padding: 6px 16px 90px; position: relative; }
+  .v4 .sep { font-family: var(--mono); font-size: .56rem; letter-spacing: 1.6px; color: var(--muted); padding: 12px 0 6px 52px; }
+  .v4 .sep.new { color: var(--neon-pink); }
+  .v4 .it { display: grid; grid-template-columns: 32px 14px 1fr; gap: 0 6px; position: relative; padding-bottom: 14px; }
+  .v4 .it .tm { font-family: var(--mono); font-size: .58rem; color: var(--muted); text-align: right; padding-top: 2px; }
+  .v4 .it .nd { position: relative; display: flex; justify-content: center; }
+  .v4 .it .nd::before { content: ''; position: absolute; top: 4px; bottom: -14px; width: 1px; background: rgba(255,255,255,0.1); }
+  .v4 .it .nd i { position: relative; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--ac); background: var(--bg); margin-top: 3px; }
+  .v4 .it.new .nd i { background: var(--ac); box-shadow: 0 0 8px var(--ac); }
+  .v4 .it .meta { font-size: .72rem; color: var(--muted); margin-bottom: 4px; }
+  .v4 .it .meta b { color: var(--ac); font-family: 'Outfit'; font-weight: 700; }
+  .v4 .it .meta .k { font-family: var(--mono); font-size: .56rem; color: var(--ac); opacity: .8; margin-left: 4px; }
+  .v4 .c-title { font-weight: 500; font-size: .84rem; }
+  .v4 .c-opt { padding: 4px 0 6px; font-size: .74rem; margin-top: 3px; }
+  .v4 .c-opt::before { inset: auto auto 0 0; height: 2px; background: var(--ac); box-shadow: 0 0 6px var(--ac); }
+  .v4 .c-opt::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: rgba(255,255,255,0.07); z-index: -1; }
+  .v4 .c-opt span:last-child { font-family: var(--mono); color: var(--muted); }
+  .v4 .c-art { width: 38px; height: 38px; border-radius: 6px; }
+  .v4 .c-photos { grid-template-columns: repeat(3, 56px); }
+  .v4 .c-photos i { border-radius: 6px; }
+  .v4 .c-acts { font-family: var(--mono); font-size: .58rem; text-transform: uppercase; letter-spacing: 1px; color: var(--ac); opacity: .9; margin-top: 6px; }
+  .v4 .fab { position: absolute; right: 16px; bottom: 80px; font-family: var(--mono); font-size: .66rem; letter-spacing: 1px; padding: 10px 14px; border: 1.5px solid var(--neon-pink); color: var(--neon-pink); background: rgba(5,5,9,0.9); z-index: 5; box-shadow: 0 0 18px -6px var(--neon-pink); }
+
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+  @keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12z"/></symbol>
+    <symbol id="i-plan" viewBox="0 0 24 24"><path d="M9 4h6v3H9z"/><path d="M15 5h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h3"/><path d="m9 13 2 2 4-4"/></symbol>
+    <symbol id="i-poll" viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></symbol>
+    <symbol id="i-jam" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></symbol>
+    <symbol id="i-dream" viewBox="0 0 24 24"><path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.4 6.8 19.1l1-5.8L3.5 9.2l5.9-.9z"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><circle cx="12" cy="9" r="6"/><path d="M8.5 14 7 22l5-3 5 3-1.5-8"/></symbol>
+    <symbol id="i-archive" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="15" rx="2"/><circle cx="9" cy="11" r="2"/><path d="m21 17-5-5-9 8"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 15V3M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></symbol>
+  </defs>
+</svg>
+
+<template id="tpl-top"><div class="sbar"><span>11:12</span><span>●●● 31%</span></div>
+  <div class="apphdr"><span class="logo"></span><span class="word">Rave<span>FAM</span></span><span class="hb">🔔</span><span class="hb">?</span><span class="hb">⏻</span></div></template>
+<template id="tpl-nav"><nav class="appnav">
+  <span class="on" style="--ac:var(--neon-pink)"><i></i>Crews</span>
+  <span style="--ac:var(--neon-purple)"><i></i>Raves</span>
+  <span style="--ac:var(--neon-green)"><i></i>Ravers</span>
+  <span style="--ac:var(--neon-cyan)"><i></i>Stats</span>
+  <span style="--ac:var(--neon-yellow)"><i></i>Village</span>
+</nav></template>
+<template id="tpl-crew"><div class="crew-top">
+  <span class="crew-back">‹</span>
+  <div class="totem">🛸</div>
+  <div style="flex:1;min-width:0"><div class="crew-name">Bass Cadets</div><div class="crew-sub"><span class="status">Recruiting</span>8 ravers</div></div>
+  <span class="avs"><span class="av g1">MA</span><span class="av g2">JO</span><span class="av g3">KA</span><span class="av more">+5</span></span>
+  <span class="share-ic"><svg class="i"><use href="#i-share"/></svg></span>
+</div></template>
+
+<div class="page-head">
+  <h1>Crew Feed — four visual takes</h1>
+  <p>Same structure in all four: Huddle strip → merged Who's Going / Rave Plan ticket → filter chips → one feed of polls, dreams, plan check-offs, jams, pins and archive drops. Only the visual language changes. Each one borrows from something RaveFAM already has. Filter chips work in every phone.</p>
+</div>
+
+<div class="rail">
+  <div class="col">
+    <div class="col-head">
+      <span class="tag" style="background:rgba(244,241,232,0.14);color:var(--paper)">1 · Backstage Pass</span>
+      <h2>Every update is a ticket stub</h2>
+      <p>Leans into the crew-pass / laminate identity. Cream paper cards with a neon stub on the left naming the type, dashed perforations, mono labels, a red "NEW" ink stamp. The ticket gets a real barcode strip. Huddle reads like a radio channel.</p>
+    </div>
+    <div class="phone v1" data-v="1"></div>
+    <div class="col-foot"><b>Feels:</b> tactile, collectible, very "RaveFAM". <b>Watch:</b> lots of cream on a dark app is bright; it may need to tone down to fewer paper cards (e.g. only plan + pins on paper).</div>
+  </div>
+  <div class="col">
+    <div class="col-head">
+      <span class="tag" style="background:rgba(191,0,255,0.16);color:var(--neon-purple)">2 · Aurora Glass</span>
+      <h2>Soft, blurred, social-app polish</h2>
+      <p>Neon becomes a blurred aurora behind frosted-glass cards. Big round avatars lead each post, the type icon sits in a tinted circle, actions are pill chips. The ticket is a glass card with a checklist progress ring; Huddle is a pill with a typing indicator.</p>
+    </div>
+    <div class="phone v2" data-v="2"></div>
+    <div class="col-foot"><b>Feels:</b> modern and friendly; the most like a social app. <b>Watch:</b> backdrop blur costs performance on older phones; it needs a solid fallback.</div>
+  </div>
+  <div class="col">
+    <div class="col-head">
+      <span class="tag" style="background:rgba(255,230,0,0.14);color:var(--neon-yellow)">3 · Flyer Wall</span>
+      <h2>Posters taped to a wall</h2>
+      <p>Pulls from the Gig Poster share card. Flat neon blocks with black type, hard white offset shadows, slight tilts, "NEW!" stickers. The countdown becomes a giant "20". Huddle is a yellow sticker strip. Loud on purpose.</p>
+    </div>
+    <div class="phone v3" data-v="3"></div>
+    <div class="col-foot"><b>Feels:</b> energetic, flyer culture, very shareable. <b>Watch:</b> six full neon fills at once is a lot; long feeds may tire the eye.</div>
+  </div>
+  <div class="col">
+    <div class="col-head">
+      <span class="tag" style="background:rgba(0,245,255,0.14);color:var(--neon-cyan)">4 · Comms Log</span>
+      <h2>No cards, just a clean timeline</h2>
+      <p>Matches the Huddle's "festival comms channel" style. No card boxes: a thin vertical line with colored nodes, mono timestamps on the left, Today / Earlier dividers. Huddle is a one-line live ticker; the ticket is outlined with corner brackets.</p>
+    </div>
+    <div class="phone v4" data-v="4"></div>
+    <div class="col-foot"><b>Feels:</b> calm, dense, fast to scan; the most room for content. <b>Watch:</b> least "fun"; relies on color and type alone for personality.</div>
+  </div>
+</div>
+
+<script>
+  const AC = { poll:'var(--neon-cyan)', jam:'var(--neon-green)', dream:'var(--neon-purple)', plan:'var(--neon-pink)', pin:'var(--neon-orange)', archive:'var(--neon-yellow)' };
+  const LABEL = { poll:'Poll', jam:'Jam', dream:'Dream', plan:'Plan', pin:'Pin', archive:'Archive' };
+  const FILTERS = [['all','All'],['poll','Polls'],['jam','Jams'],['dream','Dreams'],['plan','Plan'],['mem','Memories']];
+  const ITEMS = [
+    { k:'poll', who:'Maya', g:'g1', t:'1h', verb:'asked', isNew:true },
+    { k:'dream', who:'Rio', g:'g4', t:'1h', verb:'pinned a dream', isNew:true },
+    { k:'plan', who:'Jordan', g:'g2', t:'2h', verb:'checked off' },
+    { k:'jam', who:'Kai', g:'g3', t:'3h', verb:'dropped a jam' },
+    { k:'pin', who:'The whole crew', emoji:'🏆', t:'2w', verb:'unlocked', old:true },
+    { k:'archive', who:'Avery', g:'g6', t:'3w', verb:'added 3 photos', old:true },
+  ];
+  const ico = k => `<svg class="i"><use href="#i-${k}"/></svg>`;
+  const av = it => it.g ? `<span class="av solo ${it.g}">${it.who.slice(0,2).toUpperCase()}</span>` : `<span class="av emoji">${it.emoji}</span>`;
+  const going = '<span class="avs"><span class="av g1">MA</span><span class="av g2">JO</span><span class="av g3">KA</span><span class="av g4">RI</span><span class="av g5">SA</span><span class="av more">+3</span></span>';
+
+  function content(it) {
+    switch (it.k) {
+      case 'poll': return `<div class="c-title">Saturday night: which stage first?</div>
+        <div class="c-opt" style="--pct:62%"><span>kineticFIELD</span><span>5</span></div>
+        <div class="c-opt" style="--pct:12%"><span>basspod</span><span>1</span></div>
+        <div class="c-acts"><span>6 of 8 voted · tap to vote</span></div>`;
+      case 'dream': return `<div class="c-title">Tomorrowland 2027, full crew or nothing 🌍</div><div class="c-acts"><span>🔥 Hype · 5</span><span>💬 Talk in Huddle</span></div>`;
+      case 'plan': return `<div class="c-title">✓ Book the Airbnb</div><div class="c-sub">EDC Orlando · 8 of 12 done</div>`;
+      case 'jam': return `<div class="c-jam"><div class="c-art"></div><div><div class="c-title">Pre-game bangers</div><div class="c-sub">Spotify · 42 tracks</div></div></div><div class="c-acts"><span>▶ Play</span><span>✨ Vibe · 4</span></div>`;
+      case 'pin': return `<div class="c-title">10 Raves Strong</div><div class="c-sub">2 more raves to Year One 🎂</div>`;
+      case 'archive': return `<div class="c-title">Lost Lands 2026</div><div class="c-photos"><i></i><i></i><i></i></div>`;
+    }
+  }
+
+  // One renderer per variant: the pinned top (Huddle + ticket) and each feed item.
+  const V = {
+    1: {
+      top: () => `
+        <button class="hud"><span class="led"></span><span class="t"><b>HUDDLE · CH. MAIN</b><span>Kai: dibs shotgun. also who has the totem??</span></span><span class="n">3 NEW</span></button>
+        <div class="tk">
+          <div class="row"><div><div class="eye">NEXT UP · RAVE PLAN</div><div class="nm">EDC Orlando</div><div class="mt">Tinker Field · Nov 6–8</div></div><div class="cd">20<small>DAYS</small></div></div>
+          <div class="perf"></div>
+          <div class="going">${going}8 going</div>
+          <div class="bar"><span class="code"></span><span>7/12 · <b>1 YOURS</b> ›</span></div>
+        </div>`,
+      item: it => `<article class="it" style="--ac:${AC[it.k]}">
+          <div class="stub">${ico(it.k)}<span>${LABEL[it.k]}</span></div>
+          <div class="main"><div class="meta">${av(it)}<b>${it.who}</b> ${it.verb} · ${it.t}</div>${content(it)}</div>
+          ${it.isNew ? '<span class="stamp">NEW</span>' : ''}
+        </article>`,
+      fab: '+ ADD'
+    },
+    2: {
+      top: () => `
+        <button class="hud glass"><span class="avs"><span class="av g3">KA</span><span class="av g1">MA</span></span><span class="t"><b>Huddle</b><span class="typing"><i></i><i></i><i></i></span><span>Kai: dibs shotgun. also who has the totem??</span></span><span class="go">${ico('send')}<em>3</em></span></button>
+        <div class="tk glass">
+          <div class="info"><div class="eye">Next up · Rave Plan</div><div class="nm">EDC Orlando</div><div class="big">20<small>days</small></div><div class="going">${going}8 going</div></div>
+          <div class="ring"><span>7/12<small>1 is yours</small></span></div>
+        </div>`,
+      item: it => `<article class="it glass${it.isNew ? ' new' : ''}" style="--ac:${AC[it.k]}">
+          <div class="meta">${av(it)}<span class="who"><b>${it.who}</b>${it.verb} · ${it.t}</span><span class="kind">${ico(it.k)}</span></div>
+          ${content(it)}
+        </article>`,
+      fab: ico('plus'), flt: 'glass'
+    },
+    3: {
+      top: () => `
+        <button class="hud"><b><span>📣 3 new in the Huddle</span><span>→</span></b><span>Kai: dibs shotgun. also who has the totem??</span></button>
+        <div class="tk">
+          <div class="big">20</div>
+          <div class="txt">Days to EDC Orlando<small>Tinker Field · Nov 6–8</small></div>
+          <div class="going">${going}8 going</div>
+          <div class="bar"><i></i></div>
+          <div class="todo"><span>7/12 done · 1 is yours</span><span>Open plan →</span></div>
+        </div>`,
+      item: (it, i) => `<article class="it" style="--ac:${AC[it.k]};--rot:${i % 2 ? '0.8deg' : '-0.8deg'}">
+          ${it.isNew ? '<span class="sticker">NEW!</span>' : ''}
+          <div class="meta">${av(it)}<span>${it.who} ${it.verb} · ${it.t}</span><span class="k">${LABEL[it.k]}</span></div>
+          ${content(it)}
+        </article>`,
+      fab: '+ Add'
+    },
+    4: {
+      top: () => `
+        <button class="hud"><span class="live">LIVE</span><span class="msg"><b>KAI ›</b> dibs shotgun. also who has the totem??</span><span class="n">+3</span></button>
+        <div class="tk">
+          <div class="row"><span class="eye">NEXT UP ▸ RAVE PLAN</span><span class="t">T–20D</span></div>
+          <div class="nm">EDC Orlando</div>
+          <div class="going">${going}8 going · Nov 6–8</div>
+          <div class="line"><i></i></div>
+          <div class="todo"><span>CHECKLIST 7/12 · <b>1 YOURS</b></span><span>OPEN ›</span></div>
+        </div>`,
+      item: it => `<div class="it${it.isNew ? ' new' : ''}" style="--ac:${AC[it.k]}">
+          <span class="tm">${it.t}</span><span class="nd"><i></i></span>
+          <div><div class="meta"><b>${it.who}</b> ${it.verb}<span class="k">#${LABEL[it.k].toLowerCase()}</span></div>${content(it)}</div>
+        </div>`,
+      sep: (label, isNew) => `<div class="sep${isNew ? ' new' : ''}">${label}</div>`,
+      fab: '+ POST'
+    }
+  };
+
+  function renderFeed(phone, f) {
+    const R = V[phone.dataset.v];
+    const list = ITEMS.filter(it => f === 'all' || it.k === f || (f === 'mem' && (it.k === 'pin' || it.k === 'archive')));
+    let html = '', lastGroup = null;
+    list.forEach((it, i) => {
+      const group = it.isNew ? 'new' : it.old ? 'earlier' : 'today';
+      if (R.sep && group !== lastGroup) html += R.sep(group === 'new' ? '● NEW SINCE YOU LOOKED' : group === 'today' ? 'TODAY' : 'EARLIER', group === 'new');
+      lastGroup = group;
+      html += R.item(it, i);
+    });
+    phone.querySelector('.feed').innerHTML = html;
+  }
+
+  document.querySelectorAll('.phone[data-v]').forEach(phone => {
+    const R = V[phone.dataset.v];
+    phone.innerHTML = `
+      ${document.getElementById('tpl-top').innerHTML}
+      <div class="scroll">
+        ${document.getElementById('tpl-crew').innerHTML}
+        ${R.top()}
+        <div class="flt ${R.flt || ''}">${FILTERS.map(([k, l], i) => `<button data-f="${k}" class="${i ? '' : 'on'}">${l}</button>`).join('')}</div>
+        <div class="feed"></div>
+      </div>
+      <button class="fab">${R.fab}</button>
+      ${document.getElementById('tpl-nav').innerHTML}`;
+    renderFeed(phone, 'all');
+    phone.querySelector('.flt').addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      phone.querySelectorAll('.flt button').forEach(x => x.classList.toggle('on', x === b));
+      renderFeed(phone, b.dataset.f);
+    });
+  });
+</script>
+</body>
+</html>

@@ -32,7 +32,7 @@
   }
 
   var script = document.createElement("script");
-  script.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
+  script.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3";
   script.onload = function () {
     try {
       sbClient = window.supabase.createClient(
@@ -50,7 +50,7 @@
       withClient(function (sb) {
         sb.rpc("log_preview_click", {
           p_path: location.pathname, p_platform: platform, p_query: query, p_visitor_id: getVisitorId()
-        });
+        }).then(function () {}, function () {});
       });
     }
   };
@@ -60,8 +60,69 @@
     sb.rpc("log_pageview", {
       p_path: location.pathname, p_referrer: document.referrer, p_visitor_id: getVisitorId(),
       p_utm_source: utm.source, p_utm_medium: utm.medium, p_utm_campaign: utm.campaign
+    }).then(function () {}, function () {});
+  });
+
+  // Member detection for the Lineup Explorer ↔ RaveFAM integration. The
+  // explorer shares myravefam.com with /app, so a RaveFAM login's Supabase
+  // session is already in this browser's storage — no separate sign-in. This
+  // only reads state; nothing on the page changes yet. Resolves to:
+  //   { isMember, userId, raverId, festival: { id, slug, name, date } | null }
+  // Visitors (no session) resolve right away with isMember: false and make no
+  // extra requests. Festival lookup needs auth (festivals RLS), so it's
+  // member-only; the page slug equals festivals.slug.
+  function pageSlug() {
+    var m = /^\/lineup-explorer\/([a-z0-9-]+?)(?:\.html)?\/?$/.exec(location.pathname);
+    return m && m[1] !== "index" ? m[1] : null;
+  }
+
+  var memberPromise = new Promise(function (resolve) {
+    var visitor = { isMember: false, userId: null, raverId: null, festival: null };
+    // supabase-js is loaded from a CDN; if it never arrives, treat as visitor.
+    setTimeout(function () { resolve(visitor); }, 8000);
+    withClient(function (sb) {
+      sb.auth.getSession().then(function (res) {
+        var session = res && res.data && res.data.session;
+        if (!session || !session.user) { resolve(visitor); return; }
+        var uid = session.user.id;
+        var slug = pageSlug();
+        Promise.all([
+          sb.from("ravers").select("id,is_you,status").eq("claimed_by", uid).neq("status", "merged"),
+          slug
+            ? sb.from("festivals").select("id,slug,name,date").eq("slug", slug).is("deleted_at", null).maybeSingle()
+            : Promise.resolve({ data: null })
+        ]).then(function (out) {
+          var rows = (out[0] && out[0].data) || [];
+          var you = rows.filter(function (r) { return r.is_you || r.status === "claimed"; })[0] || null;
+          resolve({
+            isMember: true,
+            userId: uid,
+            raverId: you ? you.id : null,
+            festival: (out[1] && out[1].data) || null
+          });
+        }, function () {
+          resolve({ isMember: true, userId: uid, raverId: null, festival: null });
+        });
+      }, function () { resolve(visitor); });
     });
   });
+
+  window.LineupMember = {
+    ready: function (fn) { return memberPromise.then(fn); },
+    pageSlug: pageSlug,
+    client: withClient,
+    visitorId: getVisitorId
+  };
+
+  // First explorer page this browser ever opened. app.html reads it when a
+  // brand-new account boots, to tag signup_completed with source "explorer".
+  try {
+    if (!window.localStorage.getItem("rf_first_explorer")) {
+      window.localStorage.setItem("rf_first_explorer", JSON.stringify({
+        slug: pageSlug() || "hub", at: new Date().toISOString()
+      }));
+    }
+  } catch (e) {}
 
   // Best-effort client error logging for the PM dashboard's "Client Errors"
   // section — deduped per page load so one repeating bug doesn't spam rows.
@@ -74,7 +135,7 @@
       sb.rpc("log_client_error", {
         p_message: message, p_stack: stack || null, p_path: location.pathname,
         p_visitor_id: getVisitorId(), p_user_agent: navigator.userAgent
-      });
+      }).then(function () {}, function () {});
     });
   }
   window.addEventListener("error", function (e) {
@@ -270,6 +331,8 @@
 
   function isStandalone() {
     if (window.navigator.standalone === true) return true;
+    // The RaveFAM iOS app (Capacitor) is already on the home screen.
+    if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) return true;
     try { return window.matchMedia("(display-mode: standalone)").matches; } catch (e) { return false; }
   }
 
@@ -380,4 +443,3304 @@
   } else {
     injectButton();
   }
+})();
+
+// ☆ picks (Lineup Explorer ↔ RaveFAM integration, Phase 1a).
+// Visitors: picks live in this browser (localStorage "rf_picks", keyed by
+// page slug) until they sign up; /app imports them after login. Members:
+// picks are raver_artist_plans rows, which need a Going or Interested RSVP
+// for the festival, so a member's first ☆ on a rave they haven't RSVP'd
+// opens a one-question sheet and holds picks in the browser meanwhile.
+// Writes match app.html's (upsert ignoreDuplicates; Going and Interested are
+// mutually exclusive). Each festival page hooks in with three identical
+// lines: card() returns LineupPicks.wrap(el, a), visible() ANDs
+// LineupPicks.ok(a), and LineupPicks.init(ACTS, render) runs before the first
+// render(). b2b acts ("A b2b B") map to one plan per artist, as in the seed.
+(function () {
+  "use strict";
+
+  // 📋 pick toggle: outline clipboard (off) / filled clipboard with a ✓ (on).
+  var CLIP_OFF = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+    '<rect x="5" y="4.5" width="14" height="16.5" rx="2.5"/><path d="M9 4.5v-.7A1.3 1.3 0 0 1 10.3 2.5h3.4A1.3 1.3 0 0 1 15 3.8v.7"/>' +
+    '<path d="M8.5 10h7M8.5 13.5h7M8.5 17h4"/></svg>';
+  var CLIP_ON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+    '<rect x="5" y="4.5" width="14" height="16.5" rx="2.5" fill="currentColor"/><path d="M9 4.5v-.7A1.3 1.3 0 0 1 10.3 2.5h3.4A1.3 1.3 0 0 1 15 3.8v.7"/>' +
+    '<path d="M8.6 13.2l2.4 2.4 4.4-4.8" stroke="#0a0512" stroke-width="2.2"/></svg>';
+
+  var STORE = "rf_picks";
+  var TIP_KEY = "rf_picks_tip";
+  var FROM_KEY = "rf_picks_from";
+  var noop = function () {};
+
+  function readAll() {
+    try {
+      var v = JSON.parse(window.localStorage.getItem(STORE) || "{}");
+      return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+    } catch (e) { return {}; }
+  }
+  function writeAll(all) { try { window.localStorage.setItem(STORE, JSON.stringify(all)); } catch (e) {} }
+
+  function eventMeta() {
+    var nodes = document.querySelectorAll('script[type="application/ld+json"]');
+    for (var i = 0; i < nodes.length; i++) {
+      try {
+        var j = JSON.parse(nodes[i].textContent);
+        if (j && /Event$|Festival$/.test(j["@type"] || "")) return { t: j.name || null, d: j.startDate || null };
+      } catch (e) {}
+    }
+    return { t: null, d: null };
+  }
+
+  function splitKeys(name) {
+    return String(name).split(/\s+b2b\s+/i).map(function (s) { return s.trim().toLowerCase(); });
+  }
+
+  var slug = null, acts = [], onRender = null;
+  var view = "all";        // "all" | "picks" | "favs" | "crew" | "shared" | "schedule" | "now" (favs, crew: members only)
+  var sortWanted = false;  // "🔥 Most wanted" sort (members only)
+  var local = [];          // act names picked in this browser for this page
+  var member = null;       // LineupMember result, once it resolves as a member
+  var rsvp = null;         // "going" | "interested" | null (members only)
+  var idsByKey = {};       // artists.name_lower -> artists.id
+  var plans = {};          // artists.id -> true: this member's plans here
+  var favs = {};           // artists.id -> true: this member's ♡ favorites
+  var wantByKey = {};      // name_lower -> { want, gain_7d } (public, 5+ only)
+  var wantMax = 0;
+  var wantTop = [];        // [{ key, want, gain_7d }] in the server's most-wanted order
+  var crew = null;         // get_lineup_crew_pulse() result (members)
+  var votes = null;        // get_lineup_crew_votes() result (members)
+  var barEl = null, saveEl = null;
+
+  var memberLoaded = false; // plans + RSVP fetched for this festival
+  function isMemberMode() { return !!(memberLoaded && member && member.raverId && member.festival); }
+
+  function saveLocal() {
+    if (!slug) return;
+    var all = readAll();
+    if (local.length) {
+      var m = eventMeta();
+      all[slug] = { n: local.slice(), t: m.t, d: m.d, at: new Date().toISOString() };
+    } else {
+      delete all[slug];
+    }
+    writeAll(all);
+  }
+
+  function actIds(a) {
+    var ids = splitKeys(a.name).map(function (k) { return idsByKey[k]; });
+    return ids.every(Boolean) ? ids : null;
+  }
+
+  function isPicked(a) {
+    if (local.indexOf(a.name) !== -1) return true;
+    if (!isMemberMode()) return false;
+    var ids = actIds(a);
+    return !!ids && ids.every(function (id) { return plans[id]; });
+  }
+
+  function pickedActs() { return acts.filter(isPicked); }
+
+  // ----- ♡ favorites + Pulse (Phase 1b) -----
+  function isFav(a) {
+    if (!isMemberMode()) return false;
+    var ids = actIds(a);
+    return !!ids && ids.every(function (id) { return favs[id]; });
+  }
+
+  // Public "want to see" count for an act (5+ only, from get_lineup_want_counts);
+  // a b2b act shows its better-known half.
+  function actWant(a) {
+    var best = null;
+    splitKeys(a.name).forEach(function (k) {
+      var w = wantByKey[k];
+      if (w && (!best || w.want > best.want)) best = w;
+    });
+    return best;
+  }
+
+  // ----- crew layer (Phase 2a; data from get_lineup_crew_pulse) -----
+  var crewSel = "all";     // crew switcher: "all" or a crew id
+
+  function mateOk(id) {
+    var m = crew && crew.mates && crew.mates[id];
+    if (!m) return false;
+    return crewSel === "all" || (Array.isArray(m.c) && m.c.indexOf(crewSel) !== -1);
+  }
+
+  // Visible crewmates here (Going first), for the panel and header line.
+  function crewHere() {
+    if (!crew || !crew.mates) return [];
+    return Object.keys(crew.mates).filter(mateOk).map(function (id) {
+      var m = crew.mates[id]; m.id = id; return m;
+    }).sort(function (x, y) {
+      return (x.s === y.s ? 0 : x.s === "going" ? -1 : 1) || (x.u === y.u ? 0 : x.u ? 1 : -1) ||
+        String(x.n).localeCompare(String(y.n));
+    });
+  }
+
+  // Claimed crewmates (current switcher) who picked any artist in the act.
+  function actCrew(a) {
+    if (!crew || !crew.picks) return [];
+    var seen = {}, out = [];
+    (actIds(a) || []).forEach(function (id) {
+      (crew.picks[id] || []).forEach(function (rid) {
+        if (seen[rid] || !mateOk(rid)) return;
+        seen[rid] = true;
+        var m = crew.mates[rid]; m.id = rid;
+        out.push(m);
+      });
+    });
+    return out;
+  }
+
+  function faceEl(m, tag) {
+    var f = document.createElement(tag || "span");
+    f.className = "lp-face" + (m.s === "going" ? " is-going" : " is-interested") + (m.u ? " is-unclaimed" : "");
+    if (m.a && /^https:\/\//.test(m.a)) {
+      var img = document.createElement("img");
+      img.src = m.a; img.alt = ""; img.loading = "lazy";
+      f.appendChild(img);
+    } else {
+      f.appendChild(document.createTextNode((m.n || "?").charAt(0).toUpperCase()));
+      if (m.g && /^linear-gradient\([#0-9a-zA-Z,.%() ]+\)$/.test(m.g)) f.style.background = m.g;
+    }
+    return f;
+  }
+
+  function statusWord(m) { return m.s === "going" ? "Going" : "Interested"; }
+
+  function pulseEl(a) {
+    var w = actWant(a);
+    if (!w) return null;
+    var row = document.createElement("div");
+    row.className = "lp-pulse";
+    if (isMemberMode()) {
+      var heat = document.createElement("span");
+      heat.className = "lp-heat";
+      heat.setAttribute("aria-hidden", "true");
+      var fill = document.createElement("i");
+      fill.style.width = Math.max(8, Math.round(100 * w.want / (wantMax || w.want))) + "%";
+      heat.appendChild(fill);
+      row.appendChild(heat);
+    }
+    var t = document.createElement("span");
+    t.className = "lp-want";
+    t.textContent = w.want + " want to see" + (w.gain_7d ? " · +" + w.gain_7d + " this week" : "");
+    row.appendChild(t);
+    return row;
+  }
+
+  // "👥 2 crew" tray under a card; expands in place to names and statuses.
+  // Lives outside the card's <a> so it can be a real button.
+  function crewTrayEl(a) {
+    var mates = isMemberMode() ? actCrew(a) : [];
+    if (!mates.length) return null;
+    var tray = document.createElement("div");
+    tray.className = "lp-tray";
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "lp-tray-btn";
+    b.setAttribute("aria-expanded", "false");
+    var faces = document.createElement("span");
+    faces.className = "lp-faces";
+    faces.setAttribute("aria-hidden", "true");
+    mates.slice(0, 3).forEach(function (m) { faces.appendChild(faceEl(m)); });
+    b.appendChild(faces);
+    var names = mates.map(function (m) { return m.n || "Crewmate"; });
+    b.appendChild(document.createTextNode(mates.length + " crew · " + names.slice(0, 2).join(", ") + (names.length > 2 ? " +" + (names.length - 2) : "")));
+    b.setAttribute("aria-label", names.join(", ") + " from your crew picked " + a.name);
+    var list = document.createElement("ul");
+    list.className = "lp-tray-list";
+    list.hidden = true;
+    mates.forEach(function (m) {
+      var li = document.createElement("li");
+      li.appendChild(faceEl(m));
+      li.appendChild(document.createTextNode((m.n || "Crewmate") + " · " + statusWord(m)));
+      list.appendChild(li);
+    });
+    b.addEventListener("click", function (e) {
+      e.preventDefault();
+      var open = list.hidden;
+      list.hidden = !open;
+      b.setAttribute("aria-expanded", String(open));
+    });
+    tray.appendChild(b);
+    tray.appendChild(list);
+    return tray;
+  }
+
+  // "Your crew here" panel above the picks bar.
+  var crewEl = null;
+  function renderCrewPanel() {
+    if (!barEl) return;
+    var mates = isMemberMode() ? crewHere() : [];
+    if (!crewEl) {
+      crewEl = document.createElement("section");
+      crewEl.className = "lp-crew";
+      crewEl.setAttribute("aria-labelledby", "lpCrewTitle");
+      barEl.parentNode.insertBefore(crewEl, barEl);
+    }
+    var crews = (crew && crew.crews) || [];
+    if (!isMemberMode() || (!mates.length && crewSel === "all")) { crewEl.hidden = true; return; }
+    crewEl.hidden = false;
+    crewEl.innerHTML = "";
+    var top = document.createElement("div");
+    top.className = "lp-crew-top";
+    var h = document.createElement("h2");
+    h.id = "lpCrewTitle";
+    h.textContent = "Your crew here";
+    top.appendChild(h);
+    var going = mates.filter(function (m) { return m.s === "going"; }).length;
+    var interested = mates.length - going;
+    var sum = document.createElement("span");
+    sum.className = "lp-crew-sum";
+    sum.textContent = [going ? going + " going" : "", interested ? interested + " interested" : ""].filter(Boolean).join(" · ") || "No one from this crew yet";
+    top.appendChild(sum);
+    crewEl.appendChild(top);
+
+    if (crews.length > 1) {
+      var sw = document.createElement("div");
+      sw.className = "lp-crew-switch";
+      sw.setAttribute("role", "group");
+      sw.setAttribute("aria-label", "Show one crew");
+      [{ id: "all", n: "All crews" }].concat(crews).forEach(function (c) {
+        var cb = document.createElement("button");
+        cb.type = "button";
+        cb.className = "lp-crew-chip";
+        cb.textContent = c.n;
+        cb.setAttribute("aria-pressed", String(crewSel === c.id));
+        if (c.col && /^#[0-9a-fA-F]{3,8}$/.test(c.col)) cb.style.setProperty("--cc", c.col);
+        cb.addEventListener("click", function () { crewSel = c.id; refresh(); });
+        sw.appendChild(cb);
+      });
+      crewEl.appendChild(sw);
+    }
+
+    var row = document.createElement("div");
+    row.className = "lp-crew-faces";
+    mates.forEach(function (m) {
+      var wrap = document.createElement("span");
+      wrap.className = "lp-crew-mate";
+      if (m.u) {
+        var fb = faceEl(m, "button");
+        fb.type = "button";
+        fb.setAttribute("aria-label", (m.n || "Crewmate") + ", " + statusWord(m) + ", not on RaveFAM yet");
+        fb.setAttribute("aria-expanded", "false");
+        var pop = document.createElement("span");
+        pop.className = "lp-crew-pop";
+        pop.hidden = true;
+        pop.appendChild(document.createTextNode((m.n || "They") + " isn't on RaveFAM yet. "));
+        if (m.inv) {
+          var link = document.createElement("a");
+          link.href = "/app?invite=" + encodeURIComponent(m.id);
+          link.textContent = "Send claim link";
+          pop.appendChild(link);
+        } else {
+          pop.appendChild(document.createTextNode("Your crew leader can send them a claim link."));
+        }
+        fb.addEventListener("click", function () {
+          var open = pop.hidden;
+          pop.hidden = !open;
+          fb.setAttribute("aria-expanded", String(open));
+        });
+        wrap.appendChild(fb);
+        wrap.appendChild(pop);
+      } else {
+        var f = faceEl(m);
+        f.setAttribute("role", "img");
+        f.setAttribute("aria-label", (m.n || "Crewmate") + ", " + statusWord(m));
+        f.title = (m.n || "Crewmate") + " · " + statusWord(m);
+        wrap.appendChild(f);
+      }
+      var nm = document.createElement("span");
+      nm.className = "lp-crew-name";
+      nm.setAttribute("aria-hidden", "true");
+      nm.textContent = m.n || "Crewmate";
+      wrap.appendChild(nm);
+      row.appendChild(wrap);
+    });
+    crewEl.appendChild(row);
+
+    var overlap = pickedActs().filter(function (a) { return actCrew(a).length; });
+    if (overlap.length) {
+      var ov = document.createElement("p");
+      ov.className = "lp-crew-overlap";
+      var names = overlap.map(function (a) { return a.name; });
+      ov.textContent = "📋 You and your crew both picked: " + names.slice(0, 6).join(", ") + (names.length > 6 ? " +" + (names.length - 6) : "");
+      crewEl.appendChild(ov);
+    }
+  }
+
+  // ----- Most wanted here (Phase 3a; counts from get_lineup_want_counts) -----
+  // Top 5 acts on this page by members' 📋 picks. The server already drops
+  // anything under 5, so an empty list simply hides the panel.
+  var mwEl = null;
+  var focusSel = null;     // refresh() focus target while a panel button drives toggle()
+  function mostWantedActs() {
+    var byKey = {};
+    acts.forEach(function (a) { splitKeys(a.name).forEach(function (k) { if (!byKey[k]) byKey[k] = a; }); });
+    var seen = {}, out = [];
+    wantTop.forEach(function (w) {
+      var a = byKey[w.key];
+      if (!a || seen[a.name] || out.length >= 5) return;
+      seen[a.name] = true;
+      out.push({ act: a, want: w.want, gain_7d: w.gain_7d });
+    });
+    return out;
+  }
+
+  function jumpToAct(a) {
+    function find() {
+      var btns = document.querySelectorAll(".pick");
+      for (var i = 0; i < btns.length; i++) if (btns[i].dataset.n === a.name) return btns[i];
+      return null;
+    }
+    var b = find();
+    if (!b && view !== "all") { view = "all"; refresh(); b = find(); }
+    if (!b) return;
+    var box = b.closest(".act-cell") || b.closest(".act-wrap") || b;
+    box.scrollIntoView({ behavior: "smooth", block: "center" });
+    box.classList.remove("lp-flash");
+    void box.offsetWidth;
+    box.classList.add("lp-flash");
+    setTimeout(function () { box.classList.remove("lp-flash"); }, 1600);
+  }
+
+  function renderMostWanted() {
+    if (!barEl) return;
+    var top = mostWantedActs();
+    if (!mwEl) {
+      mwEl = document.createElement("section");
+      mwEl.className = "lp-mw";
+      mwEl.setAttribute("aria-labelledby", "lpMwTitle");
+      barEl.parentNode.insertBefore(mwEl, barEl);
+    }
+    if (!top.length) { mwEl.hidden = true; return; }
+    mwEl.hidden = false;
+    mwEl.innerHTML = "";
+    var memberMode = isMemberMode();
+    var h = document.createElement("h2");
+    h.id = "lpMwTitle";
+    h.textContent = "🔥 Most wanted here";
+    mwEl.appendChild(h);
+    var max = top[0].want || 1;
+    var ol = document.createElement("ol");
+    ol.className = "lp-mw-list";
+    top.forEach(function (x, i) {
+      var a = x.act;
+      var li = document.createElement("li");
+      li.className = "lp-mw-row";
+      var rank = document.createElement("span");
+      rank.className = "lp-mw-rank";
+      rank.setAttribute("aria-hidden", "true");
+      rank.textContent = String(i + 1);
+      li.appendChild(rank);
+      var main = document.createElement("div");
+      main.className = "lp-mw-main";
+      var nb = document.createElement("button");
+      nb.type = "button";
+      nb.className = "lp-mw-name";
+      nb.textContent = a.name;
+      nb.setAttribute("aria-label", a.name + ", " + x.want + " want to see. Show on the lineup");
+      nb.addEventListener("click", function () { jumpToAct(a); });
+      main.appendChild(nb);
+      var meta = document.createElement("div");
+      meta.className = "lp-mw-meta";
+      var heat = document.createElement("span");
+      heat.className = "lp-heat";
+      heat.setAttribute("aria-hidden", "true");
+      var fill = document.createElement("i");
+      fill.style.width = Math.max(8, Math.round(100 * x.want / max)) + "%";
+      heat.appendChild(fill);
+      meta.appendChild(heat);
+      var c = document.createElement("span");
+      c.className = "lp-want";
+      c.textContent = x.want + " want to see";
+      meta.appendChild(c);
+      if (x.gain_7d) {
+        var g = document.createElement("span");
+        g.className = "lp-mw-gain";
+        g.textContent = "+" + x.gain_7d + " this week";
+        meta.appendChild(g);
+      }
+      main.appendChild(meta);
+      li.appendChild(main);
+      if (memberMode) {
+        var mates = actCrew(a);
+        if (mates.length) {
+          var faces = document.createElement("span");
+          faces.className = "lp-faces";
+          faces.setAttribute("role", "img");
+          faces.setAttribute("aria-label", mates.length + (mates.length === 1 ? " crewmate picked this" : " crewmates picked this"));
+          mates.slice(0, 3).forEach(function (m) { faces.appendChild(faceEl(m)); });
+          if (mates.length > 3) {
+            var more = document.createElement("span");
+            more.className = "lp-face lp-more";
+            more.textContent = "+" + (mates.length - 3);
+            faces.appendChild(more);
+          }
+          li.appendChild(faces);
+        }
+      }
+      var picked = isPicked(a);
+      var pb = document.createElement("button");
+      pb.type = "button";
+      pb.className = "lp-mw-pick";
+      pb.dataset.n = a.name;
+      pb.setAttribute("aria-pressed", String(picked));
+      pb.setAttribute("aria-label", picked ? "Remove " + a.name + " from my picks" : "Add " + a.name + " to my picks");
+      pb.innerHTML = picked ? CLIP_ON : CLIP_OFF;
+      pb.addEventListener("click", function () {
+        focusSel = ".lp-mw-pick";
+        try { toggle(a); } finally { focusSel = null; }
+      });
+      li.appendChild(pb);
+      ol.appendChild(li);
+    });
+    mwEl.appendChild(ol);
+    if (memberMode && votes && (votes.crews || []).length) {
+      var vb = document.createElement("button");
+      vb.type = "button";
+      vb.className = "lp-mw-vote";
+      vb.textContent = "🗳️ Start a crew vote";
+      vb.addEventListener("click", function () { openVoteSheet(null); });
+      mwEl.appendChild(vb);
+    }
+    if (!member) {
+      var foot = document.createElement("div");
+      foot.className = "lp-mw-join";
+      var t = document.createElement("span");
+      t.textContent = "Make your picks count. Only RaveFAM members' picks are counted here.";
+      foot.appendChild(t);
+      var jb = document.createElement("button");
+      jb.type = "button";
+      jb.textContent = "Join free";
+      jb.addEventListener("click", function () {
+        if (local.length) goSave();
+        else location.href = "/app";
+      });
+      foot.appendChild(jb);
+      mwEl.appendChild(foot);
+    }
+  }
+
+  function toggleFav(a) {
+    var ids = actIds(a);
+    if (!ids) { toast("This artist can't be favorited yet."); return; }
+    var on = !isFav(a);
+    ids.forEach(function (id) { if (on) favs[id] = true; else delete favs[id]; });
+    refresh(a, ".fav");
+    window.LineupMember.client(function (sb) {
+      var q = on
+        ? sb.from("raver_favorite_artists").upsert(ids.map(function (id) {
+            return { raver_id: member.raverId, artist_id: id };
+          }), { onConflict: "raver_id,artist_id", ignoreDuplicates: true })
+        : sb.from("raver_favorite_artists").delete().eq("raver_id", member.raverId).in("artist_id", ids);
+      q.then(function (res) {
+        if (!res.error) {
+          if (on) toast("♡ " + a.name + " added to your favorites. We'll show you where they play next.");
+          return;
+        }
+        ids.forEach(function (id) { if (on) delete favs[id]; else favs[id] = true; });
+        toast("⚠️ Couldn't update your favorites. Try again.");
+        refresh();
+      }, noop);
+    });
+  }
+
+  // "🔥 Most wanted": reorders the rendered deck by public want count, then
+  // crew picks. The page's render() rebuilds the deck on every filter change,
+  // so this re-sorts after each rebuild.
+  var deckObserver = null;
+  function sortDeck() {
+    var deck = document.getElementById("deck");
+    if (!deck || !sortWanted) return;
+    var byName = {};
+    acts.forEach(function (a) { byName[a.name] = a; });
+    var cards = Array.prototype.slice.call(deck.children);
+    var scored = cards.map(function (c, i) {
+      var btn = c.querySelector && c.querySelector(".pick");
+      var a = btn && byName[btn.dataset.n];
+      var w = a ? actWant(a) : null;
+      return { c: c, i: i, s: (w ? w.want * 1000 : 0) + (a ? actCrew(a).length : 0) };
+    });
+    scored.sort(function (x, y) { return y.s - x.s || x.i - y.i; });
+    if (deckObserver) deckObserver.disconnect();
+    scored.forEach(function (x) { deck.appendChild(x.c); });
+    if (deckObserver) deckObserver.observe(deck, { childList: true });
+  }
+  function watchDeck() {
+    var deck = document.getElementById("deck");
+    if (!deck || deckObserver || !window.MutationObserver) return;
+    deckObserver = new MutationObserver(function () { if (sortWanted) sortDeck(); });
+    deckObserver.observe(deck, { childList: true });
+  }
+
+  function logEvent(name, props) {
+    window.LineupMember.client(function (sb) {
+      sb.rpc("log_analytics_event", {
+        p_event_name: name,
+        p_raver_id: member && member.raverId ? member.raverId : null,
+        p_visitor_id: window.LineupMember.visitorId(),
+        p_properties: props || {}
+      }).then(noop, noop);
+    });
+  }
+
+  // ----- toast -----
+  var toastEl = null, toastTimer = null;
+  function toast(msg, actionLabel, action) {
+    if (!toastEl) {
+      toastEl = document.createElement("div");
+      toastEl.className = "lp-toast";
+      toastEl.setAttribute("role", "status");
+      toastEl.setAttribute("aria-live", "polite");
+      document.body.appendChild(toastEl);
+    }
+    toastEl.innerHTML = "";
+    var t = document.createElement("span");
+    t.textContent = msg;
+    toastEl.appendChild(t);
+    if (actionLabel && action) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.textContent = actionLabel;
+      b.addEventListener("click", function () { hideToast(); action(); });
+      toastEl.appendChild(b);
+    }
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, actionLabel ? 6000 : 3500);
+  }
+  function hideToast() { if (toastEl) toastEl.classList.remove("show"); }
+
+  // ----- save handoff (visitors) -----
+  function goSave(fromSlug, n) {
+    var from = typeof fromSlug === "string" ? fromSlug : slug;
+    logEvent("explorer_save_click", { slug: from, picks: typeof n === "number" ? n : local.length, page: slug || "hub" });
+    try {
+      window.localStorage.setItem(FROM_KEY, JSON.stringify({ slug: from, back: location.pathname + location.search }));
+    } catch (e) {}
+    location.href = "/app?picks=1" + (from ? "&from=" + encodeURIComponent(from) : "");
+  }
+
+  // ----- hub (/lineup-explorer/): Your picks box + ☆ row on picked cards -----
+  function initHub() {
+    var cards = document.querySelectorAll(".event-card[href^='/lineup-explorer/']");
+    if (!cards.length) return;
+    var all = readAll();
+    var today = new Date().toISOString().slice(0, 10);
+    var rows = [];
+    Array.prototype.forEach.call(cards, function (c) {
+      var s = c.getAttribute("href").replace("/lineup-explorer/", "").replace(/\.html$/, "");
+      var p = all[s];
+      var names = p && Array.isArray(p.n) ? p.n.filter(function (x) { return typeof x === "string"; }) : [];
+      if (!names.length) return;
+      var row = document.createElement("div");
+      row.className = "event-picks";
+      row.textContent = "📋 " + names.length + (names.length === 1 ? " pick: " : " picks: ") +
+        names.slice(0, 3).join(", ") + (names.length > 3 ? ", …" : "");
+      var foot = c.querySelector(".event-footer");
+      c.insertBefore(row, foot || null);
+      var nameEl = c.querySelector(".event-name");
+      rows.push({
+        slug: s, names: names, at: p.at || "", href: c.getAttribute("href"),
+        title: p.t || (nameEl ? nameEl.textContent.replace(/\s+/g, " ").trim() : s),
+        past: c.dataset.date ? c.dataset.date < today : false
+      });
+    });
+    if (!rows.length) return;
+    var upcoming = rows.filter(function (r) { return !r.past; });
+    var total = upcoming.reduce(function (n, r) { return n + r.names.length; }, 0);
+    var latest = upcoming.slice().sort(function (a, b) { return a.at < b.at ? 1 : -1; })[0];
+
+    var box = document.createElement("section");
+    box.className = "lp-hub";
+    box.setAttribute("aria-labelledby", "lpHubTitle");
+    var h = document.createElement("h2");
+    h.id = "lpHubTitle";
+    h.textContent = "📋 Your picks";
+    box.appendChild(h);
+    var list = document.createElement("ul");
+    rows.forEach(function (r) {
+      var li = document.createElement("li");
+      var a = document.createElement("a");
+      a.href = r.href;
+      a.textContent = r.title;
+      li.appendChild(a);
+      var span = document.createElement("span");
+      span.textContent = " · " + r.names.slice(0, 4).join(", ") + (r.names.length > 4 ? " +" + (r.names.length - 4) : "");
+      li.appendChild(span);
+      list.appendChild(li);
+    });
+    box.appendChild(list);
+    var foot = document.createElement("div");
+    foot.className = "lp-save";
+    var msg = document.createElement("span");
+    msg.className = "lp-save-msg";
+    msg.textContent = "Your picks only live on this device. Save them to RaveFAM so they follow you and your crew can see them.";
+    foot.appendChild(msg);
+    if (latest) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.textContent = "Save my picks";
+      b.addEventListener("click", function () { goSave(latest.slug, total); });
+      foot.appendChild(b);
+    }
+    box.appendChild(foot);
+    var anchor = document.querySelector(".controls");
+    if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(box, anchor);
+  }
+
+  // ----- hub, members: For You (Your Season + artists on tour) + card badges -----
+  function hubCards() {
+    var out = {};
+    var today = new Date().toISOString().slice(0, 10);
+    Array.prototype.forEach.call(document.querySelectorAll(".event-card[href^='/lineup-explorer/']"), function (c) {
+      var s = c.getAttribute("href").replace("/lineup-explorer/", "").replace(/\.html$/, "");
+      out[s] = { el: c, href: c.getAttribute("href"), past: c.dataset.date ? c.dataset.date < today : false };
+    });
+    return out;
+  }
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  function initHubMember(m) {
+    var cards = hubCards();
+    if (!Object.keys(cards).length) return;
+    var rid = m.raverId;
+    window.LineupMember.client(function (sb) {
+      Promise.all([
+        sb.from("raver_festivals").select("festival_id").eq("raver_id", rid),
+        sb.from("raver_festival_interest").select("festival_id").eq("raver_id", rid),
+        sb.from("raver_artist_plans").select("festival_id").eq("raver_id", rid),
+        sb.from("raver_favorite_artists").select("artist_id").eq("raver_id", rid)
+      ]).then(function (out) {
+        var rows = function (i) { return (out[i] && out[i].data) || []; };
+        var status = {}, planN = {}, fids = {};
+        rows(0).forEach(function (r) { status[r.festival_id] = "going"; fids[r.festival_id] = true; });
+        rows(1).forEach(function (r) { if (!status[r.festival_id]) status[r.festival_id] = "interested"; fids[r.festival_id] = true; });
+        rows(2).forEach(function (r) { planN[r.festival_id] = (planN[r.festival_id] || 0) + 1; fids[r.festival_id] = true; });
+        var favIds = rows(3).map(function (r) { return r.artist_id; });
+        var ids = Object.keys(fids);
+        Promise.all([
+          ids.length ? sb.from("festivals").select("id,slug,name,date").in("id", ids).is("deleted_at", null) : Promise.resolve({ data: [] }),
+          favIds.length ? sb.from("artists").select("id,name,name_lower").in("id", favIds) : Promise.resolve({ data: [] })
+        ]).then(function (res) {
+          renderHubMember(cards, (res[0] && res[0].data) || [], status, planN, (res[1] && res[1].data) || []);
+        }, noop);
+      }, noop);
+    });
+  }
+
+  // ----- hub, everyone: 🔥 Most wanted line per card + Most wanted sort (Phase 3a) -----
+  // Counts come from get_lineup_hub_most_wanted(): members' live picks only,
+  // 5+ only (enforced on the server).
+  function initHubWanted() {
+    var cards = hubCards();
+    if (!Object.keys(cards).length) return;
+    window.LineupMember.client(function (sb) {
+      sb.rpc("get_lineup_hub_most_wanted").then(function (res) {
+        var d = res && res.data;
+        if (!d || !d.ok || !Array.isArray(d.fests) || !d.fests.length) return;
+        var fans = {};
+        d.fests.forEach(function (f) {
+          var c = f && cards[f.slug];
+          if (!c || c.past) return;
+          if (f.fans) fans[f.slug] = f.fans;
+          if (!f.top || !f.want) return;
+          var row = el("div", "lp-hub-mw", "🔥 Most wanted: " + f.top + " (" + f.want + ")");
+          c.el.insertBefore(row, c.el.querySelector(".event-footer") || null);
+        });
+        if (Object.keys(fans).length) addHubSort(cards, fans);
+      }, noop);
+    });
+  }
+
+  function addHubSort(cards, fans) {
+    var grid = document.querySelector(".grid");
+    var controls = document.querySelector(".controls");
+    if (!grid || !controls || controls.querySelector(".lp-sort")) return;
+    var order = Array.prototype.slice.call(grid.children);
+    var b = el("button", "lp-sort", "🔥 Most wanted");
+    b.type = "button";
+    b.setAttribute("aria-pressed", "false");
+    b.addEventListener("click", function () {
+      var on = b.getAttribute("aria-pressed") !== "true";
+      b.setAttribute("aria-pressed", String(on));
+      var list = order.slice();
+      if (on) {
+        var slugOf = function (c) {
+          var h = c.getAttribute && c.getAttribute("href");
+          return h ? h.replace("/lineup-explorer/", "").replace(/\.html$/, "") : "";
+        };
+        list = list.map(function (c, i) { return { c: c, i: i, n: fans[slugOf(c)] || 0 }; })
+          .sort(function (x, y) { return y.n - x.n || x.i - y.i; })
+          .map(function (x) { return x.c; });
+      }
+      list.forEach(function (c) { grid.appendChild(c); });
+    });
+    controls.appendChild(b);
+  }
+
+  function renderHubMember(cards, fests, status, planN, favArtists) {
+    // ♡ favorites playing each explorer page, from the hub's artist index.
+    var index = window.ARTIST_INDEX || [];
+    var byKey = {};
+    index.forEach(function (x) { byKey[x.name_lower] = x; });
+    var favPlaying = {}; // slug -> [names]
+    var tour = [];       // { name, fests: [{ slug, title }] }
+    favArtists.forEach(function (a) {
+      var x = byKey[a.name_lower];
+      if (!x) return;
+      var up = x.festivals.filter(function (f) { return cards[f.slug] && !cards[f.slug].past; });
+      up.forEach(function (f) { (favPlaying[f.slug] = favPlaying[f.slug] || []).push(a.name); });
+      if (up.length) tour.push({ name: a.name, fests: up });
+    });
+    tour.sort(function (x, y) { return y.fests.length - x.fests.length || (x.name < y.name ? -1 : 1); });
+
+    // Card badges.
+    var bySlug = {};
+    fests.forEach(function (f) { if (f.slug) bySlug[f.slug] = f; });
+    Object.keys(cards).forEach(function (slug) {
+      var f = bySlug[slug];
+      var st = f && status[f.id];
+      var picks = f ? planN[f.id] || 0 : 0;
+      var fav = favPlaying[slug] || [];
+      if (!st && !picks && !fav.length) return;
+      var row = el("div", "lp-badges");
+      if (st) row.appendChild(el("span", "lp-b lp-b-" + st, st === "going" ? "🎟️ Going" : "👀 Interested"));
+      if (picks) row.appendChild(el("span", "lp-b lp-b-picks", "📋 " + picks + (picks === 1 ? " pick" : " picks")));
+      if (fav.length) row.appendChild(el("span", "lp-b lp-b-fav",
+        "♡ " + fav.length + (fav.length === 1 ? " favorite playing: " : " favorites playing: ") +
+        fav.slice(0, 3).join(", ") + (fav.length > 3 ? ", …" : "")));
+      var c = cards[slug].el;
+      c.insertBefore(row, c.querySelector(".event-footer") || null);
+    });
+
+    // Your Season: upcoming raves you're Going to or Interested in.
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var season = fests.filter(function (f) { return status[f.id] && cards[f.slug] && !cards[f.slug].past; })
+      .sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+    if (!season.length && !tour.length) return;
+
+    var box = el("section", "lp-foryou");
+    box.setAttribute("aria-labelledby", "lpForYouTitle");
+    var h = el("h2", null, "For you");
+    h.id = "lpForYouTitle";
+    box.appendChild(h);
+
+    if (season.length) {
+      box.appendChild(el("h3", null, "Your season"));
+      var ul = el("ul", "lp-season");
+      season.forEach(function (f) {
+        var li = el("li");
+        var st = status[f.id];
+        li.appendChild(el("span", "lp-b lp-b-" + st, st === "going" ? "Going" : "Interested"));
+        var a = el("a", "lp-season-name", f.name);
+        a.href = cards[f.slug].href;
+        li.appendChild(a);
+        var parts = [];
+        if (f.date) {
+          var p = f.date.split("-").map(Number);
+          var days = Math.round((new Date(p[0], p[1] - 1, p[2]) - today) / 86400000);
+          parts.push(days > 1 ? "in " + days + " days" : days === 1 ? "tomorrow" : days === 0 ? "today" : "on now");
+        }
+        if (planN[f.id]) parts.push("📋 " + planN[f.id]);
+        if (favPlaying[f.slug]) parts.push("♡ " + favPlaying[f.slug].length);
+        li.appendChild(el("span", "lp-season-meta", parts.join(" · ")));
+        var open = el("a", "lp-season-open", "Open in RaveFAM");
+        open.href = "/app?rave=" + encodeURIComponent(f.slug);
+        li.appendChild(open);
+        ul.appendChild(li);
+      });
+      box.appendChild(ul);
+    }
+
+    if (tour.length) {
+      box.appendChild(el("h3", null, "Your artists on tour"));
+      var wrap = el("div", "lp-tour");
+      tour.slice(0, 24).forEach(function (t, i) {
+        var chip = el("button", "lp-tour-chip");
+        chip.type = "button";
+        chip.setAttribute("aria-expanded", "false");
+        var listId = "lpTour" + i;
+        chip.setAttribute("aria-controls", listId);
+        chip.appendChild(document.createTextNode("♡ " + t.name + " "));
+        chip.appendChild(el("b", null, String(t.fests.length)));
+        var list = el("ul", "lp-tour-list");
+        list.id = listId;
+        list.hidden = true;
+        t.fests.forEach(function (f) {
+          var li = el("li");
+          var a = el("a", null, f.title);
+          a.href = cards[f.slug].href + "?q=" + encodeURIComponent(t.name);
+          li.appendChild(a);
+          list.appendChild(li);
+        });
+        chip.addEventListener("click", function () {
+          var open = list.hidden;
+          list.hidden = !open;
+          chip.setAttribute("aria-expanded", String(open));
+        });
+        var item = el("div", "lp-tour-item");
+        item.appendChild(chip);
+        item.appendChild(list);
+        wrap.appendChild(item);
+      });
+      box.appendChild(wrap);
+    }
+
+    var anchor = document.querySelector(".lp-hub") || document.querySelector(".controls");
+    if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(box, anchor);
+  }
+
+  // ----- member writes -----
+  function planRows(ids) {
+    var seen = {};
+    return ids.filter(function (id) { if (seen[id]) return false; seen[id] = true; return true; })
+      .map(function (id) { return { raver_id: member.raverId, artist_id: id, festival_id: member.festival.id }; });
+  }
+
+  function upsertPlans(ids, done) {
+    window.LineupMember.client(function (sb) {
+      sb.from("raver_artist_plans")
+        .upsert(planRows(ids), { onConflict: "raver_id,artist_id,festival_id", ignoreDuplicates: true })
+        .then(function (res) { done(!res.error); }, function () { done(false); });
+    });
+  }
+
+  function setPlan(a, on) {
+    var ids = actIds(a);
+    if (on) {
+      ids.forEach(function (id) { plans[id] = true; });
+      upsertPlans(ids, function (ok) {
+        if (ok) return;
+        ids.forEach(function (id) { delete plans[id]; });
+        toast("⚠️ Couldn't save that pick. Try again.");
+        refresh();
+      });
+      return;
+    }
+    // Keep an artist's plan if another picked act still needs it
+    // (e.g. "Prospa" stays picked when "Prospa b2b Josh Baker" is removed).
+    var keep = {};
+    acts.forEach(function (o) {
+      if (o === a || !isPicked(o)) return;
+      (actIds(o) || []).forEach(function (id) { keep[id] = true; });
+    });
+    var drop = ids.filter(function (id) { return !keep[id]; });
+    drop.forEach(function (id) { delete plans[id]; });
+    if (!drop.length) return;
+    window.LineupMember.client(function (sb) {
+      sb.from("raver_artist_plans").delete()
+        .eq("raver_id", member.raverId).eq("festival_id", member.festival.id).in("artist_id", drop)
+        .then(function (res) {
+          if (!res.error) return;
+          drop.forEach(function (id) { plans[id] = true; });
+          toast("⚠️ Couldn't remove that pick. Try again.");
+          refresh();
+        }, noop);
+    });
+  }
+
+  // Moves browser-held picks for this page into raver_artist_plans. Acts
+  // whose artists aren't in the database yet stay in the browser.
+  function flushLocal(done) {
+    var ids = [], moved = [], keep = [];
+    local.forEach(function (name) {
+      var got = actIds({ name: name });
+      if (got) { ids = ids.concat(got); moved.push(name); } else { keep.push(name); }
+    });
+    if (!ids.length) { done(0); return; }
+    upsertPlans(ids, function (ok) {
+      if (!ok) { done(-1); return; }
+      ids.forEach(function (id) { plans[id] = true; });
+      local = keep;
+      saveLocal();
+      done(moved.length);
+    });
+  }
+
+  function writeRsvp(v, done) {
+    var fid = member.festival.id, rid = member.raverId;
+    var add = v === "going" ? "raver_festivals" : "raver_festival_interest";
+    var other = v === "going" ? "raver_festival_interest" : "raver_festivals";
+    window.LineupMember.client(function (sb) {
+      sb.from(add)
+        .upsert([{ raver_id: rid, festival_id: fid }], { onConflict: "raver_id,festival_id", ignoreDuplicates: true })
+        .then(function (res) {
+          if (res.error) { done(false, res.error); return; }
+          sb.from(other).delete().eq("raver_id", rid).eq("festival_id", fid).then(noop, noop);
+          logEvent("first_rsvp_updated", { festival_id: fid, direction: v, source: "explorer" });
+          done(true);
+        }, function (err) { done(false, err); });
+    });
+  }
+
+  // ----- first-star sheet (members) -----
+  var sheetEl = null, sheetLastFocus = null;
+  function askedKey() { return "rf_picks_asked_" + slug; }
+  function asked() { try { return !!window.sessionStorage.getItem(askedKey()); } catch (e) { return false; } }
+  function markAsked() { try { window.sessionStorage.setItem(askedKey(), "1"); } catch (e) {} }
+
+  function openSheet(actName) {
+    if (!isMemberMode()) return;
+    markAsked();
+    var fest = member.festival.name || "this rave";
+    if (!sheetEl) {
+      sheetEl = document.createElement("div");
+      sheetEl.className = "lp-overlay";
+      sheetEl.innerHTML =
+        '<div class="lp-sheet" role="dialog" aria-modal="true" aria-labelledby="lpSheetTitle">' +
+          '<div class="lp-sheet-top"><span class="lp-badge">RaveFAM</span>' +
+          '<button type="button" class="lp-x" aria-label="Close">✕</button></div>' +
+          '<h3 id="lpSheetTitle"></h3>' +
+          '<p class="lp-sub">We only ask once per rave. You can change it anytime.</p>' +
+          '<div class="lp-actions">' +
+            '<button type="button" class="lp-opt lp-going" data-v="going">🎟️ I\'m going</button>' +
+            '<button type="button" class="lp-opt lp-int" data-v="interested">👀 Interested</button>' +
+            '<button type="button" class="lp-opt lp-browse" data-v="browse">Just browsing</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(sheetEl);
+      sheetEl.addEventListener("click", function (e) {
+        if (e.target === sheetEl || e.target.closest(".lp-x")) { answer("browse"); return; }
+        var b = e.target.closest(".lp-opt");
+        if (b) answer(b.dataset.v);
+      });
+      sheetEl.addEventListener("keydown", function (e) { if (e.key === "Escape") answer("browse"); });
+    }
+    var title = sheetEl.querySelector("#lpSheetTitle");
+    title.textContent = (actName ? actName + " added to your picks. " : "") + "Are you going to " + fest + "?";
+    sheetEl.querySelectorAll(".lp-opt").forEach(function (b) {
+      b.setAttribute("aria-pressed", String(b.dataset.v === rsvp));
+      b.disabled = false;
+    });
+    sheetLastFocus = document.activeElement;
+    sheetEl.classList.add("show");
+    var first = sheetEl.querySelector(".lp-going");
+    if (first) first.focus();
+  }
+
+  function closeSheet() {
+    if (!sheetEl) return;
+    sheetEl.classList.remove("show");
+    if (sheetLastFocus && sheetLastFocus.focus && document.body.contains(sheetLastFocus)) sheetLastFocus.focus();
+  }
+
+  function answer(v) {
+    var fest = member.festival.name || "this rave";
+    if (v === "browse" || v === rsvp) {
+      closeSheet();
+      if (v === "browse" && !rsvp && local.length) toast("Picks kept on this device for now.");
+      return;
+    }
+    sheetEl.querySelectorAll(".lp-opt").forEach(function (b) { b.disabled = true; });
+    writeRsvp(v, function (ok, err) {
+      if (!ok) {
+        sheetEl.querySelectorAll(".lp-opt").forEach(function (b) { b.disabled = false; });
+        var blocked = err && /RSVP_BLOCKED/.test(err.message || "");
+        toast(blocked ? "🔒 That RSVP is blocked for this rave." : "⚠️ Couldn't save that. Try again.");
+        return;
+      }
+      rsvp = v;
+      closeSheet();
+      flushLocal(function (n) {
+        var lead = v === "going" ? "✅ You're going to " + fest + "!" : "👀 Watching " + fest + ".";
+        var tail = n > 0 ? " " + n + (n === 1 ? " pick" : " picks") + " saved." : n < 0 ? " Picks are still on this device." : "";
+        toast(lead + tail, "Change", function () { openSheet(null); });
+        refresh();
+      });
+    });
+  }
+
+  // ----- tapping ☆ -----
+  function toggle(a) {
+    var was = isPicked(a);
+    var inLocal = local.indexOf(a.name) !== -1;
+    if (was) {
+      if (inLocal) { local = local.filter(function (n) { return n !== a.name; }); saveLocal(); }
+      if (isMemberMode() && actIds(a) && actIds(a).every(function (id) { return plans[id]; })) setPlan(a, false);
+      refresh(a);
+      return;
+    }
+    if (isMemberMode() && rsvp && actIds(a)) {
+      setPlan(a, true);
+      refresh(a);
+      return;
+    }
+    local.push(a.name);
+    saveLocal();
+    refresh(a);
+    if (isMemberMode()) {
+      if (!asked()) openSheet(a.name);
+      else toast("📋 Saved on this device.", "Add to RaveFAM", function () { openSheet(null); });
+      return;
+    }
+    var tipped = false;
+    try { tipped = !!window.localStorage.getItem(TIP_KEY); window.localStorage.setItem(TIP_KEY, "1"); } catch (e) {}
+    if (!tipped) toast("📋 " + a.name + " added to your picks on this device.", "Save to RaveFAM", function () { goSave(); });
+  }
+
+  // ----- picks bar + signup banner -----
+  function renderBar() {
+    if (!barEl) return;
+    var picked = pickedActs();
+    var n = picked.length;
+    var days = {}, order = [];
+    picked.forEach(function (a) {
+      if (!a.night) return;
+      if (!days[a.night]) { days[a.night] = 0; order.push(a.night); }
+      days[a.night]++;
+    });
+    barEl.dataset.mode = isMemberMode() ? "member" : "visitor";
+    barEl.dataset.rsvp = rsvp || "";
+    maybeAutoNow();
+    ["all", "picks", "favs", "crew", "shared", "schedule", "now"].forEach(function (v) {
+      barEl.querySelector('[data-v="' + v + '"]').setAttribute("aria-pressed", String(view === v));
+    });
+    var member = isMemberMode();
+    barEl.querySelector('[data-v="favs"]').hidden = !member;
+    barEl.querySelector('[data-v="now"]').hidden = view !== "now" && !(festLive(Date.now()) && nowItems().length);
+    var crewN = member ? acts.filter(function (a) { return actCrew(a).length; }).length : 0;
+    barEl.querySelector('[data-v="crew"]').hidden = !crewN && view !== "crew";
+    barEl.querySelector(".lp-nc").textContent = crewN;
+    var shBtn = barEl.querySelector('[data-v="shared"]');
+    shBtn.hidden = !shared;
+    if (shared) {
+      shBtn.querySelector(".lp-sn").textContent = shared.first + "'s picks";
+      shBtn.querySelector(".lp-nsh").textContent = shared.n;
+    }
+    barEl.querySelector(".lp-share").hidden = !member || !rsvp;
+    var sortBtn = barEl.querySelector(".lp-sort");
+    sortBtn.hidden = !member;
+    sortBtn.setAttribute("aria-pressed", String(sortWanted));
+    var favN = member ? acts.filter(isFav).length : 0;
+    barEl.querySelector(".lp-nf").textContent = favN;
+    var meta = [];
+    if (member && favN) meta.push(favN + (favN === 1 ? " of your favorites plays here" : " of your favorites play here"));
+    var goingHere = member ? crewHere().filter(function (m) { return m.s === "going"; }).length : 0;
+    if (goingHere) meta.push(goingHere + " crew going");
+    var metaEl = barEl.querySelector(".lp-meta");
+    metaEl.textContent = meta.join(" · ");
+    metaEl.hidden = !meta.length;
+    barEl.querySelector(".lp-n").textContent = n;
+    barEl.querySelector(".lp-days").textContent = order.map(function (k) {
+      return String(k).toUpperCase() + " " + days[k];
+    }).join(" · ");
+
+    renderCrewPanel();
+    renderSchedule();
+    renderNow();
+    renderCheckoff();
+    renderVotes();
+    renderMostWanted();
+    renderShareBanner();
+    var msg = "", btn = "";
+    if (view === "picks" && local.length) {
+      if (!member) {
+        msg = "Your picks only live on this device. Save them to RaveFAM so they follow you and your crew can see them.";
+        btn = "Save my picks";
+      } else if (isMemberMode() && !rsvp) {
+        msg = "These picks stay on this device until you're Going or Interested.";
+        btn = "Choose";
+      }
+    } else if (view === "picks" && !n) {
+      msg = "Tap 📋 on any artist to add it to your picks.";
+    } else if (view === "favs" && !favN) {
+      msg = "Tap ♡ on an artist to follow them across every lineup.";
+    }
+    saveEl.hidden = !msg;
+    saveEl.querySelector(".lp-save-msg").textContent = msg;
+    var b = saveEl.querySelector("button");
+    b.hidden = !btn;
+    b.textContent = btn;
+    saveSnap();
+    syncReminders();
+  }
+
+  function buildBar() {
+    var anchor = document.getElementById("count") || document.getElementById("deck");
+    if (!anchor || !anchor.parentNode) return;
+    barEl = document.createElement("div");
+    barEl.className = "lp-bar";
+    barEl.setAttribute("role", "group");
+    barEl.setAttribute("aria-label", "Show all artists or only your picks");
+    barEl.innerHTML =
+      '<button type="button" class="lp-f" data-v="all">All artists</button>' +
+      '<button type="button" class="lp-f" data-v="picks"><span aria-hidden="true">📋</span> My picks <b class="lp-n">0</b></button>' +
+      '<button type="button" class="lp-f lp-fav-f" data-v="favs" hidden><span aria-hidden="true">♡</span> Favorites <b class="lp-nf">0</b></button>' +
+      '<button type="button" class="lp-f lp-crew-f" data-v="crew" hidden><span aria-hidden="true">👥</span> Crew picks <b class="lp-nc">0</b></button>' +
+      '<button type="button" class="lp-f lp-sched-f" data-v="schedule"><span aria-hidden="true">🗓️</span> My schedule</button>' +
+      '<button type="button" class="lp-f lp-now-f" data-v="now" hidden><span aria-hidden="true">🎧</span> On deck</button>' +
+      '<button type="button" class="lp-f lp-shared-f" data-v="shared" hidden><span aria-hidden="true">📋</span> <span class="lp-sn"></span> <b class="lp-nsh">0</b></button>' +
+      '<button type="button" class="lp-share" hidden>📤 Share my picks</button>' +
+      '<button type="button" class="lp-sort" hidden aria-pressed="false">🔥 Most wanted</button>' +
+      '<span class="lp-days"></span>' +
+      '<span class="lp-meta" hidden></span>';
+    barEl.addEventListener("click", function (e) {
+      if (e.target.closest(".lp-sort")) { sortWanted = !sortWanted; refresh(); return; }
+      if (e.target.closest(".lp-share")) { openShareSheet(); return; }
+      var b = e.target.closest(".lp-f");
+      if (!b) return;
+      view = b.dataset.v;
+      autoNowDone = true;
+      refresh();
+    });
+    saveEl = document.createElement("div");
+    saveEl.className = "lp-save";
+    saveEl.hidden = true;
+    saveEl.innerHTML = '<span class="lp-save-msg"></span><button type="button"></button>';
+    saveEl.querySelector("button").addEventListener("click", function () {
+      if (!member) goSave(); else openSheet(null);
+    });
+    anchor.parentNode.insertBefore(barEl, anchor);
+    anchor.parentNode.insertBefore(saveEl, anchor);
+  }
+
+  function refresh(focusAct, sel) {
+    renderBar();
+    if (onRender) onRender();
+    sortDeck();
+    if (focusAct) {
+      var btns = document.querySelectorAll(sel || focusSel || ".pick");
+      for (var i = 0; i < btns.length; i++) {
+        if (btns[i].dataset.n === focusAct.name) { btns[i].focus(); break; }
+      }
+    }
+  }
+
+  function loadWantCounts() {
+    if (!slug) return;
+    window.LineupMember.client(function (sb) {
+      sb.rpc("get_lineup_want_counts", { p_slug: slug }).then(function (res) {
+        var d = res && res.data;
+        if (!d || !d.ok || !Array.isArray(d.artists) || !d.artists.length) return;
+        d.artists.forEach(function (x) {
+          if (!x || !x.name) return;
+          var k = String(x.name).toLowerCase();
+          wantByKey[k] = { want: x.want, gain_7d: x.gain_7d };
+          wantTop.push({ key: k, want: x.want, gain_7d: x.gain_7d });
+          if (x.want > wantMax) wantMax = x.want;
+        });
+        refresh();
+      }, noop);
+    });
+  }
+
+  // ----- sharing (Phase 2b) -----
+  // Owner: one link per raver per festival (?by=<token>) from
+  // get_or_create_share_link; Copy / phone share / Post to a crew Huddle /
+  // Turn off. Viewer: get_shared_lineup(token) returns the sharer's first
+  // name and picks for this page only.
+  var shared = null;       // { first, keys: { name_lower: true }, n }
+  var sharedGone = false;  // link was turned off or expired
+  var shareSheet = null;
+
+  function isShared(a) {
+    return !!shared && splitKeys(a.name).every(function (k) { return shared.keys[k]; });
+  }
+
+  function loadShared(token) {
+    window.LineupMember.client(function (sb) {
+      sb.rpc("get_shared_lineup", { p_token: token }).then(function (res) {
+        var d = res && res.data;
+        if (!d || !d.ok || d.slug !== slug) { sharedGone = true; refresh(); return; }
+        var keys = {}, n = 0;
+        (d.artists || []).forEach(function (nm) { keys[String(nm).toLowerCase()] = true; });
+        acts.forEach(function (a) { if (splitKeys(a.name).every(function (k) { return keys[k]; })) n++; });
+        shared = { first: d.first_name || "A friend", keys: keys, n: n };
+        logEvent("lineup_share_opened", { slug: slug, picks: n });
+        refresh();
+      }, noop);
+    });
+  }
+
+  var shareBannerEl = null;
+  function renderShareBanner() {
+    if (!barEl) return;
+    if (!shareBannerEl) {
+      shareBannerEl = document.createElement("div");
+      shareBannerEl.className = "lp-sharebanner";
+      shareBannerEl.setAttribute("role", "status");
+      var anchor = document.querySelector(".lp-crew") || barEl;
+      anchor.parentNode.insertBefore(shareBannerEl, anchor);
+    }
+    shareBannerEl.innerHTML = "";
+    if (sharedGone) {
+      shareBannerEl.hidden = false;
+      shareBannerEl.appendChild(document.createTextNode("This shared lineup was turned off or has expired."));
+      return;
+    }
+    if (!shared) { shareBannerEl.hidden = true; return; }
+    shareBannerEl.hidden = false;
+    var t = document.createElement("span");
+    t.className = "lp-sharebanner-msg";
+    t.textContent = "📋 " + shared.first + " shared their picks" + (shared.n ? " (" + shared.n + ")" : "") + ".";
+    shareBannerEl.appendChild(t);
+    if (!member) {
+      var j = document.createElement("button");
+      j.type = "button";
+      j.textContent = "Join " + shared.first + " on RaveFAM";
+      j.addEventListener("click", function () {
+        if (local.length) goSave(); else location.href = "/app";
+      });
+      shareBannerEl.appendChild(j);
+    }
+  }
+
+  function shareUrl(token) {
+    return location.origin + "/lineup-explorer/" + slug + "?by=" + encodeURIComponent(token);
+  }
+
+  function openShareSheet() {
+    if (!isMemberMode()) return;
+    window.LineupMember.client(function (sb) {
+      sb.rpc("get_or_create_share_link", { p_festival_id: member.festival.id }).then(function (res) {
+        var d = res && res.data;
+        if (!d || !d.ok || !d.token) { toast("⚠️ Couldn't make a share link. Try again."); return; }
+        logEvent("lineup_share_created", { slug: slug, picks: pickedActs().length });
+        showShareSheet(sb, d.token);
+      }, function () { toast("⚠️ Couldn't make a share link. Try again."); });
+    });
+  }
+
+  function showShareSheet(sb, token) {
+    var url = shareUrl(token);
+    var fest = member.festival.name || "this rave";
+    if (!shareSheet) {
+      shareSheet = document.createElement("div");
+      shareSheet.className = "lp-overlay lp-share-overlay";
+      shareSheet.addEventListener("click", function (e) { if (e.target === shareSheet) closeShareSheet(); });
+      shareSheet.addEventListener("keydown", function (e) { if (e.key === "Escape") closeShareSheet(); });
+      document.body.appendChild(shareSheet);
+    }
+    shareSheet.innerHTML =
+      '<div class="lp-sheet" role="dialog" aria-modal="true" aria-labelledby="lpShareTitle">' +
+        '<div class="lp-sheet-top"><span class="lp-badge">RaveFAM</span>' +
+        '<button type="button" class="lp-x" aria-label="Close">✕</button></div>' +
+        '<h3 id="lpShareTitle"></h3>' +
+        '<p class="lp-sub">Anyone with the link sees your first name and your picks for this rave. It updates as your picks change and stops working 30 days after the rave.</p>' +
+        '<div class="lp-share-url"><input type="text" readonly aria-label="Share link"><button type="button" class="lp-copy">Copy link</button></div>' +
+        '<div class="lp-share-actions"></div>' +
+        '<div class="lp-share-crews" hidden><p class="lp-share-label">Post to a crew Huddle</p><div class="lp-share-crew-list"></div></div>' +
+        '<button type="button" class="lp-opt lp-browse lp-share-off">Turn off this link</button>' +
+      '</div>';
+    shareSheet.querySelector("#lpShareTitle").textContent = "Share your " + fest + " picks";
+    var input = shareSheet.querySelector("input");
+    input.value = url;
+    shareSheet.querySelector(".lp-x").addEventListener("click", closeShareSheet);
+    shareSheet.querySelector(".lp-copy").addEventListener("click", function () {
+      var done = function () { toast("🔗 Link copied."); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, function () { input.select(); });
+      else { input.select(); try { document.execCommand("copy"); done(); } catch (e) {} }
+    });
+    var actions = shareSheet.querySelector(".lp-share-actions");
+    if (navigator.share) {
+      var sh = document.createElement("button");
+      sh.type = "button";
+      sh.className = "lp-opt";
+      sh.textContent = "📤 Share…";
+      sh.addEventListener("click", function () {
+        navigator.share({ title: "My " + fest + " picks", url: url }).then(noop, noop);
+      });
+      actions.appendChild(sh);
+    }
+    shareSheet.querySelector(".lp-share-off").addEventListener("click", function () {
+      sb.rpc("turn_off_share_link", { p_festival_id: member.festival.id }).then(function (res) {
+        if (res && res.data && res.data.ok) { closeShareSheet(); toast("Link turned off. Old links won't open your picks."); }
+        else toast("⚠️ Couldn't turn the link off. Try again.");
+      }, noop);
+    });
+    // Crews you can post in (crews RLS already limits this to crews you lead
+    // or belong to that aren't Secret).
+    sb.from("crews").select("id,name").is("deleted_at", null).then(function (res) {
+      var rows = (res && res.data) || [];
+      if (!rows.length) return;
+      var box = shareSheet.querySelector(".lp-share-crews");
+      var list = box.querySelector(".lp-share-crew-list");
+      rows.forEach(function (c) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "lp-opt lp-share-crew";
+        b.textContent = "💬 " + c.name;
+        b.addEventListener("click", function () { postToHuddle(sb, c, url, b); });
+        list.appendChild(b);
+      });
+      box.hidden = false;
+    }, noop);
+    shareSheet.classList.add("show");
+    var first = shareSheet.querySelector(".lp-copy");
+    if (first) first.focus();
+  }
+
+  function closeShareSheet() { if (shareSheet) shareSheet.classList.remove("show"); }
+
+  // Same two steps as app.html's postHuddleSystemMessage: materialize the
+  // crew's room for this rave (upsert, ignore duplicates), look it up, post.
+  // A "lineup" card in the crew's Huddle room for this rave (festival:<id>),
+  // creating the room first if needed, as the app's postHuddleSystemMessage does.
+  function huddleLineupPost(sb, crewId, body, url) {
+    var fid = member.festival.id;
+    var roomKey = "festival:" + fid;
+    return sb.from("huddle_rooms").upsert([{
+      crew_id: crewId, created_by: member.userId, room_key: roomKey, kind: "festival",
+      name: (member.festival.name || "Rave") + " Huddle", festival_id: fid
+    }], { onConflict: "crew_id,room_key", ignoreDuplicates: true }).then(function () {
+      return sb.from("huddle_rooms").select("id").eq("crew_id", crewId).eq("room_key", roomKey).limit(1);
+    }).then(function (res) {
+      var room = res && res.data && res.data[0];
+      if (!room) throw new Error("no room");
+      return sb.from("huddle_messages").insert({
+        room_id: room.id, crew_id: crewId, sender_id: member.userId, kind: "lineup", body: body, media_url: url
+      });
+    }).then(function (res) {
+      if (res && res.error) throw res.error;
+    });
+  }
+
+  function postToHuddle(sb, c, url, btn) {
+    var names = pickedActs().map(function (a) { return a.name; });
+    var body = "📋 My picks for " + (member.festival.name || "this rave") + ": " +
+      (names.length ? names.slice(0, 5).join(", ") + (names.length > 5 ? " +" + (names.length - 5) : "") : "none yet");
+    btn.disabled = true;
+    huddleLineupPost(sb, c.id, body, url).then(function () {
+      btn.textContent = "✅ Posted to " + c.name;
+      logEvent("lineup_share_posted", { slug: slug, picks: names.length });
+    }).catch(function () {
+      btn.disabled = false;
+      toast("⚠️ Couldn't post to " + c.name + ". Try again.");
+    });
+  }
+
+  // ----- crew votes + Fam Faves (Phase 3b; get_lineup_crew_votes) -----
+  // A pick_many FAM Poll for this rave: each voter picks up to N sets. Only
+  // crewmates who are Going or Interested can vote, and once voting starts
+  // sets can be added but not removed (both enforced on the server). When a
+  // vote closes its top sets become that crew's Fam Faves.
+  var voteEl = null, voteSheet = null;
+  var ballot = {};         // poll id -> { artist id: true } while choosing
+  var changing = {};       // poll id -> true while re-choosing a cast vote
+  var voteIntent = null;   // { crew } from ?vote=1&crew= (the app's "Crew vote on a lineup")
+
+  function visibleVotes() {
+    var list = (votes && votes.votes) || [];
+    return list.filter(function (v) { return crewSel === "all" || v.crew_id === crewSel; });
+  }
+
+  // Crews whose closed vote made an act a Fam Fave (current switcher).
+  function actFaves(a) {
+    var ids = actIds(a) || [];
+    if (!ids.length) return [];
+    var out = [];
+    visibleVotes().forEach(function (v) {
+      if (!v.closed || !Array.isArray(v.faves)) return;
+      var hit = ids.some(function (id) { return v.faves.indexOf(id) !== -1; });
+      if (hit && out.indexOf(v.crew) === -1) out.push(v.crew);
+    });
+    return out;
+  }
+
+  function closesText(v) {
+    if (v.closed) return "Closed";
+    var ms = new Date(v.closes) - Date.now();
+    if (!(ms > 0)) return "Closed";
+    var d = Math.floor(ms / 86400000), h = Math.floor(ms / 3600000);
+    return "Closes in " + (d >= 1 ? d + (d === 1 ? " day" : " days") : h >= 1 ? h + "h" : "under an hour");
+  }
+
+  function voteCrewColor(el, col) {
+    if (col && /^#[0-9a-fA-F]{3,8}$/.test(col)) el.style.setProperty("--cc", col);
+  }
+
+  function renderVotes() {
+    if (!barEl) return;
+    if (!voteEl) {
+      voteEl = document.createElement("section");
+      voteEl.className = "lp-vote";
+      voteEl.setAttribute("aria-labelledby", "lpVoteTitle");
+      barEl.parentNode.insertBefore(voteEl, barEl);
+    }
+    var list = isMemberMode() ? visibleVotes() : [];
+    var canStart = isMemberMode() && votes && (votes.crews || []).length > 0;
+    if (!list.length && !canStart) { voteEl.hidden = true; return; }
+    voteEl.hidden = false;
+    voteEl.innerHTML = "";
+    var top = document.createElement("div");
+    top.className = "lp-vote-top";
+    var h = document.createElement("h2");
+    h.id = "lpVoteTitle";
+    h.textContent = "🗳️ Crew votes";
+    top.appendChild(h);
+    if (canStart) {
+      var sb = document.createElement("button");
+      sb.type = "button";
+      sb.className = "lp-vote-start";
+      sb.textContent = "Start a crew vote";
+      sb.addEventListener("click", function () { openVoteSheet(null); });
+      top.appendChild(sb);
+    }
+    voteEl.appendChild(top);
+    if (!list.length) {
+      var hint = document.createElement("p");
+      hint.className = "lp-vote-hint";
+      hint.textContent = "Can't agree on sets? Put your crew's picks to a vote. The top sets become your Fam Faves.";
+      voteEl.appendChild(hint);
+      return;
+    }
+    list.forEach(function (v) { voteEl.appendChild(voteCard(v)); });
+  }
+
+  function voteCard(v) {
+    var card = document.createElement("div");
+    card.className = "lp-vcard" + (v.closed ? " is-closed" : "");
+    voteCrewColor(card, v.col);
+    var head = document.createElement("div");
+    head.className = "lp-vcard-head";
+    var chip = document.createElement("span");
+    chip.className = "lp-vcrew";
+    chip.textContent = v.crew;
+    head.appendChild(chip);
+    var meta = document.createElement("span");
+    meta.className = "lp-vmeta";
+    meta.textContent = "Pick up to " + v.max + " · " + closesText(v);
+    head.appendChild(meta);
+    card.appendChild(head);
+    var q = document.createElement("p");
+    q.className = "lp-vq";
+    q.textContent = v.q;
+    card.appendChild(q);
+
+    var opts = Array.isArray(v.options) ? v.options : [];
+    var voting = !v.closed && votes.can_vote && (!v.my || changing[v.id]);
+    if (voting) {
+      if (changing[v.id] && !ballot[v.id]) {
+        ballot[v.id] = {};
+        (v.my || []).forEach(function (id) { ballot[v.id][id] = true; });
+      }
+      var sel = ballot[v.id] || (ballot[v.id] = {});
+      var n = Object.keys(sel).length;
+      var grid = document.createElement("div");
+      grid.className = "lp-vopts";
+      grid.setAttribute("role", "group");
+      grid.setAttribute("aria-label", "Pick up to " + v.max);
+      opts.forEach(function (o) {
+        var on = !!sel[o.id];
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "lp-vopt";
+        b.dataset.id = String(o.id);
+        b.setAttribute("aria-pressed", String(on));
+        b.disabled = !on && n >= v.max;
+        b.textContent = o.n;
+        b.addEventListener("click", function () {
+          if (sel[o.id]) delete sel[o.id]; else sel[o.id] = true;
+          renderVotes();
+          var again = voteEl.querySelector('.lp-vcard[data-id="' + v.id + '"] .lp-vopt[data-id="' + o.id + '"]');
+          if (again) again.focus();
+        });
+        grid.appendChild(b);
+      });
+      card.appendChild(grid);
+      var go = document.createElement("button");
+      go.type = "button";
+      go.className = "lp-vgo";
+      go.disabled = !n;
+      go.textContent = n ? (v.my ? "Update vote (" : "Vote (") + n + "/" + v.max + ")" : "Pick up to " + v.max;
+      go.addEventListener("click", function () { castCrewVote(v, go); });
+      card.appendChild(go);
+      if (changing[v.id]) {
+        var keep = document.createElement("button");
+        keep.type = "button";
+        keep.className = "lp-vadd";
+        keep.textContent = "Keep my vote";
+        keep.addEventListener("click", function () { delete changing[v.id]; delete ballot[v.id]; renderVotes(); });
+        card.appendChild(keep);
+      }
+    } else {
+      var max = opts.reduce(function (m, o) { return Math.max(m, o.v || 0); }, 0) || 1;
+      var mine = Array.isArray(v.my) ? v.my : [];
+      var faves = Array.isArray(v.faves) ? v.faves : [];
+      var ol = document.createElement("ol");
+      ol.className = "lp-vres";
+      opts.slice().sort(function (x, y) { return (y.v || 0) - (x.v || 0); }).forEach(function (o) {
+        var li = document.createElement("li");
+        if (faves.indexOf(o.id) !== -1) li.className = "is-fave";
+        var nm = document.createElement("span");
+        nm.className = "lp-vres-n";
+        nm.textContent = (faves.indexOf(o.id) !== -1 ? "⭐ " : "") + o.n + (mine.indexOf(o.id) !== -1 ? " ✓" : "");
+        li.appendChild(nm);
+        var bar = document.createElement("span");
+        bar.className = "lp-vres-bar";
+        bar.setAttribute("aria-hidden", "true");
+        var fill = document.createElement("i");
+        fill.style.width = Math.round(100 * (o.v || 0) / max) + "%";
+        bar.appendChild(fill);
+        li.appendChild(bar);
+        var c = document.createElement("span");
+        c.className = "lp-vres-c";
+        c.textContent = String(o.v || 0);
+        c.setAttribute("aria-label", (o.v || 0) + ((o.v || 0) === 1 ? " vote" : " votes"));
+        li.appendChild(c);
+        ol.appendChild(li);
+      });
+      card.appendChild(ol);
+    }
+
+    var foot = document.createElement("p");
+    foot.className = "lp-vfoot";
+    var parts = [v.voters + (v.voters === 1 ? " voted" : " voted")];
+    if (v.closed) {
+      var names = opts.filter(function (o) { return (v.faves || []).indexOf(o.id) !== -1; }).map(function (o) { return o.n; });
+      parts.unshift(names.length ? "⭐ Fam Faves: " + names.join(", ") : "No votes were cast");
+    } else if (v.my) {
+      parts.unshift("You voted");
+    } else if (!votes.can_vote) {
+      parts.unshift("Only crewmates who are Going or Interested can vote");
+    }
+    foot.textContent = parts.join(" · ");
+    card.appendChild(foot);
+    if (v.my && !v.closed && votes.can_vote && !changing[v.id]) {
+      var ch = document.createElement("button");
+      ch.type = "button";
+      ch.className = "lp-vadd";
+      ch.textContent = "✏️ Change my vote";
+      ch.addEventListener("click", function () { changing[v.id] = true; delete ballot[v.id]; renderVotes(); });
+      card.appendChild(ch);
+    }
+    if (v.own && !v.closed && opts.length < 30) {
+      var add = document.createElement("button");
+      add.type = "button";
+      add.className = "lp-vadd";
+      add.textContent = "＋ Add sets";
+      add.addEventListener("click", function () { openVoteSheet(v); });
+      card.appendChild(add);
+    }
+    card.dataset.id = v.id;
+    return card;
+  }
+
+  function reloadVotes(then) {
+    if (!isMemberMode()) return;
+    window.LineupMember.client(function (sb) {
+      sb.rpc("get_lineup_crew_votes", { p_festival_id: member.festival.id }).then(function (res) {
+        var d = res && res.data;
+        if (d && d.ok) votes = d;
+        refresh();
+        if (then) then();
+      }, noop);
+    });
+  }
+
+  function castCrewVote(v, btn) {
+    var ids = Object.keys(ballot[v.id] || {}).map(Number).filter(function (x) { return x > 0; });
+    if (!ids.length) return;
+    btn.disabled = true;
+    var value = JSON.stringify(ids);
+    window.LineupMember.client(function (sb) {
+      var q = v.my
+        ? sb.from("crew_poll_votes").update({ vote_value: value }).eq("poll_id", v.id).eq("voter_user_id", member.userId)
+        : sb.from("crew_poll_votes").insert({ poll_id: v.id, voter_user_id: member.userId, vote_value: value });
+      q.then(function (res) {
+        if (res && res.error) {
+          btn.disabled = false;
+          var rsvpErr = /pick_many_rsvp/.test(res.error.message || "");
+          toast(rsvpErr ? "Only crewmates who are Going or Interested can vote." : "⚠️ Couldn't save your vote. Try again.");
+          return;
+        }
+        delete ballot[v.id];
+        var was = changing[v.id];
+        delete changing[v.id];
+        toast(was ? "🗳️ Vote updated for " + v.crew + "." : "🗳️ Vote in for " + v.crew + ".");
+        reloadVotes();
+      }, function () { btn.disabled = false; toast("⚠️ Couldn't save your vote. Try again."); });
+    });
+  }
+
+  // Ballot candidates: one per catalog artist on this page (a b2b act lists
+  // each half), in lineup order.
+  function voteCandidates() {
+    var seen = {}, out = [];
+    acts.forEach(function (a) {
+      splitKeys(a.name).forEach(function (k, i) {
+        var id = idsByKey[k];
+        if (!id || seen[id]) return;
+        seen[id] = true;
+        var parts = String(a.name).split(/\s+b2b\s+/i);
+        out.push({ id: id, n: parts[i] || a.name, act: a });
+      });
+    });
+    return out;
+  }
+
+  // Start a vote (existing === null) or add sets to one you run.
+  function openVoteSheet(existing, prefCrew) {
+    if (!isMemberMode() || !votes) return;
+    var crews = votes.crews || [];
+    var fest = member.festival.name || "this rave";
+    var cands = voteCandidates();
+    var byId = {};
+    cands.forEach(function (c) { byId[c.id] = c; });
+    var state = {
+      crew: existing ? existing.crew_id
+        : prefCrew && crews.some(function (c) { return c.id === prefCrew; }) ? prefCrew
+        : crewSel !== "all" && crews.some(function (c) { return c.id === crewSel; }) ? crewSel
+        : (crews[0] && crews[0].id),
+      max: existing ? existing.max : 3,
+      picked: {},
+      locked: {},
+      extra: [] // ids shown in the list beyond the prefill
+    };
+    if (existing) (existing.options || []).forEach(function (o) { state.locked[o.id] = true; });
+
+    function prefill() {
+      state.picked = {};
+      if (existing) return;
+      // Your 📋 picks plus what this crew picked.
+      cands.forEach(function (c) {
+        if (plans[c.id] || isPicked(c.act)) state.picked[c.id] = true;
+        var mates = crew && crew.picks && crew.picks[c.id] || [];
+        if (mates.some(function (rid) { var m = crew.mates[rid]; return m && Array.isArray(m.c) && m.c.indexOf(state.crew) !== -1; })) state.picked[c.id] = true;
+      });
+    }
+    prefill();
+
+    if (!voteSheet) {
+      voteSheet = document.createElement("div");
+      voteSheet.className = "lp-overlay lp-vote-overlay";
+      voteSheet.addEventListener("click", function (e) { if (e.target === voteSheet) closeVoteSheet(); });
+      voteSheet.addEventListener("keydown", function (e) { if (e.key === "Escape") closeVoteSheet(); });
+      document.body.appendChild(voteSheet);
+    }
+
+    function draw() {
+      var picked = Object.keys(state.picked).filter(function (id) { return !state.locked[id]; });
+      var total = Object.keys(state.locked).length + picked.length;
+      voteSheet.innerHTML =
+        '<div class="lp-sheet lp-vsheet" role="dialog" aria-modal="true" aria-labelledby="lpVoteSheetTitle">' +
+          '<div class="lp-sheet-top"><span class="lp-badge">RaveFAM</span>' +
+          '<button type="button" class="lp-x" aria-label="Close">✕</button></div>' +
+          '<h3 id="lpVoteSheetTitle"></h3><p class="lp-sub"></p>' +
+          '<div class="lp-vs-body"></div>' +
+          '<button type="button" class="lp-vgo lp-vs-go"></button>' +
+        '</div>';
+      voteSheet.querySelector("#lpVoteSheetTitle").textContent = existing ? "Add sets to " + existing.crew + "'s vote" : "Start a crew vote";
+      voteSheet.querySelector(".lp-sub").textContent = existing
+        ? "Sets can be added once voting starts, but not removed."
+        : "Your crew picks up to " + state.max + " sets each. It closes when " + fest + " starts, and the top sets become your Fam Faves.";
+      voteSheet.querySelector(".lp-x").addEventListener("click", closeVoteSheet);
+      var body = voteSheet.querySelector(".lp-vs-body");
+
+      if (!existing) {
+        if (crews.length > 1) {
+          body.appendChild(chips("Crew", crews.map(function (c) { return { v: c.id, t: c.n, col: c.col }; }), state.crew, function (val) {
+            state.crew = val; prefill(); draw();
+          }));
+        }
+        body.appendChild(chips("Each person picks up to", [2, 3, 5].map(function (x) { return { v: x, t: String(x) }; }), state.max, function (val) {
+          state.max = val; draw();
+        }));
+        var ql = document.createElement("label");
+        ql.className = "lp-vs-label";
+        ql.textContent = "Question";
+        var qi = document.createElement("input");
+        qi.type = "text";
+        qi.className = "lp-vs-q";
+        qi.maxLength = 200;
+        qi.value = state.q || ("Which sets are we hitting at " + fest + "?");
+        qi.addEventListener("input", function () { state.q = qi.value; });
+        ql.appendChild(qi);
+        body.appendChild(ql);
+      }
+
+      var lab = document.createElement("p");
+      lab.className = "lp-vs-label";
+      lab.textContent = "Ballot · " + total + (total === 1 ? " set" : " sets");
+      body.appendChild(lab);
+      var list = document.createElement("div");
+      list.className = "lp-vs-list";
+      // Locked (already on the ballot), then picked, then Most wanted
+      // suggestions and anything added from search.
+      var order = [], seen = {};
+      function push(id) { id = Number(id); if (!byId[id] || seen[id]) return; seen[id] = true; order.push(id); }
+      Object.keys(state.locked).forEach(push);
+      Object.keys(state.picked).forEach(push);
+      mostWantedActs().forEach(function (x) { (actIds(x.act) || []).forEach(push); });
+      state.extra.forEach(push);
+      order.forEach(function (id) {
+        var c = byId[id];
+        var row = document.createElement("label");
+        row.className = "lp-vs-row";
+        var cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = !!(state.locked[id] || state.picked[id]);
+        cb.disabled = !!state.locked[id];
+        cb.addEventListener("change", function () {
+          if (cb.checked) state.picked[id] = true; else delete state.picked[id];
+          draw();
+        });
+        row.appendChild(cb);
+        var nm = document.createElement("span");
+        nm.textContent = c.n;
+        row.appendChild(nm);
+        var tags = [];
+        if (state.locked[id]) tags.push("on the ballot");
+        else {
+          if (plans[id] || isPicked(c.act)) tags.push("📋 you");
+          var w = actWant(c.act);
+          if (w) tags.push("🔥 " + w.want);
+        }
+        if (tags.length) {
+          var t = document.createElement("small");
+          t.textContent = tags.join(" · ");
+          row.appendChild(t);
+        }
+        list.appendChild(row);
+      });
+      body.appendChild(list);
+
+      var find = document.createElement("input");
+      find.type = "search";
+      find.className = "lp-vs-find";
+      find.placeholder = "Add another artist from this lineup…";
+      find.setAttribute("aria-label", "Add another artist from this lineup");
+      var hits = document.createElement("div");
+      hits.className = "lp-vs-hits";
+      find.addEventListener("input", function () {
+        var q = find.value.trim().toLowerCase();
+        hits.innerHTML = "";
+        if (q.length < 2) return;
+        cands.filter(function (c) { return !seen[c.id] && c.n.toLowerCase().indexOf(q) !== -1; }).slice(0, 6).forEach(function (c) {
+          var b = document.createElement("button");
+          b.type = "button";
+          b.className = "lp-vs-hit";
+          b.textContent = "＋ " + c.n;
+          b.addEventListener("click", function () { state.extra.push(c.id); state.picked[c.id] = true; draw(); });
+          hits.appendChild(b);
+        });
+      });
+      body.appendChild(find);
+      body.appendChild(hits);
+
+      var go = voteSheet.querySelector(".lp-vs-go");
+      if (existing) {
+        go.textContent = picked.length ? "Add " + picked.length + (picked.length === 1 ? " set" : " sets") : "Pick sets to add";
+        go.disabled = !picked.length || total > 30;
+      } else {
+        go.textContent = total >= 2 ? "Start the vote (" + total + " sets)" : "Pick at least 2 sets";
+        go.disabled = total < 2 || total > 30 || !state.crew;
+      }
+      if (total > 30) go.textContent = "30 sets max";
+      go.addEventListener("click", function () {
+        go.disabled = true;
+        if (existing) addVoteSets(existing, picked.map(Number), go);
+        else startCrewVote(state, picked.map(Number), go);
+      });
+    }
+
+    draw();
+    voteSheet.classList.add("show");
+    var first = voteSheet.querySelector(".lp-x");
+    if (first) first.focus();
+  }
+
+  function chips(label, items, value, onPick) {
+    var wrap = document.createElement("div");
+    wrap.className = "lp-vs-chips";
+    var l = document.createElement("p");
+    l.className = "lp-vs-label";
+    l.textContent = label;
+    wrap.appendChild(l);
+    var row = document.createElement("div");
+    row.className = "lp-vs-chiprow";
+    row.setAttribute("role", "group");
+    row.setAttribute("aria-label", label);
+    items.forEach(function (it) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "lp-crew-chip";
+      b.textContent = it.t;
+      b.setAttribute("aria-pressed", String(it.v === value));
+      if (it.col && /^#[0-9a-fA-F]{3,8}$/.test(it.col)) b.style.setProperty("--cc", it.col);
+      b.addEventListener("click", function () { onPick(it.v); });
+      row.appendChild(b);
+    });
+    wrap.appendChild(row);
+    return wrap;
+  }
+
+  function closeVoteSheet() { if (voteSheet) voteSheet.classList.remove("show"); }
+
+  function startCrewVote(state, ids, btn) {
+    var c = (votes.crews || []).filter(function (x) { return x.id === state.crew; })[0];
+    if (!c) return;
+    var fest = member.festival.name || "this rave";
+    var question = String(state.q || ("Which sets are we hitting at " + fest + "?")).trim().slice(0, 200) || ("Which sets are we hitting at " + fest + "?");
+    window.LineupMember.client(function (sb) {
+      sb.from("crew_polls").insert({
+        crew_id: c.id, created_by: member.userId, question: question, poll_type: "pick_many",
+        options: ids.map(function (id) { return { id: id }; }),
+        festival_id: member.festival.id, max_picks: state.max, is_anonymous: false
+      }).then(function (res) {
+        if (res && res.error) { btn.disabled = false; toast("⚠️ Couldn't start the vote. Try again."); return; }
+        closeVoteSheet();
+        toast("🗳️ Vote started for " + c.name + ".");
+        huddleLineupPost(sb, c.id,
+          "🗳️ Crew vote: " + question + " Pick up to " + state.max + ".",
+          "/lineup-explorer/" + slug).then(noop, noop);
+        reloadVotes();
+      }, function () { btn.disabled = false; toast("⚠️ Couldn't start the vote. Try again."); });
+    });
+  }
+
+  function addVoteSets(v, ids, btn) {
+    var options = (v.options || []).map(function (o) { return { id: o.id }; })
+      .concat(ids.map(function (id) { return { id: id }; }));
+    window.LineupMember.client(function (sb) {
+      sb.from("crew_polls").update({ options: options }).eq("id", v.id).then(function (res) {
+        if (res && res.error) { btn.disabled = false; toast("⚠️ Couldn't add those sets. Try again."); return; }
+        closeVoteSheet();
+        toast("＋ " + ids.length + (ids.length === 1 ? " set added." : " sets added."));
+        reloadVotes();
+      }, function () { btn.disabled = false; toast("⚠️ Couldn't add those sets. Try again."); });
+    });
+  }
+
+  // ----- set times + My schedule (Phase 4a; get_lineup_set_times) -----
+  // Times live on artist_festival_appearances (official schedules from the
+  // pages' ACTS data, member suggestions once a moderator approves them) and
+  // show in the festival's own time zone. My schedule lists your 📋 picks and
+  // your crew's ⭐ Fam Faves by day, flags overlapping sets and saves a
+  // Split / keep-one choice (raver_clash_choices for members, this browser
+  // for visitors).
+  var sets = null;         // { tz, date, days, byKey: { name_lower: set } }
+  var clash = {};          // "Act A|Act B" (sorted) -> "split" | kept act name
+  var schedDay = null, schedEl = null, suggestSheet = null;
+  var CLASH_KEY = "rf_clash";
+
+  // Festival-local wall time ("2026-10-24T23:00") to an ISO instant in tz.
+  var zonedMemo = {};
+  function zonedToIso(local, tz) {
+    var mk = local + "|" + tz;
+    if (mk in zonedMemo) return zonedMemo[mk];
+    return (zonedMemo[mk] = zonedToIsoRaw(local, tz));
+  }
+  function zonedToIsoRaw(local, tz) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(local || "");
+    if (!m || !tz) return null;
+    var want = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+    var guess = want;
+    try {
+      var f = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23",
+        year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+      for (var i = 0; i < 2; i++) {
+        var p = {};
+        f.formatToParts(new Date(guess)).forEach(function (x) { p[x.type] = x.value; });
+        var seen = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute);
+        guess += want - seen;
+      }
+    } catch (e) { return null; }
+    return new Date(guess).toISOString();
+  }
+
+  // A page's own ACTS start/end/stage (official schedules; one card per set,
+  // so an act playing several days keeps each time) win over the DB's single
+  // set per artist, which holds approved member suggestions.
+  // The festival's zone: from the DB, or a page's <meta name="rf-timezone">
+  // so its own times show before (or without) get_lineup_set_times.
+  function pageTz() {
+    if (sets && sets.tz) return sets.tz;
+    var m = document.querySelector('meta[name="rf-timezone"]');
+    return m ? m.getAttribute("content") : null;
+  }
+
+  // Posters that give start times only (EDC Orlando): a staged set with no
+  // `end` runs until the next later start on its stage that day, at most
+  // SET_CAP_MIN, and a stage's last set of the day runs to 23:59 when that is
+  // within CLOSE_MAX_MIN (else the cap applies). Acts that share a start
+  // share the slot. Festival-local wall times throughout;
+  // _ops/aggregate-artists/build-set-times.mjs applies the same rule for the DB.
+  // Inferred ends carry end_est and show with a "~" (fmtEnd).
+  var SET_CAP_MIN = 90, CLOSE_MAX_MIN = 120;
+  function addMinutes(local, min) {
+    var d = new Date(Date.parse(local + ":00Z") + min * 60000);
+    return d.toISOString().slice(0, 16);
+  }
+  function inferredEnd(a) {
+    if (!a.start || a.end || !a.stage) return null;
+    var day = a.start.slice(0, 10), next = null;
+    for (var i = 0; i < acts.length; i++) {
+      var s = acts[i].start;
+      if (s && acts[i].stage === a.stage && s.slice(0, 10) === day && s > a.start && (!next || s < next)) next = s;
+    }
+    var cap = addMinutes(a.start, SET_CAP_MIN);
+    if (next) return next < cap ? next : cap;
+    var close = day + "T23:59";
+    if (close <= a.start) return null;
+    return close <= addMinutes(a.start, CLOSE_MAX_MIN) ? close : cap;
+  }
+
+  function actSet(a) {
+    var tz = a && a.start ? pageTz() : null;
+    if (tz) {
+      var st = zonedToIso(a.start, tz);
+      var en = a.end || inferredEnd(a);
+      if (st) return { start_at: st, end_at: en ? zonedToIso(en, tz) : null, end_est: !a.end && !!en, stage: a.stage || null, page: true };
+    }
+    if (!sets) return null;
+    var keys = splitKeys(a.name);
+    for (var i = 0; i < keys.length; i++) if (sets.byKey[keys[i]]) return sets.byKey[keys[i]];
+    return null;
+  }
+
+  function fmtParts(iso, opts) {
+    try {
+      return new Intl.DateTimeFormat("en-US", Object.assign({ timeZone: pageTz() || undefined }, opts)).format(new Date(iso));
+    } catch (e) {
+      return new Intl.DateTimeFormat("en-US", opts).format(new Date(iso));
+    }
+  }
+  function fmtTime(iso) { return fmtParts(iso, { hour: "numeric", minute: "2-digit" }).replace(":00", ""); }
+  function fmtEnd(s) { return (s.end_est ? "~" : "") + fmtTime(s.end_at); }
+  function fmtDay(iso) { return fmtParts(iso, { weekday: "short" }); }
+
+  function timeText(s) {
+    if (!s) return "";
+    var bits = [];
+    if (s.start_at) bits.push(fmtDay(s.start_at) + " " + fmtTime(s.start_at) + (s.end_at ? "–" + fmtEnd(s) : ""));
+    if (s.stage) bits.push(s.stage);
+    return bits.join(" · ");
+  }
+
+  function loadSetTimes() {
+    if (!slug) return;
+    window.LineupMember.client(function (sb) {
+      var fromSnap = function () {
+        var s = readSnap();
+        if (s && s.sets && !sets) { sets = s.sets; refresh(); }
+      };
+      sb.rpc("get_lineup_set_times", { p_slug: slug }).then(function (res) {
+        var d = res && res.data;
+        if (!d || !d.ok) { if (res && res.error) fromSnap(); return; }
+        var byKey = {};
+        (d.sets || []).forEach(function (x) { if (x && x.name) byKey[String(x.name).toLowerCase()] = x; });
+        sets = { tz: d.tz || null, date: d.date || null, days: d.days || null, byKey: byKey, any: (d.sets || []).some(function (x) { return x.start_at; }) };
+        refresh();
+      }, fromSnap);
+    });
+  }
+
+  function readClashLocal() {
+    try { var all = JSON.parse(window.localStorage.getItem(CLASH_KEY) || "{}"); return (all && all[slug]) || {}; } catch (e) { return {}; }
+  }
+  function saveClash() {
+    if (isMemberMode()) {
+      window.LineupMember.client(function (sb) {
+        sb.from("raver_clash_choices").upsert({
+          raver_id: member.raverId, festival_id: member.festival.id, choices: clash, updated_at: new Date().toISOString()
+        }, { onConflict: "raver_id,festival_id" }).then(function (res) {
+          if (res && res.error) toast("⚠️ Couldn't save that choice. Try again.");
+        }, noop);
+      });
+      return;
+    }
+    try {
+      var all = JSON.parse(window.localStorage.getItem(CLASH_KEY) || "{}") || {};
+      all[slug] = clash;
+      window.localStorage.setItem(CLASH_KEY, JSON.stringify(all));
+    } catch (e) {}
+  }
+
+  function scheduleActs() {
+    var seen = {}, out = [];
+    acts.forEach(function (a) {
+      var key = a.name + "|" + (a.night || "");
+      if (seen[key]) return;
+      var mine = isPicked(a), fam = isMemberMode() ? actFaves(a) : [];
+      if (!mine && !fam.length) return;
+      seen[key] = true;
+      out.push({ act: a, mine: mine, fam: fam, set: actSet(a) });
+    });
+    return out;
+  }
+
+  function dayOf(x) {
+    if (x.act.night) return String(x.act.night);
+    if (x.set && x.set.start_at) return fmtDay(x.set.start_at).toLowerCase();
+    return "tba";
+  }
+
+  function clashPairs(items) {
+    var timed = items.filter(function (x) { return x.set && x.set.start_at; });
+    var pairs = [];
+    for (var i = 0; i < timed.length; i++) {
+      for (var j = i + 1; j < timed.length; j++) {
+        var a = timed[i], b = timed[j];
+        var aS = +new Date(a.set.start_at), bS = +new Date(b.set.start_at);
+        var aE = a.set.end_at ? +new Date(a.set.end_at) : aS + 3600000;
+        var bE = b.set.end_at ? +new Date(b.set.end_at) : bS + 3600000;
+        if (aS < bE && bS < aE) {
+          var names = [a.act.name, b.act.name].sort();
+          pairs.push({ key: names.join("|"), a: names[0], b: names[1], from: Math.max(aS, bS), to: Math.min(aE, bE),
+            toEst: !!(aE <= bE ? a.set.end_est : b.set.end_est) });
+        }
+      }
+    }
+    return pairs;
+  }
+
+  // Act name -> the picked acts its set overlaps, for the ⚡ chip on cards.
+  // Unresolved clashes only; rebuilt when picks, set times or choices change.
+  var cardClashMemo = { key: null, map: {} };
+  function cardClash(a) {
+    var picked = pickedActs();
+    var key = picked.map(function (x) { return x.name; }).join("|") + "#" + (sets ? 1 : 0) + "#" + JSON.stringify(clash);
+    if (key !== cardClashMemo.key) {
+      var map = {};
+      clashPairs(picked.map(function (x) { return { act: x, set: actSet(x) }; })).forEach(function (p) {
+        if (clash[p.key]) return;
+        (map[p.a] = map[p.a] || []).push(p.b);
+        (map[p.b] = map[p.b] || []).push(p.a);
+      });
+      cardClashMemo = { key: key, map: map };
+    }
+    return cardClashMemo.map[a.name] || [];
+  }
+
+  // Act name -> the act kept instead, from the Split / keep-one choices.
+  function skipMap(pairs) {
+    var skipped = {};
+    pairs.forEach(function (p) {
+      var c = clash[p.key];
+      if (c === p.a) skipped[p.b] = p.a;
+      else if (c === p.b) skipped[p.a] = p.b;
+    });
+    return skipped;
+  }
+
+  function renderSchedule() {
+    var on = view === "schedule";
+    document.body.classList.toggle("lp-schedule-mode", on);
+    if (!barEl) return;
+    if (!schedEl) {
+      schedEl = document.createElement("section");
+      schedEl.className = "lp-sched";
+      schedEl.setAttribute("aria-labelledby", "lpSchedTitle");
+      var anchor = document.getElementById("deck");
+      if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(schedEl, anchor);
+      else barEl.parentNode.insertBefore(schedEl, barEl.nextSibling);
+    }
+    schedEl.hidden = !on;
+    if (!on) return;
+    schedEl.innerHTML = "";
+    var h = document.createElement("h2");
+    h.id = "lpSchedTitle";
+    h.textContent = "🗓️ My schedule";
+    schedEl.appendChild(h);
+
+    var items = scheduleActs();
+    if (!items.length) {
+      schedEl.appendChild(el("p", "lp-sched-note", "Tap 📋 on the sets you want to catch and they'll line up here by day."));
+      return;
+    }
+    var order = [], groups = {};
+    items.forEach(function (x) {
+      var d = dayOf(x);
+      if (!groups[d]) { groups[d] = []; order.push(d); }
+      groups[d].push(x);
+    });
+    // Days in calendar order: by each day's earliest set, then the page's
+    // night order (fri before sat) for days with no times yet; TBA last.
+    var NIGHTS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+    var firstAt = {};
+    order.forEach(function (d) {
+      groups[d].forEach(function (x) {
+        var t = x.set && x.set.start_at ? +new Date(x.set.start_at) : Infinity;
+        if (!(firstAt[d] <= t)) firstAt[d] = t;
+      });
+    });
+    order.sort(function (p, q) {
+      return (p === "tba") - (q === "tba") || firstAt[p] - firstAt[q] ||
+        NIGHTS.indexOf(p.slice(0, 3)) - NIGHTS.indexOf(q.slice(0, 3));
+    });
+    if (order.indexOf(schedDay) === -1) schedDay = order[0];
+
+    if (order.length > 1) {
+      var tabs = el("div", "lp-sched-days");
+      tabs.setAttribute("role", "group");
+      tabs.setAttribute("aria-label", "Day");
+      order.forEach(function (d) {
+        var b = el("button", "lp-crew-chip", d === "tba" ? "Day TBA" : d.charAt(0).toUpperCase() + d.slice(1));
+        b.type = "button";
+        b.setAttribute("aria-pressed", String(d === schedDay));
+        b.addEventListener("click", function () { schedDay = d; renderSchedule(); });
+        tabs.appendChild(b);
+      });
+      schedEl.appendChild(tabs);
+    }
+
+    var list = groups[schedDay].slice().sort(function (x, y) {
+      var xs = x.set && x.set.start_at ? +new Date(x.set.start_at) : Infinity;
+      var ys = y.set && y.set.start_at ? +new Date(y.set.start_at) : Infinity;
+      return xs - ys || (x.act.name < y.act.name ? -1 : 1);
+    });
+    var pairs = clashPairs(list);
+    var skipped = skipMap(pairs);
+
+    var ol = el("ol", "lp-sched-list");
+    list.forEach(function (x) {
+      var li = el("li", "lp-sched-row" + (skipped[x.act.name] ? " is-skipped" : ""));
+      var t = el("span", "lp-sched-time", x.set && x.set.start_at
+        ? fmtTime(x.set.start_at) + (x.set.end_at ? "–" + fmtEnd(x.set) : "")
+        : "Time TBA");
+      li.appendChild(t);
+      var main = el("div", "lp-sched-main");
+      main.appendChild(el("span", "lp-sched-name", x.act.name));
+      var sub = [x.set && x.set.stage ? x.set.stage : "Stage TBA"];
+      if (x.mine) sub.push("📋 you");
+      if (x.fam.length) sub.push("⭐ " + x.fam.join(", "));
+      if (skipped[x.act.name]) sub.push("skipping for " + skipped[x.act.name]);
+      main.appendChild(el("span", "lp-sched-sub", sub.join(" · ")));
+      li.appendChild(main);
+      // Times from the page's own ACTS data are the official schedule; changes
+      // go in the page, so only DB-sourced (or missing) times take reports.
+      if (isMemberMode() && actIds(x.act) && !(x.set && x.set.page)) {
+        var timed = x.set && x.set.start_at;
+        var sb = el("button", "lp-sched-act", timed ? "✏️ Fix" : "＋ Time");
+        sb.type = "button";
+        sb.setAttribute("aria-label", (timed ? "Report a change to " : "Suggest a set time for ") + x.act.name);
+        sb.addEventListener("click", function () { openSuggestSheet(x.act, timed ? "report" : "suggest"); });
+        li.appendChild(sb);
+      }
+      ol.appendChild(li);
+    });
+    schedEl.appendChild(ol);
+
+    pairs.forEach(function (p) {
+      var box = el("div", "lp-clash");
+      box.appendChild(el("p", "lp-clash-t", "⚡ " + p.a + " and " + p.b + " overlap (" + fmtTime(new Date(p.from).toISOString()) + "–" + (p.toEst ? "~" : "") + fmtTime(new Date(p.to).toISOString()) + ")"));
+      var row = el("div", "lp-clash-opts");
+      row.setAttribute("role", "group");
+      row.setAttribute("aria-label", "Choose for " + p.a + " and " + p.b);
+      [{ v: "split", t: "Split" }, { v: p.a, t: "Only " + p.a }, { v: p.b, t: "Only " + p.b }].forEach(function (o) {
+        var b = el("button", "lp-crew-chip", o.t);
+        b.type = "button";
+        b.setAttribute("aria-pressed", String(clash[p.key] === o.v));
+        b.addEventListener("click", function () {
+          if (clash[p.key] === o.v) delete clash[p.key]; else clash[p.key] = o.v;
+          saveClash();
+          renderSchedule();
+          saveSnap();
+          syncReminders();
+        });
+        row.appendChild(b);
+      });
+      box.appendChild(row);
+      schedEl.appendChild(box);
+    });
+
+    if (!list.some(function (x) { return x.set && x.set.start_at; })) {
+      schedEl.appendChild(el("p", "lp-sched-note", "Clash check turns on when set times drop."));
+    }
+    if (isMemberMode() && nowItems().length) schedEl.appendChild(remindRow());
+    // Landed from the app's "Turn on set reminders" nudge: point at the 🔔
+    // button (push permission needs the tap itself, so it isn't auto-toggled).
+    if (remindIntent && isMemberMode()) {
+      var rb = schedEl.querySelector(".lp-remind-btn");
+      if (rb) {
+        remindIntent = false;
+        setTimeout(function () { rb.scrollIntoView({ block: "center", behavior: "smooth" }); rb.classList.add("lp-flash"); }, 60);
+      } else {
+        schedEl.appendChild(el("p", "lp-sched-note", "Add sets with times to your schedule, then turn on 🔔 reminders here."));
+      }
+    }
+    if (!member) {
+      schedEl.appendChild(el("p", "lp-sched-note", "Log in to suggest set times and see your crew's Fam Faves here."));
+    }
+  }
+
+  // ----- 🎧 On deck + set reminders + offline (Phase 4b) -----
+  // During festival hours (2 h before a set on this page to 1 h after one
+  // ends) the bar offers 🎧 On deck: the set playing now from My schedule with
+  // its progress, what's up next and how long until it starts. Members with
+  // timed picks land on it once per visit; "Full lineup" goes back. Reminders
+  // (set_set_reminders) push 15 min before each set on My schedule, and the
+  // list is re-synced whenever the schedule changes. Members' pages, assets
+  // and schedule are kept on the phone (sw.js + a localStorage snapshot) so
+  // all of this still works without signal.
+  var nowEl = null, nowTimer = null, autoNowDone = false, nowAuto = false, nowLogged = false;
+  var remind = false, remindSig = null, remindTimer = null, offlineAsked = false, onlineHooked = false;
+  var remindIntent = false;  // ?remind=1 from the app's fest-week nudge: open My schedule at the 🔔 button
+  var SNAP_KEY = "rf_lp_offline";
+  var VAPID_PUBLIC_KEY = "BCF_mOzUV61zYqsbcN-NuAiGrmuc3pPx6qQDCmRV057Dw8JNy-IwvrPb9mpYDvqDBLruXtLCk9-Q1E7caAfn_6M";
+  var HOUR = 3600000;
+
+  function setSpan(st) {
+    var s = +new Date(st.start_at);
+    return { s: s, e: st.end_at ? +new Date(st.end_at) : s + HOUR };
+  }
+
+  // Timed sets from My schedule, minus the ones skipped for a clash.
+  function nowItems() {
+    var items = scheduleActs().filter(function (x) { return x.set && x.set.start_at; });
+    var skipped = skipMap(clashPairs(items));
+    return items.filter(function (x) { return !skipped[x.act.name]; }).map(function (x) {
+      var sp = setSpan(x.set);
+      return { x: x, s: sp.s, e: sp.e };
+    }).sort(function (p, q) { return p.s - q.s || (p.x.act.name < q.x.act.name ? -1 : 1); });
+  }
+
+  function festLive(t) {
+    for (var i = 0; i < acts.length; i++) {
+      var st = actSet(acts[i]);
+      if (!st || !st.start_at) continue;
+      var sp = setSpan(st);
+      if (t >= sp.s - 2 * HOUR && t <= sp.e + HOUR) return true;
+    }
+    return false;
+  }
+
+  function maybeAutoNow() {
+    if (autoNowDone || view !== "all" || !isMemberMode()) return;
+    if (!festLive(Date.now()) || !nowItems().length) return;
+    autoNowDone = true;
+    nowAuto = true;
+    view = "now";
+  }
+
+  function untilText(ms, at) {
+    var mins = Math.max(1, Math.ceil(ms / 60000));
+    if (mins < 60) return "in " + mins + " min";
+    if (mins < 6 * 60) return "in " + Math.floor(mins / 60) + " h" + (mins % 60 ? " " + (mins % 60) + " min" : "");
+    return fmtDay(new Date(at).toISOString()) + " " + fmtTime(new Date(at).toISOString());
+  }
+
+  function nowCard(label, p, live, t) {
+    var c = el("div", "lp-now-card" + (live ? " is-live" : ""));
+    c.appendChild(el("span", "lp-now-label", label));
+    c.appendChild(el("span", "lp-now-name", p.x.act.name));
+    var sub = [p.x.set.stage || "Stage TBA"];
+    sub.push(live ? "until " + (p.x.set.end_est ? "~" : "") + fmtTime(new Date(p.e).toISOString()) : fmtTime(p.x.set.start_at));
+    if (p.x.fam.length) sub.push("⭐ " + p.x.fam.join(", "));
+    c.appendChild(el("span", "lp-now-sub", sub.join(" · ")));
+    if (live) {
+      var pct = Math.max(0, Math.min(100, Math.round((t - p.s) / (p.e - p.s) * 100)));
+      var bar = el("div", "lp-now-prog");
+      bar.setAttribute("role", "progressbar");
+      bar.setAttribute("aria-label", p.x.act.name + " set progress");
+      bar.setAttribute("aria-valuemin", "0");
+      bar.setAttribute("aria-valuemax", "100");
+      bar.setAttribute("aria-valuenow", String(pct));
+      var fill = document.createElement("i");
+      fill.style.width = pct + "%";
+      bar.appendChild(fill);
+      c.appendChild(bar);
+    }
+    return c;
+  }
+
+  function renderNow() {
+    var on = view === "now";
+    document.body.classList.toggle("lp-now-mode", on);
+    if (!barEl) return;
+    if (!on) {
+      if (nowEl) nowEl.hidden = true;
+      if (nowTimer) { clearInterval(nowTimer); nowTimer = null; }
+      return;
+    }
+    if (!nowEl) {
+      nowEl = document.createElement("section");
+      nowEl.className = "lp-now";
+      nowEl.setAttribute("aria-labelledby", "lpNowTitle");
+      var anchor = document.getElementById("deck");
+      if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(nowEl, anchor);
+      else barEl.parentNode.insertBefore(nowEl, barEl.nextSibling);
+    }
+    nowEl.hidden = false;
+    if (!nowTimer) nowTimer = setInterval(function () { if (view === "now") renderNow(); }, 30000);
+    if (!nowLogged) { nowLogged = true; logEvent("now_next_opened", { slug: slug, auto: nowAuto }); }
+
+    var t = Date.now();
+    nowEl.innerHTML = "";
+    var head = el("div", "lp-now-head");
+    var h = el("h2", null, "🎧 On deck");
+    h.id = "lpNowTitle";
+    head.appendChild(h);
+    var back = el("button", "lp-now-back", "Full lineup");
+    back.type = "button";
+    back.addEventListener("click", function () {
+      view = "all";
+      autoNowDone = true;
+      try { window.sessionStorage.setItem("rf_now_off_" + slug, "1"); } catch (e) {}
+      refresh();
+    });
+    head.appendChild(back);
+    nowEl.appendChild(head);
+    if (member && member.offline) nowEl.appendChild(el("p", "lp-now-gap", "📴 No signal. Showing your saved schedule."));
+
+    var list = nowItems();
+    if (!list.length) {
+      nowEl.appendChild(el("p", "lp-sched-note", "Tap 📋 on the sets you want to catch and they'll show up here with their times."));
+      return;
+    }
+    var live = list.filter(function (p) { return p.s <= t && t < p.e; });
+    var later = list.filter(function (p) { return p.s > t; });
+    var nextAt = later.length ? later[0].s : null;
+    live.forEach(function (p) { nowEl.appendChild(nowCard("Now playing", p, true, t)); });
+    if (!live.length) nowEl.appendChild(el("p", "lp-now-gap", later.length ? "Nothing on your schedule right now." : "That's a wrap on your schedule. 📼"));
+    later.filter(function (p) { return p.s === nextAt; }).forEach(function (p) {
+      nowEl.appendChild(nowCard("Up next · " + untilText(p.s - t, p.s), p, false, t));
+    });
+    var rest = later.filter(function (p) { return p.s !== nextAt; }).slice(0, 4);
+    if (rest.length) {
+      nowEl.appendChild(el("p", "lp-now-later", "Later: " + rest.map(function (p) {
+        return p.x.act.name + " " + (p.s - t < 18 * HOUR ? fmtTime(p.x.set.start_at) : fmtDay(p.x.set.start_at) + " " + fmtTime(p.x.set.start_at));
+      }).join(" · ")));
+    }
+    nowEl.appendChild(remindRow());
+  }
+
+  function remindRow() {
+    var box = el("div", "lp-remind");
+    if (!isMemberMode()) {
+      box.appendChild(el("p", "lp-sched-note", "Log in to get a push 15 minutes before each set."));
+      return box;
+    }
+    var b = el("button", "lp-remind-btn", remind ? "🔔 Set reminders on" : "🔔 Remind me 15 min before each set");
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(!!remind));
+    b.disabled = !!member.offline;
+    b.addEventListener("click", function () { toggleReminders(b); });
+    box.appendChild(b);
+    if (remind) box.appendChild(el("span", "lp-remind-sub", "For your 📋 picks and ⭐ Fam Faves. Tap to turn off."));
+    return box;
+  }
+
+  function reminderList() {
+    var seen = {};
+    return nowItems().filter(function (p) {
+      var k = p.x.act.name + "|" + p.s;
+      if (seen[k]) return false;
+      return (seen[k] = true);
+    }).slice(0, 150).map(function (p) {
+      return { name: p.x.act.name, stage: p.x.set.stage || null, start_at: new Date(p.s).toISOString(), kind: p.x.mine ? "pick" : "fam" };
+    });
+  }
+
+  function b64ToBytes(b64) {
+    var raw = atob((b64 + "===".slice((b64.length + 3) % 4)).replace(/-/g, "+").replace(/_/g, "/"));
+    var out = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+
+  // iOS app (Capacitor): push goes through Apple, not web push. Same flow as
+  // app.html's ensureNativePush: ask iOS, register, store the device token with
+  // register_device_push_token so send-set-reminders can reach this phone.
+  var NativePush = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()
+    && window.Capacitor.Plugins && window.Capacitor.Plugins.PushNotifications;
+  if (NativePush) {
+    // Tapping a notification while a lineup page is open: Huddle pushes go to
+    // the app (cold-start params), lineup pushes carry their own path.
+    NativePush.addListener("pushNotificationActionPerformed", function (ev) {
+      var d = (ev && ev.notification && ev.notification.data) || {};
+      if (d.crewId) {
+        var q = new URLSearchParams({ crew: d.crewId });
+        if (d.roomId) q.set("room", d.roomId);
+        if (d.messageId) q.set("msg", d.messageId);
+        location.href = "/app.html?" + q.toString();
+      } else if (d.url) {
+        location.href = d.url;
+      }
+    });
+  }
+
+  function ensureNativePush(cb) {
+    NativePush.checkPermissions().then(function (p) {
+      return p.receive === "prompt" || p.receive === "prompt-with-rationale" ? NativePush.requestPermissions() : p;
+    }).then(function (p) {
+      if (p.receive !== "granted") {
+        toast("🔕 Notifications are off for RaveFAM. Turn them on in iOS Settings → RaveFAM → Notifications.");
+        cb(false);
+        return;
+      }
+      var done = false;
+      var finish = function (ok) { if (!done) { done = true; cb(ok); } };
+      NativePush.addListener("registration", function (t) {
+        window.LineupMember.client(function (sb) {
+          sb.rpc("register_device_push_token", { p_token: t.value, p_platform: "ios" }).then(function (res) {
+            var ok = !!(res && res.data && res.data.ok);
+            if (!ok) toast("⚠️ Couldn't save this phone for push. Try again.");
+            finish(ok);
+          }, function () { finish(false); });
+        });
+      });
+      NativePush.addListener("registrationError", function () { toast("⚠️ Couldn't turn on push here."); finish(false); });
+      setTimeout(function () { finish(false); }, 15000);
+      NativePush.register();
+    }).catch(function () { toast("⚠️ Couldn't turn on push here."); cb(false); });
+  }
+
+  // Same push_subscriptions row the app's Beacon / mention toggles use; one
+  // browser subscription serves every channel.
+  function ensurePush(cb) {
+    if (NativePush) { ensureNativePush(cb); return; }
+    if (!("serviceWorker" in navigator) || !("PushManager" in window) || !window.Notification) {
+      toast("Push notifications aren't supported on this browser.");
+      cb(false);
+      return;
+    }
+    Notification.requestPermission().then(function (perm) {
+      if (perm !== "granted") {
+        toast(perm === "denied" ? "🔕 Notifications are blocked. Turn them on in your browser settings." : "Allow notifications to get set reminders.");
+        cb(false);
+        return;
+      }
+      return navigator.serviceWorker.register("/sw.js").then(function () { return navigator.serviceWorker.ready; }).then(function (reg) {
+        return reg.pushManager.getSubscription().then(function (sub) {
+          return sub || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(VAPID_PUBLIC_KEY) });
+        });
+      }).then(function (sub) {
+        var j = sub.toJSON();
+        window.LineupMember.client(function (sb) {
+          sb.from("push_subscriptions").select("id").eq("endpoint", j.endpoint).then(function (res) {
+            if (res && res.data && res.data.length) { cb(true); return; }
+            sb.from("push_subscriptions").insert({
+              user_id: member.userId, endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, user_agent: navigator.userAgent
+            }).then(function (r2) {
+              if (r2 && r2.error) { toast("⚠️ Couldn't save this phone for push. Try again."); cb(false); } else cb(true);
+            }, function () { cb(false); });
+          }, function () { cb(false); });
+        });
+      });
+    }).catch(function () { toast("⚠️ Couldn't turn on push here."); cb(false); });
+  }
+
+  function toggleReminders(btn) {
+    if (!isMemberMode() || member.offline) return;
+    var on = !remind;
+    btn.disabled = true;
+    var go = function () {
+      var list = on ? reminderList() : [];
+      window.LineupMember.client(function (sb) {
+        sb.rpc("set_set_reminders", { p_festival_id: member.festival.id, p_on: on, p_sets: list }).then(function (res) {
+          btn.disabled = false;
+          var d = res && res.data;
+          if (!d || !d.ok) { toast("⚠️ Couldn't update set reminders. Try again."); return; }
+          remind = on;
+          remindSig = on ? JSON.stringify(list) : null;
+          if (on) {
+            logEvent("reminder_enabled", { slug: slug, n: d.n || 0 });
+            toast("🔔 We'll ping you 15 min before each set.");
+          } else {
+            toast("🔕 Set reminders off.");
+          }
+          refresh();
+        }, function () { btn.disabled = false; toast("⚠️ Couldn't update set reminders. Try again."); });
+      });
+    };
+    if (!on) { go(); return; }
+    ensurePush(function (ok) { if (ok) go(); else btn.disabled = false; });
+  }
+
+  // Picks, Split / keep-one choices or times changed while reminders are on:
+  // push the new list (debounced; once per page load at least, so a set added
+  // in the app or a moved time is picked up).
+  function syncReminders() {
+    if (!remind || !isMemberMode() || member.offline) return;
+    var list = reminderList();
+    var sig = JSON.stringify(list);
+    if (sig === remindSig) return;
+    clearTimeout(remindTimer);
+    remindTimer = setTimeout(function () {
+      window.LineupMember.client(function (sb) {
+        sb.rpc("set_set_reminders", { p_festival_id: member.festival.id, p_on: true, p_sets: list }).then(function (res) {
+          if (res && res.data && res.data.ok) remindSig = sig;
+        }, noop);
+      });
+    }, 1500);
+  }
+
+  // ----- offline -----
+  function sessionUid() {
+    try {
+      var s = JSON.parse(window.localStorage.getItem("sb-tvpgopciioqbqmjjjigh-auth-token") || "null");
+      return (s && s.user && s.user.id) || null;
+    } catch (e) { return null; }
+  }
+
+  function readSnap() {
+    try {
+      var all = JSON.parse(window.localStorage.getItem(SNAP_KEY) || "{}");
+      return (all && slug && all[slug]) || null;
+    } catch (e) { return null; }
+  }
+
+  // The member's schedule for this page, for the next visit without signal.
+  // Keyed by user; the 6 most recently opened festivals are kept.
+  function saveSnap() {
+    if (!slug || !isMemberMode() || member.offline) return;
+    try {
+      var all = JSON.parse(window.localStorage.getItem(SNAP_KEY) || "{}") || {};
+      all[slug] = {
+        uid: member.userId, at: new Date().toISOString(), raverId: member.raverId, festival: member.festival,
+        rsvp: rsvp, plans: Object.keys(plans), favs: Object.keys(favs), ids: idsByKey, votes: votes,
+        clash: clash, sets: sets, remind: !!remind
+      };
+      Object.keys(all).sort(function (a, b) { return String(all[b].at).localeCompare(String(all[a].at)); })
+        .slice(6).forEach(function (k) { delete all[k]; });
+      window.localStorage.setItem(SNAP_KEY, JSON.stringify(all));
+    } catch (e) {}
+  }
+
+  // Only for the user whose session this browser still holds, so a shared
+  // phone that logged out doesn't show the last member's schedule.
+  function hydrateSnap(uid) {
+    var s = readSnap();
+    if (s && s.sets && !sets) sets = s.sets;
+    if (!s || !uid || s.uid !== uid || !s.raverId || !s.festival) {
+      if (s && s.sets) refresh();
+      return false;
+    }
+    member = { isMember: true, userId: uid, raverId: s.raverId, festival: s.festival, offline: true };
+    rsvp = s.rsvp || null;
+    (s.plans || []).forEach(function (k) { plans[k] = true; });
+    (s.favs || []).forEach(function (k) { favs[k] = true; });
+    if (s.ids) idsByKey = s.ids;
+    votes = s.votes || null;
+    if (s.clash) clash = s.clash;
+    remind = !!s.remind;
+    memberLoaded = true;
+    refresh();
+    if (!onlineHooked) {
+      onlineHooked = true;
+      window.addEventListener("online", function () {
+        toast("📶 Back online.", "Refresh", function () { location.reload(); });
+      }, { once: true });
+    }
+    return true;
+  }
+
+  // Members: register the site's service worker (sw.js) and have it keep this
+  // page and the explorer's script and styles for offline use.
+  function keepOffline() {
+    if (offlineAsked || !slug || !("serviceWorker" in navigator)) return;
+    offlineAsked = true;
+    navigator.serviceWorker.register("/sw.js").then(function () { return navigator.serviceWorker.ready; }).then(function (reg) {
+      if (reg && reg.active) reg.active.postMessage({
+        type: "rf-cache-urls",
+        urls: [location.pathname, "/lineup-explorer/lineup-common.js", "/lineup-explorer/lineup-common.css"]
+      });
+    }).catch(noop);
+  }
+
+  // ----- post-fest check-off (Phase 4c) -----
+  // From the morning after the last day (06:00 festival time) for 60 days,
+  // members who were Going and have 📋 picks get "Who'd you catch? 📼": Saw
+  // them / Missed per pick. Saw writes raver_artist_sightings (the table the
+  // app's ✅/❌ uses), Missed clears it; once every pick is answered (or Done)
+  // a raver_postfest_checkoffs row closes the prompt here and in the app.
+  // Unanswered picks stay as picks. send-lineup-alerts links here with
+  // ?view=checkoff the same morning.
+  var checkEl = null, checkedOff = false, checkFocus = false, checkBusy = false;
+  var seenIds = {};         // artists.id -> true: sightings at this festival
+  var answered = {};        // act name -> "saw" | "missed" (this visit)
+  var DAY = 24 * HOUR;
+
+  function festEndedAt() {
+    var date = (sets && sets.date) || (member && member.festival && member.festival.date);
+    if (!date) return null;
+    var days = Math.max(1, (sets && sets.days) || 1);
+    var p = String(date).split("-").map(Number);
+    var after = new Date(Date.UTC(p[0], p[1] - 1, p[2] + days)).toISOString().slice(0, 10);
+    var iso = zonedToIso(after + "T06:00", pageTz() || "America/New_York");
+    return iso ? +new Date(iso) : null;
+  }
+
+  function checkActs() {
+    var seen = {};
+    return pickedActs().filter(function (a) {
+      if (seen[a.name] || !actIds(a)) return false;
+      return (seen[a.name] = true);
+    });
+  }
+
+  function checkState(a) {
+    if (answered[a.name]) return answered[a.name];
+    return actIds(a).every(function (id) { return seenIds[id]; }) ? "saw" : null;
+  }
+
+  function checkoffDue() {
+    if (!isMemberMode() || member.offline || checkedOff || rsvp !== "going") return false;
+    var at = festEndedAt();
+    var t = Date.now();
+    return !!at && t >= at && t < at + 60 * DAY && checkActs().length > 0;
+  }
+
+  function renderCheckoff() {
+    var on = checkoffDue();
+    if (!on) { if (checkEl) checkEl.hidden = true; return; }
+    if (!checkEl) {
+      checkEl = document.createElement("section");
+      checkEl.className = "lp-check";
+      checkEl.setAttribute("aria-labelledby", "lpCheckTitle");
+      var anchor = document.getElementById("deck");
+      if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(checkEl, anchor);
+      else barEl.parentNode.insertBefore(checkEl, barEl.nextSibling);
+    }
+    checkEl.hidden = false;
+    checkEl.innerHTML = "";
+    var h = el("h2", null, "Who'd you catch? 📼");
+    h.id = "lpCheckTitle";
+    checkEl.appendChild(h);
+    checkEl.appendChild(el("p", "lp-sched-note", "Tick off the sets you saw at " + (member.festival.name || "this rave") + ". Your seen count on RaveFAM updates as you go."));
+    var list = el("ul", "lp-check-list");
+    checkActs().forEach(function (a) {
+      var st = checkState(a);
+      var li = el("li", "lp-check-row");
+      li.appendChild(el("span", "lp-check-name", a.name));
+      var opts = el("div", "lp-check-opts");
+      opts.setAttribute("role", "group");
+      opts.setAttribute("aria-label", a.name);
+      [{ v: "saw", t: "✅ Saw them" }, { v: "missed", t: "❌ Missed" }].forEach(function (o) {
+        var b = el("button", "lp-crew-chip lp-check-" + o.v, o.t);
+        b.type = "button";
+        b.setAttribute("aria-pressed", String(st === o.v));
+        b.addEventListener("click", function () { markCheck(a, o.v); });
+        opts.appendChild(b);
+      });
+      li.appendChild(opts);
+      list.appendChild(li);
+    });
+    checkEl.appendChild(list);
+    var done = el("button", "lp-check-done", "Done");
+    done.type = "button";
+    done.addEventListener("click", function () { finishCheckoff(); });
+    checkEl.appendChild(done);
+    if (checkFocus) {
+      checkFocus = false;
+      setTimeout(function () { if (checkEl.scrollIntoView) checkEl.scrollIntoView({ block: "start" }); }, 0);
+    }
+  }
+
+  function markCheck(a, v) {
+    if (checkBusy) return;
+    var ids = actIds(a);
+    checkBusy = true;
+    window.LineupMember.client(function (sb) {
+      var q;
+      if (v === "saw") {
+        var rows = ids.filter(function (id) { return !seenIds[id]; }).map(function (id) {
+          return { raver_id: member.raverId, artist_id: id, festival_id: member.festival.id };
+        });
+        q = rows.length ? sb.from("raver_artist_sightings").insert(rows) : Promise.resolve({});
+      } else {
+        q = sb.from("raver_artist_sightings").delete().eq("raver_id", member.raverId).eq("festival_id", member.festival.id).in("artist_id", ids);
+      }
+      q.then(function (res) {
+        checkBusy = false;
+        if (res && res.error) { toast("⚠️ Couldn't save that. Try again."); return; }
+        ids.forEach(function (id) { if (v === "saw") seenIds[id] = true; else delete seenIds[id]; });
+        answered[a.name] = v;
+        if (checkActs().every(function (x) { return checkState(x); })) finishCheckoff();
+        else renderCheckoff();
+      }, function () { checkBusy = false; toast("⚠️ Couldn't save that. Try again."); });
+    });
+  }
+
+  function finishCheckoff() {
+    if (checkedOff) return;
+    var saw = 0, missed = 0;
+    checkActs().forEach(function (a) {
+      var st = checkState(a);
+      if (st === "saw") saw++;
+      else if (st === "missed") missed++;
+    });
+    window.LineupMember.client(function (sb) {
+      sb.from("raver_postfest_checkoffs").insert({
+        raver_id: member.raverId, festival_id: member.festival.id, saw: saw, missed: missed
+      }).then(function (res) {
+        if (res && res.error && res.error.code !== "23505") { toast("⚠️ Couldn't save that. Try again."); return; }
+        checkedOff = true;
+        logEvent("postfest_checkoff", { slug: slug, saw: saw, missed: missed, source: "explorer" });
+        toast(saw ? "📼 Logged. " + saw + (saw === 1 ? " set" : " sets") + " caught." : "📼 Logged. Next time.");
+        refresh();
+      }, function () { toast("⚠️ Couldn't save that. Try again."); });
+    });
+  }
+
+  // Suggest a time (Going/Interested) or Report a change (any member); a
+  // moderator approves it before it shows for everyone.
+  function festDays() {
+    if (!sets || !sets.date) return [];
+    var p = String(sets.date).split("-").map(Number);
+    var n = Math.max(1, sets.days || 1), out = [];
+    for (var i = 0; i < n; i++) {
+      var d = new Date(Date.UTC(p[0], p[1] - 1, p[2] + i));
+      out.push({
+        v: d.toISOString().slice(0, 10),
+        t: new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }).format(d)
+      });
+    }
+    return out;
+  }
+
+  function openSuggestSheet(a, kind) {
+    var ids = actIds(a);
+    if (!isMemberMode() || !ids) return;
+    if (kind === "suggest" && !rsvp) { toast("Set Going or Interested first to suggest times."); return; }
+    var days = festDays();
+    if (!suggestSheet) {
+      suggestSheet = document.createElement("div");
+      suggestSheet.className = "lp-overlay lp-suggest-overlay";
+      suggestSheet.addEventListener("click", function (e) { if (e.target === suggestSheet) closeSuggestSheet(); });
+      suggestSheet.addEventListener("keydown", function (e) { if (e.key === "Escape") closeSuggestSheet(); });
+      document.body.appendChild(suggestSheet);
+    }
+    var cur = actSet(a);
+    suggestSheet.innerHTML =
+      '<div class="lp-sheet lp-vsheet" role="dialog" aria-modal="true" aria-labelledby="lpSuggestTitle">' +
+        '<div class="lp-sheet-top"><span class="lp-badge">RaveFAM</span>' +
+        '<button type="button" class="lp-x" aria-label="Close">✕</button></div>' +
+        '<h3 id="lpSuggestTitle"></h3><p class="lp-sub"></p>' +
+        '<label class="lp-vs-label">Day<select class="lp-vs-q lp-sg-day"></select></label>' +
+        '<div class="lp-sg-times">' +
+          '<label class="lp-vs-label">Starts<input type="time" class="lp-vs-q lp-sg-start"></label>' +
+          '<label class="lp-vs-label">Ends<input type="time" class="lp-vs-q lp-sg-end"></label>' +
+        '</div>' +
+        '<label class="lp-vs-label">Stage<input type="text" maxlength="60" class="lp-vs-q lp-sg-stage" placeholder="e.g. kineticFIELD"></label>' +
+        '<label class="lp-vs-label">Note<input type="text" maxlength="280" class="lp-vs-q lp-sg-note" placeholder="Where you saw it (optional)"></label>' +
+        '<button type="button" class="lp-vgo lp-sg-go">Send to a moderator</button>' +
+      '</div>';
+    suggestSheet.querySelector("#lpSuggestTitle").textContent = (kind === "report" ? "Report a change: " : "Suggest a set time: ") + a.name;
+    suggestSheet.querySelector(".lp-sub").textContent = (cur && cur.start_at ? "Posted now: " + timeText(cur) + ". " : "") +
+      "Times are in the festival's local time. A moderator checks it before it goes live.";
+    var daySel = suggestSheet.querySelector(".lp-sg-day");
+    days.forEach(function (d) {
+      var o = document.createElement("option");
+      o.value = d.v; o.textContent = d.t;
+      daySel.appendChild(o);
+    });
+    var nightIdx = { fri: 5, sat: 6, sun: 0, mon: 1, tue: 2, wed: 3, thu: 4 }[String(a.night || "").slice(0, 3).toLowerCase()];
+    if (nightIdx != null) days.forEach(function (d) { if (new Date(d.v + "T12:00:00Z").getUTCDay() === nightIdx) daySel.value = d.v; });
+    suggestSheet.querySelector(".lp-x").addEventListener("click", closeSuggestSheet);
+    var go = suggestSheet.querySelector(".lp-sg-go");
+    go.addEventListener("click", function () {
+      var day = daySel.value;
+      var st = suggestSheet.querySelector(".lp-sg-start").value;
+      var en = suggestSheet.querySelector(".lp-sg-end").value;
+      var stage = suggestSheet.querySelector(".lp-sg-stage").value;
+      var note = suggestSheet.querySelector(".lp-sg-note").value;
+      if (!st && !stage.trim() && !note.trim()) { toast("Add a time, a stage or a note."); return; }
+      if (en && !st) { toast("Add a start time too."); return; }
+      var start = st && day ? day + "T" + st : null;
+      var end = null;
+      if (start && en) {
+        var endDay = day;
+        if (en <= st) {
+          var p = day.split("-").map(Number);
+          endDay = new Date(Date.UTC(p[0], p[1] - 1, p[2] + 1)).toISOString().slice(0, 10);
+        }
+        end = endDay + "T" + en;
+      }
+      go.disabled = true;
+      window.LineupMember.client(function (sb) {
+        sb.rpc("suggest_set_time", {
+          p_festival_id: member.festival.id, p_artist_id: ids[0], p_kind: kind,
+          p_start: start, p_end: end, p_stage: stage || null, p_note: note || null
+        }).then(function (res) {
+          var d = res && res.data;
+          if (d && d.ok) {
+            closeSuggestSheet();
+            toast("🙏 Thanks! A moderator will check it before it goes live.");
+            logEvent("set_time_suggested", { slug: slug, kind: kind });
+            return;
+          }
+          go.disabled = false;
+          var msg = {
+            rsvp: "Set Going or Interested first to suggest times.",
+            out_of_range: "That time is outside the festival's dates.",
+            end_before_start: "The end time has to be after the start (within 12 hours).",
+            no_timezone: "This rave doesn't have a time zone yet, so times can't be added.",
+            rate_limited: "You've sent a lot for this rave. Wait for a moderator to catch up."
+          }[d && d.error] || "⚠️ Couldn't send that. Try again.";
+          toast(msg);
+        }, function () { go.disabled = false; toast("⚠️ Couldn't send that. Try again."); });
+      });
+    });
+    suggestSheet.classList.add("show");
+    var first = suggestSheet.querySelector(".lp-sg-start");
+    if (first) first.focus();
+  }
+
+  function closeSuggestSheet() { if (suggestSheet) suggestSheet.classList.remove("show"); }
+
+  // ----- member load -----
+  function loadMember() {
+    window.LineupMember.ready(function (m) {
+      if (!m || !m.isMember) return;
+      if (member && member.offline && (!m.raverId || !m.festival)) return; // still offline: keep the snapshot
+      member = m;
+      if (!m.raverId || !m.festival) {
+        if (navigator.onLine === false && hydrateSnap(m.userId)) return;
+        refresh();
+        return;
+      }
+      var keys = {};
+      acts.forEach(function (a) { splitKeys(a.name).forEach(function (k) { keys[k] = true; }); });
+      window.LineupMember.client(function (sb) {
+        var fid = m.festival.id, rid = m.raverId;
+        Promise.all([
+          sb.from("artists").select("id,name_lower").in("name_lower", Object.keys(keys)),
+          sb.from("raver_artist_plans").select("artist_id").eq("raver_id", rid).eq("festival_id", fid),
+          sb.from("raver_festivals").select("festival_id").eq("raver_id", rid).eq("festival_id", fid),
+          sb.from("raver_festival_interest").select("festival_id").eq("raver_id", rid).eq("festival_id", fid),
+          sb.from("raver_favorite_artists").select("artist_id").eq("raver_id", rid),
+          sb.rpc("get_lineup_crew_pulse", { p_festival_id: fid }),
+          sb.rpc("get_lineup_crew_votes", { p_festival_id: fid }),
+          sb.from("raver_clash_choices").select("choices").eq("raver_id", rid).eq("festival_id", fid),
+          sb.from("set_reminder_optins").select("festival_id").eq("festival_id", fid),
+          sb.from("raver_postfest_checkoffs").select("festival_id").eq("raver_id", rid).eq("festival_id", fid),
+          sb.from("raver_artist_sightings").select("artist_id").eq("raver_id", rid).eq("festival_id", fid)
+        ]).then(function (out) {
+          // Lost signal mid-load: the saved schedule beats an empty one.
+          if (out[1] && out[1].error && hydrateSnap(m.userId)) return;
+          remind = !!((out[8] && out[8].data) || []).length;
+          checkedOff = !!((out[9] && out[9].data) || []).length;
+          ((out[10] && out[10].data) || []).forEach(function (r) { seenIds[r.artist_id] = true; });
+          var cc = out[7] && out[7].data && out[7].data[0];
+          if (cc && cc.choices && typeof cc.choices === "object") clash = cc.choices;
+          var cv = out[6] && out[6].data;
+          votes = cv && cv.ok ? cv : null;
+          ((out[4] && out[4].data) || []).forEach(function (r) { favs[r.artist_id] = true; });
+          var cp = out[5] && out[5].data;
+          crew = cp && cp.ok ? cp : null;
+          ((out[0] && out[0].data) || []).forEach(function (r) { idsByKey[r.name_lower] = r.id; });
+          ((out[1] && out[1].data) || []).forEach(function (r) { plans[r.artist_id] = true; });
+          rsvp = (out[2].data || []).length ? "going" : (out[3].data || []).length ? "interested" : null;
+          memberLoaded = true;
+          refresh();
+          keepOffline();
+          if (voteIntent && votes && (votes.crews || []).length) {
+            var vi = voteIntent;
+            voteIntent = null;
+            setTimeout(function () { openVoteSheet(null, vi.crew); }, 300);
+          }
+          if (!local.length) return;
+          if (rsvp) {
+            flushLocal(function (n) { if (n > 0) toast("📋 " + n + (n === 1 ? " pick" : " picks") + " synced to your RaveFAM."); refresh(); });
+          } else if (!asked()) {
+            setTimeout(function () { openSheet(null); }, 900);
+          }
+        }, function () { if (!hydrateSnap(m.userId)) refresh(); });
+      });
+    });
+  }
+
+  window.LineupPicks = {
+    init: function (list, render) {
+      slug = window.LineupMember ? window.LineupMember.pageSlug() : null;
+      acts = list || [];
+      onRender = render;
+      var saved = slug ? readAll()[slug] : null;
+      var names = {};
+      acts.forEach(function (a) { names[a.name] = true; });
+      local = saved && Array.isArray(saved.n) ? saved.n.filter(function (n) { return names[n]; }) : [];
+      buildBar();
+      renderBar();
+      watchDeck();
+      loadWantCounts();
+      loadSetTimes();
+      clash = readClashLocal();
+      try {
+        var qv = new URLSearchParams(location.search).get("view");
+        if (qv === "schedule" || qv === "now") { view = qv; autoNowDone = true; }
+        if (qv === "checkoff") { checkFocus = true; autoNowDone = true; }
+        if (new URLSearchParams(location.search).get("remind") === "1") { view = "schedule"; autoNowDone = true; remindIntent = true; }
+      } catch (e) {}
+      try { if (window.sessionStorage.getItem("rf_now_off_" + slug)) autoNowDone = true; } catch (e) {}
+      // No signal (festival grounds): the member's last saved schedule, if
+      // this browser still holds their session. supabase-js can't load.
+      if (navigator.onLine === false) hydrateSnap(sessionUid());
+      loadMember();
+      // ?vote=1&crew=<id>: the app's "Crew vote on a lineup" lands here and the
+      // start sheet opens once member data loads. Stripped from the URL.
+      try {
+        var sp = new URLSearchParams(location.search);
+        if (sp.get("vote") === "1") {
+          voteIntent = { crew: sp.get("crew") };
+          sp.delete("vote"); sp.delete("crew");
+          var rest = sp.toString();
+          history.replaceState(null, "", location.pathname + (rest ? "?" + rest : "") + location.hash);
+        }
+      } catch (e) {}
+      var by = null;
+      try { by = new URLSearchParams(location.search).get("by"); } catch (e) {}
+      if (by && /^[a-z0-9-]{4,40}$/.test(by)) loadShared(by);
+    },
+    ok: function (a) {
+      if (view === "all") return true;
+      if (view === "shared") return isShared(a);
+      if (view === "schedule" || view === "now") return isPicked(a);
+      if (view === "picks") return isPicked(a);
+      if (view === "crew") return actCrew(a).length > 0;
+      return isFav(a);
+    },
+    wrap: function (el, a) {
+      var picked = isPicked(a);
+      var w = document.createElement("div");
+      w.className = "act-wrap lp-row" + (picked ? " picked" : "");
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "pick";
+      b.dataset.n = a.name;
+      b.setAttribute("aria-pressed", String(picked));
+      b.setAttribute("aria-label", picked ? "Remove " + a.name + " from my picks" : "Add " + a.name + " to my picks");
+      b.innerHTML = picked ? CLIP_ON : CLIP_OFF;
+      b.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); toggle(a); });
+      // Schedule-ticket layout: time rail | name, stage line, chips, pulse,
+      // then the .foot stub (genre + platform) that ♡ / 📋 sit on.
+      var foot = el.querySelector(".foot");
+      var eq = el.querySelector(".eq");
+      if (eq) eq.remove();
+      var st = actSet(a);
+      var timed = !!(st && st.start_at);
+      var nb = el.querySelector(".nb");
+      var body = document.createElement("div");
+      body.className = "lp-body";
+      while (el.firstChild) body.appendChild(el.firstChild);
+      if (timed) {
+        var rail = document.createElement("div");
+        rail.className = "lp-rail";
+        var tp = fmtTime(st.start_at).split(/\s+/);
+        var rh = document.createElement("span");
+        rh.className = "lp-rail-h";
+        rh.textContent = tp[0];
+        rail.appendChild(rh);
+        var ra = document.createElement("span");
+        ra.className = "lp-rail-ap";
+        ra.textContent = tp[1] || "";
+        rail.appendChild(ra);
+        if (nb) rail.appendChild(nb);
+        el.appendChild(rail);
+      } else {
+        w.classList.add("lp-untimed");
+      }
+      el.appendChild(body);
+      if (st && (st.start_at || st.stage)) {
+        var bits = [];
+        if (st.stage) bits.push(st.stage);
+        if (timed && !nb) bits.unshift(fmtDay(st.start_at));
+        if (timed && st.end_at) {
+          bits.push("until " + fmtEnd(st));
+          var mins = Math.round((new Date(st.end_at) - new Date(st.start_at)) / 60000);
+          if (mins > 0) bits.push((st.end_est ? "~" : "") + mins + "m");
+        }
+        var tl = document.createElement("div");
+        tl.className = "lp-time";
+        tl.textContent = bits.join(" · ");
+        body.insertBefore(tl, foot);
+      }
+      var chips = document.createElement("div");
+      chips.className = "lp-chips";
+      var note = body.querySelector(".note");
+      if (note) {
+        note.classList.add("lp-chip");
+        if (/^sunset/i.test(note.textContent)) { note.classList.add("lp-sun"); note.textContent = "🌅 " + note.textContent; }
+        chips.appendChild(note);
+      }
+      if (picked && isMemberMode()) {
+        var cl = cardClash(a);
+        if (cl.length) {
+          var cc = document.createElement("span");
+          cc.className = "lp-chip lp-clash-chip";
+          cc.textContent = "⚡ Overlaps " + cl[0] + (cl.length > 1 ? " +" + (cl.length - 1) : "");
+          chips.appendChild(cc);
+        }
+      }
+      var fam = actFaves(a);
+      if (fam.length) {
+        var ff = document.createElement("span");
+        ff.className = "lp-chip lp-famfave";
+        ff.textContent = "⭐ Fam Fave · " + fam.join(", ");
+        chips.appendChild(ff);
+      }
+      if (isShared(a)) {
+        var sp = document.createElement("span");
+        sp.className = "lp-chip lp-shared";
+        sp.textContent = "📋 " + (picked ? "You both picked this" : shared.first + " picked this");
+        chips.appendChild(sp);
+      }
+      if (chips.firstChild) body.insertBefore(chips, foot);
+      var pulse = pulseEl(a);
+      if (pulse) body.insertBefore(pulse, foot);
+      w.appendChild(el);
+      w.appendChild(b);
+      // The crew tray sits under the card in an outer cell, so ♡/📋 stay
+      // anchored to the card itself.
+      var tray = crewTrayEl(a);
+      if (isMemberMode()) {
+        var fav = isFav(a);
+        var h = document.createElement("button");
+        h.type = "button";
+        h.className = "fav";
+        h.dataset.n = a.name;
+        h.setAttribute("aria-pressed", String(fav));
+        h.setAttribute("aria-label", fav ? "Remove " + a.name + " from favorites" : "Add " + a.name + " to favorites");
+        h.innerHTML = '<span aria-hidden="true">' + (fav ? "♥" : "♡") + "</span>";
+        h.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); toggleFav(a); });
+        w.appendChild(h);
+        w.classList.add("member");
+        if (fav) w.classList.add("faved");
+      }
+      if (!tray) return w;
+      var cell = document.createElement("div");
+      cell.className = "act-cell";
+      cell.appendChild(w);
+      cell.appendChild(tray);
+      return cell;
+    },
+    all: readAll
+  };
+
+  // ----- header: Log in (visitors) / My RaveFAM (members) -----
+  // Sits in the .brandbar next to 📲 Save. A visitor with ☆ picks logs in
+  // through the Save my picks handoff, so the picks come along; otherwise it
+  // simply opens /app. Members get a link back to the app.
+  function injectAccountButton() {
+    var bar = document.querySelector(".brandbar");
+    if (!bar || bar.querySelector(".lp-account")) return;
+    var a = document.createElement("a");
+    a.className = "lp-account";
+    a.href = "/app";
+    a.textContent = "Log in";
+    a.addEventListener("click", function (e) {
+      if (a.dataset.member) return;
+      var all = readAll(), n = 0, latest = null;
+      Object.keys(all).forEach(function (k) {
+        var p = all[k];
+        var c = p && Array.isArray(p.n) ? p.n.length : 0;
+        if (!c) return;
+        n += c;
+        if (!latest || (p.at || "") > (all[latest].at || "")) latest = k;
+      });
+      if (!n) return;
+      e.preventDefault();
+      goSave(slug && all[slug] && all[slug].n && all[slug].n.length ? slug : latest, n);
+    });
+    // Join the right-hand group (📲 Save + year) rather than adding a third
+    // child to the space-between brandbar.
+    var group = bar.querySelector(".a2hs-yr-wrap");
+    if (!group) {
+      var right = bar.querySelector(".a2hs-btn") || bar.querySelector(".yr");
+      group = document.createElement("span");
+      group.className = "a2hs-yr-wrap";
+      if (right) { right.parentNode.insertBefore(group, right); group.appendChild(right); }
+      else bar.appendChild(group);
+    }
+    group.insertBefore(a, group.firstChild);
+    window.LineupMember.ready(function (m) {
+      if (!m || !m.isMember) return;
+      a.dataset.member = "1";
+      a.textContent = "My RaveFAM";
+      a.classList.add("is-member");
+    });
+  }
+  if (window.LineupMember) {
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", injectAccountButton);
+    else injectAccountButton();
+  }
+
+  // ----- artist pages (Phase 4c-2; /lineup-explorer/artist/<slug>) -----
+  // Static pages from _ops/aggregate-artists/build-artist-pages.mjs. Here:
+  // past festivals move under their own heading, and members get the layer
+  // from get_artist_member_info — ♡ Favorite, raves seen at, which festivals
+  // it's on their 📋 picks for, and crewmates planning to catch them — in
+  // place of the "Never miss a set" Join prompt.
+  function localToday() {
+    var t = new Date();
+    return t.getFullYear() + "-" + String(t.getMonth() + 1).padStart(2, "0") + "-" + String(t.getDate()).padStart(2, "0");
+  }
+
+  function uniqNames(list) {
+    var seen = {};
+    return list.filter(function (n) { if (!n || seen[n]) return false; return (seen[n] = true); });
+  }
+
+  function initArtistPage(root) {
+    var list = document.getElementById("arFests");
+    if (list) {
+      var today = localToday();
+      var past = [].filter.call(list.children, function (li) { return (li.getAttribute("data-end") || "") < today; });
+      past.forEach(function (li) { li.classList.add("is-past"); });
+      if (past.length && past.length < list.children.length) {
+        var ol = el("ol", "ar-fests");
+        past.forEach(function (li) { ol.appendChild(li); });
+        list.parentNode.appendChild(el("h3", null, "Past"));
+        list.parentNode.appendChild(ol);
+      }
+    }
+    window.LineupMember.ready(function (m) {
+      if (!m || !m.isMember) return;
+      var join = document.getElementById("arJoin");
+      if (join) join.hidden = true;
+      var names = [];
+      try { names = JSON.parse(root.getAttribute("data-rf-names") || "[]"); } catch (e) {}
+      if (!names.length) names = [String(root.getAttribute("data-rf-artist") || "").toLowerCase()];
+      window.LineupMember.client(function (sb) {
+        sb.rpc("get_artist_member_info", { p_names: names.slice(0, 5) }).then(function (res) {
+          var d = res && res.data;
+          if (d && d.ok) renderArtistMember(root, m, d);
+        }, noop);
+      });
+    });
+  }
+
+  function renderArtistMember(root, m, d) {
+    var box = document.getElementById("arMember");
+    if (!box) return;
+    var name = root.getAttribute("data-rf-artist") || "this artist";
+    box.innerHTML = "";
+    box.hidden = false;
+    if (d.artist_id && m.raverId) {
+      var fav = !!d.fav;
+      var b = el("button", "ar-fav");
+      b.type = "button";
+      var paint = function () {
+        b.textContent = fav ? "♥ Favorite" : "♡ Favorite";
+        b.setAttribute("aria-pressed", String(fav));
+        b.setAttribute("aria-label", fav ? "Remove " + name + " from favorites" : "Add " + name + " to favorites");
+      };
+      paint();
+      b.addEventListener("click", function () {
+        b.disabled = true;
+        window.LineupMember.client(function (sb) {
+          var q = fav
+            ? sb.from("raver_favorite_artists").delete().eq("raver_id", m.raverId).eq("artist_id", d.artist_id)
+            : sb.from("raver_favorite_artists").insert({ raver_id: m.raverId, artist_id: d.artist_id });
+          q.then(function (res) {
+            b.disabled = false;
+            if (res && res.error) { toast("⚠️ Couldn't save that. Try again."); return; }
+            fav = !fav;
+            paint();
+            toast(fav ? "♡ " + name + " is a favorite. We'll ping you when they land on a lineup." : "Removed " + name + " from your favorites.");
+          }, function () { b.disabled = false; toast("⚠️ Couldn't save that. Try again."); });
+        });
+      });
+      box.appendChild(b);
+    }
+    var seen = d.seen || 0;
+    box.appendChild(el("span", "ar-stat", seen ? "👁️ Seen live at " + seen + (seen === 1 ? " rave" : " raves") : "👁️ Not seen live yet"));
+    var crew = d.crew || [];
+    var crewNames = uniqNames(crew.map(function (c) { return c.n; }));
+    if (crewNames.length) {
+      box.appendChild(el("span", "ar-stat", "👥 " + (crewNames.length > 3 ? crewNames.slice(0, 3).join(", ") + " +" + (crewNames.length - 3) : crewNames.join(", ")) + " want" + (crewNames.length === 1 ? "s" : "") + " to catch them"));
+    }
+    var mine = {};
+    (d.my_plans || []).forEach(function (sl) { mine[sl] = true; });
+    var bySlug = {};
+    crew.forEach(function (c) { if (c.slug) (bySlug[c.slug] = bySlug[c.slug] || []).push(c.n); });
+    [].forEach.call(document.querySelectorAll(".ar-fest"), function (li) {
+      var sl = li.getAttribute("data-slug");
+      var me = li.querySelector(".ar-fest-me");
+      if (!me) return;
+      me.innerHTML = "";
+      if (mine[sl]) me.appendChild(el("span", "ar-badge ar-badge-pick", "📋 On your picks"));
+      if (bySlug[sl]) me.appendChild(el("span", "ar-badge ar-badge-crew", "👥 " + uniqNames(bySlug[sl]).join(", ")));
+      me.hidden = !me.childNodes.length;
+    });
+  }
+
+  if (window.LineupMember && !window.LineupMember.pageSlug()) {
+    var startHub = function () {
+      var artistRoot = document.querySelector("[data-rf-artist]");
+      if (artistRoot) { initArtistPage(artistRoot); return; }
+      initHub();
+      initHubWanted();
+      window.LineupMember.ready(function (m) { if (m && m.isMember && m.raverId) initHubMember(m); });
+    };
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", startHub);
+    else startHub();
+  }
+})();
+
+// ----- RaveFAM iOS app (Capacitor) -----
+// /app opens explorer pages in its own webview, with no Safari toolbar and no
+// swipe-back. So: pad below the status bar, add a ‹ back pill to the brandbar,
+// and point the RaveFAM home links (brand, breadcrumb, Join) back into /app instead
+// of the marketing site.
+(function () {
+  "use strict";
+  if (!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())) return;
+  document.documentElement.classList.add("lp-native");
+
+  // env(safe-area-inset-*) is only non-zero with viewport-fit=cover.
+  var vp = document.querySelector('meta[name="viewport"]');
+  if (vp && !/viewport-fit/.test(vp.content)) vp.content += ", viewport-fit=cover";
+
+  // Universal Links (invites, magic links, /rave/…) arriving while an explorer
+  // page is showing: /app's appUrlOpen listener isn't loaded, so follow them
+  // here. Same-host only, as in app.html's openNativeAppUrl.
+  var NativeApp = window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+  if (NativeApp && NativeApp.addListener) {
+    NativeApp.addListener("appUrlOpen", function (ev) {
+      try {
+        var target = new URL(ev && ev.url);
+        if (target.host === location.host && target.href !== location.href) location.href = target.href;
+      } catch (e) { /* bad URL: stay put */ }
+    });
+  }
+
+  function refPath() {
+    try {
+      var r = new URL(document.referrer);
+      return r.origin === location.origin ? r.pathname : null;
+    } catch (e) { return null; }
+  }
+  function fromApp() { return /^\/app(\.html)?\/?$/.test(refPath() || ""); }
+  // history.back() returns to /app where the user left it; a fresh /app load
+  // is the fallback (opened from a push, Universal Link, etc.).
+  function goApp(e) {
+    if (e) e.preventDefault();
+    if (fromApp() && history.length > 1) history.back();
+    else location.href = "/app";
+  }
+
+  function init() {
+    document.querySelectorAll('a[href="https://myravefam.com/"]').forEach(function (a) {
+      a.href = "/app";
+      a.addEventListener("click", goApp);
+    });
+
+    var brand = document.querySelector(".brandbar .brand");
+    if (!brand || document.querySelector(".lp-native-back")) return;
+    // Came from another explorer page (e.g. lineup → artist): step back to it.
+    // Otherwise the pill is the way home to the app.
+    var inExplorer = !fromApp() && refPath() !== null && history.length > 1;
+    var back = document.createElement("a");
+    back.className = "lp-native-back";
+    back.href = inExplorer ? document.referrer : "/app";
+    back.textContent = inExplorer ? "‹ Back" : "‹ RaveFAM";
+    back.setAttribute("aria-label", inExplorer ? "Back" : "Back to RaveFAM");
+    back.addEventListener("click", function (e) {
+      if (!inExplorer) return goApp(e);
+      e.preventDefault();
+      history.back();
+    });
+    // Share the left slot with the brand rather than adding a third child to
+    // the space-between brandbar.
+    var left = document.createElement("span");
+    left.className = "lp-native-left";
+    brand.parentNode.insertBefore(left, brand);
+    left.appendChild(back);
+    left.appendChild(brand);
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
 })();

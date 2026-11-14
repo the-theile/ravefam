@@ -51,7 +51,7 @@ test.describe('authenticated app', () => {
 
   test('tapping a crew card opens its detail view', async ({ page }) => {
     await bootAuthedApp(page);
-    await page.locator('#crew-grid .crew-card').first().click();
+    await page.locator('#crew-grid .crew-card .crew-row-open').first().click();
     await expect(page.locator('#page-crew-detail')).toHaveClass(/active/);
     await expect(page.locator('#page-crew-detail')).toContainText('Bass Syndicate');
   });
@@ -59,7 +59,7 @@ test.describe('authenticated app', () => {
   test('double-tap on an active tab re-fetches and shows the refresh toast', async ({ page }) => {
     await bootAuthedApp(page);
     // Real refreshTab runs loadAllData (stubbed) then re-renders; assert the toast.
-    await page.evaluate(() => { switchTab('crews'); switchTab('crews'); });
+    await page.evaluate(() => { const t = document.querySelector('.nav-tab.c-crews'); switchTab('crews', t); switchTab('crews', t); });
     await expect(page.locator('#toast')).toHaveClass(/show/);
     await expect(page.locator('#toast')).toContainText(/Refreshed|Refreshing/);
   });

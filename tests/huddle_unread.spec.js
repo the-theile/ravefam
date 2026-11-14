@@ -24,7 +24,8 @@ test.describe('huddle unread indicators', () => {
     const cta = page.locator('.huddle-cta-btn[data-crew-id="c1"]');
     await expect(cta.locator('.huddle-cta-count')).toHaveText('1');
 
-    const bell = page.locator('#notif-badge');
+    // Huddle unread has its own cyan count on the bell.
+    const bell = page.locator('#notif-huddle-badge');
     await expect(bell).toHaveClass(/has-count/);
     await expect(bell).toHaveText('1');
   });
@@ -37,7 +38,7 @@ test.describe('huddle unread indicators', () => {
     await page.waitForTimeout(200);
 
     await expect(page.locator('.huddle-cta-btn[data-crew-id="c1"]')).toHaveCount(0);
-    await expect(page.locator('#notif-badge')).not.toHaveClass(/has-count/);
+    await expect(page.locator('#notif-huddle-badge')).not.toHaveClass(/has-count/);
   });
 
   test('opening the huddle marks it read: badges clear and a read watermark persists server-side', async ({ page }) => {
@@ -50,7 +51,7 @@ test.describe('huddle unread indicators', () => {
     await page.waitForTimeout(300);
 
     await expect(page.locator('.huddle-cta-btn[data-crew-id="c1"]')).toHaveCount(0);
-    await expect(page.locator('#notif-badge')).not.toHaveClass(/has-count/);
+    await expect(page.locator('#notif-huddle-badge')).not.toHaveClass(/has-count/);
 
     const read = await page.evaluate(() =>
       (window.__store.huddle_room_reads || []).find(r => r.room_id === 'room-main' && String(r.user_id) === 'test-user-id'));
@@ -91,7 +92,7 @@ test.describe('huddle unread entries in the notification drawer', () => {
 
     // Opening the drawer itself must not clear huddle unread — only actually
     // visiting the room does that.
-    await expect(page.locator('#notif-badge')).toHaveClass(/has-count/);
+    await expect(page.locator('#notif-huddle-badge')).toHaveClass(/has-count/);
   });
 
   test('clicking a Main-room drawer entry opens that huddle and clears the badge', async ({ page }) => {
@@ -113,7 +114,11 @@ test.describe('huddle unread entries in the notification drawer', () => {
     expect(read).toBeTruthy();
   });
 
-  test('a festival-room drawer entry routes through that rave\'s Game Plan and clears the badge', async ({ page }) => {
+  // Per-rave rooms used to be reachable only through that rave's Rave Plan
+  // tile, so this asserted the tile opened. Every room kind now lives behind
+  // the one Huddle switcher, so the drawer entry opens the chat directly on
+  // the target room instead.
+  test('a festival-room drawer entry opens the Huddle on that rave\'s room and clears the badge', async ({ page }) => {
     const data = seedWithHuddle();
     data.huddle_rooms = [
       { id: 'room-fest', crew_id: 'c1', room_key: 'festival:f1', kind: 'festival', name: 'Tomorrowland Huddle', festival_id: 'f1', created_by: TEST_UID, created_at: '2024-01-01T00:00:00Z' },
@@ -132,11 +137,59 @@ test.describe('huddle unread entries in the notification drawer', () => {
     await item.click();
     await page.waitForTimeout(400);
 
-    await expect(page.locator('#page-crew-detail .stats-subtab[data-tab="gameplan"]')).toHaveClass(/active/);
-    await expect(page.locator('.huddle-cta-btn[data-crew-id="c1"]')).toHaveCount(0);
+    await expect(page.locator('#huddle-screen')).toHaveClass(/open/);
+    await expect(page.locator('.hd-room-name')).toContainText('Tomorrowland');
+    expect(await page.evaluate(() => _huddleActiveRoomId)).toBe('room-fest');
 
     const read = await page.evaluate(() =>
       (window.__store.huddle_room_reads || []).find(r => r.room_id === 'room-fest' && String(r.user_id) === 'test-user-id'));
     expect(read).toBeTruthy();
+  });
+});
+
+test.describe('huddle unread · crew activity lines', () => {
+  function seedWithActivity(about) {
+    const data = seedWithHuddle();
+    data.huddle_messages = [
+      { id: 'sys1', room_id: 'room-main', crew_id: 'c1', sender_id: 'kai-uid', kind: 'system', body: '🎟️ Kai joined a ride', about, reactions: {}, created_at: '2099-01-01T00:00:00Z', deleted_at: null },
+    ];
+    return data;
+  }
+
+  test('activity not about you shows a quiet dot, never a count', async ({ page }) => {
+    await bootAuthedApp(page, { data: seedWithActivity([]) });
+    await page.evaluate(() => loadHuddleActivityCache());
+    await page.waitForTimeout(200);
+
+    const cta = page.locator('.huddle-cta-btn[data-crew-id="c1"]');
+    await expect(cta.locator('.huddle-quiet-dot')).toHaveCount(1);
+    await expect(cta.locator('.huddle-cta-count')).toHaveCount(0);
+    await expect(page.locator('#notif-huddle-badge')).not.toHaveClass(/has-count/);
+  });
+
+  test('activity about you counts like a message', async ({ page }) => {
+    await bootAuthedApp(page, { data: seedWithActivity(['test-user-id']) });
+    await page.evaluate(() => loadHuddleActivityCache());
+    await page.waitForTimeout(200);
+
+    await expect(page.locator('.huddle-cta-btn[data-crew-id="c1"] .huddle-cta-count')).toHaveText('1');
+    await expect(page.locator('#notif-huddle-badge')).toHaveText('1');
+  });
+
+  test('opening the room clears the quiet dot', async ({ page }) => {
+    await bootAuthedApp(page, { data: seedWithActivity([]) });
+    await page.evaluate(() => loadHuddleActivityCache());
+    await page.waitForTimeout(200);
+    await page.evaluate(async () => { await openDetail('c1', { tab: 'huddle' }); });
+    await page.waitForTimeout(300);
+    await page.evaluate(() => closeHuddleScreen());
+    await expect(page.locator('.huddle-cta-btn[data-crew-id="c1"]')).toHaveCount(0);
+  });
+
+  test('an activity line is about the people it names, never the actor', async ({ page }) => {
+    await bootAuthedApp(page, { data: seedWithHuddle() });
+    const about = await page.evaluate(() => activityAbout(
+      { claimedBy: 'kai-uid' }, { claimedBy: 'test-user-id' }, { claimedBy: null }, null, { claimedBy: 'kai-uid' }));
+    expect(about).toEqual(['kai-uid']);
   });
 });

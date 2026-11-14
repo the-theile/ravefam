@@ -333,12 +333,12 @@ async function main() {
         run: async (p) => {
           await p.evaluate(() => openDetail('c1'));
           await p.evaluate(() => {
-            const gpBtn = document.querySelector('#page-crew-detail .stats-subtab[data-tab="gameplan"]');
-            switchCrewDetailTab('gameplan', gpBtn);
+            const ravePlanTile = document.querySelector('.crew-feature-tile[data-feature="raveplan"]');
+            toggleCrewFeatureTile('raveplan', ravePlanTile);
           });
           await p.waitForTimeout(500); // openGamePlanTab's game_plans/game_plan_items/huddle_rooms round-trips
           await p.evaluate(() => {
-            const checklistBtn = document.querySelector('#crew-detail-panel-gameplan .game-plan-section-tab[data-section="checklist"]');
+            const checklistBtn = document.querySelector('#crew-feature-panel-raveplan .game-plan-section-tab[data-section="checklist"]');
             switchGamePlanSection('checklist', checklistBtn);
           });
         },

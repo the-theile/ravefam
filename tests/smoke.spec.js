@@ -52,30 +52,39 @@ test.describe('double-tap tab to refresh', () => {
 
   test('two fast taps on the same tab trigger one refresh', async ({ page }) => {
     await setup(page);
-    await page.evaluate(() => { switchTab('crews'); switchTab('crews'); });
+    await page.evaluate(() => { const t = document.querySelector('.nav-tab.c-crews'); switchTab('crews', t); switchTab('crews', t); });
     // refreshTab awaits loadAllData; give the microtask a tick.
     await expect.poll(() => page.evaluate(() => window.__refreshCount)).toBe(1);
   });
 
   test('two slow taps (>400ms apart) do NOT refresh', async ({ page }) => {
     await setup(page);
-    await page.evaluate(() => switchTab('crews'));
+    await page.evaluate(() => switchTab('crews', document.querySelector('.nav-tab.c-crews')));
     await page.waitForTimeout(450);
-    await page.evaluate(() => switchTab('crews'));
+    await page.evaluate(() => switchTab('crews', document.querySelector('.nav-tab.c-crews')));
     await page.waitForTimeout(50);
     expect(await page.evaluate(() => window.__refreshCount)).toBe(0);
   });
 
   test('a fast tap of a different tab does NOT refresh', async ({ page }) => {
     await setup(page);
-    await page.evaluate(() => { switchTab('crews'); switchTab('events'); });
+    await page.evaluate(() => { switchTab('crews', document.querySelector('.nav-tab.c-crews')); switchTab('events', document.querySelector('.nav-tab.c-raves')); });
     await page.waitForTimeout(50);
     expect(await page.evaluate(() => window.__refreshCount)).toBe(0);
   });
 
   test('the Village (checklist) tab never refreshes on double-tap', async ({ page }) => {
     await setup(page);
-    await page.evaluate(() => { switchTab('checklist'); switchTab('checklist'); });
+    await page.evaluate(() => { const t = document.querySelector('.nav-tab.c-village'); switchTab('checklist', t); switchTab('checklist', t); });
+    await page.waitForTimeout(50);
+    expect(await page.evaluate(() => window.__refreshCount)).toBe(0);
+  });
+
+  test('code-driven switches (deep links) never count as a double-tap', async ({ page }) => {
+    await setup(page);
+    await page.evaluate(() => { switchTab('crews'); switchTab('crews'); });
+    // A real tap right after a code-driven switch is a first tap, not a second.
+    await page.evaluate(() => switchTab('crews', document.querySelector('.nav-tab.c-crews')));
     await page.waitForTimeout(50);
     expect(await page.evaluate(() => window.__refreshCount)).toBe(0);
   });

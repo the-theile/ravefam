@@ -78,6 +78,7 @@ test.describe('privacy & permissions', () => {
     await bootAuthedApp(page, { data });
 
     await page.evaluate(() => openProfile('r-kai'));
+    await page.locator('#page-profile .profile-tab[data-tab="raves"]').click();
     const profileText = await page.locator('#page-profile').innerText();
     expect(profileText).toContain('Location private');
     expect(profileText).not.toContain('Based in Lisbon');
@@ -87,7 +88,7 @@ test.describe('privacy & permissions', () => {
 
   test('privacy settings modal toggles persist for your own profile', async ({ page }) => {
     await bootAuthedApp(page);
-    await page.evaluate(() => openPrivacySettingsModal('r-you'));
+    await page.evaluate(() => openPrivacySettingsModal('r-you', 'privacy'));
     await expect(page.locator('#privacy-settings-overlay')).toHaveClass(/open/);
 
     const toggle = page.locator('.poll-anon-toggle[data-key="allowFestivalAdds"]');
@@ -99,6 +100,26 @@ test.describe('privacy & permissions', () => {
     expect(await hasOnClass()).toBe(false);
     const youRow = await page.evaluate(() => (window.__store.ravers || []).find(r => r.id === 'r-you'));
     expect(youRow.allow_festival_adds).toBe(false);
+  });
+
+  test('settings hub shows a summary per section and hides the dev console until 5 version taps', async ({ page }) => {
+    await bootAuthedApp(page);
+    await page.evaluate(() => { _erudaInited = true; openPrivacySettingsModal('r-you'); });
+    const overlay = page.locator('#privacy-settings-overlay');
+    await expect(overlay.locator('#settings-title')).toHaveText('⚙️ Settings');
+    await expect(overlay.locator('#settings-profile-card')).toContainText('Edit profile');
+    await expect(overlay.locator('#settings-sum-notif')).toHaveText(/^\d of 6 on$/);
+    await expect(overlay.locator('#settings-sum-privacy')).toHaveText(/^Phone (shared|hidden)/);
+    await expect(overlay.locator('#settings-sum-safety')).toContainText('PLUR Code');
+    await expect(overlay.locator('[data-page="privacy"]')).toBeHidden();
+
+    const erudaRow = page.locator('#eruda-toggle-row');
+    const version = page.locator('#app-version-label');
+    await expect(erudaRow).toBeHidden();
+    for (let i = 0; i < 4; i++) await version.click();
+    await expect(erudaRow).toBeHidden();
+    await version.click();
+    await expect(erudaRow).toBeVisible();
   });
 
   test('the privacy modal cannot be opened for someone else\'s profile', async ({ page }) => {

@@ -11,21 +11,59 @@
 // layer supports far more reliably than esm.sh's browser/deno transpile.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import webpush from "npm:web-push@3.6.7";
+import { sendToUserDevices, type ApnsMessage } from "../_shared/apns.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const VAPID_PUBLIC_KEY = Deno.env.get("VAPID_PUBLIC_KEY")!;
-const VAPID_PRIVATE_KEY = Deno.env.get("VAPID_PRIVATE_KEY")!;
+const VAPID_PUBLIC_KEY = Deno.env.get("VAPID_PUBLIC_KEY");
+const VAPID_PRIVATE_KEY = Deno.env.get("VAPID_PRIVATE_KEY");
 const VAPID_SUBJECT = Deno.env.get("VAPID_SUBJECT") ?? "mailto:hello@myravefam.com";
 
 const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+
+// VAPID setup is deliberately NOT done at module scope. web-push throws if a
+// key is missing or malformed, and a throw during module evaluation takes the
+// whole worker down with an opaque `WORKER_ERROR` before any handler runs.
+//
+// This is not hypothetical: a malformed VAPID_PUBLIC_KEY secret (stored with
+// base64 padding web-push rejects) left this function dead in production from
+// the day it shipped. Every invocation 500'd at boot, so no row was ever
+// written to huddle_beacon_push_log explaining why -- the failure was
+// completely silent. Initialising lazily turns that into a specific,
+// greppable error on a request that actually had work to do.
+let vapidReady = false;
+let vapidError: string | null = null;
+function ensureVapid(): string | null {
+  if (vapidReady) return null;
+  if (vapidError) return vapidError;
+  const missing: string[] = [];
+  if (!VAPID_PUBLIC_KEY) missing.push("VAPID_PUBLIC_KEY");
+  if (!VAPID_PRIVATE_KEY) missing.push("VAPID_PRIVATE_KEY");
+  if (missing.length) {
+    vapidError = `missing secrets: ${missing.join(", ")}`;
+    return vapidError;
+  }
+  try {
+    webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY!, VAPID_PRIVATE_KEY!);
+    vapidReady = true;
+    return null;
+  } catch (err) {
+    vapidError = String((err as Error)?.message ?? err);
+    return vapidError;
+  }
+}
 
 async function logOutcome(userId: string, messageId: string, status: "sent" | "skipped" | "failed", error?: string) {
   await sb.from("huddle_beacon_push_log").upsert(
     { user_id: userId, message_id: messageId, status, error: error ?? null, sent_at: status === "sent" ? new Date().toISOString() : null },
     { onConflict: "user_id,message_id" }
   );
+}
+
+// Users who blocked the sender never get a push from them (user_blocks).
+async function blockersOf(sb: any, senderId: string): Promise<Set<string>> {
+  const { data } = await sb.from("user_blocks").select("blocker_id").eq("blocked_id", senderId);
+  return new Set((data ?? []).map((row: any) => row.blocker_id as string));
 }
 
 Deno.serve(async (req) => {
@@ -44,6 +82,15 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ skipped: "not_an_active_beacon" }), { status: 200 });
   }
 
+  const vapidFailure = ensureVapid();
+  if (vapidFailure) {
+    console.error(`send-beacon-push: VAPID config unusable -- ${vapidFailure}`);
+    return new Response(JSON.stringify({ error: "vapid_config", detail: vapidFailure }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   const { data: crew } = await sb.from("crews").select("name").eq("id", message.crew_id).maybeSingle();
   const crewName = crew?.name ?? "your crew";
   const beaconBody = message.body ?? "";
@@ -54,11 +101,13 @@ Deno.serve(async (req) => {
     .eq("crew_id", message.crew_id)
     .is("deleted_at", null);
 
-  const recipientUids = Array.from(new Set(
+  let recipientUids = Array.from(new Set(
     (memberRows ?? [])
       .map((row: any) => row.ravers?.claimed_by as string | null)
       .filter((uid: string | null): uid is string => !!uid && uid !== message.sender_id)
   ));
+  const blockers = await blockersOf(sb, message.sender_id);
+  recipientUids = recipientUids.filter((uid) => !blockers.has(uid));
 
   const payload = JSON.stringify({
     title: `📣 Beacon from ${crewName}`,
@@ -67,6 +116,13 @@ Deno.serve(async (req) => {
     roomId: message.room_id,
     messageId: message.id,
   });
+  const apnsMessage: ApnsMessage = {
+    title: `📣 Beacon from ${crewName}`,
+    body: beaconBody,
+    data: { crewId: message.crew_id, roomId: message.room_id, messageId: message.id },
+    threadId: `crew-${message.crew_id}`,
+    huddleBadge: true,
+  };
 
   let sent = 0, skipped = 0, failed = 0;
 
@@ -89,14 +145,16 @@ Deno.serve(async (req) => {
         .select("endpoint, p256dh, auth")
         .eq("user_id", userId);
 
-      if (!subs || subs.length === 0) {
+      // iOS app devices (APNs) alongside web-push subscriptions.
+      const native = await sendToUserDevices(sb, userId, apnsMessage);
+      if ((!subs || subs.length === 0) && !native.devices) {
         await logOutcome(userId, messageId, "skipped", "no_subscription");
         skipped++;
         continue;
       }
 
-      let userSent = false, userFailed = false;
-      for (const sub of subs) {
+      let userSent = native.sent > 0, userFailed = native.failed > 0;
+      for (const sub of subs ?? []) {
         try {
           await webpush.sendNotification(
             { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
