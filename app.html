@@ -39,7 +39,6 @@
 </script>
 
 <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@800;900&family=Outfit:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,700;9..144,800&family=DM+Sans:wght@300;400;500&family=Orbitron:wght@600;700;800;900&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css" rel="stylesheet">
 <!-- supabase-js stays blocking: the main script block calls createClient() at
      parse time, so it must already be defined. The rest are deferred (nothing
      touches them until a handler runs), and jsQR / Leaflet / eruda are fetched
@@ -59,8 +58,8 @@
      stub pattern in tests/helpers.js, then run the suite. -->
 <script src="supabase-2.117.3.min.js"></script>
 <script defer src="qrcode.min.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
+<!-- html2canvas (share cards) and Cropper.js (totem crop) load on first use:
+     see ensureHtml2Canvas / ensureCropper. Every launch paid for them before. -->
 <style>
   :root {
     --neon-pink: #FF2D78;
@@ -13297,6 +13296,20 @@
   const LEAFLET_JS  = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';
   const LEAFLET_CSS = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';
   const ERUDA_JS    = 'https://cdn.jsdelivr.net/npm/eruda';
+  const HTML2CANVAS_JS = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+  const CROPPER_JS     = 'https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js';
+  const CROPPER_CSS    = 'https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css';
+  // Share-card capture. Resolves either way: callers keep their existing
+  // "typeof html2canvas" fallback (text-only share) when the load fails.
+  function ensureHtml2Canvas() {
+    if (typeof html2canvas !== 'undefined') return Promise.resolve();
+    return loadScriptOnce(HTML2CANVAS_JS).catch(() => {});
+  }
+  // Totem crop. Rejects when the library can't load, so the caller can say so.
+  function ensureCropper() {
+    if (typeof Cropper !== 'undefined') return Promise.resolve();
+    return Promise.all([loadScriptOnce(CROPPER_JS), loadStylesheetOnce(CROPPER_CSS)]);
+  }
 
   function loadJsQR() {
     return window.jsQR ? Promise.resolve() : loadScriptOnce('jsQR.min.js');
@@ -17094,7 +17107,16 @@
     const objectUrl = URL.createObjectURL(blobOrFile);
     _totemCropContext = { crewId, crew, isEdit, objectUrl };
     const img = document.getElementById('totem-crop-img');
-    const startCropper = () => {
+    const startCropper = async () => {
+      try {
+        await ensureCropper();
+      } catch (e) {
+        closeTotemCropper();
+        toastError("Couldn't open the photo editor. Check your connection and try again", e);
+        return;
+      }
+      // Closed (or reopened with another photo) while the library loaded.
+      if (!_totemCropContext || _totemCropContext.objectUrl !== objectUrl) return;
       if (_totemCropper) { _totemCropper.destroy(); _totemCropper = null; }
       document.getElementById('totem-crop-zoom').value = 0;
       _totemCropper = new Cropper(img, {
@@ -19045,6 +19067,7 @@
     const token = ++_crewShareToken;
     _crewShareBlob = null;
     setShareButtonState('preparing');
+    await ensureHtml2Canvas();
     const card = document.getElementById('crew-share-card');
     if (!card || typeof html2canvas === 'undefined') {
       if (token === _crewShareToken) setShareButtonState('text-only');
@@ -19405,6 +19428,7 @@
     const token = ++_raveShareToken;
     _raveShareBlob = null;
     setRaveShareButtonState('preparing');
+    await ensureHtml2Canvas();
     const card = document.getElementById('rave-share-card');
     if (!card || typeof html2canvas === 'undefined') {
       if (token === _raveShareToken) setRaveShareButtonState('text-only');
@@ -43935,6 +43959,7 @@
   }
 
   async function shareWrapped() {
+    await ensureHtml2Canvas();
     const card = document.getElementById('wrapped-card');
     const actions = card.querySelector('.wrapped-actions');
     if (actions) actions.style.display = 'none';
@@ -44088,6 +44113,7 @@
   }
 
   async function shareRadarCard() {
+    await ensureHtml2Canvas();
     const card = document.getElementById('radar-share-card');
     // Buttons and trim controls are for the raver, not for the image.
     const chrome = [...card.querySelectorAll('.wrapped-actions, .radar-share-edit-only')];
