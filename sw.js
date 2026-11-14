@@ -1,4 +1,4 @@
-const CACHE = 'ravefam-v10';
+const CACHE = 'ravefam-v11';
 // jsQR is no longer precached — the app fetches it on demand, and only on
 // browsers without BarcodeDetector, so precaching it cost every install ~250KB
 // for a decoder most never use. The cache-first handler below still stores it
@@ -7,8 +7,16 @@ const PRECACHE = [
   '/',
   '/app.html',
   '/qrcode.min.js',
+  // The app's first statement is supabase.createClient(): without this file
+  // in the cache the cached app.html can't boot offline.
+  '/supabase-2.117.3.min.js',
   '/manifest.json',
 ];
+
+// How long a page load waits on the network before the cached copy is shown.
+// A festival connection is often "up" but crawling; without a limit the cached
+// app is never reached and the loader spins.
+const HTML_TIMEOUT_MS = 4000;
 
 self.addEventListener('install', e => {
   e.waitUntil(
@@ -76,24 +84,36 @@ self.addEventListener('fetch', e => {
 
   // Network-first for HTML/navigation: the whole app lives in app.html,
   // so this guarantees every new deploy is picked up on reload. We fall
-  // back to the cached copy only when the network is unavailable.
+  // back to the cached copy when the network is unavailable, or slower than
+  // HTML_TIMEOUT_MS.
   if (isHTMLRequest(req)) {
-    e.respondWith(
-      fetch(req).then(res => {
-        if (res && res.ok) {
-          const clone = res.clone();
-          caches.open(CACHE).then(c => c.put(req, clone));
-        }
-        return res;
-      }).catch(async () =>
-        (await caches.match(req)) ||
-        // A Lineup Explorer page opened from a reminder (?view=now) or with any
-        // other query string still has its plain copy cached.
-        (isExplorer(url) && await caches.match(req, { ignoreSearch: true })) ||
-        (await caches.match('/app.html')) ||
-        (await caches.match('/'))
-      )
-    );
+    const net = fetch(req).then(res => {
+      if (res && res.ok) {
+        const clone = res.clone();
+        caches.open(CACHE).then(c => c.put(req, clone));
+      }
+      return res;
+    });
+    const cachedCopy = async () =>
+      (await caches.match(req)) ||
+      // A Lineup Explorer page opened from a reminder (?view=now) or with any
+      // other query string still has its plain copy cached.
+      (isExplorer(url) && await caches.match(req, { ignoreSearch: true })) ||
+      (await caches.match('/app.html')) ||
+      (await caches.match('/'));
+    e.respondWith((async () => {
+      try {
+        const slow = new Promise(resolve => setTimeout(() => resolve(null), HTML_TIMEOUT_MS));
+        const first = await Promise.race([net, slow]);
+        if (first) return first;
+        // Network is slow: show what we have. The fetch keeps going (waitUntil
+        // below) and refreshes the cache for the next load.
+        return (await cachedCopy()) || (await net);
+      } catch (err) {
+        return (await cachedCopy()) || Response.error();
+      }
+    })());
+    e.waitUntil(net.catch(() => {}));
     return;
   }
 
