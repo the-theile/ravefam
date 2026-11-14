@@ -13374,6 +13374,8 @@
     if (_realtimeChannel) { sb.removeChannel(_realtimeChannel); _realtimeChannel = null; }
     teardownCrewPresence();
     clearTimeout(_reloadDebounce);
+    clearTimeout(_loadRetryTimer);
+    _loadAllDataEverOk = false; _loadRetryDelay = 4000;
     squad.length = 0; crews.length = 0; festivals.length = 0; dreamPins = []; archiveLinks = [];
     crewPolls = []; crewJams = []; crewJamVibes = [];
     crewAchievements = []; raverAchievements = []; crewFeedEvents = [];
@@ -15121,13 +15123,48 @@
   }
 
   let _postfestDataReady = Promise.resolve();
-  async function loadAllData() {
-    const uid = currentUser.id;
+  // One load at a time. Two overlapping runs used to each push their rows
+  // into the same arrays (every crew and raver twice). A caller that arrives
+  // mid-load may have just written something the running load read too early,
+  // so it gets one fresh run after the current one; late callers share it.
+  // Resolves true when the data was replaced, false when the load failed and
+  // the previous data was kept.
+  let _loadAllDataInFlight = null;
+  let _loadAllDataAgain = null;
+  let _loadAllDataEverOk = false;
+  function loadAllData() {
+    if (!_loadAllDataInFlight) {
+      _loadAllDataInFlight = loadAllDataOnce().finally(() => { _loadAllDataInFlight = null; });
+      return _loadAllDataInFlight;
+    }
+    if (!_loadAllDataAgain) {
+      _loadAllDataAgain = _loadAllDataInFlight.catch(() => {}).then(() => {
+        _loadAllDataAgain = null;
+        return currentUser ? loadAllData() : false;
+      });
+    }
+    return _loadAllDataAgain;
+  }
 
-    // Always clear demo data first — real DB data (even empty) takes precedence
-    festivals.length = 0; festSeq = 0;
-    squad.length = 0;     squadSeq = 0;
-    crews.length = 0;     crewSeq = 0;
+  // A failed load keeps whatever is on screen and tries again by itself
+  // (4s, 8s, … capped at 60s) — at a festival the next attempt often works.
+  let _loadRetryTimer = null;
+  let _loadRetryDelay = 4000;
+  function loadAllDataFailed(err) {
+    reportBackgroundFailure('loadAllData')(err);
+    // Never leave the hardcoded demo rows standing in for a real account.
+    if (!_loadAllDataEverOk) { festivals.length = 0; squad.length = 0; crews.length = 0; }
+    clearTimeout(_loadRetryTimer);
+    _loadRetryTimer = setTimeout(async () => {
+      if (!currentUser) return;
+      if (await loadAllData()) { renderSquad(); renderCrews(); renderEvents(); }
+    }, _loadRetryDelay);
+    _loadRetryDelay = Math.min(_loadRetryDelay * 2, 60000);
+    return false;
+  }
+
+  async function loadAllDataOnce() {
+    const uid = currentUser.id;
 
     // --- Background lookups ---
     // Badges/menus and the artist/venue catalogs don't gate the Crews/Squad
@@ -15171,6 +15208,14 @@
       sb.from('crews').select('*, crew_members(raver_id, added_at, deleted_at)').is('deleted_at', null).order('created_at', { ascending: true }),
       loadNicknames().catch(reportBackgroundFailure('loadNicknames')),
     ]);
+
+    // Nothing below touches the live arrays until every query has answered:
+    // a failed reload used to leave the app empty with no error.
+    const loadErr = fErr || rErr || cErr1;
+    if (loadErr) return loadAllDataFailed(loadErr);
+    const next = { festivals: [], squad: [], crews: [] };
+    { // Build into `next` — these names shadow the globals for this block only.
+    const festivals = next.festivals, squad = next.squad, crews = next.crews;
 
     if (!fErr && dbFests) {
       dbFests.forEach(f => {
@@ -15295,8 +15340,9 @@
       });
     });
     if (missingIds.length) {
-      const { data: crewRavers } = await sb
+      const { data: crewRavers, error: mErr } = await sb
         .rpc('get_crewmate_ravers', { p_ids: missingIds });
+      if (mErr) return loadAllDataFailed(mErr);
       if (crewRavers) {
         crewRavers.forEach(r => {
           squad.push({
@@ -15351,6 +15397,20 @@
         });
       }
     }
+    } // end of the `next` build block
+
+    // Signed out (or switched account) while loading: drop the result.
+    if (!currentUser || currentUser.id !== uid) return false;
+    // Swap in place — the globals are const arrays read all over the app.
+    festivals.length = 0; festSeq = 0;
+    squad.length = 0;     squadSeq = 0;
+    crews.length = 0;     crewSeq = 0;
+    festivals.push(...next.festivals);
+    squad.push(...next.squad);
+    crews.push(...next.crews);
+    _loadAllDataEverOk = true;
+    _loadRetryDelay = 4000;
+    clearTimeout(_loadRetryTimer);
 
     // Load community genre pool (non-blocking)
     dbLoadCommunityGenres().catch(reportBackgroundFailure('dbLoadCommunityGenres'));
@@ -15361,6 +15421,7 @@
     loadViewerNotes().catch(reportBackgroundFailure('loadViewerNotes'));
     // Android beta card + Founding Tester badges (non-blocking)
     loadAndroidBetaState().catch(reportBackgroundFailure('loadAndroidBetaState'));
+    return true;
   }
 
   // ===== WELCOME BACK POPUP =====
