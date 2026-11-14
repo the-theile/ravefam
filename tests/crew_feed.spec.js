@@ -130,6 +130,15 @@ test.describe('new crew page · quests', () => {
     await row.locator('.crew-quest-stamp', { hasText: 'Open the doors' }).click();
     await expect(page.locator('#crew-manifest-overlay')).toHaveClass(/open/);
   });
+
+  test('replaying a zone from the guide opens its chip and its intro', async ({ page }) => {
+    await bootWithCrewFeed(page);
+    await openC1(page);
+    await page.evaluate(() => guideReplay('zone', 'dreamboard'));
+    await expect(page.locator('.crew-feed-filter[data-filter="dreamboard"]')).toHaveClass(/active/);
+    await expect(panel(page, 'dreamboard')).toBeVisible();
+    await expect(page.locator('.gk-sheet .gk-title').last()).toHaveText('Dream Board');
+  });
 });
 
 test.describe('new crew page · roster sheet', () => {
