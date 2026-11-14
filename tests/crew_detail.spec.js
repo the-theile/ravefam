@@ -122,20 +122,22 @@ test.describe('crew detail · game plan', () => {
     await expect(page.locator('#crew-feature-panel-raveplan')).toBeVisible();
   }
 
-  test('the Rave Plan tile is offered for a shared upcoming rave', async ({ page }) => {
+  test('a Rave Plan ticket is offered for a shared upcoming rave', async ({ page }) => {
     await bootAuthedApp(page);
     await openC1(page);
-    await expect(page.locator('.crew-feature-tile[data-feature="raveplan"]')).toContainText('Rave Plan');
+    await expect(page.locator('.crew-ticket[data-fest="f1"]')).toContainText('Tomorrowland');
   });
 
-  test('the Rave Plan tile is NOT offered when no rave has shared attendance', async ({ page }) => {
+  test('no Rave Plan ticket when no rave has shared attendance', async ({ page }) => {
     // Same deriveCrewFestivalRooms rule the per-rave Huddle room used to gate
     // on — strip r-sam's RSVP so only "you" is going to f1, no overlap.
     const data = seedData();
     data.raver_festivals = data.raver_festivals.filter(rf => rf.raver_id !== 'r-sam');
     await bootAuthedApp(page, { data });
     await openC1(page);
-    await expect(page.locator('.crew-feature-tile[data-feature="raveplan"]')).toHaveCount(0);
+    // Only the blank "Where are we raving next?" ticket, no rave ticket.
+    await expect(page.locator('.crew-ticket[data-fest]')).toHaveCount(0);
+    await expect(page.locator('.crew-ticket.crew-ticket-blank')).toHaveCount(1);
   });
 
   // Rave Plan used to drop a rave the morning after it happened, taking its
@@ -156,15 +158,10 @@ test.describe('crew detail · game plan', () => {
     await bootAuthedApp(page, { data });
     await openGamePlan(page);
 
-    const pills = page.locator('.game-plan-rave-picker .huddle-room-pill');
-    await expect(pills).toHaveCount(2);           // Tomorrowland + the "Past · 2" pill
-    await expect(pills.nth(0)).toContainText('Tomorrowland');
-    await expect(pills.nth(1)).toContainText('Past · 2');
-
-    await pills.nth(1).click();
-    await expect(page.locator('.game-plan-rave-picker .huddle-room-pill')).toHaveCount(4);
-    await expect(page.locator('.game-plan-rave-picker .huddle-room-pill').nth(2)).toContainText('Old Fest');
-    await expect(page.locator('.game-plan-rave-picker .huddle-room-pill').nth(3)).toContainText('Ancient Fest');
+    // The ticket stack is the rave switcher; past raves open behind one pill row.
+    await page.evaluate(() => openCrewPastRaves());
+    const pills = page.locator('#crew-feature-panel-raveplan .game-plan-rave-picker .huddle-room-pill');
+    await expect(pills).toHaveText([/Old Fest/, /Ancient Fest/]);
   });
 
   test('adding a checklist task shows it, persists, and can be toggled done', async ({ page }) => {

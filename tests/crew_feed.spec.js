@@ -1,7 +1,7 @@
-// The new crew page (beta, Settings → New crew page). Same panels as the
+// The crew page (formerly the beta "new crew page"). Same panels as the
 // classic tile page, laid out as header + Huddle pill + Rave Plan tickets +
-// filter chips, with the roster in a bottom sheet. These run with the flag on;
-// every other crew spec keeps covering the classic page with it off.
+// filter chips, with the roster in a bottom sheet. It is the only crew page
+// now; bootWithCrewFeed still sets the retired flag, which the app ignores.
 const { test, expect } = require('@playwright/test');
 const { bootAuthedApp, seedData } = require('./helpers');
 
@@ -18,14 +18,6 @@ async function openC1(page, opts) {
 const panel = (page, key) => page.locator(`#crew-feature-panel-${key}`);
 
 test.describe('new crew page · layout', () => {
-  test('flag off keeps the classic tile page', async ({ page }) => {
-    await bootAuthedApp(page);
-    await openC1(page);
-    await expect(page.locator('#page-crew-detail')).not.toHaveClass(/crew-feed/);
-    await expect(page.locator('#page-crew-detail .crew-feature-tile')).not.toHaveCount(0);
-    await expect(page.locator('#page-crew-detail .stats-subtab')).toHaveCount(2);
-  });
-
   test('flag on renders header, Huddle dock, ticket and filters instead of tiles and tabs', async ({ page }) => {
     const errors = await bootWithCrewFeed(page);
     await openC1(page);
@@ -126,6 +118,73 @@ test.describe('new crew page · filters', () => {
   });
 });
 
+test.describe('new crew page · quests', () => {
+  test('the quest stamps sit under the header, and a stamp opens what it asks for', async ({ page }) => {
+    // A Secret crew leaves the lead's "Open the doors" quest unstamped.
+    const data = seedData();
+    data.crews = data.crews.map(c => c.id === 'c1' ? { ...c, status: 'secret' } : c);
+    await bootWithCrewFeed(page, { data });
+    await openC1(page);
+    const row = page.locator('#page-crew-detail .crew-feed-head + #crew-quest-row');
+    await expect(row).toContainText('LEAD QUESTS');
+    await row.locator('.crew-quest-stamp', { hasText: 'Open the doors' }).click();
+    await expect(page.locator('#crew-manifest-overlay')).toHaveClass(/open/);
+  });
+
+  test('replaying a zone from the guide opens its chip and its intro', async ({ page }) => {
+    await bootWithCrewFeed(page);
+    await openC1(page);
+    await page.evaluate(() => guideReplay('zone', 'dreamboard'));
+    await expect(page.locator('.crew-feed-filter[data-filter="dreamboard"]')).toHaveClass(/active/);
+    await expect(panel(page, 'dreamboard')).toBeVisible();
+    await expect(page.locator('.gk-sheet .gk-title').last()).toHaveText('Dream Board');
+  });
+});
+
+test.describe('new crew page · section intros', () => {
+  const sheetTitle = (page) => page.locator('.gk-sheet .gk-title').last();
+  const tapChip = (page, key) => page.locator(`.crew-feed-filter[data-filter="${key}"]`).click();
+  // The test boot marks every zone opened; start these from a first visit.
+  const freshZones = (page) => page.evaluate(() => { _guidance.zones = {}; });
+
+  test('a chip\'s first tap opens its section intro, and only the first', async ({ page }) => {
+    await bootWithCrewFeed(page);
+    await openC1(page);
+    await freshZones(page);
+    await tapChip(page, 'dreamboard');
+    await expect(sheetTitle(page)).toHaveText('Dream Board');
+    await page.locator('.gk-sheet button', { hasText: 'Let’s go' }).click();
+    expect(await page.evaluate(() => _guidance.zones.dreamboard)).toBe('opened');
+    await tapChip(page, 'all');
+    await tapChip(page, 'dreamboard');
+    await page.waitForTimeout(300);
+    await expect(page.locator('.gk-sheet')).toHaveCount(0);
+  });
+
+  test('Memories introduces one section per tap', async ({ page }) => {
+    await bootWithCrewFeed(page);
+    await openC1(page);
+    await freshZones(page);
+    await tapChip(page, 'memories');
+    await expect(sheetTitle(page)).toHaveText('Archive');
+    await page.locator('.gk-sheet button', { hasText: 'Let’s go' }).click();
+    await tapChip(page, 'all');
+    await tapChip(page, 'memories');
+    await expect(sheetTitle(page)).toHaveText('Pins');
+  });
+
+  test('no intros for someone who chose fewer tips', async ({ page }) => {
+    await bootWithCrewFeed(page);
+    await openC1(page);
+    await freshZones(page);
+    await page.evaluate(() => { _guidance.help_level = 'pro'; });
+    await tapChip(page, 'dreamboard');
+    await page.waitForTimeout(300);
+    await expect(page.locator('.gk-sheet')).toHaveCount(0);
+    expect(await page.evaluate(() => _guidance.zones.dreamboard)).toBe('opened');
+  });
+});
+
 test.describe('new crew page · roster sheet', () => {
   test('the avatars open the roster sheet; Escape closes it', async ({ page }) => {
     await bootWithCrewFeed(page);
@@ -172,22 +231,6 @@ test.describe('new crew page · deep links', () => {
     await openC1(page, { tab: 'gameplan', festivalId: 'f1' });
     await expect(page.locator('.crew-feed-filter[data-filter="raveplan"]')).toHaveClass(/active/);
     await expect(panel(page, 'raveplan')).toBeVisible();
-  });
-});
-
-test.describe('new crew page · settings toggle', () => {
-  test('turning it on in Settings swaps an open crew page', async ({ page }) => {
-    await bootAuthedApp(page);
-    await openC1(page);
-    await expect(page.locator('#page-crew-detail')).not.toHaveClass(/crew-feed/);
-    await page.evaluate(() => toggleCrewFeedEnabled(document.getElementById('crew-feed-settings-toggle')));
-    await expect(page.locator('#page-crew-detail')).toHaveClass(/crew-feed/);
-    expect(await page.evaluate(() => localStorage.getItem('ravefam_crew_feed'))).toBe('1');
-
-    await page.evaluate(() => toggleCrewFeedEnabled(document.getElementById('crew-feed-settings-toggle')));
-    await expect(page.locator('#page-crew-detail')).not.toHaveClass(/crew-feed/);
-    await expect(page.locator('#page-crew-detail .stats-subtab')).toHaveCount(2);
-    expect(await page.locator('#add-member-input').count()).toBe(1);
   });
 });
 

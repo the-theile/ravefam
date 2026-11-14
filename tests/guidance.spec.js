@@ -223,7 +223,8 @@ test.describe('inline captions', () => {
     await bootAuthedApp(page, { data });
     await openC1(page, { tab: 'roster' });
     await page.waitForTimeout(400);
-    await expect(page.locator('#page-crew-detail .crew-status-zone')).toContainText('No going back to Secret');
+    // tab:roster opens the roster sheet, where the status zone lives.
+    await expect(page.locator('#crew-manifest-content .crew-status-zone')).toContainText('No going back to Secret');
   });
 
   test('unclaimed member badge carries the explanation as a title attribute', async ({ page }) => {
