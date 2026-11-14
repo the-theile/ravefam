@@ -4,6 +4,10 @@ const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ADMIN_CHAT_ID = process.env.TELEGRAM_ADMIN_CHAT_ID;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Telegram sends this back in X-Telegram-Bot-Api-Secret-Token when the webhook
+// was registered with setWebhook(..., secret_token). Without the check anyone
+// could POST fake updates (and fill telegram_feedback / ping the admin chat).
+const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
 
 const PLUR_REPLY = `Got it raver 💜
 Thanks for helping make RaveFAM better. The crew will look at this soon.
@@ -18,6 +22,17 @@ module.exports = async (req, res) => {
   if (!TOKEN) {
     console.error('TELEGRAM_BOT_TOKEN is missing');
     return res.status(500).send('Bot not configured');
+  }
+
+  // Enforced once the env var is set (and the webhook re-registered with the
+  // same secret_token); until then requests are accepted as before, so
+  // deploying this can't take the bot down.
+  if (WEBHOOK_SECRET) {
+    if (req.headers['x-telegram-bot-api-secret-token'] !== WEBHOOK_SECRET) {
+      return res.status(401).send('Unauthorized');
+    }
+  } else {
+    console.warn('TELEGRAM_WEBHOOK_SECRET is not set: webhook requests are not verified');
   }
 
   try {
