@@ -422,7 +422,7 @@
     var btn = document.createElement("button");
     btn.type = "button";
     btn.className = "a2hs-btn";
-    btn.innerHTML = "📲 Save";
+    btn.innerHTML = '📲<span class="a2hs-label"> Install</span>';
     btn.setAttribute("aria-label", "Save this page to your home screen");
     btn.addEventListener("click", function () { buildModal(os); });
 
@@ -513,6 +513,8 @@
 
   var memberLoaded = false; // plans + RSVP fetched for this festival
   function isMemberMode() { return !!(memberLoaded && member && member.raverId && member.festival); }
+  var visitorKnown = false; // LineupMember resolved with no session
+  function isVisitor() { return visitorKnown && !member; }
 
   function saveLocal() {
     if (!slug) return;
@@ -915,10 +917,7 @@
       var jb = document.createElement("button");
       jb.type = "button";
       jb.textContent = "Join free";
-      jb.addEventListener("click", function () {
-        if (local.length) goSave();
-        else location.href = "/app";
-      });
+      jb.addEventListener("click", function () { goJoin("most_wanted"); });
       foot.appendChild(jb);
       mwEl.appendChild(foot);
     }
@@ -1043,6 +1042,70 @@
     logEvent("explorer_cta_click", props);
     if (n) { goSave(slug && all[slug] && all[slug].n && all[slug].n.length ? slug : latest, n); return; }
     location.href = slug ? "/app?rave=" + encodeURIComponent(slug) : "/app";
+  }
+
+  // ----- 👥 Plan with crew (visitors): what an account adds, one sheet -----
+  // Opened from the locked chip in the picks bar. Opening logs
+  // explorer_cta_click { surface: "crew_chip", dest: "sheet" }; the sheet's
+  // button logs its own click (surface "crew_sheet") through goJoin.
+  var joinSheet = null, joinSheetFocus = null;
+  var JOIN_PERKS = [
+    ["👥", "See which artists your crew picked, right on the lineup"],
+    ["♡", "Follow artists and see every lineup they're on"],
+    ["📤", "Share your picks with one link"],
+    ["🔔", "Get a ping 15 minutes before each of your sets"]
+  ];
+  function openJoinSheet() {
+    logEvent("explorer_cta_click", { surface: "crew_chip", slug: slug || "hub", picks: local.length, dest: "sheet" });
+    if (!joinSheet) {
+      joinSheet = document.createElement("div");
+      joinSheet.className = "lp-overlay";
+      var sh = el("div", "lp-sheet");
+      sh.setAttribute("role", "dialog");
+      sh.setAttribute("aria-modal", "true");
+      sh.setAttribute("aria-labelledby", "lpJoinTitle");
+      sh.innerHTML = '<div class="lp-sheet-top"><span class="lp-badge">RaveFAM</span>' +
+        '<button type="button" class="lp-x" aria-label="Close">✕</button></div>';
+      var h = el("h3", null, "Plan this lineup with your crew");
+      h.id = "lpJoinTitle";
+      sh.appendChild(h);
+      sh.appendChild(el("p", "lp-sub", "Free with a RaveFAM account. Your picks come with you."));
+      var ul = el("ul", "lp-join-list");
+      JOIN_PERKS.forEach(function (p) {
+        var li = el("li");
+        var ic = el("span", "lp-join-ic", p[0]);
+        ic.setAttribute("aria-hidden", "true");
+        li.appendChild(ic);
+        li.appendChild(el("span", null, p[1]));
+        ul.appendChild(li);
+      });
+      sh.appendChild(ul);
+      var row = el("div", "lp-actions");
+      var go = el("button", "lp-opt lp-join-go");
+      go.type = "button";
+      var later = el("button", "lp-opt lp-browse", "Not now");
+      later.type = "button";
+      row.appendChild(go);
+      row.appendChild(later);
+      sh.appendChild(row);
+      joinSheet.appendChild(sh);
+      document.body.appendChild(joinSheet);
+      joinSheet.addEventListener("click", function (e) {
+        if (e.target === joinSheet || e.target.closest(".lp-x") || e.target.closest(".lp-browse")) { closeJoinSheet(); return; }
+        if (e.target.closest(".lp-join-go")) goJoin("crew_sheet");
+      });
+      joinSheet.addEventListener("keydown", function (e) { if (e.key === "Escape") closeJoinSheet(); });
+    }
+    var n = local.length;
+    joinSheet.querySelector(".lp-join-go").textContent = n ? "Save my " + n + (n === 1 ? " pick" : " picks") : "Join free";
+    joinSheetFocus = document.activeElement;
+    joinSheet.classList.add("show");
+    joinSheet.querySelector(".lp-join-go").focus();
+  }
+  function closeJoinSheet() {
+    if (!joinSheet) return;
+    joinSheet.classList.remove("show");
+    if (joinSheetFocus && joinSheetFocus.focus && document.body.contains(joinSheetFocus)) joinSheetFocus.focus();
   }
 
   // ----- hub (/lineup-explorer/): Your picks box + ☆ row on picked cards -----
@@ -1506,7 +1569,11 @@
     }
     var tipped = false;
     try { tipped = !!window.localStorage.getItem(TIP_KEY); window.localStorage.setItem(TIP_KEY, "1"); } catch (e) {}
-    if (!tipped) toast("📋 " + a.name + " added to your picks on this device.", "Save to RaveFAM", function () { goSave(); });
+    if (tipped) return;
+    // The join bar already carries "Save N picks" when it's up: no second button.
+    var jb = document.getElementById("ctaBar");
+    if (jb && jb.style.display !== "none" && jb.dataset.mode) toast("📋 " + a.name + " added to your picks on this device.");
+    else toast("📋 " + a.name + " added to your picks on this device.", "Save to RaveFAM", function () { goSave(); });
   }
 
   // ----- picks bar + signup banner -----
@@ -1528,6 +1595,7 @@
     });
     var member = isMemberMode();
     barEl.querySelector('[data-v="favs"]').hidden = !member;
+    barEl.querySelector(".lp-lock-f").hidden = !isVisitor();
     barEl.querySelector('[data-v="now"]').hidden = view !== "now" && !(festLive(Date.now()) && nowItems().length);
     var crewN = member ? acts.filter(function (a) { return actCrew(a).length; }).length : 0;
     barEl.querySelector('[data-v="crew"]').hidden = !crewN && view !== "crew";
@@ -1582,6 +1650,7 @@
     var b = saveEl.querySelector("button");
     b.hidden = !btn;
     b.textContent = btn;
+    renderJoinBar();
     saveSnap();
     syncReminders();
   }
@@ -1599,6 +1668,7 @@
       '<button type="button" class="lp-f lp-fav-f" data-v="favs" hidden><span aria-hidden="true">♡</span> Favorites <b class="lp-nf">0</b></button>' +
       '<button type="button" class="lp-f lp-crew-f" data-v="crew" hidden><span aria-hidden="true">👥</span> Crew picks <b class="lp-nc">0</b></button>' +
       '<button type="button" class="lp-f lp-sched-f" data-v="schedule"><span aria-hidden="true">🗓️</span> My schedule</button>' +
+      '<button type="button" class="lp-f lp-lock-f" hidden><span aria-hidden="true">👥</span> Plan with crew <span class="lp-lock" aria-hidden="true">🔒</span></button>' +
       '<button type="button" class="lp-f lp-now-f" data-v="now" hidden><span aria-hidden="true">🎧</span> On deck</button>' +
       '<button type="button" class="lp-f lp-shared-f" data-v="shared" hidden><span aria-hidden="true">📋</span> <span class="lp-sn"></span> <b class="lp-nsh">0</b></button>' +
       '<button type="button" class="lp-share" hidden>📤 Share my picks</button>' +
@@ -1608,6 +1678,7 @@
     barEl.addEventListener("click", function (e) {
       if (e.target.closest(".lp-sort")) { sortWanted = !sortWanted; refresh(); return; }
       if (e.target.closest(".lp-share")) { openShareSheet(); return; }
+      if (e.target.closest(".lp-lock-f")) { openJoinSheet(); return; }
       var b = e.target.closest(".lp-f");
       if (!b) return;
       view = b.dataset.v;
@@ -3311,7 +3382,7 @@
   // ----- member load -----
   function loadMember() {
     window.LineupMember.ready(function (m) {
-      if (!m || !m.isMember) return;
+      if (!m || !m.isMember) { visitorKnown = true; refresh(); return; }
       if (member && member.offline && (!m.raverId || !m.festival)) return; // still offline: keep the snapshot
       member = m;
       if (!m.raverId || !m.festival) {
@@ -3536,23 +3607,24 @@
     all: readAll
   };
 
-  // ----- header: Log in (visitors) / My RaveFAM (members) -----
-  // Sits in the .brandbar next to 📲 Save. A visitor with ☆ picks logs in
-  // through the Save my picks handoff, so the picks come along; otherwise it
-  // simply opens /app. Members get a link back to the app.
+  // ----- header: Join free (visitors; /app also has log in) / My RaveFAM (members) -----
+  // Sits in the .brandbar next to 📲 Install. A visitor with ☆ picks joins
+  // through goJoin: picks ride the Save my picks handoff; otherwise it opens
+  // this rave after signup (/app?rave=). Members get a link back to the app.
   function injectAccountButton() {
     var bar = document.querySelector(".brandbar");
     if (!bar || bar.querySelector(".lp-account")) return;
     var a = document.createElement("a");
     a.className = "lp-account";
     a.href = "/app";
-    a.textContent = "Log in";
+    a.textContent = "Join free";
+    a.title = "Join RaveFAM free, or log in";
     a.addEventListener("click", function (e) {
       if (a.dataset.member) return;
       e.preventDefault();
       goJoin("header");
     });
-    // Join the right-hand group (📲 Save + year) rather than adding a third
+    // Join the right-hand group (📲 Install + year) rather than adding a third
     // child to the space-between brandbar.
     var group = bar.querySelector(".a2hs-yr-wrap");
     if (!group) {
@@ -3567,30 +3639,101 @@
       if (!m || !m.isMember) return;
       a.dataset.member = "1";
       a.textContent = "My RaveFAM";
+      a.removeAttribute("title");
       a.classList.add("is-member");
     });
   }
   // ----- festival pages: "Join the fam" bar (#ctaBar, static in each page) -----
   // Web: the button goes through goJoin (picks handoff or this rave) instead of
   // the marketing homepage. In the iOS app the native block below owns the
-  // link. Dismissal sticks for the browser session; members never see it.
+  // link. Members never see it. Once a visitor has 📋 picks here it becomes
+  // the picks bar ("3 picks on this device · Save 3 picks"), and says so when
+  // picks clash; it pulses once at 3 picks and once at the first clash.
+  // ✕ stores the pick count at dismissal for the session: the bar stays away,
+  // except that a bar dismissed before 3 picks comes back once at 3.
   var JOIN_BAR_KEY = "rf_join_bar_x";
+  var joinOrig = null, joinPulse = { three: false, clash: false }, joinClashes = 0;
+  function isNative() {
+    return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  }
   function hideJoinBar(bar) {
     bar.style.display = "none";
     var w = document.querySelector(".wrap");
     if (w) w.style.paddingBottom = "70px";
   }
+  function showJoinBar(bar) {
+    if (bar.style.display !== "none") return;
+    bar.style.display = "";
+    var w = document.querySelector(".wrap");
+    if (w) w.style.paddingBottom = "";
+  }
+  function joinBarAllowed(n) {
+    var x = null;
+    try { x = window.sessionStorage.getItem(JOIN_BAR_KEY); } catch (e) {}
+    if (x === null) return true;
+    return (parseInt(x, 10) || 0) < 3 && n >= 3;
+  }
+  function pulseJoinBar(bar) {
+    bar.classList.remove("cta-pulse");
+    void bar.offsetWidth;
+    bar.classList.add("cta-pulse");
+  }
+  function setJoinCopy(copy, lead, more, short) {
+    copy.innerHTML = "";
+    copy.appendChild(el("b", null, lead));
+    copy.appendChild(document.createTextNode(" "));
+    copy.appendChild(el("span", "cta-more", more));
+    copy.appendChild(el("span", "cta-short", short));
+  }
+  function renderJoinBar() {
+    var bar = document.getElementById("ctaBar");
+    if (!bar || isNative()) return;
+    if (member) { hideJoinBar(bar); return; }
+    var n = local.length;
+    if (!joinBarAllowed(n)) { hideJoinBar(bar); return; }
+    showJoinBar(bar);
+    var copy = bar.querySelector(".cta-copy"), btn = bar.querySelector(".cta-btn");
+    if (!copy || !btn) return;
+    if (!joinOrig) joinOrig = { copy: copy.innerHTML, btn: btn.innerHTML, label: btn.getAttribute("aria-label") };
+    var clashes = n > 1 ? clashPairs(scheduleActs()).filter(function (p) { return !clash[p.key]; }).length : 0;
+    var picksWord = n === 1 ? " pick" : " picks";
+    if (!n) {
+      bar.dataset.mode = "";
+      copy.innerHTML = joinOrig.copy;
+      btn.innerHTML = joinOrig.btn;
+      if (joinOrig.label) btn.setAttribute("aria-label", joinOrig.label);
+    } else {
+      bar.dataset.mode = clashes ? "clash" : "picks";
+      if (clashes) {
+        setJoinCopy(copy, "⚡ " + (clashes === 1 ? "2 of your picks clash." : clashes + " clashes in your picks."),
+          "Save them to RaveFAM and let your crew vote on who to catch.", "Let your crew vote.");
+      } else {
+        setJoinCopy(copy, "📋 " + n + picksWord + " on this device.",
+          n === 1 ? "Save it to RaveFAM so it follows you and your crew can see it."
+                  : "Save them to RaveFAM so they follow you and your crew can see them.",
+          n === 1 ? "Save it for your crew." : "Save them for your crew.");
+      }
+      btn.textContent = "Save " + n + picksWord;
+      btn.setAttribute("aria-label", "Save " + n + picksWord + " to RaveFAM");
+    }
+    if (n >= 3 && !joinPulse.three) { joinPulse.three = true; pulseJoinBar(bar); }
+    if (clashes > joinClashes && !joinPulse.clash) { joinPulse.clash = true; pulseJoinBar(bar); }
+    joinClashes = clashes;
+  }
   function wireJoinBar() {
     var bar = document.getElementById("ctaBar");
     if (!bar) return;
-    try { if (window.sessionStorage.getItem(JOIN_BAR_KEY)) hideJoinBar(bar); } catch (e) {}
-    var native = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    try { if (window.sessionStorage.getItem(JOIN_BAR_KEY) !== null) hideJoinBar(bar); } catch (e) {}
     var btn = bar.querySelector(".cta-btn");
-    if (btn && !native) btn.addEventListener("click", function (e) { e.preventDefault(); goJoin("join_bar"); });
+    if (btn && !isNative()) btn.addEventListener("click", function (e) {
+      e.preventDefault();
+      goJoin("join_bar", { mode: bar.dataset.mode || "join" });
+    });
     var x = bar.querySelector(".cta-close");
     if (x) x.addEventListener("click", function () {
-      try { window.sessionStorage.setItem(JOIN_BAR_KEY, "1"); } catch (e) {}
+      try { window.sessionStorage.setItem(JOIN_BAR_KEY, String(local.length)); } catch (e) {}
     });
+    bar.addEventListener("animationend", function () { bar.classList.remove("cta-pulse"); });
     window.LineupMember.ready(function (m) { if (m && m.isMember) hideJoinBar(bar); });
   }
 
