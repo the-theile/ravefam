@@ -24996,11 +24996,13 @@
       return;
     }
     if (idx >= 0) huddleMessages.splice(idx, 1, data);
-    else if (!huddleMessages.some(m => m.id === data.id)) huddleMessages.push(data);
+    // Switched rooms while the insert was in flight: huddleMessages now holds
+    // the other room, so the sent message must not be appended to it.
+    else if (data.room_id === _huddleActiveRoomId && !huddleMessages.some(m => m.id === data.id)) huddleMessages.push(data);
     renderHuddleUI();
     if (fields.mentions && fields.mentions.length) notifyHuddleMentions(data, fields.mentions);
     if (fields.reply_to_id) notifyHuddleActivityResponse(fields.reply_to_id, { replyId: data.id });
-    markCrewQuest('hi', _huddleActiveCrewId);
+    markCrewQuest('hi', data.crew_id);
     showHuddleHint('huddle_first_message', 'You’re in the chat — tell the fam what you’re most hyped for.');
   }
 
@@ -25008,7 +25010,8 @@
   // server-side by the huddle_messages_notify_mention_push trigger, gated on
   // that user's mention_push_opt_in.
   async function notifyHuddleMentions(message, uids) {
-    const crew = getCrew(_huddleActiveCrewId);
+    // The message's own crew: the user may have moved on since sending.
+    const crew = getCrew(message.crew_id || _huddleActiveCrewId);
     if (!crew) return;
     const who = huddleSenderName(currentUser.id) === 'You'
       ? displayName(squad.find(r => r.isYou) || {}) || 'Someone'
