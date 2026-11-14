@@ -11205,7 +11205,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.41.2';
+  const APP_VERSION = '2.41.3';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -22275,8 +22275,19 @@
     if (filter.panels.includes('raveplan')) openGamePlanTab(activeDetailId);
     if (!opts.quiet) {
       filter.panels.filter(f => CREW_FEATURE_READ_KEYS.includes(f)).forEach(f => markCrewFeatureRead(activeDetailId, f));
+      if (!opts.noIntro) maybeOpenCrewFilterIntro(filter);
     }
     updateCrewPresence();
+  }
+
+  // A chip's first tap opens the intro for the section it shows. Memories
+  // covers three, so one intro per tap: never-seen sections before ones
+  // saved for later.
+  function maybeOpenCrewFilterIntro(filter) {
+    if (!_guidance) return;
+    const shown = filter.panels.filter(f => document.getElementById('crew-feature-panel-' + f));
+    const next = shown.find(f => !_guidance.zones[f]) || shown.find(f => _guidance.zones[f] !== 'opened');
+    if (next) maybeOpenZoneIntro(next);
   }
 
   // Opens one feature panel by selecting the chip that shows it, so deep
@@ -40276,7 +40287,10 @@
     } else {
       _guidance.zones[key] = null;
       if (activeDetailId && document.getElementById('crew-feature-panel-' + key)) {
-        openCrewFeature(key);
+        // Pick the chip without its own intro, so only this zone's opens.
+        const filter = CREW_FEED_FILTERS.find(f => f.key !== 'all' && f.panels.includes(key));
+        if (filter && _crewFeedFilter !== filter.key) selectCrewFeedFilter(filter.key, { noIntro: true });
+        document.getElementById('crew-feature-panel-' + key).scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         maybeOpenZoneIntro(key);
       } else showToast('Open a crew to find it');
     }

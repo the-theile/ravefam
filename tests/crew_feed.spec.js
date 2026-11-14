@@ -141,6 +141,50 @@ test.describe('new crew page · quests', () => {
   });
 });
 
+test.describe('new crew page · section intros', () => {
+  const sheetTitle = (page) => page.locator('.gk-sheet .gk-title').last();
+  const tapChip = (page, key) => page.locator(`.crew-feed-filter[data-filter="${key}"]`).click();
+  // The test boot marks every zone opened; start these from a first visit.
+  const freshZones = (page) => page.evaluate(() => { _guidance.zones = {}; });
+
+  test('a chip\'s first tap opens its section intro, and only the first', async ({ page }) => {
+    await bootWithCrewFeed(page);
+    await openC1(page);
+    await freshZones(page);
+    await tapChip(page, 'dreamboard');
+    await expect(sheetTitle(page)).toHaveText('Dream Board');
+    await page.locator('.gk-sheet button', { hasText: 'Let’s go' }).click();
+    expect(await page.evaluate(() => _guidance.zones.dreamboard)).toBe('opened');
+    await tapChip(page, 'all');
+    await tapChip(page, 'dreamboard');
+    await page.waitForTimeout(300);
+    await expect(page.locator('.gk-sheet')).toHaveCount(0);
+  });
+
+  test('Memories introduces one section per tap', async ({ page }) => {
+    await bootWithCrewFeed(page);
+    await openC1(page);
+    await freshZones(page);
+    await tapChip(page, 'memories');
+    await expect(sheetTitle(page)).toHaveText('Archive');
+    await page.locator('.gk-sheet button', { hasText: 'Let’s go' }).click();
+    await tapChip(page, 'all');
+    await tapChip(page, 'memories');
+    await expect(sheetTitle(page)).toHaveText('Pins');
+  });
+
+  test('no intros for someone who chose fewer tips', async ({ page }) => {
+    await bootWithCrewFeed(page);
+    await openC1(page);
+    await freshZones(page);
+    await page.evaluate(() => { _guidance.help_level = 'pro'; });
+    await tapChip(page, 'dreamboard');
+    await page.waitForTimeout(300);
+    await expect(page.locator('.gk-sheet')).toHaveCount(0);
+    expect(await page.evaluate(() => _guidance.zones.dreamboard)).toBe('opened');
+  });
+});
+
 test.describe('new crew page · roster sheet', () => {
   test('the avatars open the roster sheet; Escape closes it', async ({ page }) => {
     await bootWithCrewFeed(page);
