@@ -1024,6 +1024,27 @@
     location.href = "/app?picks=1" + (from ? "&from=" + encodeURIComponent(from) : "");
   }
 
+  // ----- signup entry points (visitors) -----
+  // Every visitor "join" button lands here: logs explorer_cta_click with its
+  // surface, then carries ☆ picks through goSave (this page's if it has any,
+  // else the latest), or, with no picks, opens this rave after signup via
+  // /app?rave=<slug> (page slug equals festivals.slug). Hub falls back to /app.
+  function goJoin(surface, extra) {
+    var all = readAll(), n = 0, latest = null;
+    Object.keys(all).forEach(function (k) {
+      var p = all[k];
+      var c = p && Array.isArray(p.n) ? p.n.length : 0;
+      if (!c) return;
+      n += c;
+      if (!latest || (p.at || "") > (all[latest].at || "")) latest = k;
+    });
+    var props = { surface: surface, slug: slug || "hub", picks: n, dest: n ? "save" : slug ? "rave" : "app" };
+    if (extra) Object.keys(extra).forEach(function (k) { props[k] = extra[k]; });
+    logEvent("explorer_cta_click", props);
+    if (n) { goSave(slug && all[slug] && all[slug].n && all[slug].n.length ? slug : latest, n); return; }
+    location.href = slug ? "/app?rave=" + encodeURIComponent(slug) : "/app";
+  }
+
   // ----- hub (/lineup-explorer/): Your picks box + ☆ row on picked cards -----
   function initHub() {
     var cards = document.querySelectorAll(".event-card[href^='/lineup-explorer/']");
@@ -1688,9 +1709,7 @@
       var j = document.createElement("button");
       j.type = "button";
       j.textContent = "Join " + shared.first + " on RaveFAM";
-      j.addEventListener("click", function () {
-        if (local.length) goSave(); else location.href = "/app";
-      });
+      j.addEventListener("click", function () { goJoin("share_banner", { shared_picks: shared.n || 0 }); });
       shareBannerEl.appendChild(j);
     }
   }
@@ -2648,7 +2667,7 @@
     if (!list.some(function (x) { return x.set && x.set.start_at; })) {
       schedEl.appendChild(el("p", "lp-sched-note", "Clash check turns on when set times drop."));
     }
-    if (isMemberMode() && nowItems().length) schedEl.appendChild(remindRow());
+    if ((isMemberMode() || !member) && nowItems().length) schedEl.appendChild(remindRow());
     // Landed from the app's "Turn on set reminders" nudge: point at the 🔔
     // button (push permission needs the tap itself, so it isn't auto-toggled).
     if (remindIntent && isMemberMode()) {
@@ -2808,6 +2827,14 @@
 
   function remindRow() {
     var box = el("div", "lp-remind");
+    if (!member) {
+      var j = el("button", "lp-remind-btn", "🔔 Remind me before my sets");
+      j.type = "button";
+      j.addEventListener("click", function () { goJoin("reminder"); });
+      box.appendChild(j);
+      box.appendChild(el("span", "lp-remind-sub", "Free RaveFAM account. We'll ping you 15 min before each set."));
+      return box;
+    }
     if (!isMemberMode()) {
       box.appendChild(el("p", "lp-sched-note", "Log in to get a push 15 minutes before each set."));
       return box;
@@ -3522,17 +3549,8 @@
     a.textContent = "Log in";
     a.addEventListener("click", function (e) {
       if (a.dataset.member) return;
-      var all = readAll(), n = 0, latest = null;
-      Object.keys(all).forEach(function (k) {
-        var p = all[k];
-        var c = p && Array.isArray(p.n) ? p.n.length : 0;
-        if (!c) return;
-        n += c;
-        if (!latest || (p.at || "") > (all[latest].at || "")) latest = k;
-      });
-      if (!n) return;
       e.preventDefault();
-      goSave(slug && all[slug] && all[slug].n && all[slug].n.length ? slug : latest, n);
+      goJoin("header");
     });
     // Join the right-hand group (📲 Save + year) rather than adding a third
     // child to the space-between brandbar.
@@ -3552,9 +3570,38 @@
       a.classList.add("is-member");
     });
   }
+  // ----- festival pages: "Join the fam" bar (#ctaBar, static in each page) -----
+  // Web: the button goes through goJoin (picks handoff or this rave) instead of
+  // the marketing homepage. In the iOS app the native block below owns the
+  // link. Dismissal sticks for the browser session; members never see it.
+  var JOIN_BAR_KEY = "rf_join_bar_x";
+  function hideJoinBar(bar) {
+    bar.style.display = "none";
+    var w = document.querySelector(".wrap");
+    if (w) w.style.paddingBottom = "70px";
+  }
+  function wireJoinBar() {
+    var bar = document.getElementById("ctaBar");
+    if (!bar) return;
+    try { if (window.sessionStorage.getItem(JOIN_BAR_KEY)) hideJoinBar(bar); } catch (e) {}
+    var native = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    var btn = bar.querySelector(".cta-btn");
+    if (btn && !native) btn.addEventListener("click", function (e) { e.preventDefault(); goJoin("join_bar"); });
+    var x = bar.querySelector(".cta-close");
+    if (x) x.addEventListener("click", function () {
+      try { window.sessionStorage.setItem(JOIN_BAR_KEY, "1"); } catch (e) {}
+    });
+    window.LineupMember.ready(function (m) { if (m && m.isMember) hideJoinBar(bar); });
+  }
+
   if (window.LineupMember) {
-    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", injectAccountButton);
-    else injectAccountButton();
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", injectAccountButton);
+      document.addEventListener("DOMContentLoaded", wireJoinBar);
+    } else {
+      injectAccountButton();
+      wireJoinBar();
+    }
   }
 
   // ----- artist pages (Phase 4c-2; /lineup-explorer/artist/<slug>) -----
