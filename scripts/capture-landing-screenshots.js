@@ -295,7 +295,7 @@ async function main() {
 }
 
 // Shared with capture-guide-screenshots.js (same demo crew + harness).
-module.exports = { startServer, stopServer: () => { if (serverProc) serverProc.kill(); }, demoData, shootApp, BASE_URL };
+module.exports = { startServer, stopServer: () => { if (serverProc) serverProc.kill(); }, demoData, shootApp, writeWebp, clearChrome, BASE_URL };
 
 if (require.main === module) {
   main().catch((err) => { console.error(err); if (serverProc) serverProc.kill(); process.exit(1); });
