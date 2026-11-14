@@ -25934,16 +25934,42 @@
     const file = event.target.files && event.target.files[0];
     event.target.value = '';
     if (!file || !currentUser) return;
+    // Uploads are slow on festival signal: show the photo at once, greyed out
+    // like any unsent message, so the tap visibly did something.
+    const roomId = _huddleActiveRoomId, crewId = _huddleActiveCrewId;
+    const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    let previewUrl = null;
+    try { previewUrl = URL.createObjectURL(file); } catch (e) { /* no preview, still sends */ }
+    if (previewUrl) {
+      huddleMessages.push({ id: tempId, room_id: roomId, crew_id: crewId, sender_id: currentUser.id, kind: 'photo',
+        media_url: previewUrl, reactions: {}, created_at: new Date().toISOString(), _pending: true });
+      renderHuddleUI();
+      huddleScrollMessagesToBottom();
+    }
+    const dropPreview = () => {
+      const i = huddleMessages.findIndex(m => m.id === tempId);
+      if (i >= 0) { huddleMessages.splice(i, 1); renderHuddleUI(); }
+      if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
+    };
     try {
       const blob = await compressImageToBlob(file, 1280, 0.82);
-      const path = `crews/${_huddleActiveCrewId}/${_huddleActiveRoomId}/${crypto.randomUUID()}.jpg`;
+      const path = `crews/${crewId}/${roomId}/${crypto.randomUUID()}.jpg`;
       const { error: upErr } = await sb.storage.from('huddle-media').upload(path, blob, { cacheControl: '3600', upsert: true });
       if (upErr) throw upErr;
       const { data } = sb.storage.from('huddle-media').getPublicUrl(path);
-      await sendHuddleMessage({ kind: 'photo', media_url: data.publicUrl });
+      dropPreview();
+      if (_huddleActiveRoomId === roomId) {
+        await sendHuddleMessage({ kind: 'photo', media_url: data.publicUrl });
+      } else {
+        // Switched rooms during the upload: post it to the room it was sent from.
+        const { error } = await sb.from('huddle_messages')
+          .insert({ room_id: roomId, crew_id: crewId, sender_id: currentUser.id, kind: 'photo', media_url: data.publicUrl });
+        if (error) throw error;
+      }
     } catch (err) {
+      dropPreview();
       console.error('huddle photo upload error', err);
-      toastError('Could not send photo. Try again');
+      toastError('Could not send photo. Try again', err);
     }
   }
 
