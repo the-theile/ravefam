@@ -13432,7 +13432,7 @@
     const pendingToken = sessionStorage.getItem('pendingClaim');
     const pendingJoin  = sessionStorage.getItem('pendingCrewJoin');
     let pendingShare = null;
-    try { pendingShare = localStorage.getItem('pendingShareRef'); } catch (e) {}
+    try { pendingShare = localStorage.getItem('pendingShareRef'); } catch {}
     // Coming back on this device: prefill the email or number they last used.
     const last = readLastLogin();
     const idInput = document.getElementById('login-id');
@@ -13649,7 +13649,7 @@
   // the picks handoff without blocking it.
   async function processPendingFollow() {
     let p = null;
-    try { p = JSON.parse(localStorage.getItem('pendingFollowArtists') || 'null'); } catch (e) {}
+    try { p = JSON.parse(localStorage.getItem('pendingFollowArtists') || 'null'); } catch {}
     if (!p || !currentUser || isOnboarding) return;
     const you = squad.find(r => r.isYou);
     if (!you) return;
@@ -13677,7 +13677,7 @@
   let _shareRefBusy = false;
   async function processPendingShareRef() {
     let token = null;
-    try { token = localStorage.getItem('pendingShareRef'); } catch (e) {}
+    try { token = localStorage.getItem('pendingShareRef'); } catch {}
     if (!token || !currentUser || isOnboarding || _shareRefBusy) return;
     if (document.getElementById('picks-handoff-overlay')?.classList.contains('open')) return;
     _shareRefBusy = true;
@@ -15274,7 +15274,9 @@
       // opens the rave after).
       const pendingRave = !!localStorage.getItem('pendingRaveSlug');
       const pendingPicks = !!localStorage.getItem('pendingPicksHandoff') || !!localStorage.getItem('pendingInviteRaver');
-      const onboarding = runFirstTimeSetup({ allowWelcome: !deepLink && !pendingRave && !pendingPicks });
+      // Its "Let <first> know?" question would sit under the welcome popup.
+      const pendingShare = !!localStorage.getItem('pendingShareRef');
+      const onboarding = runFirstTimeSetup({ allowWelcome: !deepLink && !pendingRave && !pendingPicks && !pendingShare });
       if (!onboarding && !deepLink) {
         processPendingRave();
         if (!pendingRave && !processPendingInvite()) processPendingPicks();
