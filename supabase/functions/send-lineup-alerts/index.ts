@@ -16,6 +16,7 @@
 // web-push via `npm:` and lazy VAPID setup for the same reasons as
 // send-mention-push (see its header).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireServiceRole } from "../_shared/require-service-role.ts";
 import webpush from "npm:web-push@3.6.7";
 import { sendToUserDevices } from "../_shared/apns.ts";
 import { wrapEmail as wrapEmailShared, button } from "../_shared/email-templates.ts";
@@ -154,7 +155,9 @@ async function setStatus(ids: number[], status: "sent" | "skipped" | "failed", c
   }).in("id", ids);
 }
 
-Deno.serve(async () => {
+Deno.serve(async (req) => {
+  const denied = requireServiceRole(req);
+  if (denied) return denied;
   const { data, error } = await sb.rpc("claim_lineup_alerts");
   if (error) {
     console.error("send-lineup-alerts: claim failed", error);
