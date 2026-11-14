@@ -336,15 +336,15 @@ test.describe('Lineup Explorer hub — members (For You)', () => {
 test.describe('Lineup Explorer header — account button', () => {
   test.beforeEach(async ({ page }) => { await blockExternal(page); });
 
-  test('visitors get Log in, which opens /app', async ({ page }) => {
+  test('visitors get Join free, which opens this rave after signup', async ({ page }) => {
     await installSupabaseStub(page, { session: null, data: {} });
     await page.goto(PAGE);
     const btn = page.locator('.brandbar .lp-account');
-    await expect(btn).toHaveText('Log in');
-    await Promise.all([page.waitForURL(/\/app$/), btn.click()]);
+    await expect(btn).toHaveText('Join free');
+    await Promise.all([page.waitForURL(/\/app\?rave=edc-orlando-2026$/), btn.click()]);
   });
 
-  test('with 📋 picks, Log in carries them into the handoff', async ({ page }) => {
+  test('with 📋 picks, Join free carries them into the handoff', async ({ page }) => {
     await installSupabaseStub(page, { session: null, data: {} });
     await page.goto(PAGE);
     await star(page, 'Kaskade').click();
@@ -1078,7 +1078,8 @@ test.describe('Lineup Explorer 4b — On deck, set reminders, offline', () => {
     await expect(now(page).locator('.lp-now-label')).toHaveText(['Up next · in 10 min']);
     await expect(now(page).locator('.lp-now-name')).toHaveText(['Afrojack']);
     await expect(now(page).locator('.lp-now-later')).toHaveText('Later: Alesso 10 PM · Kaskade Sat 11 PM');
-    await expect(now(page).locator('.lp-remind .lp-sched-note')).toHaveText('Log in to get a push 15 minutes before each set.');
+    // Visitors get a real button that leads to signup (the picks come along).
+    await expect(now(page).locator('.lp-remind .lp-remind-btn')).toHaveText('🔔 Remind me before my sets');
   });
 
   test('outside festival hours there is no On deck', async ({ page }) => {
@@ -1295,7 +1296,9 @@ test.describe('Lineup Explorer 4c-2 — artist pages', () => {
     await expect(page.locator('.ar-link')).toHaveCount(5);
     await expect(page.locator('.ar-link', { hasText: 'Spotify' })).toHaveAttribute('href', 'https://open.spotify.com/search/Kaskade');
     await expect(page.locator('#arJoin')).toBeVisible();
-    await expect(page.locator('#arMember')).toBeHidden();
+    // Visitors get ♡ Favorite in the member layer's slot (saved for after signup).
+    await expect(page.locator('#arMember .ar-fav')).toHaveText('♡ Favorite');
+    await expect(page.locator('#arMember .ar-stat')).toHaveText('Get a ping when Kaskade lands on a lineup. Free on RaveFAM.');
     // The hub's own panels never boot here.
     await expect(page.locator('.lp-hub')).toHaveCount(0);
     const ld = JSON.parse(await page.locator('script[type="application/ld+json"]').first().textContent());
