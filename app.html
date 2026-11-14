@@ -11296,7 +11296,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.41.0';
+  const APP_VERSION = '2.41.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -22158,6 +22158,7 @@
     page.innerHTML = `
       <div class="crew-feed-wrap">
         ${crewFeedHeaderHTML(crew, s, people)}
+        ${crewQuestRowHTML(crew)}
         <div id="huddle-tile-preview-root" class="crew-feed-huddle"></div>
         ${crewTicketStackHTML(crew)}
         <div class="crew-feed-bar">
@@ -32927,8 +32928,8 @@
     if (crew.isLead) {
       const people = crewSquad(crew);
       return { label: 'LEAD QUESTS', title: 'Lead quests', badge: 'Crew Captain', items: [
-        { key: 'add', label: 'Add your people', done: people.length >= 2, go: `switchCrewDetailTab('roster', document.querySelector('#page-crew-detail .stats-subtab:nth-child(2)'))` },
-        { key: 'doors', label: 'Open the doors', done: crew.status !== 'secret', go: `switchCrewDetailTab('roster', document.querySelector('#page-crew-detail .stats-subtab:nth-child(2)'))` },
+        { key: 'add', label: 'Add your people', done: people.length >= 2, go: `openCrewManifestSheet()` },
+        { key: 'doors', label: 'Open the doors', done: crew.status !== 'secret', go: `openCrewManifestSheet()` },
         { key: 'claim', label: 'Get a spot claimed', done: people.some(p => !p.isYou && p.claimedBy), go: `openCrewShareCard('${escJsAttr(id)}')` },
         { key: 'plan', label: 'Get a crewmate going', done: hasGamePlan, go: `switchTab('events')` }
       ] };
@@ -32936,8 +32937,8 @@
     return { label: 'GET SETTLED', title: 'Get settled', badge: 'Settled In', items: [
       { key: 'claim', label: 'Claim your spot', done: true, go: '' },
       { key: 'hi', label: 'Say hi', done: !!q[`hi:${id}`], go: `openHuddle('${escJsAttr(id)}')` },
-      { key: 'vote', label: 'Vote in a poll', done: !!q[`vote:${id}`], go: `toggleCrewFeatureTile('poll', document.querySelector('.crew-feature-tile[data-feature=&quot;poll&quot;]'))` },
-      { key: 'task', label: 'Claim a task', done: !!q[`task:${id}`], go: hasGamePlan ? `toggleCrewFeatureTile('raveplan', document.querySelector('.crew-feature-tile[data-feature=&quot;raveplan&quot;]'))` : `switchTab('events')` }
+      { key: 'vote', label: 'Vote in a poll', done: !!q[`vote:${id}`], go: `openCrewFeature('poll')` },
+      { key: 'task', label: 'Claim a task', done: !!q[`task:${id}`], go: hasGamePlan ? `openCrewFeature('raveplan')` : `switchTab('events')` }
     ] };
   }
 
@@ -40585,7 +40586,7 @@
     stats: { where: 'STATS', realm: 'stats', tips: ['PLUR & Badges shows every point and what it was for.', 'Locked badges say what’s left to earn them.', 'Raves you check off fill your Rave Life.'] },
     members: { where: 'RAVERS', realm: 'ravers', tips: ['Your card is how crewmates spot you.', '👁 See as your crew shows exactly what they see.', 'Dashed cards are spots a Lead saved.'] },
     checklist: { where: 'VILLAGE', realm: 'village', tips: ['Your crew’s picks come first in Browse.', 'Reviews earn +15 Respect, live spots +5.'] },
-    'crew-detail': { where: 'CREW PAGE', tips: ['Twinkling tiles are ones you haven’t opened yet.', 'The stamps on the ticket are your quests. Stamp them all for a badge.', 'A yellow ! is an intro you saved for later.'] }
+    'crew-detail': { where: 'CREW PAGE', tips: ['“New since you looked” marks what crewmates posted since your last visit.', 'The stamps under the crew name are your quests. Stamp them all for a badge.', 'A yellow ! is an intro you saved for later.'] }
   };
   const HELP_LEVELS = [
     { key: 'guide', label: 'Show me around', sub: 'Intros when you find something new, plus tips that shrink as you learn.' },

@@ -118,6 +118,20 @@ test.describe('new crew page · filters', () => {
   });
 });
 
+test.describe('new crew page · quests', () => {
+  test('the quest stamps sit under the header, and a stamp opens what it asks for', async ({ page }) => {
+    // A Secret crew leaves the lead's "Open the doors" quest unstamped.
+    const data = seedData();
+    data.crews = data.crews.map(c => c.id === 'c1' ? { ...c, status: 'secret' } : c);
+    await bootWithCrewFeed(page, { data });
+    await openC1(page);
+    const row = page.locator('#page-crew-detail .crew-feed-head + #crew-quest-row');
+    await expect(row).toContainText('LEAD QUESTS');
+    await row.locator('.crew-quest-stamp', { hasText: 'Open the doors' }).click();
+    await expect(page.locator('#crew-manifest-overlay')).toHaveClass(/open/);
+  });
+});
+
 test.describe('new crew page · roster sheet', () => {
   test('the avatars open the roster sheet; Escape closes it', async ({ page }) => {
     await bootWithCrewFeed(page);
