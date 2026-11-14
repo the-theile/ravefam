@@ -11295,12 +11295,27 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.40.0';
+  const APP_VERSION = '2.40.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
   const SUPA_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2cGdvcGNpaW9xYnFtampqaWdoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3NTY2OTUsImV4cCI6MjA5NjMzMjY5NX0.DAgcx2UsGV1gUCQzHdGmv1Pu0rXlJdQxhn-bf1wGsiI';
-  const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+  // Every Supabase request gets a deadline. Without one, a connection that is
+  // "up" but stalled (festival signal) leaves a write hanging for minutes: a
+  // Huddle message stays pending with no Retry. On timeout the request fails
+  // like any network error, so the existing failure paths run. Uploads get
+  // longer. Realtime uses a WebSocket and is not affected.
+  const SUPA_TIMEOUT_MS = 20000;
+  const SUPA_UPLOAD_TIMEOUT_MS = 60000;
+  function supaFetch(input, init) {
+    init = init || {};
+    if (init.signal || typeof AbortController === 'undefined') return fetch(input, init);
+    const url = typeof input === 'string' ? input : (input && input.url) || '';
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), url.includes('/storage/v1/') ? SUPA_UPLOAD_TIMEOUT_MS : SUPA_TIMEOUT_MS);
+    return fetch(input, { ...init, signal: ctl.signal }).finally(() => clearTimeout(timer));
+  }
+  const sb = supabase.createClient(SUPA_URL, SUPA_KEY, { global: { fetch: supaFetch } });
   // Public VAPID key for Beacon push subscriptions — pairs with VAPID_PRIVATE_KEY
   // configured as a send-beacon-push Edge Function secret; not sensitive on its own.
   const VAPID_PUBLIC_KEY = 'BCF_mOzUV61zYqsbcN-NuAiGrmuc3pPx6qQDCmRV057Dw8JNy-IwvrPb9mpYDvqDBLruXtLCk9-Q1E7caAfn_6M';
@@ -40792,6 +40807,9 @@
     if (err) {
       if (!navigator.onLine || /failed to fetch|networkerror|load failed/i.test(err.message || '')) {
         msg = "You're offline. Try again once you're back online.";
+      } else if (/abort/i.test((err.name || '') + ' ' + (err.message || ''))) {
+        // supaFetch gave up waiting (see SUPA_TIMEOUT_MS).
+        msg = 'The connection is too slow right now. Try again in a moment.';
       } else if (err.code === '42501' || err.status === 401 || err.status === 403) {
         msg = "You don't have permission to do that.";
       } else if (isContentBlocked(err)) {
