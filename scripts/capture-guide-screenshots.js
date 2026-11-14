@@ -153,8 +153,6 @@ async function main() {
         await page.goto('/app.html?tab=signup');
         await page.waitForTimeout(1500);
         await clearChrome(page);
-        // RaveFAM is out of beta; the app's old BETA banner stays out of the guide.
-        await page.evaluate(() => document.querySelectorAll('.landing-beta').forEach((el) => el.style.setProperty('display', 'none', 'important')));
         await writeWebp(context, await page.screenshot(), 'join', OUT_DIR);
       } finally { await context.close(); }
     }
