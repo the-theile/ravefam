@@ -13930,7 +13930,7 @@
     try {
       localStorage.removeItem('pendingCrewJoinToken');
       localStorage.removeItem('pendingCrewJoinLater');
-    } catch (e) { /* storage blocked: nothing kept there either */ }
+    } catch { /* storage blocked: nothing kept there either */ }
   }
 
   // "Maybe later" (button, backdrop or Escape): ask once more on the next app
@@ -13941,7 +13941,7 @@
     try {
       askedBefore = localStorage.getItem('pendingCrewJoinLater') === '1';
       if (!askedBefore) localStorage.setItem('pendingCrewJoinLater', '1');
-    } catch (e) {}
+    } catch { /* storage blocked: just close */ }
     if (askedBefore) clearPendingCrewJoin();
     else showToast("No worries. We'll ask once more next time you open RaveFAM.");
     closeCrewJoinModal();
@@ -14208,7 +14208,7 @@
     if (joinToken) {
       _scanHandled = true;
       sessionStorage.setItem('pendingCrewJoin', joinToken);
-      try { localStorage.setItem('pendingCrewJoinToken', joinToken); } catch (e) {}
+      try { localStorage.setItem('pendingCrewJoinToken', joinToken); } catch { /* session copy still works */ }
       closeScanner();
       if (currentUser) processPendingCrewJoin(); else showAuthScreen();
       return;
@@ -25969,7 +25969,7 @@
     const roomId = _huddleActiveRoomId, crewId = _huddleActiveCrewId;
     const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).slice(2);
     let previewUrl = null;
-    try { previewUrl = URL.createObjectURL(file); } catch (e) { /* no preview, still sends */ }
+    try { previewUrl = URL.createObjectURL(file); } catch { /* no preview, still sends */ }
     if (previewUrl) {
       huddleMessages.push({ id: tempId, room_id: roomId, crew_id: crewId, sender_id: currentUser.id, kind: 'photo',
         media_url: previewUrl, reactions: {}, created_at: new Date().toISOString(), _pending: true });
