@@ -14983,10 +14983,11 @@
     const ev = payload.new;
     if (!ev) return;
     const meta = PLUR_TRACK_META[ev.track];
-    if (!meta) return;
-    const message = `${meta.emoji} +${ev.amount} ${meta.name} points`;
-    showToast(message);
-    if (currentUser) dbAddNotification(currentUser.id, null, message, 'points_earned', { track: ev.track, amount: ev.amount, event_type: ev.event_type });
+    // Reversals arrive as negative rows; they aren't something to celebrate.
+    if (!meta || !(ev.amount > 0)) return;
+    showToast(`${meta.emoji} +${ev.amount} ${meta.name} points`);
+    // The bell entry is written once server-side (point_events_notify_earned);
+    // inserting it here gave one copy per open device.
   }
 
   // Same realtime channel also carries crew_feed_events, which is how a
