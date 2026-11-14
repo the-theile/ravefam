@@ -9,7 +9,7 @@ The catalogue in section C and the indexes in section D were extracted mechanica
 
 | Lines | What |
 |---|---|
-| 1–60 | `<head>`: meta/OG tags, Google Fonts, platform flags (`is-android`, `is-native-app`, `is-ios-web`), blocking `supabase-js@2.117.3` from jsDelivr, deferred `qrcode.min.js`, html2canvas, cropperjs |
+| 1–60 | `<head>`: meta/OG tags, Google Fonts, platform flags (`is-android`, `is-native-app`, `is-ios-web`), blocking `supabase-js@2.117.3` (self-hosted as `supabase-2.117.3.min.js` since 2.40.1), deferred `qrcode.min.js`, html2canvas, cropperjs |
 | 61–9644 | One `<style>` block: neon theme tokens, layout, modals, sheets, Huddle, responsive rules |
 | 9645–9720 | `<body>` opens: SVG icon sprite and boot loader markup (`#app-loading`) |
 | 9721–9746 | Standalone boot-loader script (status line, Retry after 10 s). Runs even if the main script throws |
@@ -52,6 +52,7 @@ Other files that matter at runtime: `sw.js` (service worker), `vercel.json` (rew
 3. `showApp` → `bootApp()`:
    `loadAllData()` → `processPendingClaim()` → `processPendingCrewJoin()` → `renderSquad/renderCrews/renderEvents` → `dbLoadNotifications` → `setupRealtimeSync()` → native push init → deep link / share inbox → `initRealms()` → `runFirstTimeSetup()` (onboarding wizard, handle picker, or welcome popup).
 4. `loadAllData()` runs again after most membership changes (10 call sites) and 800 ms after any realtime event on `crew_members`, `crews` or `raver_festivals`.
+5. Since 2.40.1: `loadAllData()` is a wrapper that allows one run at a time around `loadAllDataOnce()`, which builds new arrays and swaps them into the globals only on success (`loadAllDataFailed` keeps the old data and retries). `resyncAfterGap()` re-runs it, plus `dbLoadNotifications` and `catchUpHuddleRoom`, when the app becomes visible after 30 s hidden or comes back online.
 
 ### Realtime channels
 
@@ -64,7 +65,7 @@ Other files that matter at runtime: `sw.js` (service worker), `vercel.json` (rew
 | `crew-plan-<crewId>` | CREW FEED (L22636) | Rave Plan check-offs | L22643 |
 | `mission-briefing-<gamePlanId>` | MISSION BRIEFING (L27778) | game plan changes | L27691 |
 
-None of the `postgres_changes` subscriptions pass a status callback, and nothing re-fetches on reconnect or when the tab becomes visible again.
+None of the `postgres_changes` subscriptions pass a status callback. Since 2.40.1, `resyncAfterGap()` re-fetches after a wake or reconnect (crews, RSVPs, notifications, the open Huddle room); the Rave Plan and Mission Briefing channels still do not catch up.
 
 ### Storage buckets
 
@@ -83,7 +84,7 @@ None of the `postgres_changes` subscriptions pass a status callback, and nothing
 
 ### Service worker (`sw.js`)
 
-Cache `ravefam-v10`. Precaches `/`, `/app.html`, `/qrcode.min.js`, `/manifest.json`. HTML is network-first with cache fallback (no timeout). Same-origin static assets are cache-first. Anything on `supabase.co`, hosts starting `cdn.` or `fonts.`, Turnstile, Nominatim and Open-Meteo bypass the worker entirely, so `supabase-js` (jsDelivr) and Google Fonts are never cached by it. Also handles `push` and `notificationclick`.
+Precaches `/`, `/app.html`, `/qrcode.min.js`, `/manifest.json`. HTML is network-first with cache fallback. Same-origin static assets are cache-first. Anything on `supabase.co`, hosts starting `cdn.` or `fonts.`, Turnstile, Nominatim and Open-Meteo bypass the worker entirely, so Google Fonts are never cached by it. Since 2.40.1 `supabase-js` is same-origin and precached, the cache is `ravefam-v11`, and HTML falls back to the cached copy after 4 s. Also handles `push` and `notificationclick`.
 
 ## C. Section catalogue
 

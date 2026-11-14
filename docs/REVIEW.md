@@ -11,6 +11,29 @@ Read-only audit. Nothing in the app or the database was changed.
 
 Line numbers refer to `app.html` at 2.40.0 unless another file is named. Section names match `docs/APP_MAP.md`.
 
+## Fix status (2.40.1)
+
+The top 10 were addressed in 2.40.1, one commit per finding. Migrations are written but **not applied**; they are in `supabase/migrations/` for review.
+
+| Finding | Client change | Migration (not applied) |
+|---|---|---|
+| C1 storage listing | none | `20261114000000_storage_stop_public_listing.sql` (has DROPs: paste into the SQL editor) |
+| C2 removed members keep access | none | `20261114000100_membership_helpers_ignore_removed.sql` |
+| C3 crewmate can overwrite profiles | `dbSaveRaver` sends only permitted columns for profiles that are not yours | `20261114000200_ravers_guard_non_owner_writes.sql` |
+| H1 privacy bypass by direct read | the two `ravers` inserts return `id` only | `20261114000300_private_columns_and_rsvp_reads.sql` (apply after 2.40.1 is live) |
+| H2 offline / slow signal | `supabase-js` self-hosted and precached; `sw.js` falls back to cache after 4 s | none |
+| H3 `loadAllData` blanking and duplicates | single in-flight run, swap on success, retry with backoff | none |
+| H4 no catch-up after wake | resync on visible-after-30 s and on `online`; `catchUpHuddleRoom` | none |
+| H5 RSVP fan-out | shared catalogs re-read at most every 10 min | covered by the H1 migration |
+| H6 Huddle message tampering, lost reactions | `toggleHuddleReaction` uses the RPC, falls back until it exists | `20261114000400_huddle_message_guard_and_reactions.sql` (apply after 2.40.1 is live) |
+| M1 re-join by invite link | `confirmJoinCrew` reads `already_member`, handles `removed_by_lead` | `20261114000500_rejoin_crew_via_invite.sql` |
+| M2 RSVP writes | ordered per rave, rolled back on failure, crew line posted after save (`toggleGoingToFest`) | none |
+| M3 no request timeouts | `supaFetch` deadline: 20 s, 60 s for uploads | none |
+
+Found while fixing C3: adding a vibe tag to a crewmate went through `dbSaveRaver`, which wrote the whole masked row back and so blanked that person's hidden phone, base and notes. The C3 client change stops it.
+
+Still open from this list: a cold start with no signal now boots but has no data to show (H2 follow-up: cache the last good load), and M4 onwards.
+
 ---
 
 ## Critical
