@@ -13,19 +13,19 @@ Line numbers refer to `app.html` at 2.40.0 unless another file is named. Section
 
 ## Fix status (2.40.1)
 
-The top 10 were addressed in 2.40.1, one commit per finding. Five of the six migrations were applied to production on 14 Nov 2026 (C2, C3, H1, H6, M1) and checked with read-only queries. **C1 (`20261114000000_storage_stop_public_listing.sql`) is still not applied**: it contains `DROP POLICY` and has to be pasted into the Supabase SQL editor.
+The top 10 were addressed in 2.40.1, one commit per finding. All six migrations are applied to production (14 Nov 2026) and were checked afterwards with read-only queries. C1 went in as two steps: the scoped `SELECT` policies through `apply_migration`, and the five `DROP POLICY` statements pasted into the SQL editor, because the connector's confirmation prompt timed out. After it, an anonymous listing request returns nothing on every public bucket and existing public URLs still load. Not exercised with real writes: the C3 and H6 triggers, the re-join function, and photo upload/replace/delete under the new storage policies.
 
 | Finding | Client change | Migration |
 |---|---|---|
-| C1 storage listing | none | `20261114000000_storage_stop_public_listing.sql` (has DROPs: paste into the SQL editor) |
+| C1 storage listing | none | `20261114000000_storage_stop_public_listing.sql` (applied; DROPs run in the SQL editor) |
 | C2 removed members keep access | none | `20261114000100_membership_helpers_ignore_removed.sql` |
 | C3 crewmate can overwrite profiles | `dbSaveRaver` sends only permitted columns for profiles that are not yours | `20261114000200_ravers_guard_non_owner_writes.sql` |
-| H1 privacy bypass by direct read | the two `ravers` inserts return `id` only | `20261114000300_private_columns_and_rsvp_reads.sql` (apply after 2.40.1 is live) |
+| H1 privacy bypass by direct read | the two `ravers` inserts return `id` only | `20261114000300_private_columns_and_rsvp_reads.sql` |
 | H2 offline / slow signal | `supabase-js` self-hosted and precached; `sw.js` falls back to cache after 4 s | none |
 | H3 `loadAllData` blanking and duplicates | single in-flight run, swap on success, retry with backoff | none |
 | H4 no catch-up after wake | resync on visible-after-30 s and on `online`; `catchUpHuddleRoom` | none |
 | H5 RSVP fan-out | shared catalogs re-read at most every 10 min | covered by the H1 migration |
-| H6 Huddle message tampering, lost reactions | `toggleHuddleReaction` uses the RPC, falls back until it exists | `20261114000400_huddle_message_guard_and_reactions.sql` (apply after 2.40.1 is live) |
+| H6 Huddle message tampering, lost reactions | `toggleHuddleReaction` uses the RPC, falls back until it exists | `20261114000400_huddle_message_guard_and_reactions.sql` |
 | M1 re-join by invite link | `confirmJoinCrew` reads `already_member`, handles `removed_by_lead` | `20261114000500_rejoin_crew_via_invite.sql` |
 | M2 RSVP writes | ordered per rave, rolled back on failure, crew line posted after save (`toggleGoingToFest`) | none |
 | M3 no request timeouts | `supaFetch` deadline: 20 s, 60 s for uploads | none |
