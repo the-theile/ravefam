@@ -1038,7 +1038,12 @@
       if (!latest || (p.at || "") > (all[latest].at || "")) latest = k;
     });
     if (preferRave && slug) n = 0; // ended rave: the handoff only takes upcoming picks
-    var props = { surface: surface, slug: slug || "hub", picks: n, dest: n ? "save" : slug ? "rave" : "app" };
+    // Came in on someone's shared picks: /app shows "<first> shared their
+    // picks with you" at signup and records the referral (processPendingShareRef).
+    if (shared && sharedToken) {
+      try { window.localStorage.setItem("pendingShareRef", sharedToken); } catch (e) {}
+    }
+    var props = { surface: surface, slug: slug || "hub", picks: n, dest: n ? "save" : slug ? "rave" : "app", via_share: !!(shared && sharedToken) };
     if (extra) Object.keys(extra).forEach(function (k) { props[k] = extra[k]; });
     logEvent("explorer_cta_click", props);
     if (n) { goSave(slug && all[slug] && all[slug].n && all[slug].n.length ? slug : latest, n); return; }
@@ -1733,6 +1738,7 @@
   // Turn off. Viewer: get_shared_lineup(token) returns the sharer's first
   // name and picks for this page only.
   var shared = null;       // { first, keys: { name_lower: true }, n }
+  var sharedToken = null;  // the ?by= token behind `shared`, for the signup referral
   var sharedGone = false;  // link was turned off or expired
   var shareSheet = null;
 
@@ -1749,6 +1755,7 @@
         (d.artists || []).forEach(function (nm) { keys[String(nm).toLowerCase()] = true; });
         acts.forEach(function (a) { if (splitKeys(a.name).every(function (k) { return keys[k]; })) n++; });
         shared = { first: d.first_name || "A friend", keys: keys, n: n };
+        sharedToken = token;
         logEvent("lineup_share_opened", { slug: slug, picks: n });
         refresh();
       }, noop);
