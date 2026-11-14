@@ -16189,6 +16189,19 @@
       ...(data.isYou ? { claimed_by: uid, status: 'claimed' } : {})
     };
     if (id) {
+      // Someone else's profile (a crewmate, or a stub another member made):
+      // this client only holds a masked copy (phone/base/notes come back blank
+      // when hidden), so writing the whole row would wipe the real values.
+      // Send only what a non-owner may change — matches raverPerms() and the
+      // ravers_guard_non_owner_writes trigger.
+      const target = getRaver(id);
+      const mine = !target || target.isYou || (!target.claimedBy && String(target.createdBy) === String(uid));
+      if (!mine) {
+        const keep = target.claimedBy
+          ? ['vibe_tags', 'custom_vibe_tags', 'genres', 'updated_at', ...(raverPerms(target).editName ? ['name'] : [])]
+          : ['name', 'handle', 'base', 'gradient', 'genres', 'instagram', 'radiate', 'vibe_tags', 'custom_vibe_tags', 'updated_at'];
+        Object.keys(row).forEach(k => { if (!keep.includes(k)) delete row[k]; });
+      }
       const { data: updated, error } = await sb.from('ravers').update(row).eq('id', id).select('id');
       if (error) { console.error('raver update error', error); toastError('Could not save profile. Try again', error); return null; }
       if (!updated?.length) { console.warn('raver update: 0 rows affected (RLS block?)', id); toastError('Save failed. Permission denied'); return null; }
