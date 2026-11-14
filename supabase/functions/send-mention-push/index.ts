@@ -13,6 +13,7 @@
 // internals, which Deno's npm compat layer supports far more reliably than
 // esm.sh's browser/deno transpile.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireServiceRole } from "../_shared/require-service-role.ts";
 import webpush from "npm:web-push@3.6.7";
 import { sendToUserDevices, type ApnsMessage } from "../_shared/apns.ts";
 
@@ -72,6 +73,8 @@ async function blockersOf(sb: any, senderId: string): Promise<Set<string>> {
 }
 
 Deno.serve(async (req) => {
+  const denied = requireServiceRole(req);
+  if (denied) return denied;
   const { message_id: messageId } = await req.json();
   if (!messageId) {
     return new Response(JSON.stringify({ error: "message_id required" }), { status: 400 });

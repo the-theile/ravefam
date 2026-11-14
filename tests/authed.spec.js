@@ -82,9 +82,10 @@ test.describe('eruda debug console gating', () => {
   });
 
   test('DOES init for the maintainer account', async ({ page }) => {
+    // Gated on the server's is_super_admin answer, not on an email in app.html.
     await installSupabaseStub(page, {
-      session: makeSession({ email: 'theile.secure@proton.me' }),
-      data: seedData(),
+      session: makeSession(),
+      data: { ...seedData(), __rpc: { is_super_admin: true } },
       eruda: FAKE_ERUDA,
     });
     await page.goto('/app.html');

@@ -8,6 +8,7 @@
 // unsubscribed_at opt-out -- a Beacon needs to be read within its 2h expiry,
 // not queued behind a 15-minute cron cadence.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireServiceRole } from "../_shared/require-service-role.ts";
 import { wrapEmail as wrapEmailShared, button } from "../_shared/email-templates.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -49,6 +50,8 @@ async function logOutcome(userId: string, messageId: string, status: "sent" | "s
 }
 
 Deno.serve(async (req) => {
+  const denied = requireServiceRole(req);
+  if (denied) return denied;
   const { message_id: messageId } = await req.json();
   if (!messageId) {
     return new Response(JSON.stringify({ error: "message_id required" }), { status: 400 });

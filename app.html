@@ -39,7 +39,6 @@
 </script>
 
 <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@800;900&family=Outfit:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,700;9..144,800&family=DM+Sans:wght@300;400;500&family=Orbitron:wght@600;700;800;900&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css" rel="stylesheet">
 <!-- supabase-js stays blocking: the main script block calls createClient() at
      parse time, so it must already be defined. The rest are deferred (nothing
      touches them until a handler runs), and jsQR / Leaflet / eruda are fetched
@@ -59,8 +58,8 @@
      stub pattern in tests/helpers.js, then run the suite. -->
 <script src="supabase-2.117.3.min.js"></script>
 <script defer src="qrcode.min.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
+<!-- html2canvas (share cards) and Cropper.js (totem crop) load on first use:
+     see ensureHtml2Canvas / ensureCropper. Every launch paid for them before. -->
 <style>
   :root {
     --neon-pink: #FF2D78;
@@ -3133,6 +3132,13 @@
     transition: opacity 0.25s;
   }
   .modal-overlay.open { opacity: 1; pointer-events: all; }
+  /* A modal taller than the screen (small phone with the keyboard up,
+     landscape) was cut off top and bottom with no way to reach its buttons.
+     The overlay now scrolls; margin:auto keeps a modal that fits centred
+     exactly as before, and drops to the top instead of off-screen when it
+     doesn't. The crew manifest is a bottom sheet with its own scrolling. */
+  .modal-overlay { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+  .modal-overlay > .modal:not(.crew-manifest-sheet) { margin: auto; flex-shrink: 0; }
   /* Confirms open from full-screen surfaces (Huddle is z-index 260, page
      panels 300) — keep the yes/no dialog above all of them. */
   #confirm-overlay { z-index: 1000; }
@@ -10263,7 +10269,7 @@
 </div>
 
 <!-- Crew Join Modal (invite link flow) -->
-<div class="modal-overlay" id="crew-join-overlay" onclick="if(event.target===this)closeCrewJoinModal()">
+<div class="modal-overlay" id="crew-join-overlay" onclick="if(event.target===this)laterCrewJoin()">
   <div class="modal" id="crew-join-modal-content" style="overflow:hidden;">
     <!-- filled by JS -->
   </div>
@@ -11295,7 +11301,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.40.1';
+  const APP_VERSION = '2.40.4';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -11791,7 +11797,9 @@
       editGenres:     isMember,
       editArtists:    isMember,
       editFests:      isMember,
-      canDisconnect:  isLeader && isClaimed,
+      // Only on a spot you built: disconnect_raver() refuses anyone else's
+      // profile (it would unlink them from every crew, not just yours).
+      canDisconnect:  isClaimed && shared.some(c => c.isLead) && String(r.createdBy) === String(currentUser.id),
       canDelete:      (isLeader || mod) && !isClaimed,
       isLeaderOfRaver: isLeader,
       isClaimed,
@@ -13249,7 +13257,7 @@
 
   async function doLogout() {
     sessionStorage.removeItem('pendingClaim');
-    sessionStorage.removeItem('pendingCrewJoin');
+    clearPendingCrewJoin();
     localStorage.removeItem('pendingClaimToken');
     localStorage.removeItem('pendingRaveSlug');
     localStorage.removeItem('pendingPicksHandoff');
@@ -13295,6 +13303,20 @@
   const LEAFLET_JS  = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';
   const LEAFLET_CSS = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';
   const ERUDA_JS    = 'https://cdn.jsdelivr.net/npm/eruda';
+  const HTML2CANVAS_JS = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+  const CROPPER_JS     = 'https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js';
+  const CROPPER_CSS    = 'https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css';
+  // Share-card capture. Resolves either way: callers keep their existing
+  // "typeof html2canvas" fallback (text-only share) when the load fails.
+  function ensureHtml2Canvas() {
+    if (typeof html2canvas !== 'undefined') return Promise.resolve();
+    return loadScriptOnce(HTML2CANVAS_JS).catch(() => {});
+  }
+  // Totem crop. Rejects when the library can't load, so the caller can say so.
+  function ensureCropper() {
+    if (typeof Cropper !== 'undefined') return Promise.resolve();
+    return Promise.all([loadScriptOnce(CROPPER_JS), loadStylesheetOnce(CROPPER_CSS)]);
+  }
 
   function loadJsQR() {
     return window.jsQR ? Promise.resolve() : loadScriptOnce('jsQR.min.js');
@@ -13321,20 +13343,20 @@
   }
 
   // ===== APP SHOW / HIDE =====
-  // Debug console (eruda) is only *shown* to the maintainer — gated by account
-  // email, with a localStorage escape hatch (set rf_eruda=1) for debugging on a
-  // specific device / before login. The gate also decides whether to download
-  // it at all: it's ~1MB, and almost nobody passes.
-  const ERUDA_ALLOWED_EMAILS = ['theile.secure@proton.me'];
+  // Debug console (eruda) is only *shown* to the maintainer — gated on the
+  // server's super-admin check (is_super_admin, see dbLoadSuperAdmin) rather
+  // than an email address in this public file, with a localStorage escape
+  // hatch (set rf_eruda=1) for debugging on a specific device / before login.
+  // The gate also decides whether to download it at all: it's ~1MB, and
+  // almost nobody passes.
   let _erudaInited = false;
   async function maybeInitEruda() {
     if (_erudaInited) return;
-    const email = (currentUser?.email || '').toLowerCase();
     const inFamTesters = crews.some(c =>
       c.name.toLowerCase() === 'fam testers' &&
       crewSquad(c).some(p => p.isYou)
     );
-    const allowed = ERUDA_ALLOWED_EMAILS.includes(email)
+    const allowed = isSuperAdminUser
       || localStorage.getItem('rf_eruda') === '1'
       || inFamTesters;
     if (allowed) {
@@ -13452,10 +13474,10 @@
         // right now. Saying so here beats letting someone create an account
         // and only then toasting "isn't currently recruiting" from bootApp().
         if (data?.error === 'not_recruiting') {
-          sessionStorage.removeItem('pendingCrewJoin');
+          clearPendingCrewJoin();
           showJoinNotRecruiting(data.crew_name);
         } else if (data?.error === 'invalid_token') {
-          sessionStorage.removeItem('pendingCrewJoin');
+          clearPendingCrewJoin();
           showJoinNotRecruiting(null, true);
         }
       }).catch(() => {});
@@ -13551,8 +13573,16 @@
       // (sessionStorage is per-tab). Cleared in commitClaim() / doLogout().
       localStorage.setItem('pendingClaimToken', token);
     }
-    const joinToken = params.get('join');
-    if (joinToken) sessionStorage.setItem('pendingCrewJoin', joinToken);
+    // Same localStorage backup as the claim token: iOS can discard the tab (or
+    // a new one opens) between tapping the invite and finishing sign-in.
+    const urlJoin = params.get('join');
+    const joinToken = urlJoin || localStorage.getItem('pendingCrewJoinToken');
+    if (joinToken) {
+      // A fresh link is a fresh ask: forget any earlier "Maybe later".
+      if (urlJoin && urlJoin !== localStorage.getItem('pendingCrewJoinToken')) localStorage.removeItem('pendingCrewJoinLater');
+      sessionStorage.setItem('pendingCrewJoin', joinToken);
+      localStorage.setItem('pendingCrewJoinToken', joinToken);
+    }
     // ?rave=<slug> from the public /rave/:slug page. localStorage (not
     // session) so it survives the email-verification round trip, same as
     // pendingClaimToken. Consumed by processPendingRave().
@@ -13885,10 +13915,36 @@
     // Keep the token through a network blip so the next launch retries it;
     // every answer the server does give is final, so clear it after that.
     if (error || !data) { toastError('Could not load crew invite. We\'ll try again next time you open the app.', error); return; }
-    sessionStorage.removeItem('pendingCrewJoin');
-    if (data.error === 'invalid_token')    { toastError('This invite link is no longer valid.'); return; }
-    if (data.error === 'not_recruiting')   { toastError(`${data.crew_name || 'This crew'} isn't currently recruiting.`); return; }
+    // Final answers clear the token; a live invite keeps it until the modal
+    // is answered (confirmJoinCrew / laterCrewJoin), so closing the app with
+    // the modal up doesn't lose it.
+    if (data.error === 'invalid_token')    { clearPendingCrewJoin(); toastError('This invite link is no longer valid.'); return; }
+    if (data.error === 'not_recruiting')   { clearPendingCrewJoin(); toastError(`${data.crew_name || 'This crew'} isn't currently recruiting.`); return; }
     showCrewJoinModal(token, data);
+  }
+
+  // The crew-invite token lives in sessionStorage plus a localStorage backup
+  // (see checkClaimParam), with a flag for "Maybe later" already used once.
+  function clearPendingCrewJoin() {
+    sessionStorage.removeItem('pendingCrewJoin');
+    try {
+      localStorage.removeItem('pendingCrewJoinToken');
+      localStorage.removeItem('pendingCrewJoinLater');
+    } catch { /* storage blocked: nothing kept there either */ }
+  }
+
+  // "Maybe later" (button, backdrop or Escape): ask once more on the next app
+  // open, then let the invite go. Previously it was thrown away at once, and
+  // the only way back was finding the original message.
+  function laterCrewJoin() {
+    let askedBefore = false;
+    try {
+      askedBefore = localStorage.getItem('pendingCrewJoinLater') === '1';
+      if (!askedBefore) localStorage.setItem('pendingCrewJoinLater', '1');
+    } catch { /* storage blocked: just close */ }
+    if (askedBefore) clearPendingCrewJoin();
+    else showToast("No worries. We'll ask once more next time you open RaveFAM.");
+    closeCrewJoinModal();
   }
 
   // Build a raver's claim URL — works for both hosted and local file:// contexts.
@@ -14152,6 +14208,7 @@
     if (joinToken) {
       _scanHandled = true;
       sessionStorage.setItem('pendingCrewJoin', joinToken);
+      try { localStorage.setItem('pendingCrewJoinToken', joinToken); } catch { /* session copy still works */ }
       closeScanner();
       if (currentUser) processPendingCrewJoin(); else showAuthScreen();
       return;
@@ -14562,6 +14619,20 @@
   }
 
   // ── Commit claim ──────────────────────────────────────
+  // A claim whose response was lost to the network may still have landed.
+  // Set on a network failure; the retry checks it before saying "claimed".
+  let _claimNetworkFailedToken = null;
+
+  // After "invalid_or_used_token" on a retry: reload and see whether the
+  // earlier, unanswered attempt put you in the crew. Returns your raver id.
+  async function claimLandedEarlier(previewSnap) {
+    const crewId = previewSnap?.crew?.id;
+    if (!crewId || !(await loadAllData())) return null;
+    const me = squad.find(r => r.isYou);
+    const crew = getCrew(crewId);
+    return me && crew && (crew.squadIds || []).some(id => String(id) === String(me.id)) ? me.id : null;
+  }
+
   async function commitClaim() {
     const token = _pendingClaimToken;
     if (!token || !currentUser) return;
@@ -14598,9 +14669,8 @@
     // PLUR from the claim (and the Crews tab found at boot) is read back
     // after it lands, for the success moment's single batched line.
     const claimPlurSince = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-    const { data: result, error } = await sb.rpc('claim_and_merge_raver', params);
+    let { data: result, error } = await sb.rpc('claim_and_merge_raver', params);
     if (error || result?.error) {
-      if (btn) { btn.disabled = false; btn.textContent = btnLabel; }
       let errType;
       if (result?.error === 'invalid_or_used_token' || result?.error === 'already_claimed') {
         errType = 'claimed';
@@ -14611,9 +14681,19 @@
       } else {
         errType = 'unknown';
       }
-      showScannerError(errType, previewSnap);
-      return;
+      if (errType === 'network') _claimNetworkFailedToken = token;
+      const landedId = errType === 'claimed' && _claimNetworkFailedToken === token
+        ? await claimLandedEarlier(previewSnap) : null;
+      if (!landedId) {
+        if (btn) { btn.disabled = false; btn.textContent = btnLabel; }
+        showScannerError(errType, previewSnap);
+        return;
+      }
+      // The first attempt went through; carry on as if this one had.
+      result = { claimed_id: landedId };
+      error = null;
     }
+    _claimNetworkFailedToken = null;
 
     // Claim succeeded — safe to clear the pending token from storage
     sessionStorage.removeItem('pendingClaim');
@@ -14946,10 +15026,11 @@
     const ev = payload.new;
     if (!ev) return;
     const meta = PLUR_TRACK_META[ev.track];
-    if (!meta) return;
-    const message = `${meta.emoji} +${ev.amount} ${meta.name} points`;
-    showToast(message);
-    if (currentUser) dbAddNotification(currentUser.id, null, message, 'points_earned', { track: ev.track, amount: ev.amount, event_type: ev.event_type });
+    // Reversals arrive as negative rows; they aren't something to celebrate.
+    if (!meta || !(ev.amount > 0)) return;
+    showToast(`${meta.emoji} +${ev.amount} ${meta.name} points`);
+    // The bell entry is written once server-side (point_events_notify_earned);
+    // inserting it here gave one copy per open device.
   }
 
   // Same realtime channel also carries crew_feed_events, which is how a
@@ -15224,7 +15305,7 @@
       updateModBadge();
       return isModerator() ? dbLoadFlags().catch(reportBackgroundFailure('dbLoadFlags')) : null;
     }).then(updateModBadge);
-    dbLoadSuperAdmin().catch(catalogFailure('dbLoadSuperAdmin')).then(updatePMDashBadge);
+    dbLoadSuperAdmin().catch(catalogFailure('dbLoadSuperAdmin')).then(() => { updatePMDashBadge(); maybeInitEruda(); });
     }
     dbLoadMyVendorBadges().catch(reportBackgroundFailure('dbLoadMyVendorBadges'));
     dbLoadUserBlocks().catch(reportBackgroundFailure('dbLoadUserBlocks'));
@@ -16571,9 +16652,16 @@
   async function softDeleteRow(table, match, reason) {
     const uid = currentUser?.id;
     if (!uid) return { ok: false, rateLimited: false };
-    const { error } = await sb.from(table)
-      .update({ deleted_at: new Date().toISOString(), deleted_by: uid, delete_reason: reason || null })
+    // count, not select(): RLS can match 0 rows without an error, which read
+    // as success ("Deleted" toast, audit row) while nothing changed. A
+    // returning select would need the deleted row to stay readable.
+    const { error, count } = await sb.from(table)
+      .update({ deleted_at: new Date().toISOString(), deleted_by: uid, delete_reason: reason || null }, { count: 'exact' })
       .match(match);
+    if (!error && count === 0) {
+      console.warn(`${table} soft delete: 0 rows affected (RLS block?)`, match);
+      return { ok: false, rateLimited: false };
+    }
     if (error) {
       console.error(`${table} soft delete error`, error);
       const msg = error.message || '';
@@ -17056,7 +17144,16 @@
     const objectUrl = URL.createObjectURL(blobOrFile);
     _totemCropContext = { crewId, crew, isEdit, objectUrl };
     const img = document.getElementById('totem-crop-img');
-    const startCropper = () => {
+    const startCropper = async () => {
+      try {
+        await ensureCropper();
+      } catch (e) {
+        closeTotemCropper();
+        toastError("Couldn't open the photo editor. Check your connection and try again", e);
+        return;
+      }
+      // Closed (or reopened with another photo) while the library loaded.
+      if (!_totemCropContext || _totemCropContext.objectUrl !== objectUrl) return;
       if (_totemCropper) { _totemCropper.destroy(); _totemCropper = null; }
       document.getElementById('totem-crop-zoom').value = 0;
       _totemCropper = new Cropper(img, {
@@ -19007,6 +19104,7 @@
     const token = ++_crewShareToken;
     _crewShareBlob = null;
     setShareButtonState('preparing');
+    await ensureHtml2Canvas();
     const card = document.getElementById('crew-share-card');
     if (!card || typeof html2canvas === 'undefined') {
       if (token === _crewShareToken) setShareButtonState('text-only');
@@ -19367,6 +19465,7 @@
     const token = ++_raveShareToken;
     _raveShareBlob = null;
     setRaveShareButtonState('preparing');
+    await ensureHtml2Canvas();
     const card = document.getElementById('rave-share-card');
     if (!card || typeof html2canvas === 'undefined') {
       if (token === _raveShareToken) setRaveShareButtonState('text-only');
@@ -24959,11 +25058,13 @@
       return;
     }
     if (idx >= 0) huddleMessages.splice(idx, 1, data);
-    else if (!huddleMessages.some(m => m.id === data.id)) huddleMessages.push(data);
+    // Switched rooms while the insert was in flight: huddleMessages now holds
+    // the other room, so the sent message must not be appended to it.
+    else if (data.room_id === _huddleActiveRoomId && !huddleMessages.some(m => m.id === data.id)) huddleMessages.push(data);
     renderHuddleUI();
     if (fields.mentions && fields.mentions.length) notifyHuddleMentions(data, fields.mentions);
     if (fields.reply_to_id) notifyHuddleActivityResponse(fields.reply_to_id, { replyId: data.id });
-    markCrewQuest('hi', _huddleActiveCrewId);
+    markCrewQuest('hi', data.crew_id);
     showHuddleHint('huddle_first_message', 'You’re in the chat — tell the fam what you’re most hyped for.');
   }
 
@@ -24971,7 +25072,8 @@
   // server-side by the huddle_messages_notify_mention_push trigger, gated on
   // that user's mention_push_opt_in.
   async function notifyHuddleMentions(message, uids) {
-    const crew = getCrew(_huddleActiveCrewId);
+    // The message's own crew: the user may have moved on since sending.
+    const crew = getCrew(message.crew_id || _huddleActiveCrewId);
     if (!crew) return;
     const who = huddleSenderName(currentUser.id) === 'You'
       ? displayName(squad.find(r => r.isYou) || {}) || 'Someone'
@@ -25862,16 +25964,42 @@
     const file = event.target.files && event.target.files[0];
     event.target.value = '';
     if (!file || !currentUser) return;
+    // Uploads are slow on festival signal: show the photo at once, greyed out
+    // like any unsent message, so the tap visibly did something.
+    const roomId = _huddleActiveRoomId, crewId = _huddleActiveCrewId;
+    const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    let previewUrl = null;
+    try { previewUrl = URL.createObjectURL(file); } catch { /* no preview, still sends */ }
+    if (previewUrl) {
+      huddleMessages.push({ id: tempId, room_id: roomId, crew_id: crewId, sender_id: currentUser.id, kind: 'photo',
+        media_url: previewUrl, reactions: {}, created_at: new Date().toISOString(), _pending: true });
+      renderHuddleUI();
+      huddleScrollMessagesToBottom();
+    }
+    const dropPreview = () => {
+      const i = huddleMessages.findIndex(m => m.id === tempId);
+      if (i >= 0) { huddleMessages.splice(i, 1); renderHuddleUI(); }
+      if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
+    };
     try {
       const blob = await compressImageToBlob(file, 1280, 0.82);
-      const path = `crews/${_huddleActiveCrewId}/${_huddleActiveRoomId}/${crypto.randomUUID()}.jpg`;
+      const path = `crews/${crewId}/${roomId}/${crypto.randomUUID()}.jpg`;
       const { error: upErr } = await sb.storage.from('huddle-media').upload(path, blob, { cacheControl: '3600', upsert: true });
       if (upErr) throw upErr;
       const { data } = sb.storage.from('huddle-media').getPublicUrl(path);
-      await sendHuddleMessage({ kind: 'photo', media_url: data.publicUrl });
+      dropPreview();
+      if (_huddleActiveRoomId === roomId) {
+        await sendHuddleMessage({ kind: 'photo', media_url: data.publicUrl });
+      } else {
+        // Switched rooms during the upload: post it to the room it was sent from.
+        const { error } = await sb.from('huddle_messages')
+          .insert({ room_id: roomId, crew_id: crewId, sender_id: currentUser.id, kind: 'photo', media_url: data.publicUrl });
+        if (error) throw error;
+      }
     } catch (err) {
+      dropPreview();
       console.error('huddle photo upload error', err);
-      toastError('Could not send photo. Try again');
+      toastError('Could not send photo. Try again', err);
     }
   }
 
@@ -33983,7 +34111,7 @@
       </p>
       ${profileSection}
       <div class="modal-actions" style="margin-top:20px;">
-        <button class="btn btn-ghost" onclick="closeCrewJoinModal()">Maybe later</button>
+        <button class="btn btn-ghost" onclick="laterCrewJoin()">Maybe later</button>
         <button class="btn btn-primary" id="crew-join-confirm-btn" onclick="confirmJoinCrew()">🎉 Claim My Spot</button>
       </div>`;
     document.getElementById('crew-join-overlay').classList.add('open');
@@ -34008,7 +34136,7 @@
     // Guard: already a member of this crew (client-side check before hitting the RPC)
     if (you) {
       const alreadyIn = crews.some(c => (c.squadIds || []).some(id => String(id) === String(you.id)) && c.invite_token === token);
-      if (alreadyIn) { showToast('You\'re already in this crew!'); closeCrewJoinModal(); return; }
+      if (alreadyIn) { clearPendingCrewJoin(); showToast('You\'re already in this crew!'); closeCrewJoinModal(); return; }
     }
     const name   = you ? null : document.getElementById('crew-join-name')?.value.trim();
     const handle = you ? null : document.getElementById('crew-join-handle')?.value.trim();
@@ -34021,6 +34149,9 @@
     if (error || !data) { toastError("Couldn't join the crew. Try again.", error); if (btn) { btn.disabled = false; btn.textContent = '🎉 Claim My Spot'; } return; }
     // The RPC reports this as { already_member: true }, not as an error — the
     // old check never matched and fell through to the welcome screen.
+    // Every answer below is final for this token.
+    if (data.already_member || data.error === 'already_member' || data.error === 'removed_by_lead'
+        || data.error === 'not_recruiting' || data.error === 'invalid_token') clearPendingCrewJoin();
     if (data.already_member || data.error === 'already_member') { showToast('You\'re already in this crew!'); closeCrewJoinModal(); return; }
     if (data.error === 'removed_by_lead') { toastError(`You were removed from ${data.crew_name || 'this crew'}. Ask the crew lead to add you back.`); closeCrewJoinModal(); return; }
     if (data.error === 'not_recruiting')  { toastError(`This crew isn't recruiting right now.`); closeCrewJoinModal(); return; }
@@ -34028,6 +34159,7 @@
     if (data.error === 'name_required')   { toastError('Enter your name to join.'); if (btn) { btn.disabled = false; btn.textContent = '🎉 Claim My Spot'; } return; }
     const crewName = data.crew_name || 'the crew';
     const joinerName = you?.name || name;
+    clearPendingCrewJoin();
     closeCrewJoinModal(false);
     const _joinCrewLink = nlCrew({ id: data.crew_id, name: crewName });
     addNotification(`🎉 You joined ${crewName}! Welcome to the fam — the bassline drops harder with you here.`, [_joinCrewLink]);
@@ -43890,6 +44022,7 @@
   }
 
   async function shareWrapped() {
+    await ensureHtml2Canvas();
     const card = document.getElementById('wrapped-card');
     const actions = card.querySelector('.wrapped-actions');
     if (actions) actions.style.display = 'none';
@@ -44043,6 +44176,7 @@
   }
 
   async function shareRadarCard() {
+    await ensureHtml2Canvas();
     const card = document.getElementById('radar-share-card');
     // Buttons and trim controls are for the raver, not for the image.
     const chrome = [...card.querySelectorAll('.wrapped-actions, .radar-share-edit-only')];

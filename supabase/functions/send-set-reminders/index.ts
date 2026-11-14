@@ -13,6 +13,7 @@
 // web-push via `npm:` and lazy VAPID setup for the same reasons as
 // send-mention-push (see its header).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireServiceRole } from "../_shared/require-service-role.ts";
 import webpush from "npm:web-push@3.6.7";
 import { sendToUserDevices } from "../_shared/apns.ts";
 
@@ -76,7 +77,9 @@ async function setStatus(id: number, status: "sent" | "skipped" | "failed", erro
   }).eq("id", id);
 }
 
-Deno.serve(async () => {
+Deno.serve(async (req) => {
+  const denied = requireServiceRole(req);
+  if (denied) return denied;
   const vapidFailure = ensureVapid();
   if (vapidFailure) {
     // Leave the queue alone so the next invocation can send once the secret
