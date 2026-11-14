@@ -8,7 +8,9 @@
 // real write flows (RSVP, create crew, add/remove member, edit profile) and
 // assert the data round-trips via a fresh loadAllData(), all with no backend.
 
-const SUPABASE_URL = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3';
+// app.html loads the self-hosted copy (supabase-<version>.min.js).
+// The Lineup Explorer pages still load it from jsDelivr; both get the stub.
+const SUPABASE_URL = /\/supabase-[\d.]+\.min\.js$|cdn\.jsdelivr\.net\/npm\/@supabase\/supabase-js@2\.117\.3$/;
 
 const TEST_UID = 'test-user-id';
 
@@ -546,6 +548,22 @@ async function installSupabaseStub(page, opts = {}) {
               const myRaver = (store.ravers || []).find(r => String(r.claimed_by) === String(uid));
               const mine = myRaver ? rows.find(r => String(r.raver_id) === String(myRaver.id)) : null;
               return { data: mine ? [{ ...mine, crew_size: rows.length }] : [], error: null };
+            }
+            // Mirrors public.toggle_huddle_reaction: flips this user's emoji and
+            // returns the message's reactions.
+            if (fn === 'toggle_huddle_reaction') {
+              const m = (store.huddle_messages || []).find(x => String(x.id) === String(args.p_message_id));
+              if (!m) return { data: null, error: { message: 'NOT_FOUND: message not found.' } };
+              const rx = { ...(m.reactions || {}) };
+              const list = rx[args.p_emoji] || [];
+              if (list.includes(uid)) {
+                rx[args.p_emoji] = list.filter(u => u !== uid);
+                if (!rx[args.p_emoji].length) delete rx[args.p_emoji];
+              } else {
+                rx[args.p_emoji] = [...list, uid];
+              }
+              m.reactions = rx;
+              return { data: rx, error: null };
             }
             return { data: [], error: null };
           }

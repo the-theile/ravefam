@@ -53,8 +53,11 @@
   // Flag iPhone/iPad in a browser (not the native shell) so .ios-web-only can point them to the App Store.
   else if (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) document.documentElement.classList.add('is-ios-web');
 </script>
-<!-- Pinned: @2 floats to whatever shipped last. Bump on purpose and run the suite. -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3"></script>
+<!-- Self-hosted (was jsDelivr) so the service worker can precache it: the app
+     can't start without it, and sw.js never caches cdn.* hosts. To upgrade,
+     add the new versioned file, change this src, PRECACHE in sw.js and the
+     stub pattern in tests/helpers.js, then run the suite. -->
+<script src="supabase-2.117.3.min.js"></script>
 <script defer src="qrcode.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
@@ -11292,12 +11295,27 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.40.0';
+  const APP_VERSION = '2.40.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
   const SUPA_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2cGdvcGNpaW9xYnFtampqaWdoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3NTY2OTUsImV4cCI6MjA5NjMzMjY5NX0.DAgcx2UsGV1gUCQzHdGmv1Pu0rXlJdQxhn-bf1wGsiI';
-  const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+  // Every Supabase request gets a deadline. Without one, a connection that is
+  // "up" but stalled (festival signal) leaves a write hanging for minutes: a
+  // Huddle message stays pending with no Retry. On timeout the request fails
+  // like any network error, so the existing failure paths run. Uploads get
+  // longer. Realtime uses a WebSocket and is not affected.
+  const SUPA_TIMEOUT_MS = 20000;
+  const SUPA_UPLOAD_TIMEOUT_MS = 60000;
+  function supaFetch(input, init) {
+    init = init || {};
+    if (init.signal || typeof AbortController === 'undefined') return fetch(input, init);
+    const url = typeof input === 'string' ? input : (input && input.url) || '';
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), url.includes('/storage/v1/') ? SUPA_UPLOAD_TIMEOUT_MS : SUPA_TIMEOUT_MS);
+    return fetch(input, { ...init, signal: ctl.signal }).finally(() => clearTimeout(timer));
+  }
+  const sb = supabase.createClient(SUPA_URL, SUPA_KEY, { global: { fetch: supaFetch } });
   // Public VAPID key for Beacon push subscriptions — pairs with VAPID_PRIVATE_KEY
   // configured as a send-beacon-push Edge Function secret; not sensitive on its own.
   const VAPID_PUBLIC_KEY = 'BCF_mOzUV61zYqsbcN-NuAiGrmuc3pPx6qQDCmRV057Dw8JNy-IwvrPb9mpYDvqDBLruXtLCk9-Q1E7caAfn_6M';
@@ -13371,6 +13389,8 @@
     if (_realtimeChannel) { sb.removeChannel(_realtimeChannel); _realtimeChannel = null; }
     teardownCrewPresence();
     clearTimeout(_reloadDebounce);
+    clearTimeout(_loadRetryTimer);
+    _loadAllDataEverOk = false; _loadRetryDelay = 4000; _catalogsLoadedAt = 0;
     squad.length = 0; crews.length = 0; festivals.length = 0; dreamPins = []; archiveLinks = [];
     crewPolls = []; crewJams = []; crewJamVibes = [];
     crewAchievements = []; raverAchievements = []; crewFeedEvents = [];
@@ -14891,6 +14911,32 @@
       .subscribe();
   }
 
+  // ── Catch up after sleep / reconnect ──
+  // Realtime only delivers what arrives while the socket is up, and iOS
+  // closes it when the phone locks or the app is backgrounded. Coming back
+  // after a real gap (or regaining signal) re-reads what was missed: crews
+  // and RSVPs, the bell, and the open Huddle room.
+  const RESYNC_AFTER_HIDDEN_MS = 30000;
+  let _hiddenSince = 0;
+  let _lastResyncAt = 0;
+  function resyncAfterGap() {
+    if (!currentUser || !_bootedUserId) return;
+    if (Date.now() - _lastResyncAt < 10000) return; // 'online' + 'visibilitychange' often fire together
+    _lastResyncAt = Date.now();
+    loadAllData().then(ok => {
+      if (ok) { renderSquad(); renderCrews(); renderEvents(); }
+    }).catch(() => {});
+    dbLoadNotifications().catch(() => {});
+    catchUpHuddleRoom().catch(() => {});
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { _hiddenSince = Date.now(); return; }
+    const gap = _hiddenSince ? Date.now() - _hiddenSince : 0;
+    _hiddenSince = 0;
+    if (gap > RESYNC_AFTER_HIDDEN_MS) resyncAfterGap();
+  });
+  window.addEventListener('online', resyncAfterGap);
+
   // PLUR points land server-side via triggers the client never sees coming
   // (a review, a claim, a vote — whatever caused it happens elsewhere) —
   // this is how the client learns the real, server-verified amount instead
@@ -15118,36 +15164,81 @@
   }
 
   let _postfestDataReady = Promise.resolve();
-  async function loadAllData() {
-    const uid = currentUser.id;
+  // One load at a time. Two overlapping runs used to each push their rows
+  // into the same arrays (every crew and raver twice). A caller that arrives
+  // mid-load may have just written something the running load read too early,
+  // so it gets one fresh run after the current one; late callers share it.
+  // Resolves true when the data was replaced, false when the load failed and
+  // the previous data was kept.
+  let _loadAllDataInFlight = null;
+  let _loadAllDataAgain = null;
+  let _loadAllDataEverOk = false;
+  function loadAllData() {
+    if (!_loadAllDataInFlight) {
+      _loadAllDataInFlight = loadAllDataOnce().finally(() => { _loadAllDataInFlight = null; });
+      return _loadAllDataInFlight;
+    }
+    if (!_loadAllDataAgain) {
+      _loadAllDataAgain = _loadAllDataInFlight.catch(() => {}).then(() => {
+        _loadAllDataAgain = null;
+        return currentUser ? loadAllData() : false;
+      });
+    }
+    return _loadAllDataAgain;
+  }
 
-    // Always clear demo data first — real DB data (even empty) takes precedence
-    festivals.length = 0; festSeq = 0;
-    squad.length = 0;     squadSeq = 0;
-    crews.length = 0;     crewSeq = 0;
+  // A failed load keeps whatever is on screen and tries again by itself
+  // (4s, 8s, … capped at 60s) — at a festival the next attempt often works.
+  let _loadRetryTimer = null;
+  let _loadRetryDelay = 4000;
+  const CATALOG_TTL_MS = 10 * 60 * 1000;
+  let _catalogsLoadedAt = 0;
+  function loadAllDataFailed(err) {
+    reportBackgroundFailure('loadAllData')(err);
+    // Never leave the hardcoded demo rows standing in for a real account.
+    if (!_loadAllDataEverOk) { festivals.length = 0; squad.length = 0; crews.length = 0; }
+    clearTimeout(_loadRetryTimer);
+    _loadRetryTimer = setTimeout(async () => {
+      if (!currentUser) return;
+      if (await loadAllData()) { renderSquad(); renderCrews(); renderEvents(); }
+    }, _loadRetryDelay);
+    _loadRetryDelay = Math.min(_loadRetryDelay * 2, 60000);
+    return false;
+  }
+
+  async function loadAllDataOnce() {
+    const uid = currentUser.id;
 
     // --- Background lookups ---
     // Badges/menus and the artist/venue catalogs don't gate the Crews/Squad
     // first paint (nothing below reads them), so fire them off together
     // without awaiting.
-    dbLoadModerators().catch(reportBackgroundFailure('dbLoadModerators')).then(() => {
+    // The shared catalogs (roles, artists, lineups, venues) don't change when
+    // a crewmate RSVPs or joins, and realtime reloads run this function often.
+    // Re-read them at most every CATALOG_TTL_MS instead of on every reload.
+    const refreshCatalogs = Date.now() - _catalogsLoadedAt > CATALOG_TTL_MS;
+    if (refreshCatalogs) _catalogsLoadedAt = Date.now();
+    const catalogFailure = what => err => { _catalogsLoadedAt = 0; reportBackgroundFailure(what)(err); };
+    if (refreshCatalogs) {
+    dbLoadModerators().catch(catalogFailure('dbLoadModerators')).then(() => {
       updateModBadge();
       return isModerator() ? dbLoadFlags().catch(reportBackgroundFailure('dbLoadFlags')) : null;
     }).then(updateModBadge);
-    dbLoadSuperAdmin().catch(reportBackgroundFailure('dbLoadSuperAdmin')).then(updatePMDashBadge);
+    dbLoadSuperAdmin().catch(catalogFailure('dbLoadSuperAdmin')).then(updatePMDashBadge);
+    }
     dbLoadMyVendorBadges().catch(reportBackgroundFailure('dbLoadMyVendorBadges'));
     dbLoadUserBlocks().catch(reportBackgroundFailure('dbLoadUserBlocks'));
     dbLoadMySanctions().catch(reportBackgroundFailure('dbLoadMySanctions'));
     // Everything postfestPending reads; the bell nudge waits on it (bootApp).
     _postfestDataReady = Promise.all([
-      dbLoadArtists().catch(reportBackgroundFailure('dbLoadArtists')),
-      dbLoadArtistAppearances().catch(reportBackgroundFailure('dbLoadArtistAppearances')),
+      refreshCatalogs ? dbLoadArtists().catch(catalogFailure('dbLoadArtists')) : null,
+      refreshCatalogs ? dbLoadArtistAppearances().catch(catalogFailure('dbLoadArtistAppearances')) : null,
       dbLoadArtistSightings().catch(reportBackgroundFailure('dbLoadArtistSightings')),
       dbLoadArtistPlans().catch(reportBackgroundFailure('dbLoadArtistPlans')),
       dbLoadPostfestCheckoffs().catch(reportBackgroundFailure('dbLoadPostfestCheckoffs')),
       dbLoadTopSets().catch(reportBackgroundFailure('dbLoadTopSets'))
     ]);
-    dbLoadVenues().catch(reportBackgroundFailure('dbLoadVenues'));
+    if (refreshCatalogs) dbLoadVenues().catch(catalogFailure('dbLoadVenues'));
     // "Our Photos" only feeds the profile detail modal (opened on demand,
     // never on first paint) — likewise non-blocking.
     loadAllOurPhotos().catch(reportBackgroundFailure('loadAllOurPhotos'));
@@ -15168,6 +15259,14 @@
       sb.from('crews').select('*, crew_members(raver_id, added_at, deleted_at)').is('deleted_at', null).order('created_at', { ascending: true }),
       loadNicknames().catch(reportBackgroundFailure('loadNicknames')),
     ]);
+
+    // Nothing below touches the live arrays until every query has answered:
+    // a failed reload used to leave the app empty with no error.
+    const loadErr = fErr || rErr || cErr1;
+    if (loadErr) return loadAllDataFailed(loadErr);
+    const next = { festivals: [], squad: [], crews: [] };
+    { // Build into `next` — these names shadow the globals for this block only.
+    const festivals = next.festivals, squad = next.squad, crews = next.crews;
 
     if (!fErr && dbFests) {
       dbFests.forEach(f => {
@@ -15292,8 +15391,9 @@
       });
     });
     if (missingIds.length) {
-      const { data: crewRavers } = await sb
+      const { data: crewRavers, error: mErr } = await sb
         .rpc('get_crewmate_ravers', { p_ids: missingIds });
+      if (mErr) return loadAllDataFailed(mErr);
       if (crewRavers) {
         crewRavers.forEach(r => {
           squad.push({
@@ -15348,6 +15448,20 @@
         });
       }
     }
+    } // end of the `next` build block
+
+    // Signed out (or switched account) while loading: drop the result.
+    if (!currentUser || currentUser.id !== uid) return false;
+    // Swap in place — the globals are const arrays read all over the app.
+    festivals.length = 0; festSeq = 0;
+    squad.length = 0;     squadSeq = 0;
+    crews.length = 0;     crewSeq = 0;
+    festivals.push(...next.festivals);
+    squad.push(...next.squad);
+    crews.push(...next.crews);
+    _loadAllDataEverOk = true;
+    _loadRetryDelay = 4000;
+    clearTimeout(_loadRetryTimer);
 
     // Load community genre pool (non-blocking)
     dbLoadCommunityGenres().catch(reportBackgroundFailure('dbLoadCommunityGenres'));
@@ -15358,6 +15472,7 @@
     loadViewerNotes().catch(reportBackgroundFailure('loadViewerNotes'));
     // Android beta card + Founding Tester badges (non-blocking)
     loadAndroidBetaState().catch(reportBackgroundFailure('loadAndroidBetaState'));
+    return true;
   }
 
   // ===== WELCOME BACK POPUP =====
@@ -16189,6 +16304,19 @@
       ...(data.isYou ? { claimed_by: uid, status: 'claimed' } : {})
     };
     if (id) {
+      // Someone else's profile (a crewmate, or a stub another member made):
+      // this client only holds a masked copy (phone/base/notes come back blank
+      // when hidden), so writing the whole row would wipe the real values.
+      // Send only what a non-owner may change — matches raverPerms() and the
+      // ravers_guard_non_owner_writes trigger.
+      const target = getRaver(id);
+      const mine = !target || target.isYou || (!target.claimedBy && String(target.createdBy) === String(uid));
+      if (!mine) {
+        const keep = target.claimedBy
+          ? ['vibe_tags', 'custom_vibe_tags', 'genres', 'updated_at', ...(raverPerms(target).editName ? ['name'] : [])]
+          : ['name', 'handle', 'base', 'gradient', 'genres', 'instagram', 'radiate', 'vibe_tags', 'custom_vibe_tags', 'updated_at'];
+        Object.keys(row).forEach(k => { if (!keep.includes(k)) delete row[k]; });
+      }
       const { data: updated, error } = await sb.from('ravers').update(row).eq('id', id).select('id');
       if (error) { console.error('raver update error', error); toastError('Could not save profile. Try again', error); return null; }
       if (!updated?.length) { console.warn('raver update: 0 rows affected (RLS block?)', id); toastError('Save failed. Permission denied'); return null; }
@@ -16196,9 +16324,12 @@
     } else {
       row.created_by = uid;
       row.qr_token = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : (Math.random().toString(36).slice(2) + Date.now().toString(36));
-      const { data: inserted, error } = await sb.from('ravers').insert(row).select().single();
+      // Explicit column: phone/notes/qr_token are no longer selectable from
+      // the table directly (they come back through the raver RPCs), so a bare
+      // select() would be refused. The token is the one we just generated.
+      const { data: inserted, error } = await sb.from('ravers').insert(row).select('id').single();
       if (error) { console.error('raver insert error', error); toastError('Could not create profile. Try again', error); }
-      return inserted || null;
+      return inserted ? { id: inserted.id, qr_token: row.qr_token } : null;
     }
   }
 
@@ -16254,24 +16385,55 @@
   // Targeted single-row RSVP writes. Unlike the full-list save helpers above,
   // these only touch the one festival the user acted on, so a stale client list
   // can never prune rows added out-of-band (e.g. RSVPs migrated by a profile merge).
-  async function dbAddRaverFestival(raverId, festId) {
-    const { error } = await sb.from('raver_festivals')
-      .upsert([{ raver_id: raverId, festival_id: festId }], { onConflict: 'raver_id,festival_id', ignoreDuplicates: true });
-    if (error) {
-      console.error('raver_festivals add error', error);
-      if ((error.message || '').includes('RSVP_BLOCKED')) {
-        toastError('They asked not to be re-added to this rave');
-      } else {
-        toastError('Could not save festival attendance');
-      }
-    }
-    else logAudit({ action: 'festival.rsvp_add', entityType: 'festival', entityId: festId, metadata: { raver_id: raverId } });
+  // Both resolve true when the write landed, false when it failed (the error
+  // toast is shown here). Writes for the same raver + rave run one after the
+  // other, so a quick Going → Not going can't reach the server out of order.
+  const _rsvpWriteChain = {};
+  function queueRsvpWrite(raverId, festId, write) {
+    const key = `${raverId}:${festId}`;
+    const run = (_rsvpWriteChain[key] || Promise.resolve()).then(write, write);
+    _rsvpWriteChain[key] = run;
+    const done = () => { if (_rsvpWriteChain[key] === run) delete _rsvpWriteChain[key]; };
+    run.then(done, done);
+    return run;
   }
 
-  async function dbRemoveRaverFestival(raverId, festId) {
-    const { error } = await sb.from('raver_festivals').delete().eq('raver_id', raverId).eq('festival_id', festId);
-    if (error) { console.error('raver_festivals remove error', error); toastError('Could not update festival attendance', error); }
-    else logAudit({ action: 'festival.rsvp_remove', entityType: 'festival', entityId: festId, metadata: { raver_id: raverId } });
+  function dbAddRaverFestival(raverId, festId) {
+    return queueRsvpWrite(raverId, festId, async () => {
+      const { error } = await sb.from('raver_festivals')
+        .upsert([{ raver_id: raverId, festival_id: festId }], { onConflict: 'raver_id,festival_id', ignoreDuplicates: true });
+      if (error) {
+        console.error('raver_festivals add error', error);
+        if ((error.message || '').includes('RSVP_BLOCKED')) {
+          toastError('They asked not to be re-added to this rave');
+        } else {
+          toastError('Could not save festival attendance', error);
+        }
+        return false;
+      }
+      logAudit({ action: 'festival.rsvp_add', entityType: 'festival', entityId: festId, metadata: { raver_id: raverId } });
+      return true;
+    });
+  }
+
+  function dbRemoveRaverFestival(raverId, festId) {
+    return queueRsvpWrite(raverId, festId, async () => {
+      const { error } = await sb.from('raver_festivals').delete().eq('raver_id', raverId).eq('festival_id', festId);
+      if (error) { console.error('raver_festivals remove error', error); toastError('Could not update festival attendance', error); return false; }
+      logAudit({ action: 'festival.rsvp_remove', entityType: 'festival', entityId: festId, metadata: { raver_id: raverId } });
+      return true;
+    });
+  }
+
+  // A self-RSVP write failed: put the local Going state back so the screen
+  // matches the server. Looks `you` up again — a reload may have replaced it.
+  function revertOwnRsvp(festId, wasGoing) {
+    const you = squad.find(r => r.isYou);
+    if (!you) return;
+    const has = (you.festIds || []).some(fid => String(fid) === String(festId));
+    if (wasGoing && !has) you.festIds = [...(you.festIds || []), festId];
+    if (!wasGoing && has) you.festIds = you.festIds.filter(fid => String(fid) !== String(festId));
+    renderSetupPill(); renderEvents(); renderSquad(); renderCrews();
   }
 
   // Sets/clears the ticket type on an existing RSVP row. Unlike
@@ -25410,11 +25572,26 @@
     } else {
       reactions[emoji] = [...existing, uid];
     }
+    const before = msg.reactions || {};
     msg.reactions = reactions;
     renderHuddleUI();
-    const { error } = await sb.from('huddle_messages').update({ reactions }).eq('id', messageId);
-    if (error) toastError('Could not save reaction', error);
-    else if (firstReaction && !existing.includes(uid)) notifyHuddleActivityResponse(messageId, { emoji });
+    // The server toggles just this user's emoji under a row lock, so two
+    // people reacting at once no longer overwrite each other. PGRST202 = the
+    // RPC isn't deployed yet: fall back to the old whole-column write.
+    let { data, error } = await sb.rpc('toggle_huddle_reaction', { p_message_id: messageId, p_emoji: emoji });
+    if (error && error.code === 'PGRST202') {
+      ({ error } = await sb.from('huddle_messages').update({ reactions }).eq('id', messageId));
+      data = null;
+    }
+    if (error) {
+      msg.reactions = before;
+      renderHuddleUI();
+      toastError('Could not save reaction', error);
+      return;
+    }
+    // Server truth includes anyone who reacted in the meantime.
+    if (data && typeof data === 'object' && !Array.isArray(data)) { msg.reactions = data; renderHuddleUI(); }
+    if (firstReaction && !existing.includes(uid)) notifyHuddleActivityResponse(messageId, { emoji });
   }
 
   async function dbTogglePinHuddleMessage(messageId, pin) {
@@ -25871,6 +26048,39 @@
     _huddlePresenceState = {};
     _huddleTypingUsers = {};
     _huddleTypingSentAt = 0;
+  }
+
+  // Called by resyncAfterGap(): re-read the live end of the open room so
+  // messages sent (or deleted, edited, reacted to) while the socket was down
+  // show up without leaving and re-entering the room.
+  async function catchUpHuddleRoom() {
+    const roomId = _huddleActiveRoomId;
+    // No live room, or parked on older history after a search jump (the
+    // ↓ LATEST pill reloads from scratch there).
+    if (!roomId || !_huddleChannel || _huddleHasNewer || !currentUser) return;
+    const { data, error } = await sb.from('huddle_messages')
+      .select('*').eq('room_id', roomId).is('deleted_at', null)
+      .order('created_at', { ascending: false }).limit(HUDDLE_PAGE_SIZE);
+    if (error || !data || !data.length || _huddleActiveRoomId !== roomId || _huddleHasNewer) return;
+    const fresh = data.slice().reverse();
+    const sent = huddleMessages.filter(m => !m._pending && !m._failed);
+    const cutoff = huddleTimeOf(fresh[0]);
+    // Missed more than a page: the fresh page doesn't reach what's loaded, so
+    // merging would hide a gap. Reload the room (also resets the unread divider).
+    if (sent.length && data.length === HUDDLE_PAGE_SIZE && huddleTimeOf(sent[sent.length - 1]) < cutoff) {
+      await switchHuddleRoom(roomId);
+      return;
+    }
+    const known = new Set(sent.map(m => m.id));
+    const hasNew = fresh.some(m => !known.has(m.id) && m.sender_id !== currentUser.id);
+    const wasAtBottom = huddleAtBottom();
+    // Older history stays, the fresh page replaces everything from its first
+    // message on (dropping what was deleted meanwhile), unsent bubbles stay last.
+    huddleMessages = sent.filter(m => huddleTimeOf(m) < cutoff)
+      .concat(fresh, huddleMessages.filter(m => m._pending || m._failed));
+    renderHuddleUI();
+    if (wasAtBottom) huddleScrollMessagesToBottom();
+    else if (hasNew) document.getElementById('hd-jump')?.classList.add('show');
   }
 
   // ===== GAME PLAN =====
@@ -33809,7 +34019,10 @@
     }
     const { data, error } = await sb.rpc('join_crew_via_invite', { p_token: token, p_name: name || null, p_handle: handle || null });
     if (error || !data) { toastError("Couldn't join the crew. Try again.", error); if (btn) { btn.disabled = false; btn.textContent = '🎉 Claim My Spot'; } return; }
-    if (data.error === 'already_member')  { showToast('You\'re already in this crew!'); closeCrewJoinModal(); return; }
+    // The RPC reports this as { already_member: true }, not as an error — the
+    // old check never matched and fell through to the welcome screen.
+    if (data.already_member || data.error === 'already_member') { showToast('You\'re already in this crew!'); closeCrewJoinModal(); return; }
+    if (data.error === 'removed_by_lead') { toastError(`You were removed from ${data.crew_name || 'this crew'}. Ask the crew lead to add you back.`); closeCrewJoinModal(); return; }
     if (data.error === 'not_recruiting')  { toastError(`This crew isn't recruiting right now.`); closeCrewJoinModal(); return; }
     if (data.error === 'invalid_token')   { toastError('This invite link has expired.'); closeCrewJoinModal(); return; }
     if (data.error === 'name_required')   { toastError('Enter your name to join.'); if (btn) { btn.disabled = false; btn.textContent = '🎉 Claim My Spot'; } return; }
@@ -38842,6 +39055,7 @@
     if (!you) return;
     if (!you.festIds) you.festIds = [];
     const isGoing = you.festIds.some(fid => String(fid) === String(festId));
+    let announceGoing = null;
     if (isGoing) {
       you.festIds = you.festIds.filter(fid => String(fid) !== String(festId));
       hapticImpact('LIGHT');
@@ -38858,10 +39072,13 @@
       if (!firstRsvpMoment) showToast(isPast ? `🎟️ Sent it at ${fest?.name || 'that rave'}!` : `🎟️ You're going to ${fest?.name || 'that rave'}!`);
       addNotification(isPast ? `🎟️ Logged! You sent it at ${fest?.name || 'that rave'}.` : `🎪 You're locked in for ${fest?.name || 'that rave'}! Pack your kit, charge the glowsticks, and get ready for the frequencies.`, [nlRave(fest)]);
       // Let each of your crews know — skip Secret crews, same posture as notifyCrewMembers.
+      // Posted only once the RSVP is saved (below), so the Huddle never
+      // announces a "going" the server didn't keep.
       if (currentUser && fest) {
         const who = displayName(you).split(' ')[0];
         const activityMsg = isPast ? `🎟️ ${who} sent it at ${fest.name}!` : `🎪 ${who} is going to ${fest.name}!`;
-        crews.filter(c => c.status !== 'secret' && (c.squadIds || []).some(id => String(id) === String(you.id)))
+        const youId = you.id;
+        announceGoing = () => crews.filter(c => c.status !== 'secret' && (c.squadIds || []).some(id => String(id) === String(youId)))
           .forEach(c => postCrewActivity(c.id, activityMsg, { k: 'rave', id: fest.id }));
         if (!isPast) maybeFirstRsvpMoment(fest);
       }
@@ -38873,10 +39090,13 @@
     if (currentUser) {
       if (isGoing) {
         // Was going, now removed
-        dbRemoveRaverFestival(you.id, festId);
+        dbRemoveRaverFestival(you.id, festId).then(ok => { if (!ok) revertOwnRsvp(festId, true); });
       } else {
         // Now going — add, and clear any Interested on the same rave (mutually exclusive)
-        dbAddRaverFestival(you.id, festId);
+        dbAddRaverFestival(you.id, festId).then(ok => {
+          if (ok) { if (announceGoing) announceGoing(); }
+          else revertOwnRsvp(festId, false);
+        });
         dbRemoveRaverFestivalInterest(you.id, festId);
         logAnalyticsEvent('first_rsvp_updated', { raver_id: you.id, festival_id: festId, direction: 'going' });
       }
@@ -40587,6 +40807,9 @@
     if (err) {
       if (!navigator.onLine || /failed to fetch|networkerror|load failed/i.test(err.message || '')) {
         msg = "You're offline. Try again once you're back online.";
+      } else if (/abort/i.test((err.name || '') + ' ' + (err.message || ''))) {
+        // supaFetch gave up waiting (see SUPA_TIMEOUT_MS).
+        msg = 'The connection is too slow right now. Try again in a moment.';
       } else if (err.code === '42501' || err.status === 401 || err.status === 403) {
         msg = "You don't have permission to do that.";
       } else if (isContentBlocked(err)) {
@@ -41484,7 +41707,7 @@
         base: '', instagram: '', radiate: '', phone: '', met_story: '', notes: '',
         vibe_tags: [], custom_vibe_tags: [], blocked_tags: [],
         updated_at: new Date().toISOString(),
-      }).select().single();
+      }).select('id').single();
       error = err;
       if (!error && inserted) {
         savedId = inserted.id;
