@@ -14896,6 +14896,32 @@
       .subscribe();
   }
 
+  // ── Catch up after sleep / reconnect ──
+  // Realtime only delivers what arrives while the socket is up, and iOS
+  // closes it when the phone locks or the app is backgrounded. Coming back
+  // after a real gap (or regaining signal) re-reads what was missed: crews
+  // and RSVPs, the bell, and the open Huddle room.
+  const RESYNC_AFTER_HIDDEN_MS = 30000;
+  let _hiddenSince = 0;
+  let _lastResyncAt = 0;
+  function resyncAfterGap() {
+    if (!currentUser || !_bootedUserId) return;
+    if (Date.now() - _lastResyncAt < 10000) return; // 'online' + 'visibilitychange' often fire together
+    _lastResyncAt = Date.now();
+    loadAllData().then(ok => {
+      if (ok) { renderSquad(); renderCrews(); renderEvents(); }
+    }).catch(() => {});
+    dbLoadNotifications().catch(() => {});
+    catchUpHuddleRoom().catch(() => {});
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { _hiddenSince = Date.now(); return; }
+    const gap = _hiddenSince ? Date.now() - _hiddenSince : 0;
+    _hiddenSince = 0;
+    if (gap > RESYNC_AFTER_HIDDEN_MS) resyncAfterGap();
+  });
+  window.addEventListener('online', resyncAfterGap);
+
   // PLUR points land server-side via triggers the client never sees coming
   // (a review, a claim, a vote — whatever caused it happens elsewhere) —
   // this is how the client learns the real, server-verified amount instead
@@ -25951,6 +25977,39 @@
     _huddlePresenceState = {};
     _huddleTypingUsers = {};
     _huddleTypingSentAt = 0;
+  }
+
+  // Called by resyncAfterGap(): re-read the live end of the open room so
+  // messages sent (or deleted, edited, reacted to) while the socket was down
+  // show up without leaving and re-entering the room.
+  async function catchUpHuddleRoom() {
+    const roomId = _huddleActiveRoomId;
+    // No live room, or parked on older history after a search jump (the
+    // ↓ LATEST pill reloads from scratch there).
+    if (!roomId || !_huddleChannel || _huddleHasNewer || !currentUser) return;
+    const { data, error } = await sb.from('huddle_messages')
+      .select('*').eq('room_id', roomId).is('deleted_at', null)
+      .order('created_at', { ascending: false }).limit(HUDDLE_PAGE_SIZE);
+    if (error || !data || !data.length || _huddleActiveRoomId !== roomId || _huddleHasNewer) return;
+    const fresh = data.slice().reverse();
+    const sent = huddleMessages.filter(m => !m._pending && !m._failed);
+    const cutoff = huddleTimeOf(fresh[0]);
+    // Missed more than a page: the fresh page doesn't reach what's loaded, so
+    // merging would hide a gap. Reload the room (also resets the unread divider).
+    if (sent.length && data.length === HUDDLE_PAGE_SIZE && huddleTimeOf(sent[sent.length - 1]) < cutoff) {
+      await switchHuddleRoom(roomId);
+      return;
+    }
+    const known = new Set(sent.map(m => m.id));
+    const hasNew = fresh.some(m => !known.has(m.id) && m.sender_id !== currentUser.id);
+    const wasAtBottom = huddleAtBottom();
+    // Older history stays, the fresh page replaces everything from its first
+    // message on (dropping what was deleted meanwhile), unsent bubbles stay last.
+    huddleMessages = sent.filter(m => huddleTimeOf(m) < cutoff)
+      .concat(fresh, huddleMessages.filter(m => m._pending || m._failed));
+    renderHuddleUI();
+    if (wasAtBottom) huddleScrollMessagesToBottom();
+    else if (hasNew) document.getElementById('hd-jump')?.classList.add('show');
   }
 
   // ===== GAME PLAN =====
