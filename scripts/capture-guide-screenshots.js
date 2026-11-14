@@ -23,6 +23,22 @@ function guideData() {
   const data = demoData();
   const f = data.festivals.find((x) => x.id === 'f-edc');
   if (f) Object.assign(f, { name: 'Lights All Night', date: '2026-12-30', days: 2, location: 'Fair Park, Dallas TX', color: '#BF00FF' });
+
+  // Sets "you" checked off at the five past raves, so Stats' Artists Seen
+  // tile shows a count instead of a dash (only the count is on screen).
+  const seenAt = {
+    'p-lost': ['Excision', 'Subtronics', 'Illenium', 'Zeds Dead', 'Svdden Death'],
+    'p-okee': ['Kaskade', 'John Summit', 'GRiZ', 'Odesza'],
+    'p-ultra': ['Martin Garrix', 'Tiësto', 'Armin van Buuren', 'Afrojack', 'Kaskade'],
+    'p-edclv': ['Alison Wonderland', 'SLANDER', 'Above & Beyond', 'Gryffin', 'Illenium'],
+    'p-forest': ['Subtronics', 'GRiZ', 'Seven Lions', 'Odesza', 'Tape B'],
+  };
+  const byName = new Map(data.artists.map((a) => [a.name, a]));
+  Object.values(seenAt).flat().forEach((name) => {
+    if (!byName.has(name)) { const a = { id: `ga-${byName.size}`, name, genres: [] }; byName.set(name, a); data.artists.push(a); }
+  });
+  data.raver_artist_sightings = Object.entries(seenAt).flatMap(([festival_id, names]) =>
+    names.map((name) => ({ raver_id: 'r-you', artist_id: byName.get(name).id, festival_id })));
   return data;
 }
 
