@@ -11301,7 +11301,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.40.4';
+  const APP_VERSION = '2.41.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -13629,6 +13629,35 @@
     return true;
   }
 
+  // ===== Lineup Explorer ♡ follow handoff =====
+  // "♡ Favorite" / "Join free" on an explorer artist page (visitors) stores
+  // pendingFollowArtists = { names: [name_lower…], label } (lineup-common.js)
+  // and sends them here. After login/onboarding this favorites those artists
+  // with the explorer's upsert, and adds them to you.favArtistIds as well:
+  // dbSaveRaverFavoriteArtists prunes rows missing from that list, so a
+  // stale copy would undo the follow on the next profile save. Runs beside
+  // the picks handoff without blocking it.
+  async function processPendingFollow() {
+    let p = null;
+    try { p = JSON.parse(localStorage.getItem('pendingFollowArtists') || 'null'); } catch (e) {}
+    if (!p || !currentUser || isOnboarding) return;
+    const you = squad.find(r => r.isYou);
+    if (!you) return;
+    const names = Array.isArray(p.names) ? p.names.filter(n => typeof n === 'string' && n).slice(0, 5) : [];
+    const label = typeof p.label === 'string' && p.label ? p.label.slice(0, 80) : 'That artist';
+    if (!names.length) { localStorage.removeItem('pendingFollowArtists'); return; }
+    const { data: rows, error } = await sb.from('artists').select('id').in('name_lower', names);
+    if (error) { console.error('processPendingFollow: artist lookup failed', error); return; }
+    localStorage.removeItem('pendingFollowArtists');
+    if (!rows || !rows.length) return;
+    const { error: upErr } = await sb.from('raver_favorite_artists')
+      .upsert(rows.map(r => ({ raver_id: you.id, artist_id: r.id })), { onConflict: 'raver_id,artist_id', ignoreDuplicates: true });
+    if (upErr) { toastError(`Couldn't add ${label} to your favorites. Try ♡ on their artist page.`, upErr); return; }
+    const have = new Set((you.favArtistIds || []).map(String));
+    you.favArtistIds = (you.favArtistIds || []).concat(rows.map(r => r.id).filter(id => !have.has(String(id))));
+    showToast(`♡ ${label} added to your favorites. We'll show you where they play next.`);
+  }
+
   // ===== Lineup Explorer picks handoff =====
   // A visitor's 📋 picks live in localStorage (rf_picks: { slug: { n: [act
   // names] } }, written by lineup-explorer/lineup-common.js). "Save my picks"
@@ -15180,6 +15209,7 @@
       if (!onboarding && !deepLink) {
         processPendingRave();
         if (!pendingRave && !processPendingInvite()) processPendingPicks();
+        processPendingFollow(); // explorer artist page ♡ that brought them in
       }
     } else {
       _firstTimeSetupDeferred = true;
@@ -41886,6 +41916,7 @@
     const hadPendingRave = !!localStorage.getItem('pendingRaveSlug');
     processPendingRave(); // rave share link that brought this raver in
     if (!hadPendingRave) processPendingPicks(); // Lineup Explorer 📋 picks that brought them in
+    processPendingFollow(); // explorer artist page ♡ that brought them in
   }
 
   let _openDetailAfterCreate = false;

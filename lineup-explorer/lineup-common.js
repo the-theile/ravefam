@@ -485,10 +485,10 @@
     for (var i = 0; i < nodes.length; i++) {
       try {
         var j = JSON.parse(nodes[i].textContent);
-        if (j && /Event$|Festival$/.test(j["@type"] || "")) return { t: j.name || null, d: j.startDate || null };
+        if (j && /Event$|Festival$/.test(j["@type"] || "")) return { t: j.name || null, d: j.startDate || null, e: j.endDate || j.startDate || null };
       } catch (e) {}
     }
-    return { t: null, d: null };
+    return { t: null, d: null, e: null };
   }
 
   function splitKeys(name) {
@@ -1028,7 +1028,7 @@
   // surface, then carries ☆ picks through goSave (this page's if it has any,
   // else the latest), or, with no picks, opens this rave after signup via
   // /app?rave=<slug> (page slug equals festivals.slug). Hub falls back to /app.
-  function goJoin(surface, extra) {
+  function goJoin(surface, extra, preferRave) {
     var all = readAll(), n = 0, latest = null;
     Object.keys(all).forEach(function (k) {
       var p = all[k];
@@ -1037,6 +1037,7 @@
       n += c;
       if (!latest || (p.at || "") > (all[latest].at || "")) latest = k;
     });
+    if (preferRave && slug) n = 0; // ended rave: the handoff only takes upcoming picks
     var props = { surface: surface, slug: slug || "hub", picks: n, dest: n ? "save" : slug ? "rave" : "app" };
     if (extra) Object.keys(extra).forEach(function (k) { props[k] = extra[k]; });
     logEvent("explorer_cta_click", props);
@@ -3685,6 +3686,19 @@
     copy.appendChild(el("span", "cta-more", more));
     copy.appendChild(el("span", "cta-short", short));
   }
+  // Where today sits against the page's JSON-LD dates (visitor's local day):
+  // "soon" = 1–14 days out, "live" = during, "ended" = after, "" otherwise.
+  function festPhase() {
+    var m = eventMeta();
+    if (!m.d) return { p: "", days: null };
+    var today = localToday();
+    var end = m.e || m.d;
+    if (today > end) return { p: "ended", days: null };
+    if (today >= m.d) return { p: "live", days: 0 };
+    var a = today.split("-").map(Number), b = String(m.d).split("-").map(Number);
+    var days = Math.round((Date.UTC(b[0], b[1] - 1, b[2]) - Date.UTC(a[0], a[1] - 1, a[2])) / 86400000);
+    return { p: days <= 14 ? "soon" : "", days: days };
+  }
   function renderJoinBar() {
     var bar = document.getElementById("ctaBar");
     if (!bar || isNative()) return;
@@ -3694,19 +3708,41 @@
     showJoinBar(bar);
     var copy = bar.querySelector(".cta-copy"), btn = bar.querySelector(".cta-btn");
     if (!copy || !btn) return;
-    if (!joinOrig) joinOrig = { copy: copy.innerHTML, btn: btn.innerHTML, label: btn.getAttribute("aria-label") };
+    if (!joinOrig) {
+      var lead = copy.querySelector("b");
+      var nm = lead && /^Going to (.+?)\??$/.exec(lead.textContent.trim());
+      joinOrig = { copy: copy.innerHTML, btn: btn.innerHTML, label: btn.getAttribute("aria-label"),
+        name: (nm && nm[1]) || eventMeta().t || "this rave" };
+    }
+    var ph = festPhase();
+    bar.dataset.phase = ph.p;
+    if (ph.p === "ended") n = 0; // picks for a past rave don't hand off: talk top sets instead
     var clashes = n > 1 ? clashPairs(scheduleActs()).filter(function (p) { return !clash[p.key]; }).length : 0;
     var picksWord = n === 1 ? " pick" : " picks";
+    var fest = joinOrig.name;
     if (!n) {
       bar.dataset.mode = "";
-      copy.innerHTML = joinOrig.copy;
       btn.innerHTML = joinOrig.btn;
       if (joinOrig.label) btn.setAttribute("aria-label", joinOrig.label);
+      if (ph.p === "ended") {
+        setJoinCopy(copy, "Were you at " + fest + "?", "Rank your top sets and relive it with your crew on RaveFAM.", "Rank your top sets.");
+      } else if (ph.p === "live") {
+        setJoinCopy(copy, fest + " is on now.", "Get a ping 15 minutes before each of your sets on RaveFAM.", "Get set reminders.");
+      } else if (ph.p === "soon") {
+        setJoinCopy(copy, fest + (ph.days === 1 ? " is tomorrow." : " is in " + ph.days + " days."),
+          "Plan your sets with your crew and get a ping before each one.", "Plan it with your crew.");
+      } else {
+        copy.innerHTML = joinOrig.copy;
+      }
     } else {
       bar.dataset.mode = clashes ? "clash" : "picks";
       if (clashes) {
         setJoinCopy(copy, "⚡ " + (clashes === 1 ? "2 of your picks clash." : clashes + " clashes in your picks."),
           "Save them to RaveFAM and let your crew vote on who to catch.", "Let your crew vote.");
+      } else if (ph.p === "live" || ph.p === "soon") {
+        setJoinCopy(copy, "📋 " + n + picksWord + " on this device.",
+          (n === 1 ? "Save it" : "Save them") + " to RaveFAM and get a ping 15 minutes before each set.",
+          "Get set reminders.");
       } else {
         setJoinCopy(copy, "📋 " + n + picksWord + " on this device.",
           n === 1 ? "Save it to RaveFAM so it follows you and your crew can see it."
@@ -3727,7 +3763,7 @@
     var btn = bar.querySelector(".cta-btn");
     if (btn && !isNative()) btn.addEventListener("click", function (e) {
       e.preventDefault();
-      goJoin("join_bar", { mode: bar.dataset.mode || "join" });
+      goJoin("join_bar", { mode: bar.dataset.mode || "join", phase: bar.dataset.phase || "" }, bar.dataset.phase === "ended");
     });
     var x = bar.querySelector(".cta-close");
     if (x) x.addEventListener("click", function () {
@@ -3777,7 +3813,7 @@
       }
     }
     window.LineupMember.ready(function (m) {
-      if (!m || !m.isMember) return;
+      if (!m || !m.isMember) { renderArtistVisitor(root); return; }
       var join = document.getElementById("arJoin");
       if (join) join.hidden = true;
       var names = [];
@@ -3790,6 +3826,44 @@
         }, noop);
       });
     });
+  }
+
+  // Visitors: the member layer's slot gets "♡ Favorite" + one line, and the
+  // bottom "Join free" prompt does the same thing. Both store the follow in
+  // pendingFollowArtists ({ names: [name_lower…], label }) for /app, which
+  // favorites the artist after signup (processPendingFollow), then go
+  // through goJoin so any 📋 picks come along too.
+  function artistNames(root) {
+    var names = [];
+    try { names = JSON.parse(root.getAttribute("data-rf-names") || "[]"); } catch (e) {}
+    if (!names.length) names = [String(root.getAttribute("data-rf-artist") || "").toLowerCase()];
+    return names.filter(Boolean).slice(0, 5);
+  }
+  function followThenJoin(root, surface) {
+    var label = root.getAttribute("data-rf-artist") || "";
+    try {
+      window.localStorage.setItem("pendingFollowArtists", JSON.stringify({ names: artistNames(root), label: label }));
+    } catch (e) {}
+    var m = /\/artist\/([a-z0-9-]+)/.exec(location.pathname);
+    goJoin(surface, { page: "artist", artist: label, slug: m ? "artist/" + m[1] : "artist" });
+  }
+  function renderArtistVisitor(root) {
+    var box = document.getElementById("arMember");
+    var name = root.getAttribute("data-rf-artist") || "this artist";
+    if (box && !box.childNodes.length) {
+      var b = el("button", "ar-fav", "♡ Favorite");
+      b.type = "button";
+      b.setAttribute("aria-label", "Add " + name + " to favorites on RaveFAM");
+      b.addEventListener("click", function () { followThenJoin(root, "artist_follow"); });
+      box.appendChild(b);
+      box.appendChild(el("span", "ar-stat", "Get a ping when " + name + " lands on a lineup. Free on RaveFAM."));
+      box.hidden = false;
+    }
+    var join = document.querySelector("#arJoin .ar-join-btn");
+    if (join && !join.dataset.wired) {
+      join.dataset.wired = "1";
+      join.addEventListener("click", function (e) { e.preventDefault(); followThenJoin(root, "artist_join"); });
+    }
   }
 
   function renderArtistMember(root, m, d) {
