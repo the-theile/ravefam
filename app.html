@@ -13336,20 +13336,20 @@
   }
 
   // ===== APP SHOW / HIDE =====
-  // Debug console (eruda) is only *shown* to the maintainer — gated by account
-  // email, with a localStorage escape hatch (set rf_eruda=1) for debugging on a
-  // specific device / before login. The gate also decides whether to download
-  // it at all: it's ~1MB, and almost nobody passes.
-  const ERUDA_ALLOWED_EMAILS = ['theile.secure@proton.me'];
+  // Debug console (eruda) is only *shown* to the maintainer — gated on the
+  // server's super-admin check (is_super_admin, see dbLoadSuperAdmin) rather
+  // than an email address in this public file, with a localStorage escape
+  // hatch (set rf_eruda=1) for debugging on a specific device / before login.
+  // The gate also decides whether to download it at all: it's ~1MB, and
+  // almost nobody passes.
   let _erudaInited = false;
   async function maybeInitEruda() {
     if (_erudaInited) return;
-    const email = (currentUser?.email || '').toLowerCase();
     const inFamTesters = crews.some(c =>
       c.name.toLowerCase() === 'fam testers' &&
       crewSquad(c).some(p => p.isYou)
     );
-    const allowed = ERUDA_ALLOWED_EMAILS.includes(email)
+    const allowed = isSuperAdminUser
       || localStorage.getItem('rf_eruda') === '1'
       || inFamTesters;
     if (allowed) {
@@ -15275,7 +15275,7 @@
       updateModBadge();
       return isModerator() ? dbLoadFlags().catch(reportBackgroundFailure('dbLoadFlags')) : null;
     }).then(updateModBadge);
-    dbLoadSuperAdmin().catch(catalogFailure('dbLoadSuperAdmin')).then(updatePMDashBadge);
+    dbLoadSuperAdmin().catch(catalogFailure('dbLoadSuperAdmin')).then(() => { updatePMDashBadge(); maybeInitEruda(); });
     }
     dbLoadMyVendorBadges().catch(reportBackgroundFailure('dbLoadMyVendorBadges'));
     dbLoadUserBlocks().catch(reportBackgroundFailure('dbLoadUserBlocks'));
