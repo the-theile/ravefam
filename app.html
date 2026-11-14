@@ -11301,7 +11301,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.40.4';
+  const APP_VERSION = '2.42.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -13431,6 +13431,8 @@
     // QR/invite arrivals carry a claim or crew-join token (used for the intercept below).
     const pendingToken = sessionStorage.getItem('pendingClaim');
     const pendingJoin  = sessionStorage.getItem('pendingCrewJoin');
+    let pendingShare = null;
+    try { pendingShare = localStorage.getItem('pendingShareRef'); } catch {}
     // Coming back on this device: prefill the email or number they last used.
     const last = readLastLogin();
     const idInput = document.getElementById('login-id');
@@ -13480,6 +13482,14 @@
           clearPendingCrewJoin();
           showJoinNotRecruiting(null, true);
         }
+      }).catch(() => {});
+    } else if (pendingShare) {
+      // Lineup Explorer shared picks (?by=) that brought them here. Copy only
+      // appears once get_shared_lineup (anon) confirms the link is live; a
+      // dead link just leaves the plain login form.
+      sb.rpc('get_shared_lineup', { p_token: pendingShare }).then(({ data }) => {
+        if (data && data.ok) showShareIntercept(data);
+        else localStorage.removeItem('pendingShareRef');
       }).catch(() => {});
     }
   }
@@ -13629,6 +13639,68 @@
     return true;
   }
 
+  // ===== Lineup Explorer ♡ follow handoff =====
+  // "♡ Favorite" / "Join free" on an explorer artist page (visitors) stores
+  // pendingFollowArtists = { names: [name_lower…], label } (lineup-common.js)
+  // and sends them here. After login/onboarding this favorites those artists
+  // with the explorer's upsert, and adds them to you.favArtistIds as well:
+  // dbSaveRaverFavoriteArtists prunes rows missing from that list, so a
+  // stale copy would undo the follow on the next profile save. Runs beside
+  // the picks handoff without blocking it.
+  async function processPendingFollow() {
+    let p = null;
+    try { p = JSON.parse(localStorage.getItem('pendingFollowArtists') || 'null'); } catch {}
+    if (!p || !currentUser || isOnboarding) return;
+    const you = squad.find(r => r.isYou);
+    if (!you) return;
+    const names = Array.isArray(p.names) ? p.names.filter(n => typeof n === 'string' && n).slice(0, 5) : [];
+    const label = typeof p.label === 'string' && p.label ? p.label.slice(0, 80) : 'That artist';
+    if (!names.length) { localStorage.removeItem('pendingFollowArtists'); return; }
+    const { data: rows, error } = await sb.from('artists').select('id').in('name_lower', names);
+    if (error) { console.error('processPendingFollow: artist lookup failed', error); return; }
+    localStorage.removeItem('pendingFollowArtists');
+    if (!rows || !rows.length) return;
+    const { error: upErr } = await sb.from('raver_favorite_artists')
+      .upsert(rows.map(r => ({ raver_id: you.id, artist_id: r.id })), { onConflict: 'raver_id,artist_id', ignoreDuplicates: true });
+    if (upErr) { toastError(`Couldn't add ${label} to your favorites. Try ♡ on their artist page.`, upErr); return; }
+    const have = new Set((you.favArtistIds || []).map(String));
+    you.favArtistIds = (you.favArtistIds || []).concat(rows.map(r => r.id).filter(id => !have.has(String(id))));
+    showToast(`♡ ${label} added to your favorites. We'll show you where they play next.`);
+  }
+
+  // ===== Lineup Explorer share referral =====
+  // pendingShareRef = the ?by= token of the shared picks a visitor joined
+  // from (lineup-common.js). After login/onboarding, record_share_referral
+  // logs the referral (new accounts only, once), then asks whether to tell
+  // the sharer. Only a yes sends them a notification. Waits for the picks
+  // handoff sheet, which calls this again when it closes.
+  let _shareRefBusy = false;
+  async function processPendingShareRef() {
+    let token = null;
+    try { token = localStorage.getItem('pendingShareRef'); } catch {}
+    if (!token || !currentUser || isOnboarding || _shareRefBusy) return;
+    if (document.getElementById('picks-handoff-overlay')?.classList.contains('open')) return;
+    _shareRefBusy = true;
+    const { data, error } = await sb.rpc('record_share_referral', { p_token: token, p_notify: false });
+    _shareRefBusy = false;
+    if (error) { console.error('processPendingShareRef', error); return; } // keep it for the next launch
+    localStorage.removeItem('pendingShareRef');
+    if (!data || !data.ok || !data.new || data.notified) return;
+    const first = data.first_name || 'your friend';
+    showConfirm(
+      `${first} shared their picks with you`,
+      `Let ${first} know you joined RaveFAM? They'll get a notification with your first name.`,
+      `Tell ${first}`,
+      async () => {
+        const { data: r, error: e2 } = await sb.rpc('record_share_referral', { p_token: token, p_notify: true });
+        if (e2 || !r || !r.ok) { toastError(`Couldn't reach ${first}. Try again later.`, e2); return; }
+        showToast(`🙌 We let ${first} know you're here.`);
+      }
+    );
+    const cancelBtn = document.getElementById('confirm-cancel-btn');
+    if (cancelBtn) cancelBtn.textContent = 'Not now';
+  }
+
   // ===== Lineup Explorer picks handoff =====
   // A visitor's 📋 picks live in localStorage (rf_picks: { slug: { n: [act
   // names] } }, written by lineup-explorer/lineup-common.js). "Save my picks"
@@ -13718,10 +13790,13 @@
     document.querySelectorAll('#picks-handoff-content .ph-card')[i]?.querySelector('.ph-' + v)?.focus();
   }
 
-  function closePicksHandoff() {
+  // keepShareRef: the caller opens another screen next (Start a crew / Join
+  // with a code), so the share-referral question waits for the next launch.
+  function closePicksHandoff(keepShareRef) {
     document.getElementById('picks-handoff-overlay').classList.remove('open');
     _picksHandoff = null;
     localStorage.removeItem('rf_picks_from');
+    if (keepShareRef !== true) processPendingShareRef(); // held back while this sheet was up
   }
 
   // Same writes as toggleGoingToFest / toggleInterestedInFest (Going and
@@ -13860,8 +13935,8 @@
       </div>`;
   }
 
-  function picksHandoffStartCrew() { closePicksHandoff(); openModal(); }
-  function picksHandoffJoinCode() { closePicksHandoff(); openScanner(); switchScannerTab('code'); }
+  function picksHandoffStartCrew() { closePicksHandoff(true); openModal(); }
+  function picksHandoffJoinCode() { closePicksHandoff(true); openScanner(); switchScannerTab('code'); }
 
   function picksHandoffSolo() {
     const h = _picksHandoff;
@@ -14903,6 +14978,29 @@
   }
 
   // ── Pre-auth intercept ────────────────────────────────
+  // Invite card for a Lineup Explorer share link: "<first> shared their picks
+  // with you", the rave as the pill, the sharer's initial as the avatar.
+  function showShareIntercept(d) {
+    const color = '#2EE6C8';
+    const first = d.first_name || 'A friend';
+    const fest  = d.festival || 'the rave';
+    document.getElementById('intercept-title').textContent = `${first} shared their picks with you 📋`;
+    document.getElementById('intercept-sub').textContent = `Create an account or log in to plan ${fest} together.`;
+    const pillEl = document.getElementById('intercept-crew-pill');
+    pillEl.style.cssText = `display:inline-flex;background:${color}20;border:1px solid ${color}44;color:${color};`;
+    document.getElementById('intercept-crew-dot').style.background = color;
+    document.getElementById('intercept-crew-name').textContent = fest;
+    document.getElementById('intercept-accent').style.background = `linear-gradient(90deg,${color},${color}aa,${color}44)`;
+    const avatarEl = document.getElementById('intercept-avatar');
+    avatarEl.textContent = d.first_name ? initials(d.first_name) : '📋';
+    avatarEl.style.background = `linear-gradient(135deg,${color},#b15cff)`;
+    avatarEl.style.boxShadow = `0 0 32px ${color}55`;
+    document.getElementById('intercept-avatar-glow').style.background = `radial-gradient(circle,${color}66 0%,transparent 68%)`;
+    const box = document.getElementById('claim-intercept');
+    box.classList.remove('dead');
+    box.classList.add('open');
+  }
+
   function showPreAuthIntercept(previewData, token) {
     const crew      = previewData?.crew  || {};
     const raver     = previewData?.raver || {};
@@ -15176,10 +15274,14 @@
       // opens the rave after).
       const pendingRave = !!localStorage.getItem('pendingRaveSlug');
       const pendingPicks = !!localStorage.getItem('pendingPicksHandoff') || !!localStorage.getItem('pendingInviteRaver');
-      const onboarding = runFirstTimeSetup({ allowWelcome: !deepLink && !pendingRave && !pendingPicks });
+      // Its "Let <first> know?" question would sit under the welcome popup.
+      const pendingShare = !!localStorage.getItem('pendingShareRef');
+      const onboarding = runFirstTimeSetup({ allowWelcome: !deepLink && !pendingRave && !pendingPicks && !pendingShare });
       if (!onboarding && !deepLink) {
         processPendingRave();
         if (!pendingRave && !processPendingInvite()) processPendingPicks();
+        processPendingFollow(); // explorer artist page ♡ that brought them in
+        processPendingShareRef(); // explorer shared picks that brought them in
       }
     } else {
       _firstTimeSetupDeferred = true;
@@ -41886,6 +41988,8 @@
     const hadPendingRave = !!localStorage.getItem('pendingRaveSlug');
     processPendingRave(); // rave share link that brought this raver in
     if (!hadPendingRave) processPendingPicks(); // Lineup Explorer 📋 picks that brought them in
+    processPendingFollow(); // explorer artist page ♡ that brought them in
+    processPendingShareRef(); // explorer shared picks that brought them in
   }
 
   let _openDetailAfterCreate = false;
@@ -42296,6 +42400,7 @@
     if (t === 'points_earned' || t === 'achievement_unlocked') return 'plur';
     if (t.startsWith('mod_')) return 'safety';
     if (t === 'vendor_spotted') return 'vendor';
+    if (t === 'share_referral') return 'crew'; // a friend joined from your picks: people, not the rave
     const links = notifLinkTargets(n);
     if (links.some(l => l.k === 'huddle')) return 'mention';
     if (t.startsWith('festival_') || n.entityType === 'rave') return 'rave';
