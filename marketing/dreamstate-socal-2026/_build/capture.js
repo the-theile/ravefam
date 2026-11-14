@@ -2,8 +2,7 @@
 // Captures the Dreamstate SoCal 2026 Game Plan carousel screens from the real
 // app.html, booted on the mocked-Supabase harness (tests/helpers.js): no login,
 // no live backend, no real user data. The crew is fictional; the festival and
-// artists are real. SET TIMES ARE SAMPLE DATA: swap in the official ones
-// (SETS below) once Insomniac posts them, then re-run.
+// artists are real, and SETS holds the official set times.
 // Run from the repo root: node marketing/dreamstate-socal-2026/_build/capture.js
 'use strict';
 const path = require('path');
@@ -15,7 +14,8 @@ const PORT = 4323;
 const REPO = path.join(__dirname, '..', '..', '..');
 const OUT = path.join(__dirname, 'shots');
 const NOW = new Date('2026-11-13T21:00:00-08:00'); // night before posting: T-minus reads 6d
-const minsAgo = (m) => new Date(NOW.getTime() - m * 60000).toISOString();
+let BASE = NOW; // the shot's clock; message times are relative to it
+const minsAgo = (m) => new Date(BASE.getTime() - m * 60000).toISOString();
 const ADDED = '2026-03-01T00:00:00Z';
 
 const GRADS = ['linear-gradient(135deg,#FF2D78,#BF00FF)', 'linear-gradient(135deg,#00F5FF,#39FF14)',
@@ -32,13 +32,14 @@ const PEOPLE = [
 ];
 const UID = Object.fromEntries(PEOPLE.map(p => [p[0], p[3]]));
 
-// Sample set times (Pacific). [id, artist, start, end, who's catching it]
+// Official set times (Pacific), from artist_festival_appearances on Nov 14 2026.
+// [id, artist as billed, start, end, stage, who's catching it]
 const SETS = [
-  ['a1', 'Vini Vici', '2026-11-20T20:00', '2026-11-20T21:15', ['r-you', 'r-kai', 'r-tess']],
-  ['a2', 'Ferry Corsten', '2026-11-20T21:30', '2026-11-20T23:00', ['r-you', 'r-dani', 'r-tess', 'r-kai', 'r-marco', 'r-priya']],
-  ['a3', 'Paul van Dyk', '2026-11-20T23:00', '2026-11-21T00:30', ['r-dani', 'r-priya', 'r-marco']],
-  ['a4', 'ARTBAT', '2026-11-21T21:00', '2026-11-21T22:15', ['r-kai', 'r-you']],
-  ['a5', 'Above & Beyond', '2026-11-21T22:30', '2026-11-22T00:30', ['r-you', 'r-dani', 'r-tess', 'r-kai', 'r-marco', 'r-priya']],
+  ['a4', 'ARTBAT', '2026-11-21T00:00', '2026-11-21T01:00', 'The Dream', ['r-kai', 'r-you', 'r-tess']],
+  ['a2', 'Ferry Corsten + Marsh', '2026-11-21T22:00', '2026-11-21T23:00', 'The Dream', ['r-you', 'r-dani', 'r-marco', 'r-priya']],
+  ['a1', 'Vini Vici', '2026-11-21T22:00', '2026-11-21T23:00', 'The Sequence', ['r-kai', 'r-tess']],
+  ['a5', 'Above & Beyond (Anjunabeats Classics)', '2026-11-21T23:00', '2026-11-22T01:00', 'The Dream', ['r-you', 'r-dani', 'r-tess', 'r-kai', 'r-marco', 'r-priya']],
+  ['a3', 'Paul van Dyk pres The Essence of Acid', '2026-11-21T23:45', '2026-11-22T01:00', 'The Void', ['r-dani', 'r-priya', 'r-marco']],
 ];
 const pst = (s) => new Date(s + ':00-08:00').toISOString();
 const MEET_SPOT = 'Under the Queen Mary bow, by the big light tunnel';
@@ -63,8 +64,8 @@ function data() {
     raver_festivals: ravers.map(r => ({ raver_id: r.id, festival_id: 'f-ds', ticket_type: 'ga' })),
     raver_festival_interest: [],
     artists: SETS.map(([id, name]) => ({ id, name, name_lower: name.toLowerCase(), genres: ['trance'] })),
-    artist_festival_appearances: SETS.map(([id, , s, e]) => ({ artist_id: id, festival_id: 'f-ds', start_at: pst(s), end_at: pst(e), stage: null, night: null })),
-    raver_artist_plans: SETS.flatMap(([id, , , , who]) => who.map(r => ({ raver_id: r, artist_id: id, festival_id: 'f-ds' }))),
+    artist_festival_appearances: SETS.map(([id, , s, e, stage]) => ({ artist_id: id, festival_id: 'f-ds', start_at: pst(s), end_at: pst(e), stage, night: null })),
+    raver_artist_plans: SETS.flatMap(([id, , , , , who]) => who.map(r => ({ raver_id: r, artist_id: id, festival_id: 'f-ds' }))),
     raver_favorite_artists: [],
     game_plans: [{ id: 'gp1', crew_id: 'c1', festival_id: 'f-ds', created_by: TEST_UID, meetup_at: pst('2026-11-20T18:30'),
       meetup_location: MEET_SPOT, theme_text: 'Night one: all white. Night two: holo.', created_at: ADDED }],
@@ -78,7 +79,7 @@ function data() {
       ...PEOPLE.map(([id, , , uid], i) => [`rd${i}`, 'ready', uid, id, { is_done: true }]),
     ].map(([id, kind, by, raver, extra], i) => ({ id, game_plan_id: 'gp1', crew_id: 'c1', kind, added_by: by, assignee_raver_id: raver,
       is_done: false, created_at: minsAgo(3000 - i), deleted_at: null, ...extra })),
-    set_meetups: [{ id: 'sm1', crew_id: 'c1', festival_id: 'f-ds', artist_id: 'a5', spot: 'Left of the sound booth', meet_at: pst('2026-11-21T22:15'), created_by: TEST_UID }],
+    set_meetups: [{ id: 'sm1', crew_id: 'c1', festival_id: 'f-ds', artist_id: 'a5', spot: 'Left of the sound booth', meet_at: pst('2026-11-21T22:45'), created_by: TEST_UID }],
     huddle_rooms: [room, { id: 'room-main', crew_id: 'c1', room_key: 'main', kind: 'main', name: 'Main Huddle', festival_id: null, created_by: TEST_UID, created_at: ADDED }],
     huddle_messages: [
       msg(0, 'uid-dani', '6 DAYS 😭 who is ready', 64),
@@ -86,7 +87,7 @@ function data() {
       msg(2, TEST_UID, 'meetup is pinned 👇 6:30 Friday, phones die fast', 41),
       msg(3, TEST_UID, MEET_SPOT, 40, { kind: 'meetup', meetup_at: pst('2026-11-20T18:30') }),
       msg(4, 'uid-tess', 'locked in ✅', 33, { reactions: { '💙': ['uid-kai', 'uid-dani'] } }),
-      msg(5, 'uid-kai', 'locked in. ARTBAT Saturday or bust', 21),
+      msg(5, 'uid-kai', 'locked in. ARTBAT at midnight Friday or bust', 21),
       msg(6, 'uid-priya', 'locked in 🪩 bringing the kandi', 9, { reactions: { '🔥': ['uid-dani', 'uid-tess', 'uid-marco'] } }),
     ],
     huddle_room_reads: [{ room_id: 'room-ds', user_id: TEST_UID, last_read_at: minsAgo(1) }],
@@ -116,6 +117,7 @@ async function shoot(_, name, run, after, clock = NOW) {
   await ctx.route(/^https?:\/\/(?!127\.0\.0\.1)/, r => /fonts\.(googleapis|gstatic)\.com/.test(r.request().url()) ? r.continue() : r.abort());
   const page = await ctx.newPage();
   page.on('pageerror', e => console.warn(`[${name}] pageerror:`, e.message));
+  BASE = clock;
   await page.clock.setFixedTime(clock);
   await bootAuthedApp(page, { data: data(), sessionOver: { user_metadata: { guidance_dismissed: true, seen_tips: { beacon: true } } } });
   await page.addStyleTag({ content: '*, *::before, *::after { animation: none !important; transition: none !important; }' });

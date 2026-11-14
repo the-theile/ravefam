@@ -86,8 +86,8 @@ slide('slide1', `<div class="copy"><div class="eyebrow">Dreamstate SoCal · Long
   ${phone('mb-cover.png', 600)}`);
 slide('slide2', `<div class="copy"><div class="eyebrow">🎤 Set times</div>
   <h1 style="font-size:84px">Who's catching<br><span class="c">what</span>, when.</h1>
-  <div class="sub">Every set your crew picked, in order. <b>Whole crew</b> sets light up.</div></div>
-  ${phone('plan-lineup.png', 600, 1000, 'top')}`);
+  <div class="sub">Every set your crew picked, in order. <b>Clash at 10?</b> Split up, set a meetup.</div></div>
+  ${phone('plan-lineup.png', 600, 1000, 'center bottom')}`);
 slide('slide3', `<div class="copy"><div class="eyebrow">🚗 Rides</div>
   <h1 style="font-size:84px">Who's <span class="p">driving</span>.<br>Who's <span class="c">pooling</span>.</h1>
   <div class="sub">Post your car, claim a seat. Open seats show up so nobody's left on read.</div></div>
