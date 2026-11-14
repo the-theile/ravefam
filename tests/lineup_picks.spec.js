@@ -1296,7 +1296,9 @@ test.describe('Lineup Explorer 4c-2 — artist pages', () => {
     await expect(page.locator('.ar-link')).toHaveCount(5);
     await expect(page.locator('.ar-link', { hasText: 'Spotify' })).toHaveAttribute('href', 'https://open.spotify.com/search/Kaskade');
     await expect(page.locator('#arJoin')).toBeVisible();
-    await expect(page.locator('#arMember')).toBeHidden();
+    // Visitors get ♡ Favorite in the member layer's slot (saved for after signup).
+    await expect(page.locator('#arMember .ar-fav')).toHaveText('♡ Favorite');
+    await expect(page.locator('#arMember .ar-stat')).toHaveText('Get a ping when Kaskade lands on a lineup. Free on RaveFAM.');
     // The hub's own panels never boot here.
     await expect(page.locator('.lp-hub')).toHaveCount(0);
     const ld = JSON.parse(await page.locator('script[type="application/ld+json"]').first().textContent());
