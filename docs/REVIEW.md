@@ -36,23 +36,23 @@ Still open from this list: a cold start with no signal now boots but has no data
 
 ## Fix status (2.40.2)
 
-The remaining Medium findings and most Lows were addressed in 2.40.2, one commit per finding. **The migrations below are not applied, and the edge function change is not deployed.**
+The remaining Medium findings and most Lows were addressed in 2.40.2, one commit per finding. All seven migrations below were applied to production on 14 Nov 2026 and checked with read-only queries, and the eight edge functions were redeployed with the M8 gate (the public key now gets 403; the database's own calls still pass). L8 was later resolved by removing the Telegram bot; its table drop is still to run in the SQL editor.
 
-| Finding | In the app / repo | Migration (not applied) |
+| Finding | In the app / repo | Migration |
 |---|---|---|
 | M4 badge feed unreadable for claimed members | — | `20261114001000_badge_feed_read_any_member.sql` |
 | M5 leader can unlink any member's account | Disconnect only offered on a profile you created | `20261114001100_disconnect_raver_own_stubs_only.sql` |
 | M6 crew invite lost across tabs / on "Maybe later" | join token backed up in localStorage, kept until answered; "Maybe later" asks once more | — |
 | M7 message lands in the wrong room after a quick switch | `sendHuddleMessage` checks the room before appending | — |
-| M8 batch edge functions accept the anon key | `_shared/require-service-role.ts` gate in the eight functions | — (**needs a redeploy**) |
-| M9 forged / duplicate notifications | points handler shows the toast only | `20261114001200_points_notifications_server_side.sql` (apply before deploying 2.40.2) |
+| M8 batch edge functions accept the anon key | `_shared/require-service-role.ts` gate in the eight functions | — (redeployed 14 Nov 2026) |
+| M9 forged / duplicate notifications | points handler shows the toast only | `20261114001200_points_notifications_server_side.sql` |
 | M10 heavy first load | html2canvas and Cropper.js load on first use | — |
 | L1 checklist_items policies | — | `20261114001300_checklist_items_policies.sql` |
 | L2 silent soft-delete failures | `softDeleteRow` treats 0 affected rows as failure | — |
 | L4 no feedback while a Huddle photo uploads | pending preview bubble; photo kept in its original room | — |
 | L6 moderator list / restriction lookups readable by anyone | — | `20261114001400_narrow_moderator_and_restriction_reads.sql` |
 | L7 owner email hard-coded | debug console gated on `is_super_admin` | `20261114001500_replace_hardcoded_owner_email.sql` |
-| L8 Telegram webhook unauthenticated | checks `X-Telegram-Bot-Api-Secret-Token` once `TELEGRAM_WEBHOOK_SECRET` is set | — |
+| L8 Telegram webhook unauthenticated | resolved by removing the bot: `api/telegram.js` deleted after 2.40.2 | `20261114002000_drop_telegram_feedback.sql` (destructive: SQL editor) |
 | L9 claim retry after a lost response says "taken" | retry checks whether the first claim landed (tests in `tests/claim_retry.spec.js`) | — |
 | L10 onboarding after a failed load | fixed by H3 in 2.40.1 | — |
 | L11 tall modals cut off on small phones | modal overlays scroll; checked at 375×420 | — |
@@ -223,7 +223,7 @@ Still open:
 - **L5. Presence and typing channels are open topics.** `crew-presence:<crewId>` and `huddle-presence:<roomId>` are not private channels, so anyone who knows the id can see first names and "where". Crew ids are returned by `get_crew_by_invite_token` to anyone holding an invite link.
 - **L6. Small information leaks to any signed-in user:** `moderators_read` (all moderator user ids), `get_founding_testers`, `user_is_restricted(uid, kind)` for any uid.
 - **L7. Owner email hard-coded** in two delete policies (`raver_festivals_delete`, `raver_favorite_artists_delete`), in `is_super_admin_uid`, and in public `app.html` (`ERUDA_ALLOWED_EMAILS`, L13310). Use `is_moderator` / a table, and drop the address from the client.
-- **L8. Telegram webhook has no secret check** (`api/telegram.js`). Anyone can post fake updates; set and verify `X-Telegram-Bot-Api-Secret-Token`.
+- **L8. Telegram webhook has no secret check** (`api/telegram.js`). Anyone can post fake updates; set and verify `X-Telegram-Bot-Api-Secret-Token`. *Resolved by retiring the bot: the webhook and its empty table are removed.*
 - **L9. Claim retried after a dropped response reads as "already claimed"** (`commitClaim`, L14587–14599). If the first call succeeded but the response was lost, the retry shows the "claimed" error to the person who just claimed it. On that error, reload and check whether the profile is now theirs.
 - **L10. Onboarding after a failed boot load shows the wrong error.** If `loadAllData` failed, `squad` is empty, so `obStep2Next` (L41454–41489) inserts a second profile, hits the one-profile-per-user index and reports "That handle was just taken". Goes away with H3.
 - **L11. Modal sizing (needs verification on device).** `.modal` (L3221–3230) has no `max-height` or scroll, modals are centred in a full-height fixed overlay, and only the Huddle locks body scroll and tracks `visualViewport`. On a small iPhone with the keyboard up, the crew-join modal's "Claim My Spot" button may sit under the keyboard. Thirteen `max-height: NNvh` rules also use `vh` rather than `dvh`.

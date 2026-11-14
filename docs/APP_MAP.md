@@ -18,7 +18,7 @@ The catalogue in section C and the indexes in section D were extracted mechanica
 | 45148–45218 | Trailing script: Ko-fi support widget |
 | 45219–45221 | Vercel analytics/speed-insights, eruda init |
 
-Other files that matter at runtime: `sw.js` (service worker), `vercel.json` (rewrites for `/app?join=`, `/app?claim=`, `/rave/:slug`, `/countdown/:token`), `api/*.js` (OG images, public rave page, countdown page, Telegram webhook), `lineup-explorer/` (separate static pages sharing localStorage with the app), `supabase/functions/*` (edge functions), `capacitor.config.json` (iOS shell loads `https://myravefam.com/app`).
+Other files that matter at runtime: `sw.js` (service worker), `vercel.json` (rewrites for `/app?join=`, `/app?claim=`, `/rave/:slug`, `/countdown/:token`), `api/*.js` (OG images, public rave page, countdown page), `lineup-explorer/` (separate static pages sharing localStorage with the app), `supabase/functions/*` (edge functions), `capacitor.config.json` (iOS shell loads `https://myravefam.com/app`).
 
 ## B. How the app hangs together
 
@@ -80,7 +80,7 @@ None of the `postgres_changes` subscriptions pass a status callback. Since 2.40.
 
 ### Edge functions (Supabase) and Vercel functions
 
-`link-preview`, `giphy-proxy`, `fetch-playlist-meta` are called from the client. `send-beacon-email`, `send-beacon-push`, `send-mention-push`, `send-support-email` are fired by database triggers via `pg_net`. `send-drip-emails`, `send-lifecycle-emails`, `send-lineup-alerts`, `send-set-reminders` run on `pg_cron`. `resend-webhook` receives Resend events. Vercel: `api/invite-og.js`, `api/rave-og.js`, `api/rave.js`, `api/countdown.js`, `api/telegram.js`.
+`link-preview`, `giphy-proxy`, `fetch-playlist-meta` are called from the client. `send-beacon-email`, `send-beacon-push`, `send-mention-push`, `send-support-email` are fired by database triggers via `pg_net`. `send-drip-emails`, `send-lifecycle-emails`, `send-lineup-alerts`, `send-set-reminders` run on `pg_cron`. `resend-webhook` receives Resend events. Vercel: `api/invite-og.js`, `api/rave-og.js`, `api/rave.js`, `api/countdown.js`. (The Telegram feedback webhook was removed after 2.40.2.)
 
 ### Service worker (`sw.js`)
 
