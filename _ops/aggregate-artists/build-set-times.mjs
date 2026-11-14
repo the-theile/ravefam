@@ -10,6 +10,9 @@
 //
 // `end` and `stage` are optional; a set that runs past midnight uses the next
 // day's date for `end`. A b2b act ("A b2b B") gives both artists the same time.
+// `sync: false` keeps a card's set on the page only (e.g. an artist's extra solo
+// sets when the DB row belongs to another of their sets); it still counts for
+// end inference.
 // A staged set with no `end` gets one inferred (inferredEnd below, the same
 // rule as lineup-common.js): the next later start on its stage that day, at
 // most SET_CAP_MIN minutes on; a stage's last set of the day runs to 23:59
@@ -101,7 +104,7 @@ for (const file of files) {
   let m;
   while ((m = objRe.exec(body))) {
     const b = m[1];
-    acts.push({ name: field(b, 'name'), start: field(b, 'start'), end: field(b, 'end'), stage: field(b, 'stage') });
+    acts.push({ name: field(b, 'name'), start: field(b, 'start'), end: field(b, 'end'), stage: field(b, 'stage'), sync: !/\bsync:\s*false\b/.test(b) });
   }
   for (const a of acts) {
     const name = a.name;
@@ -109,7 +112,7 @@ for (const file of files) {
     const end = a.end || (start && TIME_RE.test(start) ? inferredEnd(a, acts) : null);
     const stageRaw = a.stage;
     const stage = stageRaw ? (stageLabels[stageRaw] || stageRaw) : null;
-    if (!name || (!start && !stage)) continue;
+    if (!name || (!start && !stage) || !a.sync) continue;
     if (start && !TIME_RE.test(start)) { problems.push(`${slug}: ${name} start "${start}" is not YYYY-MM-DDTHH:MM`); continue; }
     if (end && (!start || !TIME_RE.test(end) || end <= start)) { problems.push(`${slug}: ${name} end "${end}" must follow start`); continue; }
     if (stage && stage.length > 60) { problems.push(`${slug}: ${name} stage is over 60 characters`); continue; }
