@@ -26,23 +26,49 @@ function guideData() {
   return data;
 }
 
+// The profile shot shows the founder's real profile (photo, name, handle, city,
+// Instagram; used with their permission) on the demo crewmate's slot. The
+// how-we-met story is cleared so nothing fictional is attributed to a real
+// person; the vibe tags and sound stay as demo content.
+function guideProfileData() {
+  const data = guideData();
+  const r = data.ravers.find((x) => x.id === 'r-dani');
+  if (r) Object.assign(r, { name: 'Theile', handle: 'theile', avatar_url: '/scripts/landing-avatars/theile.jpg', base: 'Lakewood Ranch, FL', instagram: 'the_theile', met_story: '' });
+  return data;
+}
+
 async function main() {
   await startServer();
   // CHROMIUM_PATH: use a preinstalled Chrome when Playwright's own browser isn't downloaded.
   const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
-  const context = await browser.newContext({
-    baseURL: BASE_URL,
-    viewport: { width: 390, height: 844 },
-    deviceScaleFactor: 2,
-    colorScheme: 'dark',
-  });
+  // A fresh context per shot: a second app boot in one context never shows
+  // #main-app here, so each capture starts clean.
+  const shoot = async (opts) => {
+    const context = await browser.newContext({
+      baseURL: BASE_URL,
+      viewport: { width: 390, height: 844 },
+      deviceScaleFactor: 2,
+      colorScheme: 'dark',
+    });
+    try { await shootApp(context, { outDir: OUT_DIR, ...opts }); } finally { await context.close(); }
+  };
   fs.mkdirSync(OUT_DIR, { recursive: true });
 
   try {
+    // Ravers tab: a profile from the top, so the photo and name show.
+    await shoot({
+      name: 'raver',
+      data: guideProfileData(),
+      run: (p) => p.evaluate(() => {
+        window.scrollTo(0, 0); openProfile('r-dani'); setProfileTab('r-dani', 'vibe');
+        // The rainbow ring spins and the photo inside spins with it; hold it upright.
+        document.querySelectorAll('.profile-avatar-ring').forEach((el) => { el.style.animation = 'none'; });
+      }),
+    });
+
     // Stats tab from the top: the headline numbers, not Ticket Mix + Passport.
-    await shootApp(context, {
+    await shoot({
       name: 'stats',
-      outDir: OUT_DIR,
       data: guideData(),
       run: (p) => p.evaluate(() => { window.scrollTo(0, 0); switchTab('stats'); loadStatsPage(); }),
     });
