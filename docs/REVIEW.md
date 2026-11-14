@@ -36,16 +36,16 @@ Still open from this list: a cold start with no signal now boots but has no data
 
 ## Fix status (2.40.2)
 
-The remaining Medium findings and most Lows were addressed in 2.40.2, one commit per finding. **The migrations below are not applied, and the edge function change is not deployed.**
+The remaining Medium findings and most Lows were addressed in 2.40.2, one commit per finding. All seven migrations below were applied to production on 14 Nov 2026 and checked with read-only queries, and the eight edge functions were redeployed with the M8 gate (the public key now gets 403; the database's own calls still pass). L8 was later resolved by removing the Telegram bot; its table drop is still to run in the SQL editor.
 
-| Finding | In the app / repo | Migration (not applied) |
+| Finding | In the app / repo | Migration |
 |---|---|---|
 | M4 badge feed unreadable for claimed members | — | `20261114001000_badge_feed_read_any_member.sql` |
 | M5 leader can unlink any member's account | Disconnect only offered on a profile you created | `20261114001100_disconnect_raver_own_stubs_only.sql` |
 | M6 crew invite lost across tabs / on "Maybe later" | join token backed up in localStorage, kept until answered; "Maybe later" asks once more | — |
 | M7 message lands in the wrong room after a quick switch | `sendHuddleMessage` checks the room before appending | — |
-| M8 batch edge functions accept the anon key | `_shared/require-service-role.ts` gate in the eight functions | — (**needs a redeploy**) |
-| M9 forged / duplicate notifications | points handler shows the toast only | `20261114001200_points_notifications_server_side.sql` (apply before deploying 2.40.2) |
+| M8 batch edge functions accept the anon key | `_shared/require-service-role.ts` gate in the eight functions | — (redeployed 14 Nov 2026) |
+| M9 forged / duplicate notifications | points handler shows the toast only | `20261114001200_points_notifications_server_side.sql` |
 | M10 heavy first load | html2canvas and Cropper.js load on first use | — |
 | L1 checklist_items policies | — | `20261114001300_checklist_items_policies.sql` |
 | L2 silent soft-delete failures | `softDeleteRow` treats 0 affected rows as failure | — |
