@@ -16370,24 +16370,55 @@
   // Targeted single-row RSVP writes. Unlike the full-list save helpers above,
   // these only touch the one festival the user acted on, so a stale client list
   // can never prune rows added out-of-band (e.g. RSVPs migrated by a profile merge).
-  async function dbAddRaverFestival(raverId, festId) {
-    const { error } = await sb.from('raver_festivals')
-      .upsert([{ raver_id: raverId, festival_id: festId }], { onConflict: 'raver_id,festival_id', ignoreDuplicates: true });
-    if (error) {
-      console.error('raver_festivals add error', error);
-      if ((error.message || '').includes('RSVP_BLOCKED')) {
-        toastError('They asked not to be re-added to this rave');
-      } else {
-        toastError('Could not save festival attendance');
-      }
-    }
-    else logAudit({ action: 'festival.rsvp_add', entityType: 'festival', entityId: festId, metadata: { raver_id: raverId } });
+  // Both resolve true when the write landed, false when it failed (the error
+  // toast is shown here). Writes for the same raver + rave run one after the
+  // other, so a quick Going → Not going can't reach the server out of order.
+  const _rsvpWriteChain = {};
+  function queueRsvpWrite(raverId, festId, write) {
+    const key = `${raverId}:${festId}`;
+    const run = (_rsvpWriteChain[key] || Promise.resolve()).then(write, write);
+    _rsvpWriteChain[key] = run;
+    const done = () => { if (_rsvpWriteChain[key] === run) delete _rsvpWriteChain[key]; };
+    run.then(done, done);
+    return run;
   }
 
-  async function dbRemoveRaverFestival(raverId, festId) {
-    const { error } = await sb.from('raver_festivals').delete().eq('raver_id', raverId).eq('festival_id', festId);
-    if (error) { console.error('raver_festivals remove error', error); toastError('Could not update festival attendance', error); }
-    else logAudit({ action: 'festival.rsvp_remove', entityType: 'festival', entityId: festId, metadata: { raver_id: raverId } });
+  function dbAddRaverFestival(raverId, festId) {
+    return queueRsvpWrite(raverId, festId, async () => {
+      const { error } = await sb.from('raver_festivals')
+        .upsert([{ raver_id: raverId, festival_id: festId }], { onConflict: 'raver_id,festival_id', ignoreDuplicates: true });
+      if (error) {
+        console.error('raver_festivals add error', error);
+        if ((error.message || '').includes('RSVP_BLOCKED')) {
+          toastError('They asked not to be re-added to this rave');
+        } else {
+          toastError('Could not save festival attendance', error);
+        }
+        return false;
+      }
+      logAudit({ action: 'festival.rsvp_add', entityType: 'festival', entityId: festId, metadata: { raver_id: raverId } });
+      return true;
+    });
+  }
+
+  function dbRemoveRaverFestival(raverId, festId) {
+    return queueRsvpWrite(raverId, festId, async () => {
+      const { error } = await sb.from('raver_festivals').delete().eq('raver_id', raverId).eq('festival_id', festId);
+      if (error) { console.error('raver_festivals remove error', error); toastError('Could not update festival attendance', error); return false; }
+      logAudit({ action: 'festival.rsvp_remove', entityType: 'festival', entityId: festId, metadata: { raver_id: raverId } });
+      return true;
+    });
+  }
+
+  // A self-RSVP write failed: put the local Going state back so the screen
+  // matches the server. Looks `you` up again — a reload may have replaced it.
+  function revertOwnRsvp(festId, wasGoing) {
+    const you = squad.find(r => r.isYou);
+    if (!you) return;
+    const has = (you.festIds || []).some(fid => String(fid) === String(festId));
+    if (wasGoing && !has) you.festIds = [...(you.festIds || []), festId];
+    if (!wasGoing && has) you.festIds = you.festIds.filter(fid => String(fid) !== String(festId));
+    renderSetupPill(); renderEvents(); renderSquad(); renderCrews();
   }
 
   // Sets/clears the ticket type on an existing RSVP row. Unlike
@@ -39009,6 +39040,7 @@
     if (!you) return;
     if (!you.festIds) you.festIds = [];
     const isGoing = you.festIds.some(fid => String(fid) === String(festId));
+    let announceGoing = null;
     if (isGoing) {
       you.festIds = you.festIds.filter(fid => String(fid) !== String(festId));
       hapticImpact('LIGHT');
@@ -39025,10 +39057,13 @@
       if (!firstRsvpMoment) showToast(isPast ? `🎟️ Sent it at ${fest?.name || 'that rave'}!` : `🎟️ You're going to ${fest?.name || 'that rave'}!`);
       addNotification(isPast ? `🎟️ Logged! You sent it at ${fest?.name || 'that rave'}.` : `🎪 You're locked in for ${fest?.name || 'that rave'}! Pack your kit, charge the glowsticks, and get ready for the frequencies.`, [nlRave(fest)]);
       // Let each of your crews know — skip Secret crews, same posture as notifyCrewMembers.
+      // Posted only once the RSVP is saved (below), so the Huddle never
+      // announces a "going" the server didn't keep.
       if (currentUser && fest) {
         const who = displayName(you).split(' ')[0];
         const activityMsg = isPast ? `🎟️ ${who} sent it at ${fest.name}!` : `🎪 ${who} is going to ${fest.name}!`;
-        crews.filter(c => c.status !== 'secret' && (c.squadIds || []).some(id => String(id) === String(you.id)))
+        const youId = you.id;
+        announceGoing = () => crews.filter(c => c.status !== 'secret' && (c.squadIds || []).some(id => String(id) === String(youId)))
           .forEach(c => postCrewActivity(c.id, activityMsg, { k: 'rave', id: fest.id }));
         if (!isPast) maybeFirstRsvpMoment(fest);
       }
@@ -39040,10 +39075,13 @@
     if (currentUser) {
       if (isGoing) {
         // Was going, now removed
-        dbRemoveRaverFestival(you.id, festId);
+        dbRemoveRaverFestival(you.id, festId).then(ok => { if (!ok) revertOwnRsvp(festId, true); });
       } else {
         // Now going — add, and clear any Interested on the same rave (mutually exclusive)
-        dbAddRaverFestival(you.id, festId);
+        dbAddRaverFestival(you.id, festId).then(ok => {
+          if (ok) { if (announceGoing) announceGoing(); }
+          else revertOwnRsvp(festId, false);
+        });
         dbRemoveRaverFestivalInterest(you.id, festId);
         logAnalyticsEvent('first_rsvp_updated', { raver_id: you.id, festival_id: festId, direction: 'going' });
       }
