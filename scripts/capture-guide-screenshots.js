@@ -12,7 +12,7 @@ const path = require('path');
 const fs = require('fs');
 const { chromium } = require('@playwright/test');
 const { startServer, stopServer, demoData, shootApp, writeWebp, clearChrome, BASE_URL } = require('./capture-landing-screenshots');
-const { installSupabaseStub } = require('../tests/helpers');
+const { installSupabaseStub, TEST_UID } = require('../tests/helpers');
 
 const OUT_DIR = path.join(__dirname, '..', 'screenshots', 'guide');
 
@@ -157,13 +157,45 @@ async function main() {
       } finally { await context.close(); }
     }
 
-    // Crew extras: the new crew page's merged feed (polls, jams, dreams,
+    // Crews: the crew page's Crew Manifest sheet (roster, invites, status).
+    await shoot({
+      name: 'crews',
+      data: guideData(),
+      run: async (p) => {
+        await p.evaluate(() => { window.scrollTo(0, 0); openDetail('c1'); openCrewManifestSheet(); });
+        await p.waitForTimeout(500); // sheet slides up
+      },
+    });
+
+    // Crew extras: the crew page's merged feed (polls, jams, dreams,
     // memories in one stream), with the filter chips in view.
     await shoot({
       name: 'crew-extras',
       data: guideExtrasData(),
-      init: { ravefam_crew_feed: '1' },
       run: (p) => p.evaluate(() => { window.scrollTo(0, 0); openDetail('c1'); }),
+    });
+
+    // Rave Plan: the crew page's Plan chip for Lights All Night, with tasks.
+    await shoot({
+      name: 'rave-plan',
+      data: guideData(),
+      run: (p) => p.evaluate(async (me) => {
+        const gp = await dbGetOrCreateGamePlan('c1', 'f-edc');
+        const rows = [
+          { kind: 'task', added_by: 'uid-dani', text: 'Book the hotel near Fair Park', is_done: true },
+          { kind: 'task', added_by: me, text: 'Tickets on everyone\u2019s phone', is_done: true },
+          { kind: 'task', added_by: 'uid-tess', text: 'Hydration packs for everyone', is_done: false },
+          { kind: 'task', added_by: 'uid-priya', text: 'NYE fits: silver + glitter', is_done: false },
+        ];
+        for (const r of rows) {
+          const { data } = await sb.from('game_plan_items').insert({ game_plan_id: gp.id, crew_id: 'c1', ...r }).select().single();
+          gamePlanItems.push(data);
+        }
+        await openDetail('c1', { tab: 'gameplan' });
+        openCrewFeature('raveplan');
+      }, TEST_UID),
+      scrollTo: '#crew-feature-panel-raveplan',
+      scrollBy: -96, // clear the sticky app header
     });
 
     // Raves tab.

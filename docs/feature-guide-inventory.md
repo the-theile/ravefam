@@ -134,4 +134,4 @@ Tags: **LIVE** · **BETA** · **iOS** (iOS app only) · **SOON** (not shipped ye
 ## Excluded (internal / staff only)
 Mod Dashboard, Mod Guide, PM Metrics Dashboard, micro-feedback & NPS prompts,
 iOS App Store nudge, captcha, soft-delete/audit internals, Ko-fi tip jar,
-New crew page (BETA toggle), Discover places (tab unlocks, kept as a surprise).
+Discover places (tab unlocks, kept as a surprise).
