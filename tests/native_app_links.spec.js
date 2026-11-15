@@ -85,7 +85,8 @@ test.describe('Lineup Explorer in the native app', () => {
     await expect(page.locator('#auth-screen')).not.toHaveClass(/hidden/);
     await addExplorerLink(page);
     const [popup] = await Promise.all([context.waitForEvent('page'), page.locator('#le-test').click()]);
-    expect(popup.url()).toContain(EXPLORER);
+    // The new tab exists before it has navigated (its url is '' at first).
+    await popup.waitForURL(u => u.href.includes(EXPLORER));
     expect(page.url()).toContain('/app.html');
   });
 

@@ -20,8 +20,8 @@ function voteData(poll = {}, votes = []) {
 
 async function openPolls(page) {
   await page.evaluate(async () => { await openDetail('c1'); await dbLoadPolls('c1'); rerenderPolls('c1'); });
-  // The FAM Poll lives behind its crew feature tile.
-  await page.locator(".crew-feature-tile[onclick*=\"'poll'\"]").click();
+  // The FAM Poll lives behind the Polls filter chip.
+  await page.locator('.crew-feed-filter[data-filter="poll"]').click();
   await expect(page.locator('#crew-feature-panel-poll')).toBeVisible();
   await expect(page.locator('#fam-poll-section')).toContainText('Which sets are we hitting');
 }

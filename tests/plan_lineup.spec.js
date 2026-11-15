@@ -88,7 +88,7 @@ test.describe('rave plan lineup tab', () => {
   test('the Briefing lineup still shows only crew-picked sets', async ({ page }) => {
     await bootAuthedApp(page, { data: lineupData() });
     await page.evaluate(async () => { await openDetail('c1', { tab: 'gameplan' }); });
-    await page.locator('#crew-feature-panel-raveplan button', { hasText: 'Mission Briefing' }).click();
+    await page.locator('.crew-ticket-act[data-fest="f1"]', { hasText: 'Briefing' }).click();
     const lineup = page.locator('#mb-card-lineup');
     await expect(lineup).toContainText('Charlotte de Witte');
     await expect(lineup).toContainText('overlap 30 min');
