@@ -85,7 +85,7 @@ None of the `postgres_changes` subscriptions pass a status callback. Since 2.40.
 
 ### Service worker (`sw.js`)
 
-Precaches `/`, `/app.html`, `/qrcode.min.js`, `/manifest.json`. HTML is network-first with cache fallback. Same-origin static assets are cache-first. Anything on `supabase.co`, hosts starting `cdn.` or `fonts.`, Turnstile, Nominatim and Open-Meteo bypass the worker entirely, so Google Fonts are never cached by it. Since 2.40.1 `supabase-js` is same-origin and precached, the cache is `ravefam-v11`, and HTML falls back to the cached copy after 4 s. Also handles `push` and `notificationclick`.
+Precaches `/`, `/app.html`, `/qrcode.min.js`, `/manifest.json`, and since 2.45.4 the self-hosted fonts (`/webfonts/fonts.css` plus the seven latin `.woff2` files; latin-ext files are cached on first use; cache `ravefam-v12`). HTML is network-first with cache fallback. Same-origin static assets are cache-first. Anything on `supabase.co`, hosts starting `cdn.` or `fonts.`, Turnstile, Nominatim and Open-Meteo bypass the worker entirely, so Google Fonts (still used by the marketing and legal pages) are never cached by it; `app.html` no longer requests them. Since 2.40.1 `supabase-js` is same-origin and precached, the cache is `ravefam-v11`, and HTML falls back to the cached copy after 4 s. Also handles `push` and `notificationclick`.
 
 ## C. Section catalogue
 

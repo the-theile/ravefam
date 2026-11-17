@@ -64,7 +64,7 @@ Still open:
 - **L5:** fixed in 2.45.2: `crew-presence:*` and `huddle-presence:*` are private channels, authorized by `20261117002000_l5_private_presence_channels.sql` (crew leader, claimed member or moderator). Migration applied 17 Nov via `apply_migration` and verified (a real member is allowed, an outsider is denied).
 - **L12 (rest):** applied 17 Nov via `apply_migration` (0 public policies left calling auth per row; advisor no longer reports `auth_rls_initplan`): `20261117003000_l12_rls_auth_initplan.sql` wraps `auth.uid()`/`auth.role()` as `(select …)` in the 180 public policies that still call them per row. The 8 on `storage.objects` are left (owned by `supabase_storage_admin`).
 - **L12 (housekeeping):** applied 17 Nov via `apply_migration` (0 functions without a fixed `search_path`, 0 trigger functions executable by anon/authenticated): `20261117004000_l12_function_hardening.sql` pins `search_path` on `normalize_lineup_night` and `storage_path_uuid`, and revokes EXECUTE on the 11 trigger functions still callable through the REST API. The three named indexes already exist.
-- **M10 (rest):** the Google Fonts request still asks for six families.
+- **M10 (rest):** fixed in 2.45.4: `app.html` uses self-hosted variable fonts (`webfonts/`, OFL) precached by `sw.js`, instead of a render-blocking Google Fonts stylesheet. This also fixes faux-bold Outfit 900 / Fraunces 900. The other site pages still use Google Fonts.
 
 ---
 
