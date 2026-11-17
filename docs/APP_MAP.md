@@ -407,6 +407,15 @@ Three headers undersell what sits under them, because later code was added witho
 - **Tables / buckets (`.from`)**: `set_time_reports`, `artist_festival_appearances`
 - **RPCs:** `review_set_time`
 
+
+#### MOD DASHBOARD: Lineup Scout tab
+Added in 2.46.0, just above `// ===== MOD DASHBOARD: Missing Genres tab =====`.
+
+- **Functions:** `dbLoadScoutReview`, `scoutSafeUrl`, `scoutPayloadLines`, `scoutCandidateCardHTML`, `renderScoutReviewHTML`, `reviewScoutCandidate`
+- **Module-level state/consts declared here:** `modScout`, `SCOUT_FLAG_LABELS`
+- **Tables (`.from`)**: `lineup_candidates`, `scout_runs`
+- **RPCs (`.rpc`)**: `approve_lineup_candidate`, `reject_lineup_candidate`
+- The lineup scout's review queue (`_ops/lineup-scout/SCOUT.md`): last run summary, pending findings with flags + sources, Approve/Reject, and this week's auto-applied changes.
 #### MOD DASHBOARD: Missing Genres tab  
 `L20345–20486` (142 lines, 10 functions)
 
