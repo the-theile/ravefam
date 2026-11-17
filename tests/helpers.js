@@ -207,6 +207,9 @@ async function installSupabaseStub(page, opts = {}) {
           const st = { table, op: 'select', sel: '*', payload: null, upsertOpts: null, filters: [], limit: null, orders: [], range: null };
           const pred = row => st.filters.every(f => f(row));
           function exec() {
+            // window.__stubOffline = true makes every query fail the way a
+            // dropped connection does (offline cold-start tests).
+            if (window.__stubOffline) return { data: null, error: { message: 'Failed to fetch' } };
             const tbl = store[table] || (store[table] = []);
             if (st.op === 'select') {
               let rows = tbl.filter(pred);
@@ -392,6 +395,7 @@ async function installSupabaseStub(page, opts = {}) {
             return row;
           }
           function exec() {
+            if (window.__stubOffline) return { data: null, error: { message: 'Failed to fetch' } };
             // Every call is recorded (store.__rpcCalls) so a spec can check the args.
             (store.__rpcCalls = store.__rpcCalls || []).push({ fn, args: clone(args || {}) });
             // Canned RPC results a spec can seed: data.__rpc = { fn_name: result }.

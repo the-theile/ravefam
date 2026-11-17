@@ -3895,6 +3895,8 @@
     opacity: 0.75; transition: opacity 0.15s;
   }
   #offline-banner-close:hover { opacity: 1; }
+  #offline-banner.stale { padding-right: 16px; }
+  #offline-banner.stale #offline-banner-close { display: none; }
 
   /* Update-available banner */
   #update-banner {
@@ -10885,7 +10887,7 @@
 </div>
 
 <!-- Offline banner -->
-<div id="offline-banner">📡 No connection — some actions are unavailable<button id="offline-banner-close" aria-label="Dismiss">✕</button></div>
+<div id="offline-banner"><span id="offline-banner-text">📡 No connection — some actions are unavailable</span><button id="offline-banner-close" aria-label="Dismiss">✕</button></div>
 
 <!-- Update-available banner -->
 <div id="update-banner"><span>✨ A new version of RaveFAM is ready</span><button id="update-banner-btn">Update now</button></div>
@@ -11202,7 +11204,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.44.0';
+  const APP_VERSION = '2.45.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -13154,6 +13156,7 @@
   }
 
   async function doLogout() {
+    clearOfflineSnapshot();
     sessionStorage.removeItem('pendingClaim');
     clearPendingCrewJoin();
     localStorage.removeItem('pendingClaimToken');
@@ -13311,6 +13314,7 @@
     clearTimeout(_reloadDebounce);
     clearTimeout(_loadRetryTimer);
     _loadAllDataEverOk = false; _loadRetryDelay = 4000; _catalogsLoadedAt = 0;
+    clearOfflineSnapshot();
     squad.length = 0; crews.length = 0; festivals.length = 0; dreamPins = []; archiveLinks = [];
     crewPolls = []; crewJams = []; crewJamVibes = [];
     crewAchievements = []; raverAchievements = []; crewFeedEvents = [];
@@ -13441,11 +13445,51 @@
       }
       // TOKEN_REFRESHED for the same user: do nothing, app is already running.
     } else {
+      // No signal and the access token has expired: supabase-js can't refresh
+      // it, so it reports no session but keeps it stored. Open the last synced
+      // data instead of a login screen that can't send a code anyway. The
+      // client refreshes the token by itself once the connection is back.
+      if (event === 'INITIAL_SESSION' && tryOfflineBoot()) return;
       // Signed out — reset so the next login re-boots cleanly.
       _bootedUserId = null;
       showAuthScreen();
     }
   });
+
+  // The stored session supabase-js keeps under sb-<project ref>-auth-token,
+  // used only to recognise who was signed in on this device.
+  function storedAuthUser() {
+    try {
+      const ref = new URL(SUPA_URL).hostname.split('.')[0];
+      const raw = JSON.parse(localStorage.getItem(`sb-${ref}-auth-token`) || 'null');
+      return (raw && (raw.user || raw.currentSession?.user)) || null;
+    } catch { return null; }
+  }
+  function tryOfflineBoot() {
+    const user = storedAuthUser();
+    if (!user?.id) return false;
+    if (_bootedUserId === user.id) return true;  // the grace timer below got here first
+    if (!readOfflineSnapshot(user.id)) return false;
+    _bootedUserId = user.id;
+    currentUser = user;
+    // On screen before any network attempt, so the built-in demo rows never
+    // show; bootApp's loads then fail and keep retrying until they get through.
+    showOfflineSnapshot(user.id);
+    showApp(user);
+    // bootApp only draws once its first load settles, which can take a while
+    // with the refresh stuck; draw the snapshot now.
+    renderSquad(); renderCrews(); renderEvents();
+    return true;
+  }
+  // With no signal, supabase-js retries the token refresh for ~30s before it
+  // reports anything, which left the loading screen up all that time. If no
+  // auth event has booted the app shortly after start, open the snapshot.
+  // A valid stored session boots within milliseconds, so this only fires
+  // while a refresh is stuck. If the refresh later succeeds for the same
+  // account, nothing restarts; if the login turns out to be revoked,
+  // supabase-js clears it and the listener shows the login screen.
+  setTimeout(() => { if (!_bootedUserId && storedAuthUser()) tryOfflineBoot(); },
+    navigator.onLine ? 4000 : 1500);
 
   // Keyboard: submit on Enter in auth forms
   // Only from a field inside the auth card, so Enter in an overlay on top (the
@@ -15274,10 +15318,59 @@
   let _loadRetryDelay = 4000;
   const CATALOG_TTL_MS = 10 * 60 * 1000;
   let _catalogsLoadedAt = 0;
+  // ── Offline snapshot ──
+  // The last good load (crews, ravers, raves) is kept on the device so a cold
+  // start with no signal shows the crew instead of an empty app. One account
+  // per device: keyed to the user id, removed on sign-out (showAuthScreen,
+  // doLogout). Huddle messages, lineups and photos are not included.
+  const OFFLINE_SNAPSHOT_KEY = 'rf_offline_snapshot_v1';
+  const OFFLINE_SNAPSHOT_MAX_AGE_MS = 21 * 24 * 60 * 60 * 1000;
+  let _showingOfflineSnapshot = false;
+  // Banner text while the snapshot is on screen ('' when showing live data).
+  // initOfflineBanner reads it, so stale data stays flagged even when the
+  // phone counts itself as online.
+  let _offlineSnapshotBanner = '';
+  function saveOfflineSnapshot(uid) {
+    try {
+      localStorage.setItem(OFFLINE_SNAPSHOT_KEY, JSON.stringify({ v: 1, uid, at: Date.now(), festivals, squad, crews }));
+    } catch { /* quota or blocked storage: offline start just stays empty */ }
+  }
+  function readOfflineSnapshot(uid) {
+    try {
+      const snap = JSON.parse(localStorage.getItem(OFFLINE_SNAPSHOT_KEY) || 'null');
+      if (!snap || snap.v !== 1 || !uid || snap.uid !== uid) return null;
+      if (Date.now() - snap.at > OFFLINE_SNAPSHOT_MAX_AGE_MS) return null;
+      return snap;
+    } catch { return null; }
+  }
+  function clearOfflineSnapshot() {
+    try { localStorage.removeItem(OFFLINE_SNAPSHOT_KEY); } catch { /* nothing stored */ }
+    _showingOfflineSnapshot = false;
+    _offlineSnapshotBanner = '';
+    window.refreshOfflineBanner?.();
+  }
+  // Puts the snapshot on screen. True when there was one to show.
+  function showOfflineSnapshot(uid) {
+    const snap = readOfflineSnapshot(uid);
+    if (!snap) return false;
+    festivals.length = 0; squad.length = 0; crews.length = 0;
+    festivals.push(...snap.festivals); squad.push(...snap.squad); crews.push(...snap.crews);
+    _showingOfflineSnapshot = true;
+    const when = new Date(snap.at).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+    showToast(`No signal. Showing your crews as of ${when}; they'll update when you're back online.`);
+    _offlineSnapshotBanner = `📡 Showing saved crews from ${when}`;
+    window.refreshOfflineBanner?.();
+    return true;
+  }
+
   function loadAllDataFailed(err) {
     reportBackgroundFailure('loadAllData')(err);
-    // Never leave the hardcoded demo rows standing in for a real account.
-    if (!_loadAllDataEverOk) { festivals.length = 0; squad.length = 0; crews.length = 0; }
+    // First load of this session failed: show the last synced data if this
+    // device has it, and never leave the hardcoded demo rows standing in for
+    // a real account.
+    if (!_loadAllDataEverOk && !_showingOfflineSnapshot && !showOfflineSnapshot(currentUser?.id)) {
+      festivals.length = 0; squad.length = 0; crews.length = 0;
+    }
     clearTimeout(_loadRetryTimer);
     _loadRetryTimer = setTimeout(async () => {
       if (!currentUser) return;
@@ -15541,8 +15634,15 @@
     squad.push(...next.squad);
     crews.push(...next.crews);
     _loadAllDataEverOk = true;
+    if (_showingOfflineSnapshot) {
+      _offlineSnapshotBanner = '';
+      window.refreshOfflineBanner?.();
+      showToast('Back online — crews updated ✨');
+    }
+    _showingOfflineSnapshot = false;
     _loadRetryDelay = 4000;
     clearTimeout(_loadRetryTimer);
+    saveOfflineSnapshot(uid);
 
     // Load community genre pool (non-blocking)
     dbLoadCommunityGenres().catch(reportBackgroundFailure('dbLoadCommunityGenres'));
@@ -40597,12 +40697,20 @@
     const banner = document.getElementById('offline-banner');
     let _bannerDismissed = false;
     let _offlineTimer = null;
+    const bannerText = document.getElementById('offline-banner-text');
+    const OFFLINE_TEXT = bannerText.textContent;
     // iOS WebKit fires short false 'offline' blips on network handoffs and when
     // the app returns from Mail/Messages mid-onboarding, and doesn't always
     // follow with 'online'. Only show once offline has held for a few seconds.
     function update() {
       clearTimeout(_offlineTimer);
-      if (navigator.onLine) {
+      // Saved data on screen: always say so, and don't allow dismissing it.
+      const stale = _offlineSnapshotBanner;
+      banner.classList.toggle('stale', !!stale);
+      bannerText.textContent = stale || OFFLINE_TEXT;
+      if (stale) {
+        banner.classList.add('visible');
+      } else if (navigator.onLine) {
         banner.classList.remove('visible');
       } else if (!_bannerDismissed) {
         _offlineTimer = setTimeout(() => {
@@ -40626,6 +40734,7 @@
       _bannerDismissed = true;
       banner.classList.remove('visible');
     });
+    window.refreshOfflineBanner = update;
     update();
   })();
 

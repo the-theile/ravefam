@@ -32,7 +32,7 @@ The top 10 were addressed in 2.40.1, one commit per finding. All six migrations 
 
 Found while fixing C3: adding a vibe tag to a crewmate went through `dbSaveRaver`, which wrote the whole masked row back and so blanked that person's hidden phone, base and notes. The C3 client change stops it.
 
-Still open from this list: a cold start with no signal now boots but has no data to show (H2 follow-up: cache the last good load), and M4 onwards (see 2.40.2 below).
+Still open from this list: M4 onwards (see 2.40.2 below). The H2 follow-up (a cold start with no signal had no data to show) is fixed in 2.45.0.
 
 ## Fix status (2.40.2)
 
@@ -60,7 +60,6 @@ The remaining Medium findings and most Lows were addressed in 2.40.2, one commit
 
 Still open:
 
-- **H2 follow-up:** a cold start with no signal boots but has no data to show. Needs the last good load cached on the device (and cleared on sign-out).
 - **L3:** the destructive-action rate limit still counts audit rows the browser writes; the audit row should come from the trigger.
 - **L5:** presence and typing channels are still open topics; making them private needs Realtime authorization set up.
 - **L12 (rest):** 193 policies still call `auth.uid()` per row instead of `(select auth.uid())`.
