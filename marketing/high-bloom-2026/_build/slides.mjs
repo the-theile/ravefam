@@ -77,13 +77,13 @@ slide('slide1', null, `
     <div class="sub" style="font-size:36px">Get the crew on the same page. 🌸</div>
   </div>`);
 
-// 2. Lineup Explorer: the real High Bloom page
-slide('slide2', 'LINEUP EXPLORER', `<div class="copy">
-  <div class="eyebrow">The lineup is live</div>
-  <h1 style="font-size:88px">Dig the lineup<br>before you go.</h1>
-  <div class="sub"><b>Dirt Monkey</b>, Kash’d Out, WonkyWilla, Badda Skat and 3 more. Tap any act to preview.</div></div>
+// 2. Lineup Explorer: the real High Bloom page, with official set times
+slide('slide2', 'SET TIMES', `<div class="copy">
+  <div class="eyebrow">Set times are out</div>
+  <h1 style="font-size:88px">Know when<br>to run.</h1>
+  <div class="sub">Badda Skat opens at 3. <b>Dirt Monkey</b> at 8:50. <b>WonkyWilla</b> closes till 11:20. All 7 sets on the Lineup Explorer.</div></div>
   ${phone('explorer.png', { left: 64, top: 640, w: 460, h: 800, pos: 'center 46%' })}
-  ${phone('explorer-acts.png', { left: 556, top: 600, w: 460, h: 840, cls: 'c' })}`);
+  ${phone('explorer-late.png', { left: 556, top: 600, w: 460, h: 840, cls: 'c' })}`);
 
 // 3. Crew + RSVP
 slide('slide3', 'CREWS + RSVP', `<div class="copy">

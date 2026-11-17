@@ -6,15 +6,15 @@
 
 ## Where the data comes from
 - **High Bloom:** the live `festivals` row: Sat Nov 21 2026, 1 day, Port Charlotte, Florida (slug renamed to `high-bloom-2026` to match the page).
-- **Lineup:** the 7 acts billed on the official Eventbrite page (Dab Day Productions × HippieStock), in billing order: Dirt Monkey, Kash'd Out, WonkyWilla (billed "Wonky Willa"), Badda Skat, Dionysus, The Hulagans (billed "The Hulagan's"), Kairo Reef. No set times have been posted.
-- **Slide 2:** the real High Bloom 2026 Lineup Explorer page (`lineup-explorer/high-bloom-2026.html`), logged out, nothing seeded.
+- **Lineup:** the 7 acts billed on the official Eventbrite page (Dab Day Productions × HippieStock), in billing order: Dirt Monkey, Kash'd Out, WonkyWilla (billed "Wonky Willa"), Badda Skat, Dionysus, The Hulagans (billed "The Hulagan's"), Kairo Reef. Set times: the official "Festival Performance Times" poster (`lineup-explorer/HIGH_BLOOM_2026_SET_TIMES.md`).
+- **Slide 2:** the real High Bloom 2026 Lineup Explorer page (`lineup-explorer/high-bloom-2026.html`), logged out, nothing seeded, showing the official set times.
 - **Slides 3–4:** real `app.html` UI on the stubbed harness from `scripts/capture-landing-screenshots.js`. The crew, names and avatars are the fictional demo crew the landing page and guide already use (no real user data). The crew's upcoming rave is the real High Bloom row with its real 7-act lineup. The "Who's driving?" poll, its options and its votes are demo content, the same way the guide shows a demo poll.
 
 ## Caption
 
 > High Bloom is Saturday 🌸 Port Charlotte, 11.21.
 >
-> Dirt Monkey, Kash'd Out, WonkyWilla, Badda Skat, Dionysus, The Hulagans and Kairo Reef. The full lineup is on the Lineup Explorer now, so dig in before Saturday.
+> Dirt Monkey, Kash'd Out, WonkyWilla, Badda Skat, Dionysus, The Hulagans and Kairo Reef. Set times are out: Badda Skat opens at 3, Dirt Monkey hits at 8:50, WonkyWilla closes till 11:20. Every set is on the Lineup Explorer.
 >
 > Then start a crew, tap Going, and settle "who's driving?" with one poll instead of 200 texts.
 >
@@ -26,7 +26,7 @@
 
 ## Alt text
 1. Neon title card: "High Bloom 11.21", Sat Nov 21, Port Charlotte FL.
-2. "Dig the lineup before you go." Two phones showing the High Bloom 2026 Lineup Explorer: the page header, and the 7 acts with Dirt Monkey starred at the top of the bill.
+2. "Know when to run." Two phones showing the High Bloom 2026 Lineup Explorer: the page header, and the evening set times from Dionysus at 6:20 PM to WonkyWilla's 9:50–11:20 PM closing set.
 3. "Start a crew. See who's going." The Create New Crew form next to the High Bloom RSVP sheet showing 8 crewmates going.
 4. "Who's driving?" A crew poll with seat options and live vote results.
 5. "Your crew. One plan." Download on the App Store badge and myravefam.com.

@@ -84,6 +84,19 @@ async function shot(browser, name, data, run) {
       await p.evaluate(() => window.scrollTo(0, document.getElementById('count').getBoundingClientRect().top + scrollY - 16));
     });
 
+    // Same page, scrolled to the evening sets (Kash'd Out → WonkyWilla closing).
+    await shot(browser, 'explorer-late', null, async (p) => {
+      await p.route(/^https?:\/\/(?!127\.0\.0\.1)/, (r) => r.abort());
+      await p.goto('/lineup-explorer/high-bloom-2026.html');
+      await p.waitForSelector('.act');
+      await p.evaluate(() => document.fonts.ready);
+      await p.addStyleTag({ content: '.cta-bar, .lp-toast, .a2hs-btn, .lp-sheet, .lp-coach { display: none !important; }' });
+      await p.evaluate(() => {
+        const el = [...document.querySelectorAll('.act')].find((x) => /Kash/.test(x.textContent));
+        window.scrollTo(0, el.getBoundingClientRect().top + scrollY - 70);
+      });
+    });
+
     await shot(browser, 'create-crew', highBloomData(), async (p) => {
       await p.evaluate(() => { window.scrollTo(0, 0); openModal(); });
       await p.waitForTimeout(400);
