@@ -1,4 +1,4 @@
-const CACHE = 'ravefam-v11';
+const CACHE = 'ravefam-v12';
 // jsQR is no longer precached — the app fetches it on demand, and only on
 // browsers without BarcodeDetector, so precaching it cost every install ~250KB
 // for a decoder most never use. The cache-first handler below still stores it
@@ -11,6 +11,18 @@ const PRECACHE = [
   // in the cache the cached app.html can't boot offline.
   '/supabase-2.117.3.min.js',
   '/manifest.json',
+  // Self-hosted fonts (M10): the latin files, so an offline cold start draws
+  // in the real fonts. latin-ext files are cached by the cache-first handler
+  // the first time a page needs them. File names aren't versioned: bump CACHE
+  // when webfonts/ changes.
+  '/webfonts/fonts.css',
+  '/webfonts/dm-sans-latin-400-700.woff2',
+  '/webfonts/outfit-latin-400-900.woff2',
+  '/webfonts/urbanist-latin-800-900.woff2',
+  '/webfonts/fraunces-latin-700-900.woff2',
+  '/webfonts/orbitron-latin-400-900.woff2',
+  '/webfonts/courier-prime-latin-400.woff2',
+  '/webfonts/courier-prime-latin-700.woff2',
 ];
 
 // How long a page load waits on the network before the cached copy is shown.
