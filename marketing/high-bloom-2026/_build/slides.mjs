@@ -77,11 +77,11 @@ slide('slide1', null, `
     <div class="sub" style="font-size:36px">Get the crew on the same page. 🌸</div>
   </div>`);
 
-// 2. Lineup Explorer (High Bloom's lineup isn't posted; nearest FL rave that has one)
+// 2. Lineup Explorer: the real High Bloom page
 slide('slide2', 'LINEUP EXPLORER', `<div class="copy">
-  <div class="eyebrow">Lineup drops here first</div>
+  <div class="eyebrow">The lineup is live</div>
   <h1 style="font-size:88px">Dig the lineup<br>before you go.</h1>
-  <div class="sub">High Bloom’s lineup isn’t out yet. Here’s <b>Tapesgiving</b> in Clearwater, Nov 27–28, on the Explorer right now.</div></div>
+  <div class="sub"><b>Dirt Monkey</b>, Kash’d Out, WonkyWilla, Badda Skat and 3 more. Tap any act to preview.</div></div>
   ${phone('explorer.png', { left: 64, top: 640, w: 460, h: 800, pos: 'center 46%' })}
   ${phone('explorer-acts.png', { left: 556, top: 600, w: 460, h: 840, cls: 'c' })}`);
 

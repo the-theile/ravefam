@@ -1,11 +1,10 @@
 // Captures the High Bloom 11.21 carousel screens.
-//  - explorer.png: the real Tapesgiving 2026 Lineup Explorer page (High Bloom has
-//    no lineup posted yet; Tapesgiving, Clearwater Nov 27-28, is the nearest
-//    Florida rave with one). Logged out, no picks seeded, page data untouched.
+//  - explorer.png / explorer-acts.png: the real High Bloom 2026 Lineup Explorer
+//    page (lineup-explorer/high-bloom-2026.html). Logged out, no picks seeded.
 //  - create-crew.png / rsvp.png / poll.png: the real app.html UI on the mocked
 //    harness from scripts/capture-landing-screenshots.js (stubbed Supabase, the
 //    fictional demo crew, no real user data). The crew's upcoming rave is the
-//    real High Bloom row (Nov 21 2026, 1 day, Port Charlotte FL).
+//    real High Bloom row (Nov 21 2026, 1 day, Port Charlotte FL) with its real 7-act lineup.
 // Run from the repo root: node marketing/high-bloom-2026/_build/capture.js
 'use strict';
 const path = require('path');
@@ -22,6 +21,13 @@ function highBloomData() {
   const data = demoData();
   const f = data.festivals.find((x) => x.id === 'f-edc');
   Object.assign(f, { name: 'High Bloom', date: '2026-11-21', days: 1, location: 'Port Charlotte, FL', color: '#FF2D78' });
+  // The real High Bloom lineup (same 7 acts as lineup-explorer/high-bloom-2026.html).
+  [['Dirt Monkey', ['bass'], true], ["Kash'd Out", ['reggae rock']], ['WonkyWilla', ['dubstep']], ['Badda Skat', ['reggae']],
+   ['Dionysus', ['funk']], ['The Hulagans', ['reggae rock']], ['Kairo Reef', ['reggae']]].forEach(([name, genres, hl], i) => {
+    const id = `hb-${i}`;
+    data.artists.push({ id, name, genres });
+    (data.artist_festival_appearances ||= []).push({ artist_id: id, festival_id: 'f-edc', is_headliner: !!hl, night: null, note: null });
+  });
   return data;
 }
 
@@ -62,7 +68,7 @@ async function shot(browser, name, data, run) {
   try {
     await shot(browser, 'explorer', null, async (p) => {
       await p.route(/^https?:\/\/(?!127\.0\.0\.1)/, (r) => r.abort());
-      await p.goto('/lineup-explorer/tapesgiving-2026.html');
+      await p.goto('/lineup-explorer/high-bloom-2026.html');
       await p.waitForSelector('.act');
       await p.evaluate(() => document.fonts.ready);
       await p.addStyleTag({ content: '.cta-bar, .lp-toast, .a2hs-btn, .lp-sheet, .lp-coach { display: none !important; }' });
@@ -71,7 +77,7 @@ async function shot(browser, name, data, run) {
     // Same page, scrolled so the artist list fills the screen.
     await shot(browser, 'explorer-acts', null, async (p) => {
       await p.route(/^https?:\/\/(?!127\.0\.0\.1)/, (r) => r.abort());
-      await p.goto('/lineup-explorer/tapesgiving-2026.html');
+      await p.goto('/lineup-explorer/high-bloom-2026.html');
       await p.waitForSelector('.act');
       await p.evaluate(() => document.fonts.ready);
       await p.addStyleTag({ content: '.cta-bar, .lp-toast, .a2hs-btn, .lp-sheet, .lp-coach { display: none !important; }' });
