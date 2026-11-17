@@ -49,12 +49,16 @@ After it runs, the generator (`_ops/explorer/build-explorer.mjs`) brings the pag
 the DB: III Points and the 4 EDC cards get their set times. Everything else is
 already identical: a generator run against a snapshot of today's pages changes 0 of 38 pages.
 
-## Needs a decision
+## Decisions (Theile, 2026-11-17)
 
-1. **EDC Orlando names.** DB rows `DKNOW`, `Fury`, `Mad Dubz & VKTM` (Circuit
-   Grounds, Sat 1:00–3:30 PM) vs page cards `CID`, `Fury with MC Dino`, `MADVKTM`.
-   Which billing is right? The wrong ones get removed (dashboard SQL, since it's a delete).
-2. **JVNA K-Pop set stage** at Lost In Dreams: set the DB to Vivid (recommended).
-3. **EDC Orlando `days`**: set to 3 (Nov 6–8).
-4. **Cyclops Cove alerts**: the 27 acts missing from the DB never triggered "artist
-   added" alerts in the app. Keep them silent (default), or let fans who ♡ them get one now?
+1. **EDC Orlando names.** Official billing is "Fury with MC Dino" and "MADVKTM"
+   (the Mad Dubz × VKTM b2b project); ticketing lists Fury and MC Dino
+   separately. The page was right. Supabase stored "Dknow" (wrong) and one
+   "Mad Dubz & VKTM" artist. Now: the page keeps the billed names, Supabase
+   stores linked b2b rows (Fury + MC Dino, Mad Dubz + VKTM) via
+   `CARD_ARTISTS` in `_ops/explorer/pages.mjs`. The two wrong rows are removed by
+   `20261117033000_edc_orlando_billing_cleanup.sql` (dashboard, since it's a delete).
+2. **JVNA K-Pop set → Vivid.** Applied (`20261117032000_explorer_data_fixes.sql`).
+3. **EDC Orlando `days` → 3.** Applied (same file).
+4. **Cyclops Cove alerts: send them.** The reconcile adds Cyclops Cove's acts
+   after the alert triggers are back on. 1 fan follows one of those 27 acts today.

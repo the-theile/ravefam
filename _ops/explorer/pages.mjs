@@ -17,7 +17,19 @@ export const NON_FESTIVAL_FILES = new Set(['index.html', 'icon-source.html', 'og
 // Same overrides as build-artists-seed.mjs / build-artist-pages.mjs.
 export const CANONICAL_NAME_OVERRIDES = { illenium: 'ILLENIUM', kettama: 'KETTAMA' };
 export const canonicalize = n => CANONICAL_NAME_OVERRIDES[n.toLowerCase()] || n;
-export const splitB2B = n => { const p = n.split(/\s+b2b\s+/i).map(s => s.trim()); return p.length >= 2 ? p : [n.trim()]; };
+// Billed names that are really several artists (stored as a b2b group in the
+// DB so each artist links to their other festivals). Lowercased card name ->
+// artists. Checked against official billing / ticketing.
+export const CARD_ARTISTS = {
+  'madvktm': ['Mad Dubz', 'VKTM'],            // Mad Dubz × VKTM b2b project
+  'fury with mc dino': ['Fury', 'MC Dino'],   // EDC Orlando 2026 billing
+};
+export const splitB2B = n => {
+  const alias = CARD_ARTISTS[n.trim().toLowerCase()];
+  if (alias) return alias;
+  const p = n.split(/\s+b2b\s+/i).map(s => s.trim());
+  return p.length >= 2 ? p : [n.trim()];
+};
 
 const TIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
 const SET_CAP_MIN = 90, CLOSE_MAX_MIN = 120;
