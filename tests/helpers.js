@@ -599,7 +599,7 @@ async function installSupabaseStub(page, opts = {}) {
           }; } };
           // Expose the store for test introspection.
           window.__store = store;
-          return { auth, storage, from(t) { return makeBuilder(t); }, rpc(fn, params) { return makeRpc(fn, params); }, channel() { return channel; }, removeChannel() { return Promise.resolve('ok'); } };
+          return { auth, storage, from(t) { return makeBuilder(t); }, rpc(fn, params) { return makeRpc(fn, params); }, channel(name, opts) { (window.__channels = window.__channels || []).push({ name, opts: opts || {} }); return channel; }, removeChannel() { return Promise.resolve('ok'); } };
         }
 
         window.supabase = { createClient };

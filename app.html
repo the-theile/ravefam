@@ -11204,7 +11204,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.45.1';
+  const APP_VERSION = '2.45.2';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -19874,7 +19874,9 @@
     });
     want.forEach(id => {
       if (_crewPresenceChannels[id]) return;
-      const ch = sb.channel(`crew-presence:${id}`, { config: { presence: { key: currentUser.id } } });
+      // Private: Realtime only lets this crew's members join (L5, policies on
+      // realtime.messages via can_use_presence_topic).
+      const ch = sb.channel(`crew-presence:${id}`, { config: { private: true, presence: { key: currentUser.id } } });
       ch.on('presence', { event: 'sync' }, () => {
         const others = [];
         Object.values(ch.presenceState()).forEach(metas => {
@@ -26109,7 +26111,8 @@
 
   function trackHuddlePresence(roomId) {
     const me = squad.find(r => r.isYou);
-    _huddlePresenceChannel = sb.channel(`huddle-presence:${roomId}`, { config: { presence: { key: currentUser.id } } });
+    // Private: only the room's crew can join, see presence or typing (L5).
+    _huddlePresenceChannel = sb.channel(`huddle-presence:${roomId}`, { config: { private: true, presence: { key: currentUser.id } } });
     _huddlePresenceChannel.on('presence', { event: 'sync' }, () => {
       _huddlePresenceState = _huddlePresenceChannel.presenceState();
       // Only the header shows presence — re-rendering the whole stream on
