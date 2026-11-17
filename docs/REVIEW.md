@@ -60,8 +60,8 @@ The remaining Medium findings and most Lows were addressed in 2.40.2, one commit
 
 Still open:
 
-- **L3:** the destructive-action rate limit still counts audit rows the browser writes; the audit row should come from the trigger.
-- **L5:** presence and typing channels are still open topics; making them private needs Realtime authorization set up.
+- **L3:** fixed 17 Nov (applied in the SQL editor): `20261117001000_l3_rate_limit_server_side_events.sql` counts trigger-recorded events in a table clients can't touch, instead of browser-written audit rows. Run via the dashboard, so it isn't in `schema_migrations`; the file is the record.
+- **L5:** fixed in 2.45.2: `crew-presence:*` and `huddle-presence:*` are private channels, authorized by `20261117002000_l5_private_presence_channels.sql` (crew leader, claimed member or moderator). Migration applied 17 Nov via `apply_migration` and verified (a real member is allowed, an outsider is denied).
 - **L12 (rest):** 193 policies still call `auth.uid()` per row instead of `(select auth.uid())`.
 - **M10 (rest):** the Google Fonts request still asks for six families.
 
