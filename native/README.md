@@ -59,6 +59,7 @@ The App Store version is `APP_VERSION` at build time, so released versions skip 
 ### Next iOS release
 Each native PR adds a line here; **After release** holds web changes that wait on it.
 
+- Countdown widget (large): a pinned crew lists that crew's own upcoming raves instead of padding with other crews
 - Lineup Explorer and other myravefam.com pages stay in the app's webview (`server.allowNavigation`) (#387)
 - Edge swipe-back on pages outside `/app` (#386, #387)
 - Haptic taps as each rave pops in on the Radar Map, plus a success tap at the end (`@capacitor/haptics`)
