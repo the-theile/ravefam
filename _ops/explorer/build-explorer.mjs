@@ -51,7 +51,9 @@ async function loadSnapshot() {
   if (!url || !key) throw new Error('Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, or pass --data');
   const res = await fetch(`${url.replace(/\/$/, '')}/rest/v1/rpc/explorer_snapshot`, {
     method: 'POST',
-    headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    // Legacy service_role keys are JWTs and go in Authorization too; new
+    // sb_secret_ keys are not JWTs and only go in the apikey header.
+    headers: { apikey: key, ...(key.startsWith('eyJ') ? { Authorization: `Bearer ${key}` } : {}), 'Content-Type': 'application/json' },
     body: '{}',
   });
   if (!res.ok) throw new Error(`explorer_snapshot failed: ${res.status} ${await res.text()}`);
