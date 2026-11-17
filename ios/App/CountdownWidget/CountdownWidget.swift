@@ -7,7 +7,8 @@ import AppIntents
 // screen (circular / rectangular / inline) and StandBy (small). Each widget
 // can pin a crew (long-press → Edit Widget → Crew; a crew's next rave needs
 // 2+ members going). The default is the raver's own next rave, and the large
-// size lists one row per rave (`raves`). Data: CountdownModel.swift.
+// size lists one row per rave (`raves`), or per pinned-crew rave when a crew
+// is pinned. Data: CountdownModel.swift.
 
 // MARK: - Crew picker
 
@@ -359,8 +360,28 @@ struct LargeView: View {
                 Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        } else if let pinned = pinnedCrew {
+            // A pinned crew: one row per rave that crew has coming up.
+            let rows = Array(pinnedRows(pinned).prefix(5))
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Next up 🔊").font(heavy(22)).foregroundStyle(.white)
+                CrewTag(name: pinned.name, accent: pinned.accent)
+                if rows.isEmpty {
+                    LargeRow(crew: pinned, date: entry.date)
+                }
+                ForEach(rows, id: \.self) { row in
+                    let sub = pinnedSub(row)
+                    if let url = row.appURL {
+                        Link(destination: url) { LargeRow(crew: row, date: entry.date, sub: sub) }
+                    } else {
+                        LargeRow(crew: row, date: entry.date, sub: sub)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else {
-            let crews = Array(pinnedFirst.prefix(5))
+            let crews = Array(sortedCrews(entry.crews, at: entry.date).prefix(5))
             VStack(alignment: .leading, spacing: 8) {
                 Text("Next up 🔊").font(heavy(22)).foregroundStyle(.white)
                 ForEach(crews, id: \.id) { crew in
@@ -376,11 +397,24 @@ struct LargeView: View {
         }
     }
 
-    // A pinned crew leads the list; the rest stay soonest-first.
-    private var pinnedFirst: [CountdownCrew] {
-        let sorted = sortedCrews(entry.crews, at: entry.date)
-        guard let id = entry.pinnedID, let pinned = sorted.first(where: { $0.id == id }) else { return sorted }
-        return [pinned] + sorted.filter { $0.id != id }
+    private var pinnedCrew: CountdownCrew? {
+        guard let id = entry.pinnedID else { return nil }
+        return entry.crews.first { $0.id == id }
+    }
+
+    // The pinned crew split into one single-rave crew per fest (soonest first,
+    // ended ones dropped), so each LargeRow counts down to its own rave.
+    private func pinnedRows(_ crew: CountdownCrew) -> [CountdownCrew] {
+        (crew.fests ?? [])
+            .map { CountdownCrew(id: crew.id, name: crew.name, color: crew.color, fests: [$0]) }
+            .filter { $0.state(at: entry.date).phase != .empty }
+    }
+
+    // "Sat, Nov 28 · 5 going": the crew's name is already the header.
+    private func pinnedSub(_ row: CountdownCrew) -> String? {
+        guard let fest = row.fests?.first else { return nil }
+        let going = (fest.going ?? 0) > 0 ? "\(fest.going ?? 0) going" : ""
+        return [fest.whenLine(), going].filter { !$0.isEmpty }.joined(separator: " · ")
     }
 }
 
