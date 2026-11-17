@@ -64,7 +64,6 @@ Still open:
 - **L5:** presence and typing channels are still open topics; making them private needs Realtime authorization set up.
 - **L12 (rest):** 193 policies still call `auth.uid()` per row instead of `(select auth.uid())`.
 - **M10 (rest):** the Google Fonts request still asks for six families.
-- Voice notes have the same room-switch race L4 fixed for photos (`stopHuddleVoiceRecording` path).
 
 ---
 

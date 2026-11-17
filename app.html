@@ -11204,7 +11204,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.45.0';
+  const APP_VERSION = '2.45.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -25973,9 +25973,12 @@
     }
     const mimeType = ['audio/webm', 'audio/mp4', 'audio/ogg'].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
     _huddleRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-    _huddleRecordedChunks = [];
+    // Each recording keeps its own chunks, so starting a new note while the
+    // last one is still finishing can't mix the two.
+    const chunks = [];
+    _huddleRecordedChunks = chunks;
     _huddleRecordingStartedAt = Date.now();
-    _huddleRecorder.ondataavailable = e => { if (e.data && e.data.size) _huddleRecordedChunks.push(e.data); };
+    _huddleRecorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
 
     huddleHideAllInlineForms();
     const bar = document.getElementById('huddle-recording-bar');
@@ -26015,20 +26018,31 @@
       return;
     }
 
+    // The note belongs to the room it was recorded in. Release the recorder
+    // now so a room switch while it finishes or uploads can't cancel it.
+    const roomId = _huddleActiveRoomId, crewId = _huddleActiveCrewId;
+    const chunks = _huddleRecordedChunks;
+    _huddleRecorder = null;
+    _huddleRecordedChunks = [];
     const stopped = new Promise(resolve => { recorder.onstop = resolve; });
     try { recorder.stop(); } catch (e) {}
     await stopped;
-    _huddleRecorder = null;
     recorder.stream?.getTracks?.().forEach(t => t.stop());
-    const blob = new Blob(_huddleRecordedChunks, { type: recorder.mimeType || 'audio/webm' });
-    _huddleRecordedChunks = [];
+    const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
     try {
       const ext = (recorder.mimeType || '').includes('mp4') ? 'm4a' : (recorder.mimeType || '').includes('ogg') ? 'ogg' : 'webm';
-      const path = `crews/${_huddleActiveCrewId}/${_huddleActiveRoomId}/${crypto.randomUUID()}.${ext}`;
+      const path = `crews/${crewId}/${roomId}/${crypto.randomUUID()}.${ext}`;
       const { error: upErr } = await sb.storage.from('huddle-media').upload(path, blob, { cacheControl: '3600', upsert: true });
       if (upErr) throw upErr;
       const { data } = sb.storage.from('huddle-media').getPublicUrl(path);
-      await sendHuddleMessage({ kind: 'voice', media_url: data.publicUrl, media_duration_ms: elapsedMs });
+      if (_huddleActiveRoomId === roomId) {
+        await sendHuddleMessage({ kind: 'voice', media_url: data.publicUrl, media_duration_ms: elapsedMs });
+      } else {
+        // Switched rooms while it uploaded: post it to the room it was recorded in.
+        const { error } = await sb.from('huddle_messages')
+          .insert({ room_id: roomId, crew_id: crewId, sender_id: currentUser.id, kind: 'voice', media_url: data.publicUrl, media_duration_ms: elapsedMs });
+        if (error) throw error;
+      }
     } catch (err) {
       console.error('huddle voice upload error', err);
       toastError('Could not send voice note. Try again');
