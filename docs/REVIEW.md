@@ -60,7 +60,7 @@ The remaining Medium findings and most Lows were addressed in 2.40.2, one commit
 
 Still open:
 
-- **L3:** fix written, not yet applied: `20261117001000_l3_rate_limit_server_side_events.sql` counts trigger-recorded events in a table clients can't touch, instead of browser-written audit rows.
+- **L3:** fixed 17 Nov (applied in the SQL editor): `20261117001000_l3_rate_limit_server_side_events.sql` counts trigger-recorded events in a table clients can't touch, instead of browser-written audit rows. Run via the dashboard, so it isn't in `schema_migrations`; the file is the record.
 - **L5:** presence and typing channels are still open topics; making them private needs Realtime authorization set up.
 - **L12 (rest):** 193 policies still call `auth.uid()` per row instead of `(select auth.uid())`.
 - **M10 (rest):** the Google Fonts request still asks for six families.
