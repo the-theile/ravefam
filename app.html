@@ -11211,7 +11211,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.45.4';
+  const APP_VERSION = '2.46.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -20458,7 +20458,7 @@
   }
 
   // ===== MOD DASHBOARD =====
-  let modDashTab = 'reports';  // 'reports' | 'recent' | 'genres' | 'settimes' | 'gifs' | 'guide'
+  let modDashTab = 'reports';  // 'reports' | 'recent' | 'genres' | 'settimes' | 'scout' | 'gifs' | 'guide'
   let modDashRecentRows = [];  // last-loaded audit_logs rows, keyed by id for Restore lookups
   let modDashOpenFlags = [];   // open flags as rendered, for the action sheets' lookups
 
@@ -20474,7 +20474,8 @@
   function closeModDashboard() { closeDetail(); }
 
   async function renderModDashboard() {
-    const [flags, recent, missingGenreArtists, setTimeReports] = await Promise.all([dbLoadFlags(), dbLoadRecentDestructiveActions(), dbLoadMissingGenreArtists(), dbLoadSetTimeReports()]);
+    const [flags, recent, missingGenreArtists, setTimeReports, scout] = await Promise.all([dbLoadFlags(), dbLoadRecentDestructiveActions(), dbLoadMissingGenreArtists(), dbLoadSetTimeReports(), dbLoadScoutReview()]);
+    modScout = scout;
     modDashRecentRows = recent;
     modMissingGenreArtists = missingGenreArtists;
     modSetTimeReports = setTimeReports;
@@ -20494,6 +20495,7 @@
         <button class="status-opt ${modDashTab==='recent'?'active':''}" onclick="switchModDashTab('recent')">🗑️ Recent Deletes${recent.length ? ` (${recent.length})` : ''}</button>
         <button class="status-opt ${modDashTab==='genres'?'active':''}" onclick="switchModDashTab('genres')">🎵 Missing Genres${missingGenreArtists.length ? ` (${missingGenreArtists.length})` : ''}</button>
         <button class="status-opt ${modDashTab==='settimes'?'active':''}" onclick="switchModDashTab('settimes')">🕘 Set times${setTimeReports.length ? ` (${setTimeReports.length})` : ''}</button>
+        <button class="status-opt ${modDashTab==='scout'?'active':''}" onclick="switchModDashTab('scout')">🔭 Scout${scout.pending.length ? ` (${scout.pending.length})` : ''}</button>
         <button class="status-opt ${modDashTab==='gifs'?'active':''}" onclick="switchModDashTab('gifs')">🪩 GIF pack</button>
         <button class="status-opt ${modDashTab==='guide'?'active':''}" onclick="switchModDashTab('guide')">📖 Guide</button>
       </div>
@@ -20523,6 +20525,8 @@
       body.innerHTML = renderMissingGenresHTML();
     } else if (modDashTab === 'settimes') {
       body.innerHTML = renderSetTimeReportsHTML();
+    } else if (modDashTab === 'scout') {
+      body.innerHTML = renderScoutReviewHTML();
     } else if (modDashTab === 'gifs') {
       renderModGifPackInto(body);
     } else if (modDashTab === 'guide') {
@@ -20701,6 +20705,123 @@
     if (error || !data?.ok) { toastError('Could not update that report. Try again', error); return; }
     showToast(approve ? 'Set time is live' : 'Report rejected');
     modSetTimeReports = modSetTimeReports.filter(r => r.id !== id);
+    renderModDashboard();
+  }
+
+  // ===== MOD DASHBOARD: Lineup Scout tab =====
+  // The lineup scout (_ops/lineup-scout/SCOUT.md) files findings into
+  // lineup_candidates. Clean, official, high-confidence ones auto-apply; the
+  // rest wait here. Approving runs approve_lineup_candidate (trust rules +
+  // change log) as this moderator; the Explorer pages rebuild within the hour.
+  let modScout = { pending: [], runs: [], auto: [] };
+  const SCOUT_FLAG_LABELS = {
+    new_festival: 'New festival', big_shrink: 'Lineup shrinks >20%', date_change: 'Date change',
+    venue_change: 'Venue change', cancellation: 'Cancellation', rebrand: 'Renamed',
+    low_trust: 'Press source', low_confidence: 'Not high confidence',
+    official_time: 'Would change an official time', source_conflict: 'Sources disagree',
+  };
+
+  async function dbLoadScoutReview() {
+    if (!isModerator()) return { pending: [], runs: [], auto: [] };
+    const since = new Date(Date.now() - 7 * 86400000).toISOString();
+    const [p, r, a] = await Promise.all([
+      sb.from('lineup_candidates').select('id,festival_id,festival_name,festival_year,change_type,payload,source_urls,confidence,confidence_score,source_trust,notes,flags,created_at')
+        .eq('status', 'pending').order('created_at', { ascending: true }).limit(100),
+      sb.from('scout_runs').select('id,mode,run_trigger,dry_run,status,started_at,summary_md')
+        .order('started_at', { ascending: false }).limit(3),
+      sb.from('lineup_candidates').select('id,festival_name,change_type,applied_summary,reviewed_at')
+        .eq('status', 'approved').eq('auto_applied', true).gte('reviewed_at', since)
+        .order('reviewed_at', { ascending: false }).limit(15),
+    ]);
+    if (p.error || r.error || a.error) console.error('scout review load error', p.error || r.error || a.error);
+    return { pending: p.data || [], runs: r.data || [], auto: a.data || [] };
+  }
+
+  function scoutSafeUrl(u) {
+    try { const x = new URL(u); return /^https?:$/.test(x.protocol) ? x.href : null; } catch { return null; }
+  }
+
+  function scoutPayloadLines(c) {
+    const pl = c.payload || {};
+    const lines = [];
+    const f = pl.festival || {};
+    const labels = { name: 'Name', date: 'Date', days: 'Days', location: 'Venue', timezone: 'Timezone', official_url: 'Official site', ticket_url: 'Tickets', lineup_status: 'Lineup phase', genres: 'Genres' };
+    for (const [k, v] of Object.entries(f)) {
+      if (k === 'cancelled') { lines.push(v ? '❌ Mark as cancelled' : 'Un-cancel'); continue; }
+      lines.push(`${labels[k] || k}: <b>${escHtml(Array.isArray(v) ? v.join(', ') : String(v))}</b>`);
+    }
+    const up = pl.upsert || [];
+    if (up.length) {
+      const timed = up.filter(r => r.start_local).length;
+      const names = up.slice(0, 8).map(r => escHtml(r.artist) + (r.night ? ` <span style="color:var(--muted);">${escHtml(r.night)}</span>` : '') + (r.start_local ? ` <span style="color:var(--muted);">${escHtml(r.start_local.slice(11))}</span>` : '')).join(', ');
+      lines.push(`➕ ${up.length} add/update${up.length > 1 ? 's' : ''}${timed ? ` · ${timed} with set times` : ''}: ${names}${up.length > 8 ? ` +${up.length - 8} more` : ''}`);
+    }
+    const rm = pl.remove || [];
+    if (rm.length) lines.push(`➖ Remove ${rm.length}: ${rm.slice(0, 8).map(r => escHtml(r.artist)).join(', ')}${rm.length > 8 ? ` +${rm.length - 8} more` : ''}`);
+    return lines;
+  }
+
+  function scoutCandidateCardHTML(c) {
+    const flags = (c.flags || []).filter(fl => fl !== c.change_type).map(fl => `<span class="stats-pill yellow">${escHtml(SCOUT_FLAG_LABELS[fl] || fl)}</span>`).join(' ');
+    const srcs = (c.source_urls || []).map(scoutSafeUrl).filter(Boolean).slice(0, 3)
+      .map(u => `<a href="${escHtml(u)}" target="_blank" rel="noopener noreferrer">${escHtml(new URL(u).hostname.replace(/^www\./, ''))}</a>`).join(' · ');
+    return `
+      <div class="event-item" id="scout-cand-${escHtml(c.id)}">
+        <div class="event-item-body" style="align-items:flex-start;">
+          <div class="event-info" style="width:100%;">
+            <div class="event-name">${escHtml(c.festival_name)}${c.festival_year ? ` <span style="color:var(--muted);font-weight:500;">${escHtml(String(c.festival_year))}</span>` : ''}</div>
+            <div class="event-meta"><span class="stats-pill cyan">${escHtml(c.change_type.replace(/_/g, ' '))}</span> ${flags}</div>
+            ${scoutPayloadLines(c).map(l => `<div class="event-meta">${l}</div>`).join('')}
+            <div class="event-meta" style="color:var(--muted);">Source (${escHtml(c.source_trust || '—')}, ${escHtml(c.confidence)}${c.confidence_score != null ? ' ' + escHtml(String(c.confidence_score)) : ''}): ${srcs || '—'}</div>
+            ${c.notes ? `<div class="event-meta">“${escHtml(c.notes)}”</div>` : ''}
+            <input type="text" class="form-input" id="scout-note-${escHtml(c.id)}" maxlength="200" placeholder="Note (optional)" aria-label="Review note" style="margin-top:8px;">
+            <div style="display:flex;gap:8px;margin-top:8px;">
+              <button class="btn btn-primary" onclick="reviewScoutCandidate('${escJsAttr(c.id)}', true, this)">✅ Approve</button>
+              <button class="btn btn-ghost" onclick="reviewScoutCandidate('${escJsAttr(c.id)}', false, this)">✕ Reject</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function renderScoutReviewHTML() {
+    const { pending, runs, auto } = modScout;
+    const last = runs[0];
+    const runHTML = last ? `
+      <div class="event-item" style="margin-bottom:14px;">
+        <div class="event-item-body"><div class="event-info" style="width:100%;">
+          <div class="event-name">Last run <span style="color:var(--muted);font-weight:500;">${escHtml(new Date(last.started_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}</span></div>
+          <div class="event-meta"><span class="stats-pill ${last.dry_run ? 'yellow' : 'cyan'}">${last.dry_run ? 'Dry run' : 'Live'}</span> <span class="stats-pill">${escHtml(last.mode)}</span> <span class="stats-pill">${escHtml(last.status)}</span></div>
+          <div class="event-meta" style="white-space:pre-wrap;line-height:1.45;">${escHtml(last.summary_md || '')}</div>
+        </div></div>
+      </div>` : '';
+    const queueHTML = pending.length
+      ? `<div class="events-list">${pending.map(scoutCandidateCardHTML).join('')}</div>`
+      : `<div class="es-block" style="padding:30px 24px;"><div class="es-icon">🔭</div><div class="es-headline">Nothing waiting</div><div class="es-sub">Flagged scout findings land here. Clean official updates apply on their own.</div></div>`;
+    const autoHTML = auto.length ? `
+      <div class="section-title" style="font-size:15px;margin:22px 0 8px;">Auto-applied this week</div>
+      <div class="events-list">${auto.map(a => {
+        const s = a.applied_summary || {};
+        const bits = [s.inserted ? `+${s.inserted}` : '', s.removed ? `−${s.removed}` : '', s.updated ? `${s.updated} updated` : '', s.nights_filled ? `${s.nights_filled} days filled` : '', s.festival_changed ? 'festival info' : ''].filter(Boolean).join(' · ');
+        return `<div class="event-item"><div class="event-item-body"><div class="event-info"><div class="event-name">${escHtml(a.festival_name)}</div><div class="event-meta">${escHtml(a.change_type.replace(/_/g, ' '))}${bits ? ' · ' + escHtml(bits) : ''} · ${escHtml(new Date(a.reviewed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))}</div></div></div></div>`;
+      }).join('')}</div>` : '';
+    return `
+      <div class="text-hint" style="margin-bottom:14px;">The lineup scout checks official festival sources. Approving applies the change in Supabase; the Lineup Explorer pages update within the hour.</div>
+      ${runHTML}
+      <div class="section-title" style="font-size:15px;margin:4px 0 8px;">Needs review${pending.length ? ` (${pending.length})` : ''}</div>
+      ${queueHTML}
+      ${autoHTML}`;
+  }
+
+  async function reviewScoutCandidate(id, approve, btn) {
+    if (!isModerator()) return;
+    const note = (document.getElementById(`scout-note-${id}`)?.value || '').trim() || null;
+    if (btn) btn.disabled = true;
+    const { data, error } = await sb.rpc(approve ? 'approve_lineup_candidate' : 'reject_lineup_candidate', { p_id: id, p_review_note: note });
+    if (error) { if (btn) btn.disabled = false; toastError('Could not update that finding. Try again', error); return; }
+    const conflicts = approve && data && Array.isArray(data.conflicts) ? data.conflicts.length : 0;
+    showToast(approve ? (conflicts ? `Applied · ${conflicts} kept (higher-trust data)` : 'Applied · Explorer updates within the hour') : 'Finding rejected');
+    modScout.pending = modScout.pending.filter(c => c.id !== id);
     renderModDashboard();
   }
 
