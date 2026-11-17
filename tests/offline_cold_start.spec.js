@@ -27,6 +27,22 @@ test('when the first load fails, the app shows the last synced crews', async ({ 
   await expect(page.locator('#page-crews')).toContainText('Bass Syndicate');
 });
 
+test('saved crews stay flagged by a banner until a live load replaces them', async ({ page }) => {
+  await bootAuthedApp(page);
+  await page.addInitScript(() => { window.__stubOffline = true; });
+  await page.reload();
+  const banner = page.locator('#offline-banner');
+  // Shown even though the browser counts itself as online, and not dismissable.
+  await expect(banner).toHaveClass(/visible/);
+  await expect(banner).toContainText('Showing saved crews from');
+  await expect(page.locator('#offline-banner-close')).toBeHidden();
+
+  await page.evaluate(() => { window.__stubOffline = false; window.dispatchEvent(new Event('online')); });
+  await expect(page.locator('#toast')).toContainText('Back online', { timeout: 15000 });
+  await expect(banner).not.toHaveClass(/visible/);
+  await expect(page.locator('#offline-banner-text')).toHaveText(/No connection/);
+});
+
 test('offline with an expired login, it opens from the snapshot instead of the login screen', async ({ page }) => {
   await bootAuthedApp(page);
   // Next start: supabase-js reports no session (it could not refresh) but the

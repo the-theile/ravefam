@@ -3895,6 +3895,8 @@
     opacity: 0.75; transition: opacity 0.15s;
   }
   #offline-banner-close:hover { opacity: 1; }
+  #offline-banner.stale { padding-right: 16px; }
+  #offline-banner.stale #offline-banner-close { display: none; }
 
   /* Update-available banner */
   #update-banner {
@@ -10885,7 +10887,7 @@
 </div>
 
 <!-- Offline banner -->
-<div id="offline-banner">📡 No connection — some actions are unavailable<button id="offline-banner-close" aria-label="Dismiss">✕</button></div>
+<div id="offline-banner"><span id="offline-banner-text">📡 No connection — some actions are unavailable</span><button id="offline-banner-close" aria-label="Dismiss">✕</button></div>
 
 <!-- Update-available banner -->
 <div id="update-banner"><span>✨ A new version of RaveFAM is ready</span><button id="update-banner-btn">Update now</button></div>
@@ -15324,6 +15326,10 @@
   const OFFLINE_SNAPSHOT_KEY = 'rf_offline_snapshot_v1';
   const OFFLINE_SNAPSHOT_MAX_AGE_MS = 21 * 24 * 60 * 60 * 1000;
   let _showingOfflineSnapshot = false;
+  // Banner text while the snapshot is on screen ('' when showing live data).
+  // initOfflineBanner reads it, so stale data stays flagged even when the
+  // phone counts itself as online.
+  let _offlineSnapshotBanner = '';
   function saveOfflineSnapshot(uid) {
     try {
       localStorage.setItem(OFFLINE_SNAPSHOT_KEY, JSON.stringify({ v: 1, uid, at: Date.now(), festivals, squad, crews }));
@@ -15340,6 +15346,8 @@
   function clearOfflineSnapshot() {
     try { localStorage.removeItem(OFFLINE_SNAPSHOT_KEY); } catch (e) { /* nothing stored */ }
     _showingOfflineSnapshot = false;
+    _offlineSnapshotBanner = '';
+    window.refreshOfflineBanner?.();
   }
   // Puts the snapshot on screen. True when there was one to show.
   function showOfflineSnapshot(uid) {
@@ -15350,6 +15358,8 @@
     _showingOfflineSnapshot = true;
     const when = new Date(snap.at).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
     showToast(`No signal. Showing your crews as of ${when}; they'll update when you're back online.`);
+    _offlineSnapshotBanner = `📡 Showing saved crews from ${when}`;
+    window.refreshOfflineBanner?.();
     return true;
   }
 
@@ -15624,6 +15634,11 @@
     squad.push(...next.squad);
     crews.push(...next.crews);
     _loadAllDataEverOk = true;
+    if (_showingOfflineSnapshot) {
+      _offlineSnapshotBanner = '';
+      window.refreshOfflineBanner?.();
+      showToast('Back online — crews updated ✨');
+    }
     _showingOfflineSnapshot = false;
     _loadRetryDelay = 4000;
     clearTimeout(_loadRetryTimer);
@@ -40682,12 +40697,20 @@
     const banner = document.getElementById('offline-banner');
     let _bannerDismissed = false;
     let _offlineTimer = null;
+    const bannerText = document.getElementById('offline-banner-text');
+    const OFFLINE_TEXT = bannerText.textContent;
     // iOS WebKit fires short false 'offline' blips on network handoffs and when
     // the app returns from Mail/Messages mid-onboarding, and doesn't always
     // follow with 'online'. Only show once offline has held for a few seconds.
     function update() {
       clearTimeout(_offlineTimer);
-      if (navigator.onLine) {
+      // Saved data on screen: always say so, and don't allow dismissing it.
+      const stale = _offlineSnapshotBanner;
+      banner.classList.toggle('stale', !!stale);
+      bannerText.textContent = stale || OFFLINE_TEXT;
+      if (stale) {
+        banner.classList.add('visible');
+      } else if (navigator.onLine) {
         banner.classList.remove('visible');
       } else if (!_bannerDismissed) {
         _offlineTimer = setTimeout(() => {
@@ -40711,6 +40734,7 @@
       _bannerDismissed = true;
       banner.classList.remove('visible');
     });
+    window.refreshOfflineBanner = update;
     update();
   })();
 
