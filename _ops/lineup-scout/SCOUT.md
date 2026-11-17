@@ -14,7 +14,7 @@ pre-judge flags yourself, and never write to `festivals` or
 
 ## Inputs (from the scheduled task's prompt)
 
-- `MODE`: `auto` (daily: maintain, plus discover on Mondays), `maintain`, `discover`, or `window` (festival-weekend run: maintain only festivals in their 4-hour window)
+- `MODE`: `auto` (daily: maintain, plus discover on Mondays, or whenever an extra message on a manual run asks for discovery), `maintain`, `discover`, or `window` (festival-weekend run: maintain only festivals in their 4-hour window)
 - `DRY_RUN`: `true` = plan only. Call `scout_submit_candidate` with `p_dry_run => true`, don't call `scout_mark_scouted`, and list the planned changes in the summary. The run is still logged in `scout_runs` (with `dry_run = true`) so it shows in the Hub.
 - `RUN_TRIGGER`: `scheduled`, `festival_window` or `manual`
 
@@ -30,7 +30,11 @@ pre-judge flags yourself, and never write to `festivals` or
 
 **Images:** set times are often posted only as images. If the page text doesn't carry the times and you can't read the image, submit nothing for times and list the festival under "Needs a human look" with the image or post URL.
 
-**Politeness:** before your first fetch from a domain in a run, fetch `/robots.txt` and skip any path disallowed for all user agents. Keep it to about 25 fetches per festival, with no rapid-fire refetching. Never log in, never get past a paywall, never use a cached or mirror copy of a blocked page. If a site blocks you, note it and move on.
+**Fetching (unattended runs):** use only the WebSearch and WebFetch tools. Never use curl, wget or scripts in the shell: they can't reach these sites. With nobody there to approve, WebFetch only opens URLs that appeared in a WebSearch or WebFetch result in this run, so:
+- Search first (`"<festival name> 2026 lineup official"`, `"<festival> set times"`, `site:<official domain> lineup`), then fetch the result URLs. Don't type or edit URLs yourself (no guessed paths, no `/robots.txt`). If a page you need isn't in the results, search for it more specifically so it appears.
+- A stored `official_url` is a hint for what to search for (`site:domain.com`), not a URL to fetch directly.
+- WebFetch keeps to sites' robots rules itself. If it refuses a page or a site blocks it, treat the page as unavailable and note it. Don't route around it (no cache, mirror or shell).
+- About 25 fetches per festival, never log in, never get past a paywall.
 
 **Confidence** (`p_confidence`, `p_confidence_score`):
 - `high`, 85–100: read directly from an official or ticketing page, complete and unambiguous.
