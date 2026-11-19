@@ -11283,7 +11283,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.47.0';
+  const APP_VERSION = '2.48.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -12316,9 +12316,23 @@
 
   // Tapped notification: Huddle pushes carry crewId/roomId/messageId, lineup
   // pushes carry a site path in url.
-  function openFromNativePush(data) {
+  // Rave Check long-press buttons (AppDelegate's RAVE_CHECK category).
+  const RAVE_CHECK_PUSH_ACTIONS = { rc_in: 'in', rc_maybe: 'maybe', rc_no: 'no' };
+
+  async function openFromNativePush(data, actionId) {
     if (!data) return;
     if (data.crewId) { openHuddleDeepLink({ crewId: data.crewId, roomId: data.roomId, messageId: data.messageId, briefing: data.briefing }); return; }
+    // A Rave Check answered from the notification: save it first (the same
+    // path as the in-app card), then open the rave in place. openNativeAppUrl
+    // reloads the page, which would cut the save off, so it's only the fallback.
+    const reply = RAVE_CHECK_PUSH_ACTIONS[actionId];
+    if (reply && data.raveCheckId && data.festivalId) {
+      // Cold start: login can finish before your own raver loads, and without
+      // it the Going/Interested save in raveCheckReply would be skipped.
+      for (let i = 0; i < 30 && !squad.some(r => r.isYou); i++) await new Promise(res => setTimeout(res, 500));
+      await raveCheckReply(String(data.raveCheckId), String(data.festivalId), reply, null);
+      if (getFestival(data.festivalId)) { switchTab('events'); openRaveFocus(data.festivalId); return; }
+    }
     if (data.url) openNativeAppUrl(new URL(data.url, window.location.origin).href);
   }
 
@@ -12333,9 +12347,10 @@
       console.error('native push: registration failed', err);
       if (_nativePushWaiter) { _nativePushWaiter.reject(new Error('registration_failed')); _nativePushWaiter = null; }
     });
-    NativePush.addListener('pushNotificationActionPerformed', ({ notification }) => {
+    NativePush.addListener('pushNotificationActionPerformed', ({ actionId, notification }) => {
       // A cold start can deliver this before login finishes; wait for it.
-      const go = () => openFromNativePush(notification && notification.data);
+      // actionId is 'tap' for a plain tap, or a long-press button (rc_in, …).
+      const go = () => openFromNativePush(notification && notification.data, actionId);
       if (currentUser) go();
       else { const t = setInterval(() => { if (currentUser) { clearInterval(t); go(); } }, 500); setTimeout(() => clearInterval(t), 30000); }
     });

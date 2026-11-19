@@ -132,6 +132,26 @@ test.describe('rave check', () => {
     expect(rsvps).toBe(0);
   });
 
+  test('iOS long-press: an "I\'m in" button on the push saves the answer and opens the rave', async ({ page }) => {
+    const errors = await bootAuthedApp(page, { data: receiverData() });
+    // What the push plugin hands pushNotificationActionPerformed for the RAVE_CHECK category.
+    await page.evaluate(id => openFromNativePush({ url: '/app.html?rave=eternal-nye', raveCheckId: id, festivalId: 'f3' }, 'rc_in'), RC_ID);
+
+    expect((await rpcCalls(page, 'reply_rave_check'))[0].args).toEqual({ p_rave_check_id: RC_ID, p_reply: 'in' });
+    await expect.poll(() => page.evaluate(() =>
+      (window.__store.raver_festivals || []).some(r => r.raver_id === 'r-you' && r.festival_id === 'f3'))).toBe(true);
+    await expect(page.locator('#rave-focus-overlay')).toHaveClass(/open/);
+    await expect(page.locator('#rave-focus-modal .rf-title')).toHaveText('Eternal NYE');
+    expect(errors).toEqual([]);
+  });
+
+  test('iOS long-press: a plain tap still only opens, without answering', async ({ page }) => {
+    await bootAuthedApp(page, { data: receiverData() });
+    await page.evaluate(() => { window.__openedUrl = null; window.openNativeAppUrl = u => { window.__openedUrl = u; }; });
+    await page.evaluate(id => openFromNativePush({ url: '/app.html?rave=eternal-nye', raveCheckId: id, festivalId: 'f3' }, 'tap'), RC_ID);
+    expect(await rpcCalls(page, 'reply_rave_check')).toHaveLength(0);
+  });
+
   test('settings: the Rave checks push toggle is listed under notifications', async ({ page }) => {
     await bootAuthedApp(page);
     await expect(page.locator('#rave-check-push-settings-toggle')).toHaveCount(1);
