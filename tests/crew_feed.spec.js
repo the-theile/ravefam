@@ -1,7 +1,7 @@
-// The new crew page (beta, Settings → New crew page). Same panels as the
+// The crew page (formerly the beta "new crew page"). Same panels as the
 // classic tile page, laid out as header + Huddle pill + Rave Plan tickets +
-// filter chips, with the roster in a bottom sheet. These run with the flag on;
-// every other crew spec keeps covering the classic page with it off.
+// filter chips, with the roster in a bottom sheet. It is the only crew page
+// now; bootWithCrewFeed still sets the retired flag, which the app ignores.
 const { test, expect } = require('@playwright/test');
 const { bootAuthedApp, seedData } = require('./helpers');
 
@@ -18,15 +18,7 @@ async function openC1(page, opts) {
 const panel = (page, key) => page.locator(`#crew-feature-panel-${key}`);
 
 test.describe('new crew page · layout', () => {
-  test('flag off keeps the classic tile page', async ({ page }) => {
-    await bootAuthedApp(page);
-    await openC1(page);
-    await expect(page.locator('#page-crew-detail')).not.toHaveClass(/crew-feed/);
-    await expect(page.locator('#page-crew-detail .crew-feature-tile')).not.toHaveCount(0);
-    await expect(page.locator('#page-crew-detail .stats-subtab')).toHaveCount(2);
-  });
-
-  test('flag on renders header, Huddle pill, ticket and filters instead of tiles and tabs', async ({ page }) => {
+  test('flag on renders header, Huddle dock, ticket and filters instead of tiles and tabs', async ({ page }) => {
     const errors = await bootWithCrewFeed(page);
     await openC1(page);
     const detail = page.locator('#page-crew-detail');
@@ -36,7 +28,7 @@ test.describe('new crew page · layout', () => {
     // Status sits above the roster + share buttons, not under the name.
     await expect(detail.locator('.crew-feed-side > .crew-status')).toHaveText(/Recruiting/);
     await expect(detail.locator('.crew-feed-title .crew-status')).toHaveCount(0);
-    await expect(detail.locator('#huddle-tile-preview-root .huddle-tile-preview')).toBeVisible();
+    await expect(detail.locator('#huddle-tile-preview-root .hd-dock')).toBeVisible();
     // You and Sam are both going to Tomorrowland, so it gets a Rave Plan ticket.
     await expect(detail.locator('.crew-ticket[data-fest="f1"]')).toContainText('Tomorrowland');
     await expect(detail.locator('.crew-feed-filter')).toHaveText(['All', 'Polls', 'Jams', 'Dreams', 'Plan', 'Memories']);
@@ -126,6 +118,73 @@ test.describe('new crew page · filters', () => {
   });
 });
 
+test.describe('new crew page · quests', () => {
+  test('the quest stamps sit under the header, and a stamp opens what it asks for', async ({ page }) => {
+    // A Secret crew leaves the lead's "Open the doors" quest unstamped.
+    const data = seedData();
+    data.crews = data.crews.map(c => c.id === 'c1' ? { ...c, status: 'secret' } : c);
+    await bootWithCrewFeed(page, { data });
+    await openC1(page);
+    const row = page.locator('#page-crew-detail .crew-feed-head + #crew-quest-row');
+    await expect(row).toContainText('LEAD QUESTS');
+    await row.locator('.crew-quest-stamp', { hasText: 'Open the doors' }).click();
+    await expect(page.locator('#crew-manifest-overlay')).toHaveClass(/open/);
+  });
+
+  test('replaying a zone from the guide opens its chip and its intro', async ({ page }) => {
+    await bootWithCrewFeed(page);
+    await openC1(page);
+    await page.evaluate(() => guideReplay('zone', 'dreamboard'));
+    await expect(page.locator('.crew-feed-filter[data-filter="dreamboard"]')).toHaveClass(/active/);
+    await expect(panel(page, 'dreamboard')).toBeVisible();
+    await expect(page.locator('.gk-sheet .gk-title').last()).toHaveText('Dream Board');
+  });
+});
+
+test.describe('new crew page · section intros', () => {
+  const sheetTitle = (page) => page.locator('.gk-sheet .gk-title').last();
+  const tapChip = (page, key) => page.locator(`.crew-feed-filter[data-filter="${key}"]`).click();
+  // The test boot marks every zone opened; start these from a first visit.
+  const freshZones = (page) => page.evaluate(() => { _guidance.zones = {}; });
+
+  test('a chip\'s first tap opens its section intro, and only the first', async ({ page }) => {
+    await bootWithCrewFeed(page);
+    await openC1(page);
+    await freshZones(page);
+    await tapChip(page, 'dreamboard');
+    await expect(sheetTitle(page)).toHaveText('Dream Board');
+    await page.locator('.gk-sheet button', { hasText: 'Let’s go' }).click();
+    expect(await page.evaluate(() => _guidance.zones.dreamboard)).toBe('opened');
+    await tapChip(page, 'all');
+    await tapChip(page, 'dreamboard');
+    await page.waitForTimeout(300);
+    await expect(page.locator('.gk-sheet')).toHaveCount(0);
+  });
+
+  test('Memories introduces one section per tap', async ({ page }) => {
+    await bootWithCrewFeed(page);
+    await openC1(page);
+    await freshZones(page);
+    await tapChip(page, 'memories');
+    await expect(sheetTitle(page)).toHaveText('Archive');
+    await page.locator('.gk-sheet button', { hasText: 'Let’s go' }).click();
+    await tapChip(page, 'all');
+    await tapChip(page, 'memories');
+    await expect(sheetTitle(page)).toHaveText('Pins');
+  });
+
+  test('no intros for someone who chose fewer tips', async ({ page }) => {
+    await bootWithCrewFeed(page);
+    await openC1(page);
+    await freshZones(page);
+    await page.evaluate(() => { _guidance.help_level = 'pro'; });
+    await tapChip(page, 'dreamboard');
+    await page.waitForTimeout(300);
+    await expect(page.locator('.gk-sheet')).toHaveCount(0);
+    expect(await page.evaluate(() => _guidance.zones.dreamboard)).toBe('opened');
+  });
+});
+
 test.describe('new crew page · roster sheet', () => {
   test('the avatars open the roster sheet; Escape closes it', async ({ page }) => {
     await bootWithCrewFeed(page);
@@ -172,22 +231,6 @@ test.describe('new crew page · deep links', () => {
     await openC1(page, { tab: 'gameplan', festivalId: 'f1' });
     await expect(page.locator('.crew-feed-filter[data-filter="raveplan"]')).toHaveClass(/active/);
     await expect(panel(page, 'raveplan')).toBeVisible();
-  });
-});
-
-test.describe('new crew page · settings toggle', () => {
-  test('turning it on in Settings swaps an open crew page', async ({ page }) => {
-    await bootAuthedApp(page);
-    await openC1(page);
-    await expect(page.locator('#page-crew-detail')).not.toHaveClass(/crew-feed/);
-    await page.evaluate(() => toggleCrewFeedEnabled(document.getElementById('crew-feed-settings-toggle')));
-    await expect(page.locator('#page-crew-detail')).toHaveClass(/crew-feed/);
-    expect(await page.evaluate(() => localStorage.getItem('ravefam_crew_feed'))).toBe('1');
-
-    await page.evaluate(() => toggleCrewFeedEnabled(document.getElementById('crew-feed-settings-toggle')));
-    await expect(page.locator('#page-crew-detail')).not.toHaveClass(/crew-feed/);
-    await expect(page.locator('#page-crew-detail .stats-subtab')).toHaveCount(2);
-    expect(await page.locator('#add-member-input').count()).toBe(1);
   });
 });
 
@@ -459,9 +502,297 @@ test.describe('new crew page · compact pins', () => {
     const pin = page.locator('#crew-feed-list .crew-feed-pin[data-kind="badge"]');
     await expect(pin).toContainText('The whole crew unlocked Squad Goals');
     expect((await pin.boundingBox()).height).toBeLessThan(60);
-    await expect(pin.locator('.crew-feed-act')).toHaveCount(0);
+    // No reactions yet: just the ＋ to add one.
+    await expect(pin.locator('.crew-feed-act')).toHaveText(['＋']);
     await pin.click();
     await expect(page.locator('.crew-feed-filter[data-filter="memories"]')).toHaveClass(/active/);
     await expect(page.locator('#crew-feature-panel-pins')).toBeVisible();
+  });
+});
+
+test.describe('new crew page · feed reactions', () => {
+  test('long-pressing a pin row shows its reactions; picking one adds a chip and pings the earner', async ({ page }) => {
+    const data = seedFeed();
+    data.crew_feed_events[0] = { ...data.crew_feed_events[0], event_type: 'plur_tier_unlocked', badge_name: 'Peace Guardian', is_crew_level: false, reactions: {} };
+    data.__rpc = { toggle_crew_feed_reaction: { '💖': ['test-user-id'] } };
+    await bootWithCrewFeed(page, { data });
+    await openC1(page);
+    const pin = page.locator('#crew-feed-list .crew-feed-pin[data-kind="badge"]');
+    await expect(pin.locator('.crew-feed-act')).toHaveText(['＋']);
+    await pin.click({ button: 'right' });
+    await expect(pin).toHaveClass(/is-picking/);
+    await expect(pin.locator('.crew-feed-act')).toHaveText(['🎉', '💖', '🙌']);
+    await pin.locator('.crew-feed-act', { hasText: '💖' }).click();
+    await expect(pin).not.toHaveClass(/is-picking/);
+    await expect(pin.locator('.crew-feed-act')).toHaveText(['💖 1', '＋']);
+    await expect(pin.locator('.crew-feed-act').first()).toHaveClass(/is-hot/);
+    // Tapping the chip reacted, it didn't open the Pins panel.
+    await expect(page.locator('#crew-feature-panel-pins')).toBeHidden();
+    const calls = await page.evaluate(() => window.__store.__rpcCalls.filter(c => c.fn === 'toggle_crew_feed_reaction'));
+    expect(calls).toEqual([{ fn: 'toggle_crew_feed_reaction', args: { p_kind: 'badge', p_id: 'fe1', p_emoji: '💖' } }]);
+    await expect.poll(() => page.evaluate(() => (window.__store.notifications || []).map(n => [n.user_id, n.message])))
+      .toEqual([['kai-uid', expect.stringMatching(/^💖 .+ reacted to your Peace Guardian in Bass Syndicate$/)]]);
+  });
+
+  test('the ＋ on a pin row opens the picker instead of the Pins panel', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedFeed() });
+    await openC1(page);
+    const pin = page.locator('#crew-feed-list .crew-feed-pin[data-kind="badge"]');
+    await pin.locator('.crew-feed-pin-add').click();
+    await expect(pin).toHaveClass(/is-picking/);
+    await expect(pin.locator('.crew-feed-act')).toHaveText(['🎉', '💖', '🙌']);
+    await expect(page.locator('#crew-feature-panel-pins')).toBeHidden();
+  });
+
+  test('archive drops and check-offs get their own reaction sets; polls, jams and dreams don\'t', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedCheckoffs() });
+    await openC1(page);
+    const card = (kind) => page.locator(`#crew-feed-list .crew-feed-card[data-kind="${kind}"] .crew-feed-act[onclick*="toggleCrewFeedReaction"]`);
+    await expect(card('archive')).toHaveText(['😍', '🔥', '🥹']);
+    await expect(card('checkoff')).toHaveText(['🙏', '💪', '🫡']);
+    for (const kind of ['poll', 'jam', 'dream']) await expect(card(kind)).toHaveCount(0);
+  });
+
+  test('a failed save rolls the reaction back', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedCheckoffs() });
+    await openC1(page);
+    // No canned result: make the RPC fail.
+    await page.evaluate(() => { sb.rpc = async () => ({ data: null, error: { message: 'nope' } }); });
+    const btn = page.locator('#crew-feed-list .crew-feed-card[data-kind="checkoff"] .crew-feed-act[data-emoji="🙏"]');
+    await btn.click();
+    await expect(btn).toHaveText('🙏');
+    await expect(btn).not.toHaveClass(/is-hot/);
+  });
+
+  test('a crewmate\'s reaction lands live', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedCheckoffs() });
+    await openC1(page);
+    await page.evaluate(() => handleCrewFeedReactionUpdate('archive', { new: { id: 'al1', reactions: { '🔥': ['kai-uid'] } } }));
+    await expect(page.locator('#crew-feed-list .crew-feed-card[data-kind="archive"] .crew-feed-act[data-emoji="🔥"]')).toHaveText('🔥 1');
+  });
+
+  test('a crewmate\'s reaction on a check-off lands live through the crew-plan channel', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedCheckoffs() });
+    await openC1(page);
+    await page.evaluate(() => {
+      const row = { ...crewPlanCheckoffs.find(r => r.id === 't1'), reactions: { '💪': ['kai-uid'] } };
+      handleCrewPlanItemRealtime({ eventType: 'UPDATE', new: row, old: { id: 't1' } });
+    });
+    await expect(page.locator('#crew-feed-list .crew-feed-card[data-kind="checkoff"] .crew-feed-act[data-emoji="💪"]')).toHaveText('💪 1');
+  });
+});
+
+// ── 2.25.1: flat Plan view, ticket as plan header ──
+
+test.describe('new crew page · Plan view', () => {
+  test('Plan shows the ticket as header and the sections flat, with no repeated controls', async ({ page }) => {
+    const errors = await bootWithCrewFeed(page);
+    await openC1(page);
+    await page.locator('.crew-ticket[data-fest="f1"]').click();
+    const plan = panel(page, 'raveplan');
+    await expect(plan.locator('.crew-plan-tabs')).toBeVisible();
+    // The second rave switcher, the hint, Mission Briefing and the shortcut row are gone…
+    for (const sel of ['.game-plan-rave-picker', '.game-plan-shortcuts', ':scope > .text-hint-xs']) {
+      await expect(plan.locator(sel)).toHaveCount(0);
+    }
+    await expect(plan.getByRole('button', { name: /Mission Briefing/ })).toHaveCount(0);
+    await expect(plan.locator('.section-banner').first()).toBeHidden();
+    await expect(plan.locator('.crew-plan-tabs .game-plan-section-tab')).toHaveText(['Tasks', 'Roles', 'Rides', 'Stay', 'Outfit', 'Lineup']);
+    await expect(plan.locator('.crew-plan-help')).toBeVisible();
+    // …and the ticket carries Briefing and the rave's chat instead of its barcode.
+    const ticket = page.locator('.crew-ticket[data-fest="f1"]');
+    await expect(ticket.locator('.crew-ticket-foot')).toBeHidden();
+    await expect(ticket.locator('.crew-ticket-act')).toHaveText(['🎯 Briefing', '💬 Rave chat']);
+    await expect(ticket.locator('.crew-ticket-progress')).toContainText('No tasks yet');
+    expect(errors).toEqual([]);
+  });
+
+  test('ticket progress and the Tasks count follow the checklist', async ({ page }) => {
+    await bootWithCrewFeed(page);
+    await openC1(page);
+    await page.locator('.crew-ticket[data-fest="f1"]').click();
+    await expect(page.locator('#game-plan-task-input')).toBeAttached();
+    for (const t of ['Buy tickets', 'Book the Airbnb']) {
+      await page.evaluate(async (text) => {
+        document.getElementById('game-plan-task-input').value = text;
+        await addGamePlanTask('c1');
+      }, t);
+    }
+    const progress = page.locator('.crew-ticket[data-fest="f1"] .crew-ticket-progress');
+    await expect(progress).toContainText('0/2 done');
+    await expect(page.locator('.crew-plan-tabs em[data-count="checklist"]')).toHaveText('2');
+    const id = await page.evaluate(() => window.__store.game_plan_items.find(it => it.text === 'Buy tickets').id);
+    await page.evaluate(async (tid) => { await toggleGamePlanTask(tid, true); }, id);
+    await expect(progress).toContainText('1/2 done');
+    await expect(page.locator('.crew-plan-tabs em[data-count="checklist"]')).toHaveText('1');
+  });
+
+  test('the ticket actions work without re-selecting the ticket; leaving Plan restores the barcode', async ({ page }) => {
+    await bootWithCrewFeed(page);
+    await openC1(page);
+    await page.locator('.crew-ticket[data-fest="f1"]').click();
+    await page.locator('.crew-ticket[data-fest="f1"] .crew-ticket-act', { hasText: 'Rave chat' }).click();
+    await expect(page.locator('#huddle-screen')).toBeVisible();
+    await page.evaluate(() => closeHuddleScreen());
+    await page.locator('.crew-feed-filter[data-filter="all"]').click();
+    await expect(page.locator('.crew-ticket[data-fest="f1"] .crew-ticket-foot')).toBeVisible();
+    await expect(page.locator('.crew-ticket[data-fest="f1"] .crew-ticket-plan')).toBeHidden();
+  });
+
+  test('the selected chip is scrolled into view', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await bootWithCrewFeed(page);
+    await openC1(page);
+    await page.locator('.crew-feed-filter[data-filter="memories"]').click();
+    const inView = await page.evaluate(() => {
+      const chip = document.querySelector('.crew-feed-filter[data-filter="memories"]');
+      const row = chip.parentElement.getBoundingClientRect();
+      const r = chip.getBoundingClientRect();
+      return r.left >= row.left - 1 && r.right <= row.right + 1;
+    });
+    expect(inView).toBe(true);
+  });
+});
+
+test.describe('crew description', () => {
+  test('a saved crew description loads with the crew and shows on both pages', async ({ page }) => {
+    const data = seedData();
+    data.crews[0].description = 'Bass in the face, love in the heart';
+    await bootWithCrewFeed(page, { data });
+    await openC1(page);
+    await expect(page.locator('#page-crew-detail .crew-feed-desc')).toHaveText('Bass in the face, love in the heart');
+    await page.evaluate(() => { localStorage.removeItem('ravefam_crew_feed'); renderDetail('c1'); });
+    await expect(page.locator('#page-crew-detail')).toContainText('Bass in the face, love in the heart');
+  });
+});
+
+// ── 2.26: live Rave Plan ──
+// The stub's channel doesn't dispatch, so these feed handleCrewPlanItemRealtime
+// the payloads Supabase would send.
+test.describe('new crew page · live plan', () => {
+  const kaiTicks = (extra = {}) => ({
+    id: 't2', game_plan_id: 'gp1', crew_id: 'c1', kind: 'task', added_by: 'kai-uid', text: 'Pack glowsticks',
+    is_done: true, done_at: new Date().toISOString(), done_by: 'kai-uid',
+    created_at: new Date(Date.now() - 3600e3).toISOString(), deleted_at: null, ...extra,
+  });
+
+  test('a crewmate ticking a task shows in the feed and the open plan without a reload', async ({ page }) => {
+    const errors = await bootWithCrewFeed(page, { data: seedCheckoffs() });
+    await openC1(page);
+    await page.locator('.crew-ticket[data-fest="f1"]').click();
+    await expect(page.locator('#game-plan-section-checklist')).toContainText('Book the Airbnb');
+    const progress = page.locator('.crew-ticket[data-fest="f1"] .crew-ticket-progress');
+    await expect(progress).toContainText('2/2 done');
+    // Kai adds a task, then ticks it.
+    await page.evaluate((row) => handleCrewPlanItemRealtime({ eventType: 'INSERT', new: row, old: {} }), kaiTicks({ is_done: false, done_at: null, done_by: null }));
+    await expect(page.locator('#game-plan-section-checklist')).toContainText('Pack glowsticks');
+    await expect(progress).toContainText('2/3 done');
+    await page.evaluate((row) => handleCrewPlanItemRealtime({ eventType: 'UPDATE', new: row, old: { id: row.id } }), kaiTicks());
+    await expect(progress).toContainText('3/3 done');
+    await page.locator('.crew-feed-filter[data-filter="all"]').click();
+    await expect(page.locator('#crew-feed-list .crew-feed-card[data-kind="checkoff"]', { hasText: 'Pack glowsticks' })).toHaveCount(1);
+    // Kai unticks it: the card goes.
+    await page.evaluate((row) => handleCrewPlanItemRealtime({ eventType: 'UPDATE', new: row, old: { id: row.id } }), kaiTicks({ is_done: false, done_at: null, done_by: null }));
+    await expect(page.locator('#crew-feed-list .crew-feed-card[data-kind="checkoff"]', { hasText: 'Pack glowsticks' })).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('a deleted task leaves the plan and the feed', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedCheckoffs() });
+    await openC1(page);
+    await page.locator('.crew-ticket[data-fest="f1"]').click();
+    await expect(page.locator('#game-plan-section-checklist')).toContainText('Book the Airbnb');
+    const t1 = await page.evaluate(() => window.__store.game_plan_items.find(it => it.id === 't1'));
+    await page.evaluate((row) => handleCrewPlanItemRealtime({ eventType: 'UPDATE', new: { ...row, deleted_at: new Date().toISOString() }, old: { id: row.id } }), t1);
+    await expect(page.locator('#game-plan-section-checklist')).not.toContainText('Book the Airbnb');
+    await page.locator('.crew-feed-filter[data-filter="all"]').click();
+    await expect(page.locator('#crew-feed-list .crew-feed-card[data-kind="checkoff"]')).toHaveCount(0);
+  });
+
+  test('a live change waits while you type in the plan, so your draft survives', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedCheckoffs() });
+    await openC1(page);
+    await page.locator('.crew-ticket[data-fest="f1"]').click();
+    const input = page.locator('#game-plan-task-input');
+    await input.fill('Earpl');
+    await input.focus();
+    await page.evaluate((row) => handleCrewPlanItemRealtime({ eventType: 'INSERT', new: row, old: {} }), kaiTicks({ is_done: false, done_at: null, done_by: null }));
+    await page.waitForTimeout(600);
+    await expect(input).toHaveValue('Earpl');
+    await expect(page.locator('#game-plan-section-checklist')).not.toContainText('Pack glowsticks');
+    await input.blur();
+    await expect(page.locator('#game-plan-section-checklist')).toContainText('Pack glowsticks');
+  });
+
+  test('another crew\'s rows are ignored, and leaving the crew drops the channel', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedCheckoffs() });
+    await openC1(page);
+    expect(await page.evaluate(() => !!_crewPlanChannel)).toBe(true);
+    await page.evaluate((row) => handleCrewPlanItemRealtime({ eventType: 'UPDATE', new: row, old: { id: row.id } }), kaiTicks({ crew_id: 'c2', game_plan_id: 'gpX' }));
+    await expect(page.locator('#crew-feed-list .crew-feed-card[data-kind="checkoff"]', { hasText: 'Pack glowsticks' })).toHaveCount(0);
+    await page.evaluate(() => closeDetail());
+    expect(await page.evaluate(() => _crewPlanChannel)).toBeNull();
+  });
+});
+
+// Past raves in the ticket stack: wrapped stubs sit left of Next up (the
+// stack opens on Next up), only raves since you joined the crew show, and a
+// "Who'd you catch?" nudge rides the stub, the All feed and the bell.
+function seedPastRaves() {
+  const d = seedData();
+  d.crew_members.find(m => m.raver_id === 'r-you').added_at = '2026-06-01T12:00:00Z';
+  d.festivals.push(
+    { id: 'f-old', name: 'Before Fest', date: '2026-03-01', location: 'Miami, FL', color: '#39FF14', days: 1, deleted_at: null },
+    // Started the day before you joined, ended the day after: still yours.
+    { id: 'f-span', name: 'Span Fest', date: '2026-05-31', location: 'Austin, TX', color: '#39FF14', days: 3, deleted_at: null },
+    { id: 'f-mid', name: 'Summer Fest', date: '2026-08-01', location: 'Chicago, IL', color: '#39FF14', days: 1, deleted_at: null },
+    { id: 'f-hula', name: 'Hulaween', date: '2026-10-24', location: 'Live Oak, FL', color: '#39FF14', days: 1, deleted_at: null },
+  );
+  for (const f of ['f-old', 'f-span', 'f-mid', 'f-hula']) {
+    d.raver_festivals.push({ raver_id: 'r-you', festival_id: f }, { raver_id: 'r-sam', festival_id: f });
+  }
+  d.artists.push({ id: 71, name: 'Kaskade', genres: ['house'] });
+  d.artist_festival_appearances = [{ artist_id: 71, festival_id: 'f-hula' }];
+  d.raver_artist_plans = [{ raver_id: 'r-you', artist_id: 71, festival_id: 'f-hula' }];
+  d.raver_artist_sightings = [];
+  d.raver_postfest_checkoffs = [];
+  return d;
+}
+
+test.describe('new crew page · past raves', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-10-26T15:00:00'));
+  });
+
+  test('wrapped raves since you joined sit left of Next up, which the stack opens on', async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedPastRaves() });
+    await openC1(page);
+    const stack = page.locator('#page-crew-detail .crew-ticket-stack');
+    await expect(stack.locator(':scope > .crew-ticket')).toHaveCount(4);
+    expect(await stack.locator(':scope > .crew-ticket').evaluateAll(els => els.map(e => e.dataset.fest))).toEqual(['f-span', 'f-mid', 'f-hula', 'f1']);
+    await expect(stack.locator('.crew-ticket[data-fest="f-hula"] .crew-ticket-eyebrow')).toHaveText(/Just wrapped/);
+    await expect(stack.locator('.crew-ticket[data-fest="f-mid"] .crew-ticket-stamp')).toHaveText('Used');
+    // Next up is fully in view (as the last card it sits flush right, with
+    // the wrapped stub peeking in on the left).
+    const pos = await stack.evaluate(el => {
+      const s = el.getBoundingClientRect(), t = el.querySelector('[data-fest="f1"]').getBoundingClientRect();
+      return { scrolled: el.scrollLeft, inLeft: t.left >= s.left - 1, inRight: t.right <= s.right + 1 };
+    });
+    expect(pos).toEqual({ scrolled: expect.any(Number), inLeft: true, inRight: true });
+    expect(pos.scrolled).toBeGreaterThan(0);
+    // Before you joined: not in the stack, not in the past-raves pills either.
+    await page.evaluate(() => openCrewPastRaves());
+    await expect(panel(page, 'raveplan').locator('.game-plan-rave-picker .huddle-room-pill')).toHaveText(['Summer Fest', 'Span Fest']);
+  });
+
+  test("Who'd you catch? nudges on the stub, atop All and in the bell, and the stub opens the check-off", async ({ page }) => {
+    await bootWithCrewFeed(page, { data: seedPastRaves() });
+    await expect.poll(() => page.evaluate(() => window.__store.notifications.filter(n => n.data?.postfest).map(n => n.data.postfest)))
+      .toEqual([{ fest: 'f-hula', stage: 1 }]);
+    await openC1(page);
+    await expect(page.locator('#crew-feed-list .crew-feed-sightings')).toContainText('Hulaween');
+    await expect(page.locator('.crew-ticket[data-fest="f-mid"] .crew-ticket-seen')).toHaveCount(0);
+    await page.locator('.crew-ticket[data-fest="f-hula"] .crew-ticket-seen').click();
+    await expect(page.locator('#lineup-section .postfest-card')).toBeVisible();
   });
 });

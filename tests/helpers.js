@@ -8,7 +8,9 @@
 // real write flows (RSVP, create crew, add/remove member, edit profile) and
 // assert the data round-trips via a fresh loadAllData(), all with no backend.
 
-const SUPABASE_URL = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3';
+// app.html loads the self-hosted copy (supabase-<version>.min.js).
+// The Lineup Explorer pages still load it from jsDelivr; both get the stub.
+const SUPABASE_URL = /\/supabase-[\d.]+\.min\.js$|cdn\.jsdelivr\.net\/npm\/@supabase\/supabase-js@2\.117\.3$/;
 
 const TEST_UID = 'test-user-id';
 
@@ -205,6 +207,9 @@ async function installSupabaseStub(page, opts = {}) {
           const st = { table, op: 'select', sel: '*', payload: null, upsertOpts: null, filters: [], limit: null, orders: [], range: null };
           const pred = row => st.filters.every(f => f(row));
           function exec() {
+            // window.__stubOffline = true makes every query fail the way a
+            // dropped connection does (offline cold-start tests).
+            if (window.__stubOffline) return { data: null, error: { message: 'Failed to fetch' } };
             const tbl = store[table] || (store[table] = []);
             if (st.op === 'select') {
               let rows = tbl.filter(pred);
@@ -390,6 +395,7 @@ async function installSupabaseStub(page, opts = {}) {
             return row;
           }
           function exec() {
+            if (window.__stubOffline) return { data: null, error: { message: 'Failed to fetch' } };
             // Every call is recorded (store.__rpcCalls) so a spec can check the args.
             (store.__rpcCalls = store.__rpcCalls || []).push({ fn, args: clone(args || {}) });
             // Canned RPC results a spec can seed: data.__rpc = { fn_name: result }.
@@ -446,6 +452,12 @@ async function installSupabaseStub(page, opts = {}) {
               return { data: { ok: true, removed, status, target_type: f.target_type, target_id: f.target_id, closed: closed.length }, error: null };
             }
             if (fn === 'mod_flag_context') return { data: {}, error: null };
+            // Mirrors the server: checks EVERY raver (no RLS), case-insensitive, like ravers_handle_unique_idx.
+            if (fn === 'handle_available') {
+              const h = String(args.p_handle || '').trim().toLowerCase();
+              const taken = (store.ravers || []).some(r => r.handle && String(r.handle).toLowerCase() === h && String(r.id) !== String(args.p_exclude_id));
+              return { data: !taken, error: null };
+            }
             if (fn === 'mod_issue_sanction') {
               if (!isMod()) return { data: { ok: false, error: 'FORBIDDEN' }, error: null };
               if (String(args.p_user) === String(uid)) return { data: { ok: false, error: 'SELF' }, error: null };
@@ -541,6 +553,22 @@ async function installSupabaseStub(page, opts = {}) {
               const mine = myRaver ? rows.find(r => String(r.raver_id) === String(myRaver.id)) : null;
               return { data: mine ? [{ ...mine, crew_size: rows.length }] : [], error: null };
             }
+            // Mirrors public.toggle_huddle_reaction: flips this user's emoji and
+            // returns the message's reactions.
+            if (fn === 'toggle_huddle_reaction') {
+              const m = (store.huddle_messages || []).find(x => String(x.id) === String(args.p_message_id));
+              if (!m) return { data: null, error: { message: 'NOT_FOUND: message not found.' } };
+              const rx = { ...(m.reactions || {}) };
+              const list = rx[args.p_emoji] || [];
+              if (list.includes(uid)) {
+                rx[args.p_emoji] = list.filter(u => u !== uid);
+                if (!rx[args.p_emoji].length) delete rx[args.p_emoji];
+              } else {
+                rx[args.p_emoji] = [...list, uid];
+              }
+              m.reactions = rx;
+              return { data: rx, error: null };
+            }
             return { data: [], error: null };
           }
           return {
@@ -571,7 +599,7 @@ async function installSupabaseStub(page, opts = {}) {
           }; } };
           // Expose the store for test introspection.
           window.__store = store;
-          return { auth, storage, from(t) { return makeBuilder(t); }, rpc(fn, params) { return makeRpc(fn, params); }, channel() { return channel; }, removeChannel() { return Promise.resolve('ok'); } };
+          return { auth, storage, from(t) { return makeBuilder(t); }, rpc(fn, params) { return makeRpc(fn, params); }, channel(name, opts) { (window.__channels = window.__channels || []).push({ name, opts: opts || {} }); return channel; }, removeChannel() { return Promise.resolve('ok'); } };
         }
 
         window.supabase = { createClient };

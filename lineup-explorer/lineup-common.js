@@ -422,7 +422,7 @@
     var btn = document.createElement("button");
     btn.type = "button";
     btn.className = "a2hs-btn";
-    btn.innerHTML = "📲 Save";
+    btn.innerHTML = '📲<span class="a2hs-label"> Install</span>';
     btn.setAttribute("aria-label", "Save this page to your home screen");
     btn.addEventListener("click", function () { buildModal(os); });
 
@@ -485,10 +485,10 @@
     for (var i = 0; i < nodes.length; i++) {
       try {
         var j = JSON.parse(nodes[i].textContent);
-        if (j && /Event$|Festival$/.test(j["@type"] || "")) return { t: j.name || null, d: j.startDate || null };
+        if (j && /Event$|Festival$/.test(j["@type"] || "")) return { t: j.name || null, d: j.startDate || null, e: j.endDate || j.startDate || null };
       } catch (e) {}
     }
-    return { t: null, d: null };
+    return { t: null, d: null, e: null };
   }
 
   function splitKeys(name) {
@@ -513,6 +513,8 @@
 
   var memberLoaded = false; // plans + RSVP fetched for this festival
   function isMemberMode() { return !!(memberLoaded && member && member.raverId && member.festival); }
+  var visitorKnown = false; // LineupMember resolved with no session
+  function isVisitor() { return visitorKnown && !member; }
 
   function saveLocal() {
     if (!slug) return;
@@ -915,10 +917,7 @@
       var jb = document.createElement("button");
       jb.type = "button";
       jb.textContent = "Join free";
-      jb.addEventListener("click", function () {
-        if (local.length) goSave();
-        else location.href = "/app";
-      });
+      jb.addEventListener("click", function () { goJoin("most_wanted"); });
       foot.appendChild(jb);
       mwEl.appendChild(foot);
     }
@@ -1022,6 +1021,97 @@
       window.localStorage.setItem(FROM_KEY, JSON.stringify({ slug: from, back: location.pathname + location.search }));
     } catch (e) {}
     location.href = "/app?picks=1" + (from ? "&from=" + encodeURIComponent(from) : "");
+  }
+
+  // ----- signup entry points (visitors) -----
+  // Every visitor "join" button lands here: logs explorer_cta_click with its
+  // surface, then carries ☆ picks through goSave (this page's if it has any,
+  // else the latest), or, with no picks, opens this rave after signup via
+  // /app?rave=<slug> (page slug equals festivals.slug). Hub falls back to /app.
+  function goJoin(surface, extra, preferRave) {
+    var all = readAll(), n = 0, latest = null;
+    Object.keys(all).forEach(function (k) {
+      var p = all[k];
+      var c = p && Array.isArray(p.n) ? p.n.length : 0;
+      if (!c) return;
+      n += c;
+      if (!latest || (p.at || "") > (all[latest].at || "")) latest = k;
+    });
+    if (preferRave && slug) n = 0; // ended rave: the handoff only takes upcoming picks
+    // Came in on someone's shared picks: /app shows "<first> shared their
+    // picks with you" at signup and records the referral (processPendingShareRef).
+    if (shared && sharedToken) {
+      try { window.localStorage.setItem("pendingShareRef", sharedToken); } catch (e) {}
+    }
+    var props = { surface: surface, slug: slug || "hub", picks: n, dest: n ? "save" : slug ? "rave" : "app", via_share: !!(shared && sharedToken) };
+    if (extra) Object.keys(extra).forEach(function (k) { props[k] = extra[k]; });
+    logEvent("explorer_cta_click", props);
+    if (n) { goSave(slug && all[slug] && all[slug].n && all[slug].n.length ? slug : latest, n); return; }
+    location.href = slug ? "/app?rave=" + encodeURIComponent(slug) : "/app";
+  }
+
+  // ----- 👥 Plan with crew (visitors): what an account adds, one sheet -----
+  // Opened from the locked chip in the picks bar. Opening logs
+  // explorer_cta_click { surface: "crew_chip", dest: "sheet" }; the sheet's
+  // button logs its own click (surface "crew_sheet") through goJoin.
+  var joinSheet = null, joinSheetFocus = null;
+  var JOIN_PERKS = [
+    ["👥", "See which artists your crew picked, right on the lineup"],
+    ["♡", "Follow artists and see every lineup they're on"],
+    ["📤", "Share your picks with one link"],
+    ["🔔", "Get a ping 15 minutes before each of your sets"]
+  ];
+  function openJoinSheet() {
+    logEvent("explorer_cta_click", { surface: "crew_chip", slug: slug || "hub", picks: local.length, dest: "sheet" });
+    if (!joinSheet) {
+      joinSheet = document.createElement("div");
+      joinSheet.className = "lp-overlay";
+      var sh = el("div", "lp-sheet");
+      sh.setAttribute("role", "dialog");
+      sh.setAttribute("aria-modal", "true");
+      sh.setAttribute("aria-labelledby", "lpJoinTitle");
+      sh.innerHTML = '<div class="lp-sheet-top"><span class="lp-badge">RaveFAM</span>' +
+        '<button type="button" class="lp-x" aria-label="Close">✕</button></div>';
+      var h = el("h3", null, "Plan this lineup with your crew");
+      h.id = "lpJoinTitle";
+      sh.appendChild(h);
+      sh.appendChild(el("p", "lp-sub", "Free with a RaveFAM account. Your picks come with you."));
+      var ul = el("ul", "lp-join-list");
+      JOIN_PERKS.forEach(function (p) {
+        var li = el("li");
+        var ic = el("span", "lp-join-ic", p[0]);
+        ic.setAttribute("aria-hidden", "true");
+        li.appendChild(ic);
+        li.appendChild(el("span", null, p[1]));
+        ul.appendChild(li);
+      });
+      sh.appendChild(ul);
+      var row = el("div", "lp-actions");
+      var go = el("button", "lp-opt lp-join-go");
+      go.type = "button";
+      var later = el("button", "lp-opt lp-browse", "Not now");
+      later.type = "button";
+      row.appendChild(go);
+      row.appendChild(later);
+      sh.appendChild(row);
+      joinSheet.appendChild(sh);
+      document.body.appendChild(joinSheet);
+      joinSheet.addEventListener("click", function (e) {
+        if (e.target === joinSheet || e.target.closest(".lp-x") || e.target.closest(".lp-browse")) { closeJoinSheet(); return; }
+        if (e.target.closest(".lp-join-go")) goJoin("crew_sheet");
+      });
+      joinSheet.addEventListener("keydown", function (e) { if (e.key === "Escape") closeJoinSheet(); });
+    }
+    var n = local.length;
+    joinSheet.querySelector(".lp-join-go").textContent = n ? "Save my " + n + (n === 1 ? " pick" : " picks") : "Join free";
+    joinSheetFocus = document.activeElement;
+    joinSheet.classList.add("show");
+    joinSheet.querySelector(".lp-join-go").focus();
+  }
+  function closeJoinSheet() {
+    if (!joinSheet) return;
+    joinSheet.classList.remove("show");
+    if (joinSheetFocus && joinSheetFocus.focus && document.body.contains(joinSheetFocus)) joinSheetFocus.focus();
   }
 
   // ----- hub (/lineup-explorer/): Your picks box + ☆ row on picked cards -----
@@ -1485,7 +1575,11 @@
     }
     var tipped = false;
     try { tipped = !!window.localStorage.getItem(TIP_KEY); window.localStorage.setItem(TIP_KEY, "1"); } catch (e) {}
-    if (!tipped) toast("📋 " + a.name + " added to your picks on this device.", "Save to RaveFAM", function () { goSave(); });
+    if (tipped) return;
+    // The join bar already carries "Save N picks" when it's up: no second button.
+    var jb = document.getElementById("ctaBar");
+    if (jb && jb.style.display !== "none" && jb.dataset.mode) toast("📋 " + a.name + " added to your picks on this device.");
+    else toast("📋 " + a.name + " added to your picks on this device.", "Save to RaveFAM", function () { goSave(); });
   }
 
   // ----- picks bar + signup banner -----
@@ -1507,6 +1601,7 @@
     });
     var member = isMemberMode();
     barEl.querySelector('[data-v="favs"]').hidden = !member;
+    barEl.querySelector(".lp-lock-f").hidden = !isVisitor();
     barEl.querySelector('[data-v="now"]').hidden = view !== "now" && !(festLive(Date.now()) && nowItems().length);
     var crewN = member ? acts.filter(function (a) { return actCrew(a).length; }).length : 0;
     barEl.querySelector('[data-v="crew"]').hidden = !crewN && view !== "crew";
@@ -1561,6 +1656,7 @@
     var b = saveEl.querySelector("button");
     b.hidden = !btn;
     b.textContent = btn;
+    renderJoinBar();
     saveSnap();
     syncReminders();
   }
@@ -1578,6 +1674,7 @@
       '<button type="button" class="lp-f lp-fav-f" data-v="favs" hidden><span aria-hidden="true">♡</span> Favorites <b class="lp-nf">0</b></button>' +
       '<button type="button" class="lp-f lp-crew-f" data-v="crew" hidden><span aria-hidden="true">👥</span> Crew picks <b class="lp-nc">0</b></button>' +
       '<button type="button" class="lp-f lp-sched-f" data-v="schedule"><span aria-hidden="true">🗓️</span> My schedule</button>' +
+      '<button type="button" class="lp-f lp-lock-f" hidden><span aria-hidden="true">👥</span> Plan with crew <span class="lp-lock" aria-hidden="true">🔒</span></button>' +
       '<button type="button" class="lp-f lp-now-f" data-v="now" hidden><span aria-hidden="true">🎧</span> On deck</button>' +
       '<button type="button" class="lp-f lp-shared-f" data-v="shared" hidden><span aria-hidden="true">📋</span> <span class="lp-sn"></span> <b class="lp-nsh">0</b></button>' +
       '<button type="button" class="lp-share" hidden>📤 Share my picks</button>' +
@@ -1587,6 +1684,7 @@
     barEl.addEventListener("click", function (e) {
       if (e.target.closest(".lp-sort")) { sortWanted = !sortWanted; refresh(); return; }
       if (e.target.closest(".lp-share")) { openShareSheet(); return; }
+      if (e.target.closest(".lp-lock-f")) { openJoinSheet(); return; }
       var b = e.target.closest(".lp-f");
       if (!b) return;
       view = b.dataset.v;
@@ -1640,6 +1738,7 @@
   // Turn off. Viewer: get_shared_lineup(token) returns the sharer's first
   // name and picks for this page only.
   var shared = null;       // { first, keys: { name_lower: true }, n }
+  var sharedToken = null;  // the ?by= token behind `shared`, for the signup referral
   var sharedGone = false;  // link was turned off or expired
   var shareSheet = null;
 
@@ -1656,6 +1755,7 @@
         (d.artists || []).forEach(function (nm) { keys[String(nm).toLowerCase()] = true; });
         acts.forEach(function (a) { if (splitKeys(a.name).every(function (k) { return keys[k]; })) n++; });
         shared = { first: d.first_name || "A friend", keys: keys, n: n };
+        sharedToken = token;
         logEvent("lineup_share_opened", { slug: slug, picks: n });
         refresh();
       }, noop);
@@ -1688,9 +1788,7 @@
       var j = document.createElement("button");
       j.type = "button";
       j.textContent = "Join " + shared.first + " on RaveFAM";
-      j.addEventListener("click", function () {
-        if (local.length) goSave(); else location.href = "/app";
-      });
+      j.addEventListener("click", function () { goJoin("share_banner", { shared_picks: shared.n || 0 }); });
       shareBannerEl.appendChild(j);
     }
   }
@@ -2360,11 +2458,38 @@
     return m ? m.getAttribute("content") : null;
   }
 
+  // Posters that give start times only (EDC Orlando): a staged set with no
+  // `end` runs until the next later start on its stage that day, at most
+  // SET_CAP_MIN, and a stage's last set of the day runs to 23:59 when that is
+  // within CLOSE_MAX_MIN (else the cap applies). Acts that share a start
+  // share the slot. Festival-local wall times throughout;
+  // _ops/aggregate-artists/build-set-times.mjs applies the same rule for the DB.
+  // Inferred ends carry end_est and show with a "~" (fmtEnd).
+  var SET_CAP_MIN = 90, CLOSE_MAX_MIN = 120;
+  function addMinutes(local, min) {
+    var d = new Date(Date.parse(local + ":00Z") + min * 60000);
+    return d.toISOString().slice(0, 16);
+  }
+  function inferredEnd(a) {
+    if (!a.start || a.end || !a.stage) return null;
+    var day = a.start.slice(0, 10), next = null;
+    for (var i = 0; i < acts.length; i++) {
+      var s = acts[i].start;
+      if (s && acts[i].stage === a.stage && s.slice(0, 10) === day && s > a.start && (!next || s < next)) next = s;
+    }
+    var cap = addMinutes(a.start, SET_CAP_MIN);
+    if (next) return next < cap ? next : cap;
+    var close = day + "T23:59";
+    if (close <= a.start) return null;
+    return close <= addMinutes(a.start, CLOSE_MAX_MIN) ? close : cap;
+  }
+
   function actSet(a) {
     var tz = a && a.start ? pageTz() : null;
     if (tz) {
       var st = zonedToIso(a.start, tz);
-      if (st) return { start_at: st, end_at: a.end ? zonedToIso(a.end, tz) : null, stage: a.stage || null, page: true };
+      var en = a.end || inferredEnd(a);
+      if (st) return { start_at: st, end_at: en ? zonedToIso(en, tz) : null, end_est: !a.end && !!en, stage: a.stage || null, page: true };
     }
     if (!sets) return null;
     var keys = splitKeys(a.name);
@@ -2380,12 +2505,13 @@
     }
   }
   function fmtTime(iso) { return fmtParts(iso, { hour: "numeric", minute: "2-digit" }).replace(":00", ""); }
+  function fmtEnd(s) { return (s.end_est ? "~" : "") + fmtTime(s.end_at); }
   function fmtDay(iso) { return fmtParts(iso, { weekday: "short" }); }
 
   function timeText(s) {
     if (!s) return "";
     var bits = [];
-    if (s.start_at) bits.push(fmtDay(s.start_at) + " " + fmtTime(s.start_at) + (s.end_at ? "–" + fmtTime(s.end_at) : ""));
+    if (s.start_at) bits.push(fmtDay(s.start_at) + " " + fmtTime(s.start_at) + (s.end_at ? "–" + fmtEnd(s) : ""));
     if (s.stage) bits.push(s.stage);
     return bits.join(" · ");
   }
@@ -2459,11 +2585,30 @@
         var bE = b.set.end_at ? +new Date(b.set.end_at) : bS + 3600000;
         if (aS < bE && bS < aE) {
           var names = [a.act.name, b.act.name].sort();
-          pairs.push({ key: names.join("|"), a: names[0], b: names[1], from: Math.max(aS, bS), to: Math.min(aE, bE) });
+          pairs.push({ key: names.join("|"), a: names[0], b: names[1], from: Math.max(aS, bS), to: Math.min(aE, bE),
+            toEst: !!(aE <= bE ? a.set.end_est : b.set.end_est) });
         }
       }
     }
     return pairs;
+  }
+
+  // Act name -> the picked acts its set overlaps, for the ⚡ chip on cards.
+  // Unresolved clashes only; rebuilt when picks, set times or choices change.
+  var cardClashMemo = { key: null, map: {} };
+  function cardClash(a) {
+    var picked = pickedActs();
+    var key = picked.map(function (x) { return x.name; }).join("|") + "#" + (sets ? 1 : 0) + "#" + JSON.stringify(clash);
+    if (key !== cardClashMemo.key) {
+      var map = {};
+      clashPairs(picked.map(function (x) { return { act: x, set: actSet(x) }; })).forEach(function (p) {
+        if (clash[p.key]) return;
+        (map[p.a] = map[p.a] || []).push(p.b);
+        (map[p.b] = map[p.b] || []).push(p.a);
+      });
+      cardClashMemo = { key: key, map: map };
+    }
+    return cardClashMemo.map[a.name] || [];
   }
 
   // Act name -> the act kept instead, from the Split / keep-one choices.
@@ -2550,7 +2695,7 @@
     list.forEach(function (x) {
       var li = el("li", "lp-sched-row" + (skipped[x.act.name] ? " is-skipped" : ""));
       var t = el("span", "lp-sched-time", x.set && x.set.start_at
-        ? fmtTime(x.set.start_at) + (x.set.end_at ? "–" + fmtTime(x.set.end_at) : "")
+        ? fmtTime(x.set.start_at) + (x.set.end_at ? "–" + fmtEnd(x.set) : "")
         : "Time TBA");
       li.appendChild(t);
       var main = el("div", "lp-sched-main");
@@ -2577,7 +2722,7 @@
 
     pairs.forEach(function (p) {
       var box = el("div", "lp-clash");
-      box.appendChild(el("p", "lp-clash-t", "⚡ " + p.a + " and " + p.b + " overlap (" + fmtTime(new Date(p.from).toISOString()) + "–" + fmtTime(new Date(p.to).toISOString()) + ")"));
+      box.appendChild(el("p", "lp-clash-t", "⚡ " + p.a + " and " + p.b + " overlap (" + fmtTime(new Date(p.from).toISOString()) + "–" + (p.toEst ? "~" : "") + fmtTime(new Date(p.to).toISOString()) + ")"));
       var row = el("div", "lp-clash-opts");
       row.setAttribute("role", "group");
       row.setAttribute("aria-label", "Choose for " + p.a + " and " + p.b);
@@ -2601,7 +2746,18 @@
     if (!list.some(function (x) { return x.set && x.set.start_at; })) {
       schedEl.appendChild(el("p", "lp-sched-note", "Clash check turns on when set times drop."));
     }
-    if (isMemberMode() && nowItems().length) schedEl.appendChild(remindRow());
+    if ((isMemberMode() || !member) && nowItems().length) schedEl.appendChild(remindRow());
+    // Landed from the app's "Turn on set reminders" nudge: point at the 🔔
+    // button (push permission needs the tap itself, so it isn't auto-toggled).
+    if (remindIntent && isMemberMode()) {
+      var rb = schedEl.querySelector(".lp-remind-btn");
+      if (rb) {
+        remindIntent = false;
+        setTimeout(function () { rb.scrollIntoView({ block: "center", behavior: "smooth" }); rb.classList.add("lp-flash"); }, 60);
+      } else {
+        schedEl.appendChild(el("p", "lp-sched-note", "Add sets with times to your schedule, then turn on 🔔 reminders here."));
+      }
+    }
     if (!member) {
       schedEl.appendChild(el("p", "lp-sched-note", "Log in to suggest set times and see your crew's Fam Faves here."));
     }
@@ -2618,6 +2774,7 @@
   // all of this still works without signal.
   var nowEl = null, nowTimer = null, autoNowDone = false, nowAuto = false, nowLogged = false;
   var remind = false, remindSig = null, remindTimer = null, offlineAsked = false, onlineHooked = false;
+  var remindIntent = false;  // ?remind=1 from the app's fest-week nudge: open My schedule at the 🔔 button
   var SNAP_KEY = "rf_lp_offline";
   var VAPID_PUBLIC_KEY = "BCF_mOzUV61zYqsbcN-NuAiGrmuc3pPx6qQDCmRV057Dw8JNy-IwvrPb9mpYDvqDBLruXtLCk9-Q1E7caAfn_6M";
   var HOUR = 3600000;
@@ -2667,7 +2824,7 @@
     c.appendChild(el("span", "lp-now-label", label));
     c.appendChild(el("span", "lp-now-name", p.x.act.name));
     var sub = [p.x.set.stage || "Stage TBA"];
-    sub.push(live ? "until " + fmtTime(new Date(p.e).toISOString()) : fmtTime(p.x.set.start_at));
+    sub.push(live ? "until " + (p.x.set.end_est ? "~" : "") + fmtTime(new Date(p.e).toISOString()) : fmtTime(p.x.set.start_at));
     if (p.x.fam.length) sub.push("⭐ " + p.x.fam.join(", "));
     c.appendChild(el("span", "lp-now-sub", sub.join(" · ")));
     if (live) {
@@ -2749,6 +2906,14 @@
 
   function remindRow() {
     var box = el("div", "lp-remind");
+    if (!member) {
+      var j = el("button", "lp-remind-btn", "🔔 Remind me before my sets");
+      j.type = "button";
+      j.addEventListener("click", function () { goJoin("reminder"); });
+      box.appendChild(j);
+      box.appendChild(el("span", "lp-remind-sub", "Free RaveFAM account. We'll ping you 15 min before each set."));
+      return box;
+    }
     if (!isMemberMode()) {
       box.appendChild(el("p", "lp-sched-note", "Log in to get a push 15 minutes before each set."));
       return box;
@@ -3225,7 +3390,7 @@
   // ----- member load -----
   function loadMember() {
     window.LineupMember.ready(function (m) {
-      if (!m || !m.isMember) return;
+      if (!m || !m.isMember) { visitorKnown = true; refresh(); return; }
       if (member && member.offline && (!m.raverId || !m.festival)) return; // still offline: keep the snapshot
       member = m;
       if (!m.raverId || !m.festival) {
@@ -3303,6 +3468,7 @@
         var qv = new URLSearchParams(location.search).get("view");
         if (qv === "schedule" || qv === "now") { view = qv; autoNowDone = true; }
         if (qv === "checkoff") { checkFocus = true; autoNowDone = true; }
+        if (new URLSearchParams(location.search).get("remind") === "1") { view = "schedule"; autoNowDone = true; remindIntent = true; }
       } catch (e) {}
       try { if (window.sessionStorage.getItem("rf_now_off_" + slug)) autoNowDone = true; } catch (e) {}
       // No signal (festival grounds): the member's last saved schedule, if
@@ -3335,7 +3501,7 @@
     wrap: function (el, a) {
       var picked = isPicked(a);
       var w = document.createElement("div");
-      w.className = "act-wrap" + (picked ? " picked" : "");
+      w.className = "act-wrap lp-row" + (picked ? " picked" : "");
       var b = document.createElement("button");
       b.type = "button";
       b.className = "pick";
@@ -3344,28 +3510,82 @@
       b.setAttribute("aria-label", picked ? "Remove " + a.name + " from my picks" : "Add " + a.name + " to my picks");
       b.innerHTML = picked ? CLIP_ON : CLIP_OFF;
       b.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); toggle(a); });
-      if (isShared(a)) {
-        var sp = document.createElement("div");
-        sp.className = "lp-shared";
-        sp.textContent = "📋 " + (picked ? "You both picked this" : shared.first + " picked this");
-        el.insertBefore(sp, el.querySelector(".foot"));
-      }
+      // Schedule-ticket layout: time rail | name, stage line, chips, pulse,
+      // then the .foot stub (genre + platform) that ♡ / 📋 sit on.
+      var foot = el.querySelector(".foot");
+      var eq = el.querySelector(".eq");
+      if (eq) eq.remove();
       var st = actSet(a);
+      var timed = !!(st && st.start_at);
+      var nb = el.querySelector(".nb");
+      var body = document.createElement("div");
+      body.className = "lp-body";
+      while (el.firstChild) body.appendChild(el.firstChild);
+      if (timed) {
+        var rail = document.createElement("div");
+        rail.className = "lp-rail";
+        var tp = fmtTime(st.start_at).split(/\s+/);
+        var rh = document.createElement("span");
+        rh.className = "lp-rail-h";
+        rh.textContent = tp[0];
+        rail.appendChild(rh);
+        var ra = document.createElement("span");
+        ra.className = "lp-rail-ap";
+        ra.textContent = tp[1] || "";
+        rail.appendChild(ra);
+        if (nb) rail.appendChild(nb);
+        el.appendChild(rail);
+      } else {
+        w.classList.add("lp-untimed");
+      }
+      el.appendChild(body);
       if (st && (st.start_at || st.stage)) {
+        var bits = [];
+        if (st.stage) bits.push(st.stage);
+        if (timed && !nb) bits.unshift(fmtDay(st.start_at));
+        if (timed && st.end_at) {
+          bits.push("until " + fmtEnd(st));
+          var mins = Math.round((new Date(st.end_at) - new Date(st.start_at)) / 60000);
+          if (mins > 0) bits.push((st.end_est ? "~" : "") + mins + "m");
+        }
         var tl = document.createElement("div");
         tl.className = "lp-time";
-        tl.textContent = "🕘 " + timeText(st);
-        el.insertBefore(tl, el.querySelector(".foot"));
+        tl.textContent = bits.join(" · ");
+        body.insertBefore(tl, foot);
+      }
+      var chips = document.createElement("div");
+      chips.className = "lp-chips";
+      var note = body.querySelector(".note");
+      if (note) {
+        note.classList.add("lp-chip");
+        if (/^sunset/i.test(note.textContent)) { note.classList.add("lp-sun"); note.textContent = "🌅 " + note.textContent; }
+        chips.appendChild(note);
+      }
+      if (picked && isMemberMode()) {
+        var cl = cardClash(a);
+        if (cl.length) {
+          var cc = document.createElement("span");
+          cc.className = "lp-chip lp-clash-chip";
+          cc.textContent = "⚡ Overlaps " + cl[0] + (cl.length > 1 ? " +" + (cl.length - 1) : "");
+          chips.appendChild(cc);
+        }
       }
       var fam = actFaves(a);
       if (fam.length) {
-        var ff = document.createElement("div");
-        ff.className = "lp-famfave";
+        var ff = document.createElement("span");
+        ff.className = "lp-chip lp-famfave";
         ff.textContent = "⭐ Fam Fave · " + fam.join(", ");
-        el.insertBefore(ff, el.querySelector(".foot"));
+        chips.appendChild(ff);
       }
+      if (isShared(a)) {
+        var sp = document.createElement("span");
+        sp.className = "lp-chip lp-shared";
+        sp.textContent = "📋 " + (picked ? "You both picked this" : shared.first + " picked this");
+        chips.appendChild(sp);
+      }
+      if (chips.firstChild) body.insertBefore(chips, foot);
       var pulse = pulseEl(a);
-      if (pulse) el.insertBefore(pulse, el.querySelector(".foot"));
+      if (pulse) body.insertBefore(pulse, foot);
       w.appendChild(el);
       w.appendChild(b);
       // The crew tray sits under the card in an outer cell, so ♡/📋 stay
@@ -3395,32 +3615,24 @@
     all: readAll
   };
 
-  // ----- header: Log in (visitors) / My RaveFAM (members) -----
-  // Sits in the .brandbar next to 📲 Save. A visitor with ☆ picks logs in
-  // through the Save my picks handoff, so the picks come along; otherwise it
-  // simply opens /app. Members get a link back to the app.
+  // ----- header: Join free (visitors; /app also has log in) / My RaveFAM (members) -----
+  // Sits in the .brandbar next to 📲 Install. A visitor with ☆ picks joins
+  // through goJoin: picks ride the Save my picks handoff; otherwise it opens
+  // this rave after signup (/app?rave=). Members get a link back to the app.
   function injectAccountButton() {
     var bar = document.querySelector(".brandbar");
     if (!bar || bar.querySelector(".lp-account")) return;
     var a = document.createElement("a");
     a.className = "lp-account";
     a.href = "/app";
-    a.textContent = "Log in";
+    a.textContent = "Join free";
+    a.title = "Join RaveFAM free, or log in";
     a.addEventListener("click", function (e) {
       if (a.dataset.member) return;
-      var all = readAll(), n = 0, latest = null;
-      Object.keys(all).forEach(function (k) {
-        var p = all[k];
-        var c = p && Array.isArray(p.n) ? p.n.length : 0;
-        if (!c) return;
-        n += c;
-        if (!latest || (p.at || "") > (all[latest].at || "")) latest = k;
-      });
-      if (!n) return;
       e.preventDefault();
-      goSave(slug && all[slug] && all[slug].n && all[slug].n.length ? slug : latest, n);
+      goJoin("header");
     });
-    // Join the right-hand group (📲 Save + year) rather than adding a third
+    // Join the right-hand group (📲 Install + year) rather than adding a third
     // child to the space-between brandbar.
     var group = bar.querySelector(".a2hs-yr-wrap");
     if (!group) {
@@ -3435,12 +3647,147 @@
       if (!m || !m.isMember) return;
       a.dataset.member = "1";
       a.textContent = "My RaveFAM";
+      a.removeAttribute("title");
       a.classList.add("is-member");
     });
   }
+  // ----- festival pages: "Join the fam" bar (#ctaBar, static in each page) -----
+  // Web: the button goes through goJoin (picks handoff or this rave) instead of
+  // the marketing homepage. In the iOS app the native block below owns the
+  // link. Members never see it. Once a visitor has 📋 picks here it becomes
+  // the picks bar ("3 picks on this device · Save 3 picks"), and says so when
+  // picks clash; it pulses once at 3 picks and once at the first clash.
+  // ✕ stores the pick count at dismissal for the session: the bar stays away,
+  // except that a bar dismissed before 3 picks comes back once at 3.
+  var JOIN_BAR_KEY = "rf_join_bar_x";
+  var joinOrig = null, joinPulse = { three: false, clash: false }, joinClashes = 0;
+  function isNative() {
+    return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  }
+  function hideJoinBar(bar) {
+    bar.style.display = "none";
+    var w = document.querySelector(".wrap");
+    if (w) w.style.paddingBottom = "70px";
+  }
+  function showJoinBar(bar) {
+    if (bar.style.display !== "none") return;
+    bar.style.display = "";
+    var w = document.querySelector(".wrap");
+    if (w) w.style.paddingBottom = "";
+  }
+  function joinBarAllowed(n) {
+    var x = null;
+    try { x = window.sessionStorage.getItem(JOIN_BAR_KEY); } catch (e) {}
+    if (x === null) return true;
+    return (parseInt(x, 10) || 0) < 3 && n >= 3;
+  }
+  function pulseJoinBar(bar) {
+    bar.classList.remove("cta-pulse");
+    void bar.offsetWidth;
+    bar.classList.add("cta-pulse");
+  }
+  function setJoinCopy(copy, lead, more, short) {
+    copy.innerHTML = "";
+    copy.appendChild(el("b", null, lead));
+    copy.appendChild(document.createTextNode(" "));
+    copy.appendChild(el("span", "cta-more", more));
+    copy.appendChild(el("span", "cta-short", short));
+  }
+  // Where today sits against the page's JSON-LD dates (visitor's local day):
+  // "soon" = 1–14 days out, "live" = during, "ended" = after, "" otherwise.
+  function festPhase() {
+    var m = eventMeta();
+    if (!m.d) return { p: "", days: null };
+    var today = localToday();
+    var end = m.e || m.d;
+    if (today > end) return { p: "ended", days: null };
+    if (today >= m.d) return { p: "live", days: 0 };
+    var a = today.split("-").map(Number), b = String(m.d).split("-").map(Number);
+    var days = Math.round((Date.UTC(b[0], b[1] - 1, b[2]) - Date.UTC(a[0], a[1] - 1, a[2])) / 86400000);
+    return { p: days <= 14 ? "soon" : "", days: days };
+  }
+  function renderJoinBar() {
+    var bar = document.getElementById("ctaBar");
+    if (!bar || isNative()) return;
+    if (member) { hideJoinBar(bar); return; }
+    var n = local.length;
+    if (!joinBarAllowed(n)) { hideJoinBar(bar); return; }
+    showJoinBar(bar);
+    var copy = bar.querySelector(".cta-copy"), btn = bar.querySelector(".cta-btn");
+    if (!copy || !btn) return;
+    if (!joinOrig) {
+      var lead = copy.querySelector("b");
+      var nm = lead && /^Going to (.+?)\??$/.exec(lead.textContent.trim());
+      joinOrig = { copy: copy.innerHTML, btn: btn.innerHTML, label: btn.getAttribute("aria-label"),
+        name: (nm && nm[1]) || eventMeta().t || "this rave" };
+    }
+    var ph = festPhase();
+    bar.dataset.phase = ph.p;
+    if (ph.p === "ended") n = 0; // picks for a past rave don't hand off: talk top sets instead
+    var clashes = n > 1 ? clashPairs(scheduleActs()).filter(function (p) { return !clash[p.key]; }).length : 0;
+    var picksWord = n === 1 ? " pick" : " picks";
+    var fest = joinOrig.name;
+    if (!n) {
+      bar.dataset.mode = "";
+      btn.innerHTML = joinOrig.btn;
+      if (joinOrig.label) btn.setAttribute("aria-label", joinOrig.label);
+      if (ph.p === "ended") {
+        setJoinCopy(copy, "Were you at " + fest + "?", "Rank your top sets and relive it with your crew on RaveFAM.", "Rank your top sets.");
+      } else if (ph.p === "live") {
+        setJoinCopy(copy, fest + " is on now.", "Get a ping 15 minutes before each of your sets on RaveFAM.", "Get set reminders.");
+      } else if (ph.p === "soon") {
+        setJoinCopy(copy, fest + (ph.days === 1 ? " is tomorrow." : " is in " + ph.days + " days."),
+          "Plan your sets with your crew and get a ping before each one.", "Plan it with your crew.");
+      } else {
+        copy.innerHTML = joinOrig.copy;
+      }
+    } else {
+      bar.dataset.mode = clashes ? "clash" : "picks";
+      if (clashes) {
+        setJoinCopy(copy, "⚡ " + (clashes === 1 ? "2 of your picks clash." : clashes + " clashes in your picks."),
+          "Save them to RaveFAM and let your crew vote on who to catch.", "Let your crew vote.");
+      } else if (ph.p === "live" || ph.p === "soon") {
+        setJoinCopy(copy, "📋 " + n + picksWord + " on this device.",
+          (n === 1 ? "Save it" : "Save them") + " to RaveFAM and get a ping 15 minutes before each set.",
+          "Get set reminders.");
+      } else {
+        setJoinCopy(copy, "📋 " + n + picksWord + " on this device.",
+          n === 1 ? "Save it to RaveFAM so it follows you and your crew can see it."
+                  : "Save them to RaveFAM so they follow you and your crew can see them.",
+          n === 1 ? "Save it for your crew." : "Save them for your crew.");
+      }
+      btn.textContent = "Save " + n + picksWord;
+      btn.setAttribute("aria-label", "Save " + n + picksWord + " to RaveFAM");
+    }
+    if (n >= 3 && !joinPulse.three) { joinPulse.three = true; pulseJoinBar(bar); }
+    if (clashes > joinClashes && !joinPulse.clash) { joinPulse.clash = true; pulseJoinBar(bar); }
+    joinClashes = clashes;
+  }
+  function wireJoinBar() {
+    var bar = document.getElementById("ctaBar");
+    if (!bar) return;
+    try { if (window.sessionStorage.getItem(JOIN_BAR_KEY) !== null) hideJoinBar(bar); } catch (e) {}
+    var btn = bar.querySelector(".cta-btn");
+    if (btn && !isNative()) btn.addEventListener("click", function (e) {
+      e.preventDefault();
+      goJoin("join_bar", { mode: bar.dataset.mode || "join", phase: bar.dataset.phase || "" }, bar.dataset.phase === "ended");
+    });
+    var x = bar.querySelector(".cta-close");
+    if (x) x.addEventListener("click", function () {
+      try { window.sessionStorage.setItem(JOIN_BAR_KEY, String(local.length)); } catch (e) {}
+    });
+    bar.addEventListener("animationend", function () { bar.classList.remove("cta-pulse"); });
+    window.LineupMember.ready(function (m) { if (m && m.isMember) hideJoinBar(bar); });
+  }
+
   if (window.LineupMember) {
-    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", injectAccountButton);
-    else injectAccountButton();
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", injectAccountButton);
+      document.addEventListener("DOMContentLoaded", wireJoinBar);
+    } else {
+      injectAccountButton();
+      wireJoinBar();
+    }
   }
 
   // ----- artist pages (Phase 4c-2; /lineup-explorer/artist/<slug>) -----
@@ -3473,7 +3820,7 @@
       }
     }
     window.LineupMember.ready(function (m) {
-      if (!m || !m.isMember) return;
+      if (!m || !m.isMember) { renderArtistVisitor(root); return; }
       var join = document.getElementById("arJoin");
       if (join) join.hidden = true;
       var names = [];
@@ -3486,6 +3833,44 @@
         }, noop);
       });
     });
+  }
+
+  // Visitors: the member layer's slot gets "♡ Favorite" + one line, and the
+  // bottom "Join free" prompt does the same thing. Both store the follow in
+  // pendingFollowArtists ({ names: [name_lower…], label }) for /app, which
+  // favorites the artist after signup (processPendingFollow), then go
+  // through goJoin so any 📋 picks come along too.
+  function artistNames(root) {
+    var names = [];
+    try { names = JSON.parse(root.getAttribute("data-rf-names") || "[]"); } catch (e) {}
+    if (!names.length) names = [String(root.getAttribute("data-rf-artist") || "").toLowerCase()];
+    return names.filter(Boolean).slice(0, 5);
+  }
+  function followThenJoin(root, surface) {
+    var label = root.getAttribute("data-rf-artist") || "";
+    try {
+      window.localStorage.setItem("pendingFollowArtists", JSON.stringify({ names: artistNames(root), label: label }));
+    } catch (e) {}
+    var m = /\/artist\/([a-z0-9-]+)/.exec(location.pathname);
+    goJoin(surface, { page: "artist", artist: label, slug: m ? "artist/" + m[1] : "artist" });
+  }
+  function renderArtistVisitor(root) {
+    var box = document.getElementById("arMember");
+    var name = root.getAttribute("data-rf-artist") || "this artist";
+    if (box && !box.childNodes.length) {
+      var b = el("button", "ar-fav", "♡ Favorite");
+      b.type = "button";
+      b.setAttribute("aria-label", "Add " + name + " to favorites on RaveFAM");
+      b.addEventListener("click", function () { followThenJoin(root, "artist_follow"); });
+      box.appendChild(b);
+      box.appendChild(el("span", "ar-stat", "Get a ping when " + name + " lands on a lineup. Free on RaveFAM."));
+      box.hidden = false;
+    }
+    var join = document.querySelector("#arJoin .ar-join-btn");
+    if (join && !join.dataset.wired) {
+      join.dataset.wired = "1";
+      join.addEventListener("click", function (e) { e.preventDefault(); followThenJoin(root, "artist_join"); });
+    }
   }
 
   function renderArtistMember(root, m, d) {

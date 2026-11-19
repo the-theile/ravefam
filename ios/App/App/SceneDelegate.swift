@@ -8,6 +8,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         guard let windowScene = scene as? UIWindowScene else { return }
 
+        // This is the app's only window. Info.plist must not name a scene
+        // storyboard: UIKit would build a second window around Main.storyboard's
+        // own bridge, the likely cause of the iPad "taps do nothing" rejection.
         window = UIWindow(windowScene: windowScene)
         window?.rootViewController = RaveBridgeViewController()
         window?.makeKeyAndVisible()
@@ -34,6 +37,12 @@ class RaveBridgeViewController: CAPBridgeViewController {
 
     override func capacitorDidLoad() {
         super.capacitorDidLoad()
+        // Local plugin (not an npm package): links shared to RaveFAM from the
+        // iOS share sheet. See ShareInboxPlugin.swift.
+        bridge?.registerPluginInstance(ShareInboxPlugin())
+        // Local plugin: feeds the Rave Countdown home/lock screen widget.
+        // See CountdownWidgetPlugin.swift.
+        bridge?.registerPluginInstance(CountdownWidgetPlugin())
         urlObservation = webView?.observe(\.url, options: [.initial, .new]) { webView, _ in
             let path = webView.url?.path ?? "/app"
             webView.allowsBackForwardNavigationGestures = !(path == "/app" || path.hasPrefix("/app.html") || path.hasPrefix("/app/"))

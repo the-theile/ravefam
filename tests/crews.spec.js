@@ -9,8 +9,9 @@ test.describe('crews', () => {
   test('crew detail lists both members', async ({ page }) => {
     await bootAuthedApp(page);
     await page.locator('#crew-grid .crew-card .crew-row-open').first().click();
-    // The detail roster shows first names only.
-    const detail = page.locator('#page-crew-detail');
+    // The roster lives in the Crew Manifest sheet and shows first names only.
+    await page.locator('#page-crew-detail .crew-feed-faces').click();
+    const detail = page.locator('#crew-manifest-content');
     await expect(detail).toContainText('Theile');
     await expect(detail).toContainText('Sam');
   });
@@ -53,9 +54,9 @@ test.describe('crews', () => {
       .poll(() => page.evaluate(() => crews.find(c => c.name === 'Our House')?.id))
       .not.toMatch(/^temp_/);
 
-    // The lead is on the Roster tab — where the status control lives.
-    await page.locator('#page-crew-detail .stats-subtab', { hasText: 'Roster' }).click();
-    await page.locator('#page-crew-detail .btn-status-cta', { hasText: 'Open the Crew to Recruiting' }).click();
+    // The status control lives in the roster sheet.
+    await page.locator('#page-crew-detail .crew-feed-faces').click();
+    await page.locator('#crew-manifest-content .btn-status-cta', { hasText: 'Open the Crew to Recruiting' }).click();
     await page.locator('#status-warn-modal .btn-primary').click();
 
     await expect(page.locator('#toast')).not.toContainText('Only the Crew Lead');

@@ -20,8 +20,8 @@ function voteData(poll = {}, votes = []) {
 
 async function openPolls(page) {
   await page.evaluate(async () => { await openDetail('c1'); await dbLoadPolls('c1'); rerenderPolls('c1'); });
-  // The FAM Poll lives behind its crew feature tile.
-  await page.locator(".crew-feature-tile[onclick*=\"'poll'\"]").click();
+  // The FAM Poll lives behind the Polls filter chip.
+  await page.locator('.crew-feed-filter[data-filter="poll"]').click();
   await expect(page.locator('#crew-feature-panel-poll')).toBeVisible();
   await expect(page.locator('#fam-poll-section')).toContainText('Which sets are we hitting');
 }
@@ -91,6 +91,8 @@ test('change my vote while the crew vote is open', async ({ page }) => {
 });
 
 test('Crew vote on a lineup links to upcoming raves with a lineup page', async ({ page }) => {
+  // Pin "today" before EDC Orlando 2026 (Nov 6–8) so it still counts as upcoming.
+  await page.clock.setFixedTime(new Date('2026-10-01T18:00:00Z'));
   const d = voteData();
   d.festivals.push({ id: 'f9', name: 'EDC Orlando 2026', date: '2026-11-06', location: 'Orlando, FL', slug: 'edc-orlando-2026', deleted_at: null });
   d.raver_festivals.push({ raver_id: 'r-sam', festival_id: 'f9' });

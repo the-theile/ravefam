@@ -166,7 +166,7 @@ async function clearChrome(page) {
 }
 
 // PNG -> WebP inside Chromium (canvas.toDataURL), so no image dependency.
-async function writeWebp(context, png, name) {
+async function writeWebp(context, png, name, outDir = OUT_DIR) {
   const page = await context.newPage();
   const b64 = await page.evaluate(async ({ src, q }) => {
     const img = new Image();
@@ -178,12 +178,12 @@ async function writeWebp(context, png, name) {
     return c.toDataURL('image/webp', q).split(',')[1];
   }, { src: 'data:image/png;base64,' + png.toString('base64'), q: WEBP_QUALITY });
   await page.close();
-  const out = path.join(OUT_DIR, `${name}.webp`);
+  const out = path.join(outDir, `${name}.webp`);
   fs.writeFileSync(out, Buffer.from(b64, 'base64'));
   console.log('wrote', path.relative(REPO_ROOT, out), `${Math.round(fs.statSync(out).size / 1024)}KB`);
 }
 
-async function shootApp(context, { name, data, run, scrollTo, scrollBy }) {
+async function shootApp(context, { name, data, run, scrollTo, scrollBy, outDir }) {
   const page = await context.newPage();
   await bootAuthedApp(page, {
     data,
@@ -200,7 +200,7 @@ async function shootApp(context, { name, data, run, scrollTo, scrollBy }) {
     await page.evaluate((y) => window.scrollBy(0, y), scrollBy);
     await page.waitForTimeout(200);
   }
-  await writeWebp(context, await page.screenshot(), name);
+  await writeWebp(context, await page.screenshot(), name, outDir);
   await page.close();
 }
 
@@ -294,4 +294,9 @@ async function main() {
   }
 }
 
-main().catch((err) => { console.error(err); if (serverProc) serverProc.kill(); process.exit(1); });
+// Shared with capture-guide-screenshots.js (same demo crew + harness).
+module.exports = { startServer, stopServer: () => { if (serverProc) serverProc.kill(); }, demoData, shootApp, writeWebp, clearChrome, BASE_URL };
+
+if (require.main === module) {
+  main().catch((err) => { console.error(err); if (serverProc) serverProc.kill(); process.exit(1); });
+}

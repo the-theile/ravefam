@@ -61,6 +61,33 @@ test.describe('blocking users', () => {
     expect(errors).toEqual([]);
   });
 
+  test('blocking hides their crew posts and reviews everywhere, and the confirm says moderators are told', async ({ page }) => {
+    const errors = collectPageErrors(page);
+    await bootAuthedApp(page, { data: seedWithChat(), sessionOver: SESSION_OVER });
+    const shown = () => page.evaluate(() => {
+      dreamPins = [
+        { id: 'p1', label: 'kai pin', added_by: 'kai-uid', hyped_by: [], created_at: new Date().toISOString() },
+        { id: 'p2', label: 'my pin', added_by: 'test-user-id', hyped_by: [], created_at: new Date().toISOString() },
+      ];
+      return {
+        board: buildDreamBoardHTML('c1').includes('kai pin'),
+        mine: buildDreamBoardHTML('c1').includes('my pin'),
+        feed: buildCrewFeedItems().some(it => it.actor === 'kai-uid'),
+        jam: renderJamCard({ id: 'j1', added_by: 'kai-uid', platform: 'other', title: 't', url: 'https://x.test' }, 'test-user-id', false, 'c1') !== '',
+        review: vendorReviewRowHTML({ id: 'r1', raver_id: 'kai-uid', rating: 4, body: 'kai review' }, 'v1') !== '',
+      };
+    });
+    expect(await shown()).toEqual({ board: true, mine: true, feed: true, jam: true, review: true });
+
+    await page.evaluate(() => confirmBlockUser('kai-uid'));
+    await expect(page.locator('#confirm-body')).toContainText('moderators');
+    await page.locator('#confirm-ok-btn').click();
+    await expect.poll(() => page.evaluate(() => isBlockedUser('kai-uid'))).toBe(true);
+
+    expect(await shown()).toEqual({ board: false, mine: true, feed: false, jam: false, review: false });
+    expect(errors).toEqual([]);
+  });
+
   test('an existing block hides their messages and notifications at boot', async ({ page }) => {
     const data = seedWithChat({
       user_blocks: [{ blocker_id: TEST_UID, blocked_id: 'kai-uid', created_at: minsAgo(60) }],

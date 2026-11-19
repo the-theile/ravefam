@@ -7,6 +7,7 @@
 // and marks the row sent/skipped/failed. Uses the service-role key so it can
 // read across all users regardless of RLS.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireServiceRole } from "../_shared/require-service-role.ts";
 import {
   wrapEmail as wrapEmailShared,
   button,
@@ -143,7 +144,9 @@ async function markRow(id: number, status: "sent" | "skipped" | "failed", error?
     .eq("id", id);
 }
 
-Deno.serve(async () => {
+Deno.serve(async (req) => {
+  const denied = requireServiceRole(req);
+  if (denied) return denied;
   const { data: dueRows, error: dueError } = await sb
     .from("email_drip_queue")
     .select("id, user_id, step_key, scheduled_for")

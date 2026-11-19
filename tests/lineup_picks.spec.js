@@ -32,6 +32,17 @@ function memberData(extra = {}) {
 
 const star = (page, name) => page.locator(`.pick[data-n="${name}"]`);
 
+// The 4a/4b blocks drive set times from the DB (get_lineup_set_times). The EDC
+// Orlando page now carries its own official times, which win over the DB, so
+// serve it with the ACTS start/end/stage fields stripped.
+async function withoutPageSetTimes(page) {
+  await page.route(/\/lineup-explorer\/edc-orlando-2026(\.html)?(\?.*)?$/, async route => {
+    const res = await route.fetch();
+    const body = (await res.text()).replace(/, (start|end|stage): "[^"]*"/g, '');
+    await route.fulfill({ response: res, body });
+  });
+}
+
 test.describe('Lineup Explorer 📋 picks — visitor', () => {
   test.beforeEach(async ({ page }) => {
     await blockExternal(page);
@@ -189,6 +200,8 @@ test.describe('Lineup Explorer hub — Your picks', () => {
   });
 
   test('lists picks by festival, marks picked cards, and saves from the latest rave', async ({ page }) => {
+    // Pin "today" before EDC Orlando 2026 (Nov 6–8) so it still counts as upcoming.
+    await page.clock.setFixedTime(new Date('2026-10-01T18:00:00Z'));
     await page.addInitScript(() => {
       if (sessionStorage.getItem('seeded')) return;
       sessionStorage.setItem('seeded', '1');
@@ -287,6 +300,8 @@ test.describe('Lineup Explorer hub — members (For You)', () => {
   test.beforeEach(async ({ page }) => { await blockExternal(page); });
 
   test('shows Your season, artists on tour and card badges', async ({ page }) => {
+    // Pin "today" before EDC Orlando 2026 (Nov 6–8) so it still counts as upcoming.
+    await page.clock.setFixedTime(new Date('2026-10-01T18:00:00Z'));
     await installSupabaseStub(page, {
       session: makeSession(),
       data: memberData({
@@ -321,15 +336,15 @@ test.describe('Lineup Explorer hub — members (For You)', () => {
 test.describe('Lineup Explorer header — account button', () => {
   test.beforeEach(async ({ page }) => { await blockExternal(page); });
 
-  test('visitors get Log in, which opens /app', async ({ page }) => {
+  test('visitors get Join free, which opens this rave after signup', async ({ page }) => {
     await installSupabaseStub(page, { session: null, data: {} });
     await page.goto(PAGE);
     const btn = page.locator('.brandbar .lp-account');
-    await expect(btn).toHaveText('Log in');
-    await Promise.all([page.waitForURL(/\/app$/), btn.click()]);
+    await expect(btn).toHaveText('Join free');
+    await Promise.all([page.waitForURL(/\/app\?rave=edc-orlando-2026$/), btn.click()]);
   });
 
-  test('with 📋 picks, Log in carries them into the handoff', async ({ page }) => {
+  test('with 📋 picks, Join free carries them into the handoff', async ({ page }) => {
     await installSupabaseStub(page, { session: null, data: {} });
     await page.goto(PAGE);
     await star(page, 'Kaskade').click();
@@ -807,8 +822,12 @@ test.describe('Lineup Explorer follow-ups — change vote, ?vote=1', () => {
   });
 });
 
+// Card set time as "<start> <AM/PM> <day> · <stage line>" (time rail + .lp-time).
+const cardWhen = (page, name) => expect.poll(() => page.locator('.act-wrap', { has: star(page, name) }).evaluateAll(cards => cards.map(c =>
+  [...c.querySelectorAll('.lp-rail-h, .lp-rail-ap, .lp-rail .nb')].map(x => x.textContent).join(' ') + ' · ' + (c.querySelector('.lp-time') || {}).textContent)));
+
 test.describe('Lineup Explorer 4a — set times and My schedule', () => {
-  test.beforeEach(async ({ page }) => { await blockExternal(page); });
+  test.beforeEach(async ({ page }) => { await blockExternal(page); await withoutPageSetTimes(page); });
 
   // EDC Orlando is Eastern: Fri Nov 6 9:30 PM EST = 02:30Z on Nov 7.
   const SETS = { ok: true, tz: 'America/New_York', date: '2026-11-06', days: 3, sets: [
@@ -842,7 +861,8 @@ test.describe('Lineup Explorer 4a — set times and My schedule', () => {
     await installSupabaseStub(page, { session: null, data: schedData() });
     await page.goto(PAGE);
     const card = page.locator('.act-wrap', { has: star(page, 'Afrojack') });
-    await expect(card.locator('.lp-time')).toHaveText('🕘 Fri 9:30 PM–10:45 PM · kineticFIELD');
+    await expect(card).toHaveCount(1);
+    await cardWhen(page, 'Afrojack').toEqual(['9:30 PM FRI · kineticFIELD · until 10:45 PM · 75m']);
 
     await page.locator('.lp-f[data-v="schedule"]').click();
     const sched = page.locator('.lp-sched');
@@ -927,9 +947,9 @@ test.describe('Lineup Explorer — Hulaween official set times (page data)', () 
     await installSupabaseStub(page, { session: null, data: { festivals: [], artists: [] } });
     await page.goto('/lineup-explorer/hulaween-2026.html');
     const excision = page.locator('.act-wrap', { has: star(page, 'Excision') });
-    await expect(excision.locator('.lp-time')).toHaveText('🕘 Thu 10:30 PM–12 AM · The Meadow');
-    const sci = page.locator('.act-wrap', { has: star(page, 'The String Cheese Incident') }).locator('.lp-time');
-    await expect(sci).toHaveText(['🕘 Fri 7:30 PM–9 PM · The Meadow', '🕘 Sat 5:45 PM–7 PM · The Meadow', '🕘 Sun 3 PM–5 PM · The Meadow']);
+    await expect(excision).toHaveCount(1);
+    await cardWhen(page, 'Excision').toEqual(['10:30 PM THU · The Meadow · until 12 AM · 90m']);
+    await cardWhen(page, 'The String Cheese Incident').toEqual(['7:30 PM FRI · The Meadow · until 9 PM · 90m', '5:45 PM SAT · The Meadow · until 7 PM · 75m', '3 PM SUN · The Meadow · until 5 PM · 120m']);
 
     await page.locator('.lp-f[data-v="schedule"]').click();
     await expect(page.locator('.lp-sched-days .lp-crew-chip')).toHaveText(['Fri', 'Sat', 'Sun']);
@@ -943,8 +963,34 @@ test.describe('Lineup Explorer — Hulaween official set times (page data)', () 
   });
 });
 
-test.describe('Lineup Explorer 4b — On deck, set reminders, offline', () => {
+test.describe('Lineup Explorer — start-only posters infer set ends (EDC Orlando page data)', () => {
   test.beforeEach(async ({ page }) => { await blockExternal(page); });
+
+  test('a set ends at the next start on its stage (shown as an estimate), capped at 90 min; closers run to 11:59 PM', async ({ page }) => {
+    const errors = collectPageErrors(page);
+    await page.addInitScript(() => {
+      if (sessionStorage.getItem('seeded')) return;
+      sessionStorage.setItem('seeded', '1');
+      localStorage.setItem('rf_picks', JSON.stringify({ 'edc-orlando-2026': { n: ['Afrojack', 'Interplanetary Criminal'] } }));
+    });
+    await installSupabaseStub(page, { session: null, data: { festivals: [], artists: [] } });
+    await page.goto(PAGE);
+    await cardWhen(page, 'Afrojack').toEqual(['8 PM FRI · Kinetic Field · until ~9:13 PM · ~73m']);          // next: Mau P 9:13
+    await cardWhen(page, 'KREAM').toEqual(['4:47 PM FRI · Kinetic Field · until ~5:18 PM · ~31m']);           // next: Alesso 5:18
+    await cardWhen(page, 'Alesso').toEqual(['5:18 PM FRI · Kinetic Field · until ~6:48 PM · ~90m']);          // gap to 8 PM, capped
+    await cardWhen(page, 'David Guetta').toEqual(['10:31 PM FRI · Kinetic Field · until ~11:59 PM · ~88m']);  // stage closer
+    await cardWhen(page, 'ALLEYCVT').toEqual(['1 PM SAT · Circuit Grounds · until ~2:30 PM · ~90m']);        // shares 1 PM with Fury
+    await cardWhen(page, 'Fury with MC Dino').toEqual(['1 PM SAT · Circuit Grounds · until ~2:30 PM · ~90m']);
+    await cardWhen(page, 'ALLNIGHTKEV').toEqual(['1 PM SAT · Casa Bacardí · until ~2:30 PM · ~90m']);        // lone set, 11:59 PM too far
+
+    await page.locator('.lp-f[data-v="schedule"]').click();
+    await expect(page.locator('.lp-clash-t')).toContainText('overlap (8 PM–~8:30 PM)');
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('Lineup Explorer 4b — On deck, set reminders, offline', () => {
+  test.beforeEach(async ({ page }) => { await blockExternal(page); await withoutPageSetTimes(page); });
 
   // Eastern: Fri 9:30 PM = 02:30Z Nov 7; Sat 11 PM = 04:00Z Nov 8.
   const SETS = { ok: true, tz: 'America/New_York', date: '2026-11-06', days: 3, sets: [
@@ -1032,7 +1078,8 @@ test.describe('Lineup Explorer 4b — On deck, set reminders, offline', () => {
     await expect(now(page).locator('.lp-now-label')).toHaveText(['Up next · in 10 min']);
     await expect(now(page).locator('.lp-now-name')).toHaveText(['Afrojack']);
     await expect(now(page).locator('.lp-now-later')).toHaveText('Later: Alesso 10 PM · Kaskade Sat 11 PM');
-    await expect(now(page).locator('.lp-remind .lp-sched-note')).toHaveText('Log in to get a push 15 minutes before each set.');
+    // Visitors get a real button that leads to signup (the picks come along).
+    await expect(now(page).locator('.lp-remind .lp-remind-btn')).toHaveText('🔔 Remind me before my sets');
   });
 
   test('outside festival hours there is no On deck', async ({ page }) => {
@@ -1249,7 +1296,9 @@ test.describe('Lineup Explorer 4c-2 — artist pages', () => {
     await expect(page.locator('.ar-link')).toHaveCount(5);
     await expect(page.locator('.ar-link', { hasText: 'Spotify' })).toHaveAttribute('href', 'https://open.spotify.com/search/Kaskade');
     await expect(page.locator('#arJoin')).toBeVisible();
-    await expect(page.locator('#arMember')).toBeHidden();
+    // Visitors get ♡ Favorite in the member layer's slot (saved for after signup).
+    await expect(page.locator('#arMember .ar-fav')).toHaveText('♡ Favorite');
+    await expect(page.locator('#arMember .ar-stat')).toHaveText('Get a ping when Kaskade lands on a lineup. Free on RaveFAM.');
     // The hub's own panels never boot here.
     await expect(page.locator('.lp-hub')).toHaveCount(0);
     const ld = JSON.parse(await page.locator('script[type="application/ld+json"]').first().textContent());

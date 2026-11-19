@@ -241,6 +241,7 @@
     border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
   .cta-bar .cta-copy { font-size: 0.85rem; color: var(--muted); line-height: 1.4; }
   .cta-bar .cta-copy b { color: var(--ink); }
+  .cta-bar .cta-short { display: none; }
   .cta-btn { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 8px; padding: 11px 22px;
     border-radius: 999px; background: var(--grad); background-size: 180% 180%;
     font-family: "Orbitron", sans-serif; font-weight: 700; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
@@ -254,9 +255,12 @@
     .deck { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
     .roll { flex: 1 1 100%; }
     .brand .tag { display: none; }
-    .cta-bar { flex-direction: column; align-items: flex-start; gap: 10px; padding-right: 40px; position: relative; }
-    .cta-bar .cta-copy { font-size: 0.8rem; }
-    .cta-close { position: absolute; top: 10px; right: 12px; }
+    .cta-bar { flex-wrap: nowrap; gap: 10px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)); }
+    .cta-bar .cta-copy { font-size: 0.8rem; flex: 1 1 auto; min-width: 0; }
+    .cta-bar .cta-more { display: none; }
+    .cta-bar .cta-short { display: inline; }
+    .cta-btn { padding: 10px 16px; }
+    .cta-close { padding: 4px 2px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .blob { animation: none; }
@@ -361,7 +365,7 @@
 
   <!-- Join CTA -->
   <div class="cta-bar" id="ctaBar" role="complementary" aria-label="Join RaveFAM">
-    <p class="cta-copy"><b>Going to III Points?</b> Track it with your crew on RaveFAM — free crew tools, countdowns & shared memories.</p>
+    <p class="cta-copy"><b>Going to III Points?</b> <span class="cta-more">Track it with your crew on RaveFAM — free crew tools, countdowns & shared memories.</span><span class="cta-short">Plan it with your crew.</span></p>
     <a class="cta-btn" href="https://myravefam.com/" aria-label="Join RaveFAM">Join the fam 🔊</a>
     <button class="cta-close" id="ctaClose" aria-label="Dismiss">✕</button>
   </div>
@@ -378,54 +382,54 @@
 
   // day: "fri" (10/16) | "sat" (10/17) | null (TBA). Sorted from the official set times.
   const ACTS = [
-    { name: "Underworld",      g: "techno",       hl: true, night: "sat" },
-    { name: "Four Tet",        g: "experimental", hl: true, night: "sat" },
-    { name: "Flying Lotus",    g: "experimental", hl: true, night: "fri" },
-    { name: "Blood Orange",    g: "indie",        hl: true, night: "sat" },
+    { name: "Underworld",      g: "techno",       hl: true, night: "sat", stage: "Mind Melt", start: "2026-10-18T00:00", end: "2026-10-18T01:00" },
+    { name: "Four Tet",        g: "experimental", hl: true, night: "sat", stage: "Mind Melt", start: "2026-10-18T01:30", end: "2026-10-18T02:45" },
+    { name: "Flying Lotus",    g: "experimental", hl: true, night: "fri", stage: "Sector 3", start: "2026-10-17T03:00", end: "2026-10-17T04:00" },
+    { name: "Blood Orange",    g: "indie",        hl: true, night: "sat", stage: "Mind Melt", start: "2026-10-17T20:40", end: "2026-10-17T21:50" },
 
-    { name: "Kelela",          g: "hiphop",       night: "sat" },
-    { name: "Charlotte de Witte", g: "techno",    night: "sat" },
-    { name: "Tricky",          g: "experimental", night: "sat" },
-    { name: "Honey Dijon",     g: "house",        night: "fri" },
-    { name: "Parcels",         g: "indie",        night: "fri" },
-    { name: "Men I Trust",     g: "indie",        night: "fri" },
-    { name: "PAWSA",           g: "house",        night: "fri" },
-    { name: "horsegiirL",      g: "house",        night: "sat", q: "horsegiirL" },
-    { name: "Sunn O)))",       g: "experimental", night: "sat", q: "Sunn O))) drone metal" },
-    { name: "Floating Points", g: "experimental", night: "fri" },
-    { name: "Seth Troxler",    g: "house",        night: "sat" },
-    { name: "DJ Harvey",       g: "house",        night: "fri" },
+    { name: "Kelela",          g: "hiphop",       night: "sat", stage: "Sector 3", start: "2026-10-17T22:20", end: "2026-10-17T23:05" },
+    { name: "Charlotte de Witte", g: "techno",    night: "sat", stage: "RC95", start: "2026-10-18T03:00", end: "2026-10-18T04:00" },
+    { name: "Tricky",          g: "experimental", night: "sat", stage: "Sector 3", start: "2026-10-17T19:55", end: "2026-10-17T20:45" },
+    { name: "Honey Dijon",     g: "house",        night: "fri", stage: "S3QUENC3", start: "2026-10-17T02:30" },
+    { name: "Parcels",         g: "indie",        night: "fri", stage: "Mind Melt", start: "2026-10-16T20:45", end: "2026-10-16T22:00" },
+    { name: "Men I Trust",     g: "indie",        night: "fri", stage: "Mind Melt", start: "2026-10-16T19:25", end: "2026-10-16T20:15" },
+    { name: "PAWSA",           g: "house",        night: "fri", stage: "Mind Melt", start: "2026-10-17T02:30" },
+    { name: "horsegiirL",      g: "house",        night: "sat", q: "horsegiirL", stage: "Sector 3", start: "2026-10-17T23:30", end: "2026-10-18T00:20" },
+    { name: "Sunn O)))",       g: "experimental", night: "sat", q: "Sunn O))) drone metal", stage: "Sector 3", start: "2026-10-18T03:00", end: "2026-10-18T04:00" },
+    { name: "Floating Points", g: "experimental", night: "fri", stage: "444", start: "2026-10-17T00:00", end: "2026-10-17T04:00" },
+    { name: "Seth Troxler",    g: "house",        night: "sat", stage: "444", start: "2026-10-18T00:00", end: "2026-10-18T04:00" },
+    { name: "DJ Harvey",       g: "house",        night: "fri", stage: "444", start: "2026-10-16T20:00", end: "2026-10-17T00:00" },
 
     { name: "GZA",             g: "hiphop",       night: "fri", note: "performing Liquid Swords" },
-    { name: "Bone Thugs-N-Harmony", g: "hiphop",  night: "fri" },
-    { name: "Danny Brown",     g: "hiphop",       night: "fri" },
-    { name: "Kettama",         g: "house",        night: "sat", q: "Kettama house" },
-    { name: "Disco Lines",     g: "house",        night: "fri" },
-    { name: "Daphni",          g: "house",        night: "sat" },
-    { name: "Cloonee",         g: "house",        night: "fri" },
-    { name: "VTSS",            g: "techno",       night: "sat", q: "VTSS techno" },
+    { name: "Bone Thugs-N-Harmony", g: "hiphop",  night: "fri", stage: "Sector 3", start: "2026-10-16T20:15", end: "2026-10-16T21:00" },
+    { name: "Danny Brown",     g: "hiphop",       night: "fri", stage: "Sector 3", start: "2026-10-17T00:45", end: "2026-10-17T01:30" },
+    { name: "Kettama",         g: "house",        night: "sat", q: "Kettama house", stage: "Mind Melt", start: "2026-10-18T02:45", end: "2026-10-18T04:00" },
+    { name: "Disco Lines",     g: "house",        night: "fri", stage: "RC95", start: "2026-10-17T02:45", end: "2026-10-17T04:00" },
+    { name: "Daphni",          g: "house",        night: "sat", stage: "S3QUENC3", start: "2026-10-17T23:00", end: "2026-10-18T00:15" },
+    { name: "Cloonee",         g: "house",        night: "fri", stage: "Mind Melt", start: "2026-10-16T23:30", end: "2026-10-17T01:00" },
+    { name: "VTSS",            g: "techno",       night: "sat", q: "VTSS techno", stage: "RC95", start: "2026-10-18T00:30", end: "2026-10-18T01:30" },
     { name: "Mary Droppinz",   g: "house",        night: "fri" },
-    { name: "HAAi",            g: "techno",       night: "sat", q: "HAAi techno" },
+    { name: "HAAi",            g: "techno",       night: "sat", q: "HAAi techno", stage: "RC95", start: "2026-10-18T01:30" },
     { name: "Hamdi",           g: "house",        night: "fri", q: "Hamdi bass" },
-    { name: "Adam Port",       g: "house",        night: "sat" },
-    { name: "Lil' Kim",        g: "hiphop",       night: "fri" },
-    { name: "Ki/Ki",           g: "techno",       night: "sat", q: "Ki Ki techno" },
-    { name: "Rusowsky",        g: "indie",        night: "sat" },
-    { name: "Tokischa",        g: "latin",        night: "fri" },
-    { name: "999999999",       g: "techno",       night: "sat", q: "999999999 techno" },
-    { name: "Beltran b2b Ben Sterling", g: "techno", night: "fri", q: "Beltran Ben Sterling" },
-    { name: "Shanti Celeste b2b Peach", g: "house", night: "fri", q: "Shanti Celeste Peach" },
-    { name: "Purity Ring",     g: "indie",        night: "fri" },
-    { name: "DJ Three b2b Sister System", g: "house", night: "sat", q: "DJ Three Sister System" },
-    { name: "Miguelle & Tons b2b Saraga", g: "house", night: "fri", q: "Miguelle Tons Saraga" },
-    { name: "Rebolledo",       g: "house",        night: "sat" },
-    { name: "Tiga",            g: "house",        night: "sat" },
-    { name: "Vintage Culture b2b Max Styler", g: "house", night: "fri", q: "Vintage Culture Max Styler" },
-    { name: "Marco Carola b2b Franky Rizardo", g: "techno", night: "sat", q: "Marco Carola Franky Rizardo" },
-    { name: "Interplanetary Criminal", g: "house", night: "sat", q: "Interplanetary Criminal bass" },
-    { name: "Red Axes",        g: "house",        night: "sat" },
-    { name: "Eli Escobar b2b Jubilee", g: "house", night: "fri", q: "Eli Escobar Jubilee" },
-    { name: "Danny Daze b2b DJ Godfather", g: "house", night: "fri", q: "Danny Daze DJ Godfather" },
+    { name: "Adam Port",       g: "house",        night: "sat", stage: "Mind Melt", start: "2026-10-17T22:15", end: "2026-10-17T23:30" },
+    { name: "Lil' Kim",        g: "hiphop",       night: "fri", stage: "Sector 3", start: "2026-10-16T21:15", end: "2026-10-16T22:00" },
+    { name: "Ki/Ki",           g: "techno",       night: "sat", q: "Ki Ki techno", stage: "RC95", start: "2026-10-17T22:00", end: "2026-10-17T23:15" },
+    { name: "Rusowsky",        g: "indie",        night: "sat", stage: "Sector 3", start: "2026-10-17T21:10", end: "2026-10-17T21:55" },
+    { name: "Tokischa",        g: "latin",        night: "fri", stage: "Mind Melt", start: "2026-10-16T22:30", end: "2026-10-16T23:15" },
+    { name: "999999999",       g: "techno",       night: "sat", q: "999999999 techno", stage: "S3QUENC3", start: "2026-10-18T01:30", end: "2026-10-18T02:45" },
+    { name: "Beltran b2b Ben Sterling", g: "techno", night: "fri", q: "Beltran Ben Sterling", stage: "Mind Melt", start: "2026-10-17T01:00" },
+    { name: "Shanti Celeste b2b Peach", g: "house", night: "fri", q: "Shanti Celeste Peach", stage: "S3QUENC3", start: "2026-10-17T01:00" },
+    { name: "Purity Ring",     g: "indie",        night: "fri", stage: "Sector 3", start: "2026-10-16T23:35", end: "2026-10-17T00:25" },
+    { name: "DJ Three b2b Sister System", g: "house", night: "sat", q: "DJ Three Sister System", stage: "Door IV", start: "2026-10-18T01:00" },
+    { name: "Miguelle & Tons b2b Saraga", g: "house", night: "fri", q: "Miguelle Tons Saraga", stage: "Isotropic", start: "2026-10-16T21:30" },
+    { name: "Rebolledo",       g: "house",        night: "sat", stage: "S3QUENC3", start: "2026-10-17T19:15", end: "2026-10-17T20:30" },
+    { name: "Tiga",            g: "house",        night: "sat", stage: "S3QUENC3", start: "2026-10-18T02:45", end: "2026-10-18T04:00" },
+    { name: "Vintage Culture b2b Max Styler", g: "house", night: "fri", q: "Vintage Culture Max Styler", stage: "Isotropic", start: "2026-10-17T02:00", end: "2026-10-17T04:00" },
+    { name: "Marco Carola b2b Franky Rizardo", g: "techno", night: "sat", q: "Marco Carola Franky Rizardo", stage: "Isotropic", start: "2026-10-18T02:30" },
+    { name: "Interplanetary Criminal", g: "house", night: "sat", q: "Interplanetary Criminal bass", stage: "S3QUENC3", start: "2026-10-18T00:15", end: "2026-10-18T01:30" },
+    { name: "Red Axes",        g: "house",        night: "sat", stage: "444", start: "2026-10-17T20:00", end: "2026-10-18T00:00" },
+    { name: "Eli Escobar b2b Jubilee", g: "house", night: "fri", q: "Eli Escobar Jubilee", stage: "S3QUENC3", start: "2026-10-16T22:00", end: "2026-10-16T23:30" },
+    { name: "Danny Daze b2b DJ Godfather", g: "house", night: "fri", q: "Danny Daze DJ Godfather", stage: "S3QUENC3", start: "2026-10-16T23:30", end: "2026-10-17T01:00" },
   ];
 
   const NIGHT_LABEL = { fri: "FRI", sat: "SAT" };

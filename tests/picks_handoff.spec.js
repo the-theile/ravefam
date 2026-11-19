@@ -3,6 +3,12 @@
 const { test, expect } = require('@playwright/test');
 const { bootAuthedApp, seedData } = require('./helpers');
 
+// Two tests here load the app a second time. Without this, the service worker
+// registered by the first load answers the second one, and it serves the real
+// self-hosted supabase-js from its cache — page.route() stubs never see
+// requests a worker makes — so the app boots signed out.
+test.use({ serviceWorkers: 'block' });
+
 function data() {
   const d = seedData();
   d.festivals[0].slug = 'tomorrowland-2099';           // r-you is Going (seed)

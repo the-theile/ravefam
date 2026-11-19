@@ -49,19 +49,19 @@ function seedWithPrefs() {
 const calls = (page, name) => page.evaluate((n) => window.__native.calls.filter(c => c.name === n), name);
 
 test.describe('iOS app · App Store fixes', () => {
-  test('signed out: the BETA banner is hidden in the app and shown on the web', async ({ page, browser }) => {
+  test('signed out: no BETA banner in the app or on the web (out of beta, 2.40.5)', async ({ page, browser }) => {
     await installCapacitorStub(page);
     await installSupabaseStub(page, { session: null, data: seedData() });
     await page.goto('/app.html');
     await expect(page.locator('#auth-screen')).not.toHaveClass(/hidden/);
     await expect(page.locator('html')).toHaveClass(/is-native-app/);
-    await expect(page.locator('.landing-beta')).toBeHidden();
+    await expect(page.locator('.landing-beta')).toHaveCount(0);
 
     const web = await browser.newPage();
     await installSupabaseStub(web, { session: null, data: seedData() });
     await web.goto('/app.html');
     await expect(web.locator('#auth-screen')).not.toHaveClass(/hidden/);
-    await expect(web.locator('.landing-beta')).toBeVisible();
+    await expect(web.locator('.landing-beta')).toHaveCount(0);
     await web.close();
   });
 

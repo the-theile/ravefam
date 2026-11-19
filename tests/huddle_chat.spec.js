@@ -10,6 +10,9 @@ const { bootAuthedApp, collectPageErrors, seedData, TEST_UID } = require('./help
 const now = Date.now();
 const minsAgo = (m) => new Date(now - m * 60000).toISOString();
 const daysAgo = (d, m = 0) => new Date(now - d * 86400000 - m * 60000).toISOString();
+// Yesterday at 12:MM local time. "1 day + N minutes ago" crossed midnight
+// when the suite ran in the small hours, splitting one sender's group.
+const yesterdayAt = (m) => { const d = new Date(now); d.setDate(d.getDate() - 1); d.setHours(12, m, 0, 0); return d.toISOString(); };
 
 function seedWithChat(over = {}) {
   const data = seedData();
@@ -17,9 +20,9 @@ function seedWithChat(over = {}) {
     { id: 'room-main', crew_id: 'c1', room_key: 'main', kind: 'main', name: 'Main Huddle', festival_id: null, created_by: TEST_UID, created_at: '2024-01-01T00:00:00Z' },
   ];
   data.huddle_messages = [
-    { id: 'm1', room_id: 'room-main', crew_id: 'c1', sender_id: 'kai-uid', kind: 'text', body: 'who is driving tomorrow', reactions: {}, created_at: daysAgo(1, 90), deleted_at: null, mentions: [] },
-    { id: 'm2', room_id: 'room-main', crew_id: 'c1', sender_id: 'kai-uid', kind: 'text', body: 'i can take four', reactions: {}, created_at: daysAgo(1, 89), deleted_at: null, mentions: [] },
-    { id: 'm3', room_id: 'room-main', crew_id: 'c1', sender_id: TEST_UID, kind: 'text', body: 'riding with you', reactions: {}, created_at: daysAgo(1, 87), deleted_at: null, mentions: [] },
+    { id: 'm1', room_id: 'room-main', crew_id: 'c1', sender_id: 'kai-uid', kind: 'text', body: 'who is driving tomorrow', reactions: {}, created_at: yesterdayAt(0), deleted_at: null, mentions: [] },
+    { id: 'm2', room_id: 'room-main', crew_id: 'c1', sender_id: 'kai-uid', kind: 'text', body: 'i can take four', reactions: {}, created_at: yesterdayAt(1), deleted_at: null, mentions: [] },
+    { id: 'm3', room_id: 'room-main', crew_id: 'c1', sender_id: TEST_UID, kind: 'text', body: 'riding with you', reactions: {}, created_at: yesterdayAt(3), deleted_at: null, mentions: [] },
     { id: 'm4', room_id: 'room-main', crew_id: 'c1', sender_id: 'kai-uid', kind: 'text', body: 'do not be late', reactions: {}, created_at: minsAgo(5), deleted_at: null, mentions: [] },
   ];
   data.huddle_room_reads = [{ room_id: 'room-main', user_id: TEST_UID, last_read_at: minsAgo(30) }];
@@ -270,7 +273,7 @@ test.describe('huddle chat · mentions', () => {
 });
 
 test.describe('huddle chat · crew detail entry', () => {
-  test('the crew tile shows a preview with the unread count and launches the chat', async ({ page }) => {
+  test('the Huddle dock shows the unread count and launches the chat', async ({ page }) => {
     await bootAuthedApp(page, {
       data: seedWithChat(),
       sessionOver: { user_metadata: { guidance_dismissed: true, seen_tips: { beacon: true } } },
@@ -278,8 +281,8 @@ test.describe('huddle chat · crew detail entry', () => {
     await page.evaluate(async () => { await openDetail('c1'); await loadHuddleActivityCache(); rerenderHuddleTilePreview('c1'); });
     await page.waitForTimeout(300);
 
-    const preview = page.locator('.huddle-tile-preview');
-    await expect(preview).toContainText('unread');
+    const preview = page.locator('#huddle-tile-preview-root .hd-dock');
+    await expect(preview).toHaveAttribute('aria-label', /1 unread/);
     await expect(preview.locator('.huddle-cta-count')).toHaveText('1');
 
     // The conversation itself is not inlined into crew detail anymore.
@@ -288,14 +291,14 @@ test.describe('huddle chat · crew detail entry', () => {
     await expect(page.locator('#huddle-screen')).toHaveClass(/open/);
   });
 
-  test('tapping the Huddle tile opens the chat in one tap', async ({ page }) => {
+  test('tapping the Huddle dock opens the chat in one tap', async ({ page }) => {
     await bootAuthedApp(page, {
       data: seedWithChat(),
       sessionOver: { user_metadata: { guidance_dismissed: true, seen_tips: { beacon: true } } },
     });
     await page.evaluate(async () => { await openDetail('c1'); });
     await expect(page.locator('#huddle-screen')).toHaveCount(0);
-    await page.locator('.crew-feature-tile[data-feature="huddle"]').click();
+    await page.locator('#huddle-tile-preview-root .hd-dock').click();
     await expect(page.locator('#huddle-screen')).toHaveClass(/open/);
   });
 
