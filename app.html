@@ -5602,7 +5602,7 @@
   .crew-ticket-progress b { color: var(--paper-ink); }
   .crew-ticket-track { flex: 1; height: 6px; border-radius: 3px; background: rgba(var(--black-rgb),0.1); overflow: hidden; }
   .crew-ticket-track i { display: block; height: 100%; border-radius: 3px; background: var(--paper-ink); }
-  .crew-ticket-acts { display: flex !important; gap: 6px; margin-top: 10px; }
+  .crew-ticket-acts { display: flex !important; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
   .crew-ticket-act { border: none; cursor: pointer; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.72rem; padding: 7px 12px; border-radius: 100px; background: var(--paper-edge); color: var(--surface2); }
   .crew-ticket-act.is-hot { background: var(--paper-ink); color: var(--white); }
 
@@ -11346,7 +11346,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.48.0';
+  const APP_VERSION = '2.49.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -22855,6 +22855,8 @@
       const when = d ? `${d.getDate()} ${MON_SHORT[d.getMonth()]}` : '';
       const faces = who.slice(0, 6).map(p => raverAvatarHTML(p.avatarUrl, p.gradient, p.name, 'avatar crew-ticket-face', '')).join('');
       const more = who.length > 6 ? `<span class="crew-ticket-more">+${who.length - 6}</span>` : '';
+      // Rave Check for this crew: only while the rave is ahead and someone here hasn't RSVPd.
+      const canRaveCheck = n !== null && n >= 0 && raveCheckPending(f, festivalGoers(f.id), festivalInterestedGoers(f.id), crew.id).length > 0;
       return `
         <div class="crew-ticket${f === live[0].festival ? ' is-next' : ''}" role="button" tabindex="0" data-fest="${escHtml(String(f.id))}" onclick="openCrewFeedPlan(this.dataset.fest)" onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openCrewFeedPlan(this.dataset.fest);}" aria-label="Open the Rave Plan for ${escHtml(f.name)}">
           <span class="crew-ticket-top">
@@ -22873,6 +22875,7 @@
             <span class="crew-ticket-acts">
               <button type="button" class="crew-ticket-act is-hot" data-fest="${escHtml(String(f.id))}" onclick="event.stopPropagation(); openMissionBriefing(activeDetailId, this.dataset.fest)">🎯 Briefing</button>
               <button type="button" class="crew-ticket-act" data-fest="${escHtml(String(f.id))}" onclick="event.stopPropagation(); openHuddleForFestival(activeDetailId, this.dataset.fest)">💬 Rave chat</button>
+              ${canRaveCheck ? `<button type="button" class="crew-ticket-act" data-fest="${escHtml(String(f.id))}" onclick="event.stopPropagation(); openCrewRaveCheck(activeDetailId, this.dataset.fest)">🎧 Rave check</button>` : ''}
             </span>
           </span>
         </div>`;
@@ -39822,10 +39825,21 @@
     return 'open';
   }
 
-  // Crewmates who are neither Going nor Interested.
-  function raveCheckPending(f, goers, interestedPeople) {
+  // Crewmates who are neither Going nor Interested. crewId narrows it to one
+  // crew's members (the crew screen's Rave Plan ticket).
+  function raveCheckPending(f, goers, interestedPeople, crewId = null) {
     const answered = new Set([...goers, ...interestedPeople].map(r => String(r.id)));
-    return raveCheckCrewmates().filter(r => !answered.has(String(r.id)));
+    const crew = crewId ? getCrew(crewId) : null;
+    const inCrew = crew ? new Set((crew.squadIds || []).map(String)) : null;
+    return raveCheckCrewmates().filter(r => !answered.has(String(r.id)) && (!inCrew || inCrew.has(String(r.id))));
+  }
+
+  // "🎧 Rave check" on a crew's Rave Plan ticket: load who was checked
+  // recently (so they show as skipped), then open the sheet for that crew only.
+  async function openCrewRaveCheck(crewId, festId) {
+    if (!currentUser || !getFestival(festId)) return;
+    await loadRaveCheckStatus(festId);
+    openRaveCheckSheet(festId, null, crewId);
   }
 
   const raveCheckEqIcon = () => '<span class="rc-eq" aria-hidden="true"><i></i><i></i><i></i></span>';
@@ -39914,11 +39928,12 @@
     };
   }
 
-  // raverIds null = everyone still open on this rave.
-  function openRaveCheckSheet(festId, raverIds) {
+  // raverIds null = everyone still open on this rave (in crewId's crew, if given).
+  function openRaveCheckSheet(festId, raverIds, crewId = null) {
     const f = getFestival(festId);
     if (!f || !currentUser) return;
-    const pending = raveCheckPending(f, festivalGoers(f.id), festivalInterestedGoers(f.id));
+    const pending = raveCheckPending(f, festivalGoers(f.id), festivalInterestedGoers(f.id), crewId);
+    const crewName = crewId ? getCrew(crewId)?.name : null;
     const open = pending.filter(r => raveCheckState(f.id, r.id) === 'open');
     const picked = raverIds ? open.filter(r => raverIds.some(id => String(id) === String(r.id))) : open;
     if (!picked.length) { showToast('Everyone here has been rave-checked'); return; }
@@ -39931,7 +39946,7 @@
         <button type="button" class="page-panel-back" aria-label="Close" onclick="closeRaveCheckSheet()">✕</button>
       </div>
       <div class="modal-title" id="rave-check-sheet-title" style="margin-bottom:4px;">${picked.length > 1 ? `Rave check ${picked.length} people` : `Rave check ${first(picked[0])}`}</div>
-      <p class="text-hint" style="margin-bottom:12px;">${escHtml(f.name)} · they can answer I'm in, Maybe or Can't make it</p>
+      <p class="text-hint" style="margin-bottom:12px;">${escHtml(f.name)}${crewName ? ` · ${escHtml(crewName)}` : ''} · they can answer I'm in, Maybe or Can't make it</p>
       <div class="rc-who">${pills}${skipped.length ? `<span class="text-hint-xs">Skipping ${skipped.map(first).join(', ')} (checked recently)</span>` : ''}</div>
       <div class="rc-presets">${RAVE_CHECK_PRESETS.map(p => `<button type="button" class="rc-preset" aria-pressed="false" onclick="raveCheckPickPreset(this)">${escHtml(p)}</button>`).join('')}</div>
       <input class="form-input" id="rave-check-note" aria-label="Add a note" placeholder="Add a note (optional)" maxlength="80" autocomplete="off" oninput="raveCheckSyncPresets()">
