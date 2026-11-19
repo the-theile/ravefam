@@ -76,6 +76,10 @@ h1 { font-family: 'Orbitron'; font-weight: 900; line-height: 0.98; letter-spacin
 .actions { position: absolute; left: 64px; right: 64px; display: flex; flex-direction: column; gap: 14px; }
 .actions div { border-radius: 30px; padding: 24px 36px; font-size: 36px; font-weight: 700; background: rgba(38,32,58,0.86); border: 1.5px solid rgba(255,255,255,0.12); }
 .actions .in { color: #39FF14; } .actions .maybe { color: #00F5FF; } .actions .no { color: #b9b0d6; }
+.shot { position: absolute; left: 50%; transform: translateX(-50%); width: 900px; border-radius: 36px; overflow: hidden;
+  box-shadow: 0 30px 100px -18px rgba(177,92,255,0.6), 0 0 0 2px rgba(243,238,251,0.14); }
+.shot img { display: block; width: 100%; }
+.ring { position: absolute; border-radius: 999px; border: 5px solid #39FF14; box-shadow: 0 0 0 8px rgba(57,255,20,0.18), 0 0 40px rgba(57,255,20,0.7); }
 .press { position: absolute; right: 120px; width: 120px; height: 120px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.55); box-shadow: 0 0 0 18px rgba(255,255,255,0.08), 0 0 60px rgba(177,92,255,0.6); }
 `;
 
@@ -93,7 +97,10 @@ ${s.body}
 const phone = (shot, top, h, pos = 'top') => `<div class="phone" style="top:${top}px"><div class="screen" style="height:${h}px"><img src="../shots/${shot}" style="width:100%;height:100%;object-fit:cover;object-position:${pos}"></div></div>`;
 
 const LIVE = 'Live now · <b>myravefam.com</b>';
-const N = 4;
+const N = 5;
+// ticket.png is 1170px wide (390pt @3x); px() maps its pixels onto the slide.
+const SHOT_W = 760;
+const px = v => Math.round(v * SHOT_W / 1170);
 
 slide('slide1', 'NEW', 1, N, `<div class="copy"><div class="eyebrow">New on RaveFAM</div>
   <h1 style="font-size:150px">Rave<br>Check</h1>
@@ -105,15 +112,21 @@ slide('slide2', 'NEW', 2, N, `<div class="copy"><div class="eyebrow">One tap · 
   <div class="sub">They answer <b>I'm in</b>, <b>Maybe</b> or <b>Can't make it</b>. Every answer is welcome.</div></div>
   ${phone('card.png', 600, 500, 'center 44%')}`, LIVE);
 
-slide('slide3', 'HOW IT WORKS', 3, N, `<div class="copy"><div class="eyebrow">Open a rave · Crew tab</div>
+slide('slide3', 'NEW', 3, N, `<div class="copy"><div class="eyebrow">From your crew screen</div>
+  <h1 style="font-size:92px">Right on the<br>Rave Plan</h1>
+  <div class="sub">Open your crew and tap <b>🎧 Rave check</b> on the next rave. Just that crew, no digging.</div></div>
+  <div class="shot" style="top:575px;width:${SHOT_W}px"><img src="../shots/ticket.png">
+    <div class="ring" style="left:${px(650)}px;top:${px(804)}px;width:${px(316)}px;height:${px(104)}px"></div></div>`, LIVE);
+
+slide('slide4', 'HOW IT WORKS', 4, N, `<div class="copy"><div class="eyebrow">Three taps, done</div>
   <h1 style="font-size:92px">No more<br>"so... are<br>we going??"</h1>
   <div class="steps">
-    <div class="step"><div class="n">1</div><div class="t"><b>Tap Rave check?</b>Next to anyone who hasn't RSVPd. Add a note: Carpool? 🚗</div></div>
+    <div class="step"><div class="n">1</div><div class="t"><b>Tap Rave check</b>On your crew's Rave Plan or a rave's Crew tab. Add a note: Carpool? 🚗</div></div>
     <div class="step"><div class="n">2</div><div class="t"><b>They answer in one tap</b>In the app, with a push if notifications are on.</div></div>
     <div class="step"><div class="n">3</div><div class="t"><b>Watch the crew meter fill</b>See who's in at a glance. No spam: one check per 48h.</div></div>
   </div></div>`, LIVE);
 
-slide('slide4', 'SNEAK PEEK', 4, N, `<div class="copy"><span class="soon">⏳ Coming soon · iOS app</span>
+slide('slide5', 'SNEAK PEEK', 5, N, `<div class="copy"><span class="soon">⏳ Coming soon to the iOS app</span>
   <h1 style="font-size:84px">Answer from<br>your lock screen</h1>
   <div class="sub">Long-press the push and tap your answer.</div></div>
   <div class="notif" style="top:640px"><img src="../brand-mark.svg" alt=""><div class="body"><div class="app"><span>RaveFAM</span><span>now</span></div>
