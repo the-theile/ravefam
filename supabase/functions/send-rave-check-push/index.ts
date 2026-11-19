@@ -121,10 +121,13 @@ Deno.serve(async (req) => {
     const payload = JSON.stringify({ title, body, url: path, tag });
     const apnsMessage: ApnsMessage = {
       title, body,
-      data: { url: path, raveCheckId: check.id },
+      data: { url: path, raveCheckId: check.id, festivalId: check.festival_id },
       collapseId: tag,
       threadId: tag,
       ttlSeconds: 86400,
+      // Long-press: I'm in / Maybe / Can't make it (needs the app build that
+      // registers RAVE_CHECK; older builds show the plain notification).
+      category: "RAVE_CHECK",
     };
 
     const { data: subs } = await sb.from("push_subscriptions").select("endpoint, p256dh, auth").eq("user_id", userId);

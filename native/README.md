@@ -95,6 +95,10 @@ Each native PR adds a line here; **After release** holds web changes that wait o
   `/countdown/<token>?json=1` every few hours and rolls the count over at local midnight
   - The new App ID needs the same App Groups capability (`group.com.myravefam.app`); same fix as above
     if the archive fails on provisioning
+- Rave Check long-press replies: `AppDelegate` registers the `RAVE_CHECK` notification category
+  (I'm in / Maybe / Can't make it; each opens the app after unlock). `send-rave-check-push` already
+  sets `aps.category`, and `openFromNativePush` in `app.html` saves the answer (since 2.48.0); older
+  builds just show the plain notification
 
 **After release**
 - Re-add `/lineup-explorer` and `/lineup-explorer/*` to `.well-known/apple-app-site-association`
