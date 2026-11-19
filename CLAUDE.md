@@ -37,6 +37,11 @@ grant select, insert, update, delete on public.my_table to service_role;  -- edg
 Tables only touched by `security definer` RPCs or edge functions need just
 the `service_role` grant.
 
+A migration pasted into the dashboard SQL editor still gets the old default
+grants (select/insert/update/delete for `authenticated`) on new tables
+(seen Nov 19 2026). For tables clients shouldn't touch directly, add
+`revoke all on public.my_table from anon, authenticated;` to the migration.
+
 ### Applying them from a cloud session (approval prompts)
 
 Learned the hard way (Oct 17 – Nov 4 2026):
@@ -48,6 +53,8 @@ Learned the hard way (Oct 17 – Nov 4 2026):
   That question never reaches the owner in the iOS app, so the call times
   out after 60s ("The server asked the user a question…"). Clearing other
   sessions' stuck prompts did not help (tested Nov 4 2026).
+- A `delete` inside a function body counts too: a migration whose only
+  deletes are in `create function` bodies still timed out (Nov 19 2026).
 
 So for destructive SQL, don't call the connector. Commit the migration file,
 then give the owner the exact SQL to paste into the Supabase dashboard's SQL
