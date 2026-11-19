@@ -599,10 +599,11 @@ test.describe('new crew page · Plan view', () => {
     await expect(plan.locator('.section-banner').first()).toBeHidden();
     await expect(plan.locator('.crew-plan-tabs .game-plan-section-tab')).toHaveText(['Tasks', 'Roles', 'Rides', 'Stay', 'Outfit', 'Lineup']);
     await expect(plan.locator('.crew-plan-help')).toBeVisible();
-    // …and the ticket carries Briefing and the rave's chat instead of its barcode.
+    // …and the ticket carries Briefing and the rave's chat instead of its barcode,
+    // plus Rave check (2.49.0) since Kai, a claimed crewmate, hasn't RSVPd.
     const ticket = page.locator('.crew-ticket[data-fest="f1"]');
     await expect(ticket.locator('.crew-ticket-foot')).toBeHidden();
-    await expect(ticket.locator('.crew-ticket-act')).toHaveText(['🎯 Briefing', '💬 Rave chat']);
+    await expect(ticket.locator('.crew-ticket-act')).toHaveText(['🎯 Briefing', '💬 Rave chat', '🎧 Rave check']);
     await expect(ticket.locator('.crew-ticket-progress')).toContainText('No tasks yet');
     expect(errors).toEqual([]);
   });
