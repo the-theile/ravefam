@@ -56,6 +56,26 @@ test('sender: crew tab + send sheet', async ({ page }) => {
   await page.screenshot({ path: path.join(OUT, 'sheet.png'), animations: 'disabled' });
 });
 
+test('crew screen: Rave Plan ticket with the Rave check button', async ({ page }) => {
+  const data = crewData('Alex', [
+    { id: 'r-jess', name: 'Jess', uid: 'u-jess', g: G.green }, { id: 'r-marco', name: 'Marco', uid: 'u-marco', g: G.cyan },
+    { id: 'r-priya', name: 'Priya', uid: 'u-priya', g: G.yellow }, { id: 'r-dani', name: 'Dani', uid: 'u-dani', g: G.orange },
+    { id: 'r-kev', name: 'Kev', uid: 'u-kev', g: G.purple }, { id: 'r-sam', name: 'Sam', uid: 'u-sam', g: G.pink },
+  ]);
+  data.raver_festivals = ['r-you', 'r-jess', 'r-marco'].map(id => ({ raver_id: id, festival_id: 'f9' }));
+  data.raver_festival_interest = [{ raver_id: 'r-priya', festival_id: 'f9' }];
+  await bootAuthedApp(page, { data });
+  await page.evaluate(async () => { await openDetail('c1', { tab: 'gameplan' }); });
+  // The test account's quest banner isn't part of the feature; hide it.
+  await page.evaluate(() => document.querySelectorAll('.crew-quests').forEach(el => { el.style.display = 'none'; }));
+  await page.waitForTimeout(700);
+  // From the crew name down to the bottom of the ticket (skips the app header).
+  const name = await page.getByText('Bass Fam', { exact: true }).filter({ visible: true }).first().boundingBox();
+  const t = await page.locator('.crew-ticket[data-fest="f9"]').boundingBox();
+  const top = Math.max(0, Math.floor(name.y - 60));
+  await page.screenshot({ path: path.join(OUT, 'ticket.png'), animations: 'disabled', clip: { x: 0, y: top, width: 390, height: Math.ceil(t.y + t.height + 14 - top) } });
+});
+
 test('receiver: card in the rave popup', async ({ page }) => {
   const data = crewData('Dani', [
     { id: 'r-alex', name: 'Alex', uid: 'u-alex', g: G.pink }, { id: 'r-jess', name: 'Jess', uid: 'u-jess', g: G.green },

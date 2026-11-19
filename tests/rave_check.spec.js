@@ -152,6 +152,40 @@ test.describe('rave check', () => {
     expect(await rpcCalls(page, 'reply_rave_check')).toHaveLength(0);
   });
 
+  test('crew ticket: "Rave check" opens the sheet for that crew only', async ({ page }) => {
+    // c1 Bass Syndicate: you + Sam (unclaimed, Going) + Kai (claimed, no RSVP) -> Tomorrowland is a live Rave Plan.
+    // c2 Day Ones: you + Lu (claimed, no RSVP). Lu must not show up from c1's ticket.
+    const data = seedData();
+    data.ravers = data.ravers.concat([{ ...data.ravers.find(r => r.id === 'r-kai'), id: 'r-lu', name: 'Lu V.', handle: 'lu', claimed_by: 'lu-uid', qr_token: 'qr-lu' }]);
+    data.crews = data.crews.concat([{ ...data.crews[0], id: 'c2', name: 'Day Ones', invite_token: 'inv-c2' }]);
+    data.crew_members = data.crew_members.concat(['r-you', 'r-lu'].map(id => ({ crew_id: 'c2', raver_id: id, added_at: '2024-01-01T00:00:00Z', added_by: TEST_UID, deleted_at: null })));
+    data.__rpc = { rave_check_status: [] };
+    const errors = await bootAuthedApp(page, { data });
+    // The ticket's action row shows on the crew's Plan view (like Briefing / Rave chat).
+    await page.evaluate(async () => { await openDetail('c1', { tab: 'gameplan' }); });
+
+    const btn = page.locator('.crew-ticket[data-fest="f1"] .crew-ticket-act', { hasText: 'Rave check' });
+    await expect(btn).toHaveCount(1);
+    await btn.click();
+    const sheet = page.locator('#rave-check-sheet-overlay');
+    await expect(sheet).toHaveClass(/open/);
+    await expect(sheet.locator('.modal-title')).toHaveText('Rave check Kai');
+    await expect(sheet.locator('.text-hint').first()).toContainText('Tomorrowland · Bass Syndicate');
+    await expect(sheet.locator('.rc-who')).not.toContainText('Lu');
+    // It loaded the cooldown state before opening.
+    expect((await rpcCalls(page, 'rave_check_status'))[0].args).toEqual({ p_festival_id: 'f1' });
+    expect(errors).toEqual([]);
+  });
+
+  test('crew ticket: no Rave check button once everyone in the crew has answered', async ({ page }) => {
+    const data = seedData();
+    data.raver_festival_interest = data.raver_festival_interest.concat([{ raver_id: 'r-kai', festival_id: 'f1' }]);
+    await bootAuthedApp(page, { data });
+    await page.evaluate(async () => { await openDetail('c1'); });
+    await expect(page.locator('.crew-ticket[data-fest="f1"] .crew-ticket-act', { hasText: 'Rave chat' })).toHaveCount(1);
+    await expect(page.locator('.crew-ticket[data-fest="f1"] .crew-ticket-act', { hasText: 'Rave check' })).toHaveCount(0);
+  });
+
   test('settings: the Rave checks push toggle is listed under notifications', async ({ page }) => {
     await bootAuthedApp(page);
     await expect(page.locator('#rave-check-push-settings-toggle')).toHaveCount(1);
