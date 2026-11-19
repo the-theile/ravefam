@@ -46,6 +46,10 @@ alter table public.raver_connect_codes enable row level security;
 alter table public.raver_connections enable row level security;
 grant select, insert, update, delete on public.raver_connect_codes to service_role;
 grant select, insert, update, delete on public.raver_connections to service_role;
+-- A dashboard SQL-editor run still applies the default grants, so take them
+-- back explicitly.
+revoke all on public.raver_connect_codes from anon, authenticated;
+revoke all on public.raver_connections from anon, authenticated;
 
 -- ── Helpers ───────────────────────────────────────────────
 create or replace function public.users_blocked_either_way(p_a uuid, p_b uuid)

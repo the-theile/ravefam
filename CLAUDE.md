@@ -37,6 +37,11 @@ grant select, insert, update, delete on public.my_table to service_role;  -- edg
 Tables only touched by `security definer` RPCs or edge functions need just
 the `service_role` grant.
 
+A migration pasted into the dashboard SQL editor still gets the old default
+grants (select/insert/update/delete for `authenticated`) on new tables
+(seen Nov 19 2026). For tables clients shouldn't touch directly, add
+`revoke all on public.my_table from anon, authenticated;` to the migration.
+
 ### Applying them from a cloud session (approval prompts)
 
 Learned the hard way (Oct 17 – Nov 4 2026):
