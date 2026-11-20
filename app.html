@@ -527,6 +527,18 @@
   .crew-row-avs .avatar:first-child { margin-left: 0; }
   @media (max-width: 380px) { .crew-row-avs { display: none; } }
   .crew-card.is-open .crew-row-chev { transform: rotate(180deg); }
+  /* Open row: the header carries the crew's identity (bigger totem + name);
+     the next-rave line moves out since the body shows it larger. */
+  .crew-card.is-open .crew-row-toggle { min-height: 92px; gap: 14px; }
+  .crew-card.is-open .crew-row-totem {
+    width: 66px; height: 66px;
+    border-radius: 17px;
+    font-size: 1.7rem;
+    box-shadow: 0 0 18px color-mix(in srgb, var(--accent-a, var(--neon-pink)) 35%, transparent);
+  }
+  .crew-card.is-open .crew-row-totem.is-zoomable { cursor: zoom-in; }
+  .crew-card.is-open .crew-row-text .crew-name { font-size: 1.42rem; line-height: 1.1; }
+  .crew-row-lead { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; }
   /* Live: a crewmate is in this crew's Huddle or Rave Plan right now
      (see CREW PRESENCE). Throbs in the crew's own colour — quicker for chat,
      slower for planning. */
@@ -603,6 +615,8 @@
   .crew-row-last b { color: var(--white); }
   .crew-row-fam { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .crew-row-fam-label { font-size: 0.7rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; text-align: right; }
+  /* The header shows members/lead on open rows, unless a live line has taken that slot. */
+  .crew-card:not(.is-live) .crew-row-fam-label { display: none; }
   .crew-row-body .huddle-cta-btn { margin-top: 0; }
   .crew-row-foot { display: flex; align-items: center; justify-content: space-between; min-height: 24px; }
   .crew-row-open {
@@ -11211,7 +11225,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.46.0';
+  const APP_VERSION = '2.47.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -19957,6 +19971,13 @@
     return `${count} ${count !== 1 ? 'members' : 'member'}`;
   }
 
+  // Open row's subtitle: the body already shows the next rave, so the header
+  // carries members + lead instead.
+  function crewRowOpenSub(crew) {
+    const count = crew.members.length;
+    return `<span class="crew-row-lead">${count} ${count !== 1 ? 'members' : 'member'}${crew.isLead ? ' · 👑 You lead' : ''}</span>`;
+  }
+
   // Patches just the one row in place: re-rendering the whole list on every
   // join/leave would restart every other row's throb mid-pulse.
   function refreshCrewPresenceRow(crewId) {
@@ -19967,7 +19988,7 @@
     card.classList.remove('is-live', 'is-live-huddle', 'is-live-plan', 'is-live-mixed');
     if (live) card.classList.add('is-live', 'is-live-' + live.kind);
     const sub = card.querySelector('.crew-row-sub');
-    if (sub) sub.innerHTML = live ? live.html : crewRowBaseSub(crew);
+    if (sub) sub.innerHTML = live ? live.html : (card.classList.contains('is-open') ? crewRowOpenSub(crew) : crewRowBaseSub(crew));
   }
 
   function toggleCrewActivitySharing(btn) {
@@ -20008,7 +20029,9 @@
     showToast("🎟️ You're going too!");
   }
 
-  function crewRowTotemHTML(crew) {
+  function crewRowTotemHTML(crew, isOpen) {
+    // Open row: tapping the photo opens it full size instead of collapsing the row.
+    if (crew.totemPhotoUrl && isOpen) return `<span class="crew-row-totem is-zoomable" title="View crew totem" onclick="event.stopPropagation(); openPhotoLightbox('${escJsAttr(crew.totemPhotoUrl)}', null, null, '✦ crew totem ✦')"><img src="${escHtml(crew.totemPhotoUrl)}" alt=""></span>`;
     if (crew.totemPhotoUrl) return `<span class="crew-row-totem"><img src="${escHtml(crew.totemPhotoUrl)}" alt=""></span>`;
     const glyph = crew.totemIcon
       ? (TOTEM_ICON_MAP[crew.totemIcon] || '✦')
@@ -20025,7 +20048,7 @@
     const count = crew.members.length;
     const membersLabel = `${count} ${count !== 1 ? 'members' : 'member'}`;
     // A crewmate being here right now outranks the countdown line.
-    const sub = crewPresenceLine(crew.id)?.html || crewRowBaseSub(crew);
+    const sub = crewPresenceLine(crew.id)?.html || (isOpen ? crewRowOpenSub(crew) : crewRowBaseSub(crew));
 
     // Collapsed rows carry the Huddle signal; the open row shows the full CTA instead.
     const badge = isOpen ? null : huddleActivityBadge(crew.id);
@@ -20036,7 +20059,7 @@
     const head = `
       <button type="button" class="crew-row-toggle" aria-expanded="${isOpen}" aria-controls="${bodyId}" onclick="toggleCrewRow('${jsId}')">
         <span class="crew-row-stripe" style="background:${safeGradient(crew.gradient)}"></span>
-        ${crewRowTotemHTML(crew)}
+        ${crewRowTotemHTML(crew, isOpen)}
         <span class="crew-row-text">
           <span class="crew-name">${escHtml(crew.name)}</span>
           <span class="crew-row-sub">${sub}</span>
