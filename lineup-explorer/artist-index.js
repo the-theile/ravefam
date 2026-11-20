@@ -215,6 +215,7 @@ window.ARTIST_INDEX = [
   { name: "Chris Stassy", name_lower: "chris stassy", slug: "chris-stassy", festivals: [{ slug: "coachella-2027", title: "Coachella 2027" }] },
   { name: "CHYL", name_lower: "chyl", slug: "chyl", festivals: [{ slug: "nocturnal-wonderland-2026", title: "Nocturnal Wonderland 2026" }] },
   { name: "CID", name_lower: "cid", slug: "cid", festivals: [{ slug: "breakaway-philadelphia-2026", title: "Breakaway Philadelphia 2026" }, { slug: "edc-orlando-2026", title: "EDC Orlando 2026" }] },
+  { name: "Cirez D", name_lower: "cirez d", slug: "cirez-d", festivals: [{ slug: "ultra-music-festival-miami-2027", title: "Ultra Music Festival Miami 2027" }] },
   { name: "Clara Cuvé", name_lower: "clara cuvé", slug: "clara-cuve", festivals: [{ slug: "edsea-2027", title: "EDSea 2027" }] },
   { name: "Clawz presents: For The Floor", name_lower: "clawz presents: for the floor", slug: "clawz-presents-for-the-floor", festivals: [{ slug: "wasteland-2026", title: "Wasteland 2026" }] },
   { name: "Claybrook", name_lower: "claybrook", slug: "claybrook", festivals: [{ slug: "tapesgiving-2026", title: "Tapesgiving 2026" }] },
