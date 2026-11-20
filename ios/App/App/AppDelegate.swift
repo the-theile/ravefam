@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import UserNotifications
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -7,8 +8,36 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        registerNotificationCategories()
         return true
+    }
+
+    // Long-press actions on pushes. A push opts in with aps.category (see
+    // supabase/functions/send-rave-check-push). Capacitor's NotificationRouter
+    // stays the notification-center delegate and hands the tapped action to
+    // the web layer as pushNotificationActionPerformed { actionId }, where
+    // openFromNativePush() in app.html saves the answer. Each action opens the
+    // app (.foreground) so the reply runs with the signed-in web session;
+    // .authenticationRequired keeps a locked phone from answering for you.
+    private func registerNotificationCategories() {
+        let options: UNNotificationActionOptions = [.foreground, .authenticationRequired]
+        let raveCheck = UNNotificationCategory(
+            identifier: "RAVE_CHECK",
+            actions: [
+                UNNotificationAction(identifier: "rc_in", title: "I'm in", options: options),
+                UNNotificationAction(identifier: "rc_maybe", title: "Maybe", options: options),
+                UNNotificationAction(identifier: "rc_no", title: "Can't make it", options: options),
+            ],
+            intentIdentifiers: [],
+            options: []
+        )
+        // Merge, so a category registered elsewhere (a plugin) isn't dropped.
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationCategories { existing in
+            var all = existing.filter { $0.identifier != raveCheck.identifier }
+            all.insert(raveCheck)
+            center.setNotificationCategories(all)
+        }
     }
 
     func applicationWillResignActive(_ application: UIApplication) {

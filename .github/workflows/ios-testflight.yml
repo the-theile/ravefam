@@ -106,6 +106,51 @@ jobs:
             })().catch((e) => { console.log("::error::Could not reach App Store Connect: " + e.message); process.exit(1); });
           '
 
+      # Every run starts on a fresh Mac, so automatic signing creates a new Apple
+      # Development certificate for the archive and the runner throws its private
+      # key away. They pile up until Apple's cap ("Your account has reached the
+      # maximum number of certificates", run #22). Revoke the ones earlier runs
+      # left behind: development certificates Apple labels "Created via API" (how
+      # it names certificates made with an API key). Distribution certificates and
+      # any made in Xcode on a Mac are left alone. Never fails the build: if
+      # nothing matches or Apple refuses, it warns and the names are in the log.
+      - name: Revoke development certificates left by earlier runs
+        run: |
+          node -e '
+            const crypto = require("crypto"), fs = require("fs");
+            const b64 = (o) => Buffer.from(typeof o === "string" ? o : JSON.stringify(o)).toString("base64url");
+            const now = Math.floor(Date.now() / 1000);
+            const head = b64({ alg: "ES256", kid: process.env.ASC_KEY_ID, typ: "JWT" });
+            const body = b64({ iss: process.env.ASC_ISSUER_ID, iat: now, exp: now + 600, aud: "appstoreconnect-v1" });
+            const sig = crypto.sign("sha256", Buffer.from(head + "." + body),
+              { key: fs.readFileSync(process.env.ASC_KEY_PATH), dsaEncoding: "ieee-p1363" }).toString("base64url");
+            const auth = { Authorization: "Bearer " + head + "." + body + "." + sig };
+            const api = (method, path) => fetch("https://api.appstoreconnect.apple.com" + path, { method, headers: auth })
+              .then(async (r) => ({ status: r.status, json: await r.json().catch(() => null) }));
+            const DEV_TYPES = new Set(["DEVELOPMENT", "IOS_DEVELOPMENT"]);
+            const FROM_API = /created via api/i;
+            (async () => {
+              const res = await api("GET", "/v1/certificates?limit=200&fields[certificates]=certificateType,displayName,name,expirationDate");
+              if (res.status !== 200) { console.log("::warning::Could not list certificates (HTTP " + res.status + "); skipping cleanup."); return; }
+              const dev = res.json.data.filter((c) => DEV_TYPES.has(c.attributes.certificateType));
+              for (const c of dev) {
+                const a = c.attributes;
+                console.log("Development certificate: name=" + JSON.stringify(a.name) + " displayName=" + JSON.stringify(a.displayName) + " expires=" + a.expirationDate);
+              }
+              const stale = dev.filter((c) => FROM_API.test(c.attributes.displayName || "") || FROM_API.test(c.attributes.name || ""));
+              let revoked = 0;
+              for (const c of stale) {
+                const del = await api("DELETE", "/v1/certificates/" + c.id);
+                if (del.status === 204) revoked++;
+                else console.log("::warning::Could not revoke " + JSON.stringify(c.attributes.name) + " (HTTP " + del.status + "): " + JSON.stringify(del.json && del.json.errors));
+              }
+              console.log("Revoked " + revoked + " of " + stale.length + " CI development certificate(s); " + (dev.length - revoked) + " development certificate(s) left.");
+              if (!stale.length && dev.length >= 8) {
+                console.log("::warning::" + dev.length + " development certificates and none look CI-made; Apple caps them, so signing may fail. Revoke old ones at developer.apple.com > Certificates, IDs & Profiles > Certificates.");
+              }
+            })().catch((e) => console.log("::warning::Certificate cleanup skipped: " + e.message));
+          '
+
       # Marketing version tracks APP_VERSION (package.json); build number is the
       # workflow run number so every upload is unique.
       - name: Archive

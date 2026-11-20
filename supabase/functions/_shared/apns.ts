@@ -70,6 +70,10 @@ export interface ApnsMessage {
   // keep whatever badge the icon already shows.
   huddleBadge?: boolean;
   badge?: number;
+  // aps.category: long-press action buttons registered by the app
+  // (AppDelegate.registerNotificationCategories). Builds without that
+  // category ignore it and show a plain notification.
+  category?: string;
 }
 
 async function sendOne(token: string, m: ApnsMessage): Promise<{ ok: boolean; gone: boolean; reason?: string }> {
@@ -78,6 +82,7 @@ async function sendOne(token: string, m: ApnsMessage): Promise<{ ok: boolean; go
       alert: { title: m.title, body: m.body }, sound: "default",
       ...(m.threadId ? { "thread-id": m.threadId } : {}),
       ...(typeof m.badge === "number" ? { badge: m.badge } : {}),
+      ...(m.category ? { category: m.category } : {}),
     },
   };
   for (const [k, v] of Object.entries(m.data ?? {})) if (v != null) payload[k] = v;
