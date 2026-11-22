@@ -719,6 +719,10 @@
   .add-ravers-row-name { flex: 1; min-width: 0; font-weight: 600; font-size: 0.88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .crew-handoff-btn { padding: 5px 10px; border-radius: 9px; cursor: pointer; font: inherit; font-size: 0.75rem; color: var(--text); background: none; border: 1px solid rgba(var(--white-rgb),0.15); white-space: nowrap; }
   .crew-handoff-btn.is-hot { color: var(--neon-green); border-color: rgba(var(--neon-green-rgb),0.45); }
+  /* Rave page: saved-spot picker's Going / Interested toggle */
+  #rf-saved-picker .rf-seg { padding: 4px; }
+  #rf-saved-picker .rf-seg-btn { padding: 8px; }
+  #rf-saved-picker .rf-seg-btn.active { background: rgba(var(--secret-violet-rgb),0.18); color: var(--secret-violet); border-radius: 10px; }
 
 
   /* Crew Next Festival block (crew detail page) — styled as a taped
@@ -3578,23 +3582,6 @@
     font-weight: 700;
   }
   .detail-member-link:hover .detail-member-arrow { color: var(--neon-green); }
-  .member-search-wrap { position: relative; }
-  .member-search-dropdown {
-    position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
-    background: var(--surface2); border: 1px solid rgba(var(--white-rgb),0.12);
-    border-radius: 12px; overflow: hidden;
-    max-height: 220px; overflow-y: auto;
-    box-shadow: 0 8px 32px rgba(var(--black-rgb),0.4);
-  }
-  .member-search-opt {
-    display: flex; align-items: center; gap: 10px;
-    padding: 10px 14px; cursor: pointer; font-size: 0.86rem;
-    transition: background 0.12s; border-bottom: 1px solid rgba(var(--white-rgb),0.05);
-  }
-  .member-search-opt:last-child { border-bottom: none; }
-  .member-search-opt:hover { background: rgba(var(--white-rgb),0.06); }
-  .member-search-opt .opt-handle { color: var(--muted); font-size: 0.76rem; margin-left: auto; }
-  .member-search-create { color: var(--neon-pink); font-weight: 700; font-family: 'Outfit', sans-serif; }
   .remove-member-btn {
     margin-left: auto; background: none; border: none; cursor: pointer;
     color: var(--muted); font-size: 1.1rem; line-height: 1; padding: 2px 6px;
@@ -10286,8 +10273,11 @@
       </div>
     </div>
     <div class="form-group">
-      <label class="form-label">Crew Totem <span class="text-hint" style="font-weight:400;">optional</span></label>
-      <div class="totem-icon-grid" id="create-totem-icon-grid"></div>
+      <button type="button" class="btn btn-ghost" id="create-totem-toggle" style="padding:8px 14px;font-size:0.8rem;" onclick="this.hidden = true; document.getElementById('create-totem-wrap').hidden = false;">＋ Totem <span class="text-hint" style="font-weight:400;">optional</span></button>
+      <div id="create-totem-wrap" hidden>
+        <label class="form-label">Crew Totem <span class="text-hint" style="font-weight:400;">optional</span></label>
+        <div class="totem-icon-grid" id="create-totem-icon-grid"></div>
+      </div>
     </div>
     </div>
     <div id="create-crew-step-2" hidden>
@@ -18959,6 +18949,10 @@
         <button type="button" class="totem-icon-swatch" data-icon-key="${key}" style="background:${CREW_GRADIENTS['#FF2D78']}" title="${label}" aria-label="${label}" aria-pressed="false" onclick="selectCreateTotemIcon(this)">${glyph}</button>
       `).join('');
     }
+    const totemToggle = document.getElementById('create-totem-toggle');
+    if (totemToggle) totemToggle.hidden = false;
+    const totemWrap = document.getElementById('create-totem-wrap');
+    if (totemWrap) totemWrap.hidden = true;
     const secretOpt = document.querySelector('input[name="create-crew-mode"][value="secret"]');
     if (secretOpt) secretOpt.checked = true;
     crewCreateStep(1);
@@ -21897,7 +21891,7 @@
     ` },
     { id: 'profiles', icon: '👤', title: 'Profile & Privacy', body: `
       <div class="v-stack">
-        ${modGuideBullet(`Profiles can be <b>unclaimed</b> (a stub someone else created, e.g. a crew leader adding a friend who hasn't signed up) or <b>claimed</b> (the real person linked their account via a QR-based claim flow). A claimed profile can also be disconnected back to unclaimed.`)}
+        ${modGuideBullet(`Profiles can be <b>unclaimed</b>, shown to users as a <b>Saved spot</b> (a stub someone else created, e.g. a crew leader adding a friend who hasn't signed up) or <b>claimed</b> (the real person linked their account via a QR-based claim flow). A claimed profile can also be disconnected back to unclaimed.`)}
         ${modGuideBullet(`<b>While unclaimed:</b> the crew leader (or, for some fields, any crew member) can edit name, location, Instagram, phone, etc. — there's no owner yet, so someone has to be able to manage it.`)}
         ${modGuideBullet(`<b>Once claimed:</b> the crew leader loses edit rights on location, Instagram, phone, and radiate — those become the owner's own privacy call. Leaders keep some editing (name/tags/genres/artists/fests-adjacent fields) based on crew membership, separate from claim status.`)}
         ${modGuideBullet(`<b>Deleting a profile:</b> only possible for unclaimed profiles, by the leader or a moderator. Once claimed, that delete path is closed entirely — there's no leader/mod way to delete a claimed person's profile.`)}
@@ -22723,7 +22717,9 @@
             const qrBtn = !isSecret && p.qrToken
               ? `<button class="remove-member-btn" style="background:none;border:1.5px solid rgba(var(--white-rgb),0.15);border-radius:8px;padding:2px 7px;font-size:0.8rem;" data-raver-id="${p.id}" onclick="event.stopPropagation(); showQRModal(this.dataset.raverId)" title="Show QR to invite" aria-label="Show QR to invite">📲</button>`
               : '';
+            const ravesBtn = `<button class="remove-member-btn" style="background:none;border:1.5px solid rgba(var(--white-rgb),0.15);border-radius:8px;padding:2px 7px;font-size:0.8rem;" data-raver-id="${p.id}" onclick="event.stopPropagation(); openProfileListSheet('manage', this.dataset.raverId)" title="Mark their raves" aria-label="Mark ${escHtml(displayName(p).split(' ')[0])}'s raves">🎟️</button>`;
             right = `<span style="display:flex;align-items:center;gap:5px;">
+              ${ravesBtn}
               ${qrBtn}
               <button class="remove-member-btn" data-crew="${crew.id}" data-raver="${p.id}" onclick="event.stopPropagation(); confirmRemoveMember(this.dataset.crew, this.dataset.raver)" title="Remove from crew" aria-label="Remove from crew">×</button>
             </span>`;
@@ -22739,7 +22735,7 @@
           const pDisplayFirst = escHtml(displayName(p).split(' ')[0]);
           const nameDisplay = isLeader
             ? `<span style="display:flex;align-items:center;gap:5px;">${pDisplayFirst}${p.isYou ? ' (You)' : ''} <span title="Crew Leader" style="font-size:1rem;">👑</span> ${statusDot}</span>`
-            : `<span>${pDisplayFirst}${p.isYou ? ' (You)' : ''} ${statusDot}</span>`;
+            : `<span>${pDisplayFirst}${p.isYou ? ' (You)' : ''} ${statusDot}${isSecret && !isClaimed && canManageMembers ? '<small class="text-hint-xs" style="display:block;margin-top:1px;">Invite unlocks when you open the doors</small>' : ''}</span>`;
           return `
             <div class="detail-member detail-member-link" data-raver-id="${p.id}" role="button" tabindex="0" aria-label="View ${escHtml(p.name)}'s profile" onclick="goToProfileFromDetail(this.dataset.raverId)" title="View ${escHtml(p.name)}'s profile">
               ${raverAvatarHTML(p.avatarUrl, p.gradient, p.name, isClaimed ? 'avatar' : 'avatar avatar-unclaimed', 'margin:0;')}
@@ -23276,7 +23272,7 @@
         <div class="es-block crew-feed-empty">
           <div class="es-icon">🌀</div>
           <div class="es-headline">Nothing here yet</div>
-          <div class="es-sub">Polls, jams, dreams, photos and pins all land here. Tap + to start something.</div>
+          <div class="es-sub">${getCrew(crewId)?.status === 'secret' ? 'Dreams, photos and pins' : 'Polls, jams, dreams, photos and pins'} all land here. Tap + to start something.</div>
         </div>${historyCard}`;
       return;
     }
@@ -33518,7 +33514,8 @@
       return { label: 'BLACKBOOK QUESTS', title: 'Blackbook quests', badge: 'Blackbook Keeper', items: [
         { key: 'add', label: 'Add your people', done: others.length >= 1, go: `openAddRaversSheet('${escJsAttr(id)}')` },
         { key: 'rave', label: 'Mark someone’s rave', done: others.some(p => (p.festIds || []).length || (p.interestedFestIds || []).length), go: `openCrewManifestSheet()` },
-        { key: 'dream', label: 'Pin a dream rave', done: dreamDone, go: `openCrewFeature('dreamboard')` }
+        { key: 'dream', label: 'Pin a dream rave', done: dreamDone, go: `openCrewFeature('dreamboard')` },
+        ...(others.some(p => p.claimedBy) ? [{ key: 'check', label: 'Send a Rave Check', done: !!q[`check:${id}`], go: `switchTab('events')` }] : [])
       ] };
     }
     if (crew.isLead) {
@@ -33849,10 +33846,11 @@
       </div>`;
     }
     const n = crewSavedSpots(crew).length;
+    const onApp = crewSquad(crew).some(p => !p.isYou && p.claimedBy);
     return `<div class="crew-secret-banner" id="crew-secret-banner">
       <div class="crew-secret-banner-head"><span aria-hidden="true">🤫</span><div>
         <strong>Your private Blackbook</strong>
-        <p>Only you can see this crew. Save spots for the ravers you know and keep track of which raves they’re hitting, no group chat needed. Nobody is notified.${n ? ` ${n} saved spot${n !== 1 ? 's' : ''} so far.` : ''}</p>
+        <p>Only you can see this crew. Save spots for the ravers you know and keep track of which raves they’re hitting, no group chat needed. Nobody is notified.${onApp ? ' For anyone on RaveFAM, send a 🎧 Rave Check from a rave to ask them directly. It comes from you, not the crew.' : ''}${n ? ` ${n} saved spot${n !== 1 ? 's' : ''} so far.` : ''}</p>
       </div></div>
       <div class="crew-secret-banner-actions">
         ${addBtn('')}
@@ -34048,40 +34046,6 @@
       <button class="btn btn-primary btn-wide" style="margin-top:14px;padding:12px;" onclick="closeCrewSetupSheet()">Done for now</button>
       <div class="text-hint-xs" style="text-align:center;margin-top:8px;">You can find these invites in the roster any time.</div>`;
     document.getElementById('crew-setup-overlay').classList.add('open');
-  }
-
-  function searchMembersDropdown(query) {
-    const dropdown = document.getElementById('member-search-dropdown');
-    if (!dropdown) return;
-    const crew = crews.find(c => String(c.id) === String(activeDetailId));
-    const q = query.trim().toLowerCase();
-    if (!q) { dropdown.style.display = 'none'; return; }
-
-    const matches = squad.filter(r =>
-      !crew.squadIds.some(id => String(id) === String(r.id)) &&
-      (r.name.toLowerCase().includes(q) || (r.handle || '').toLowerCase().includes(q) || (nicknameCache[String(r.id)] || '').toLowerCase().includes(q))
-    );
-
-    const rows = matches.map(r => {
-      const dn = displayName(r);
-      const realNameNote = (nicknameCache[String(r.id)] && dn !== r.name) ? `<span class="text-hint-xs" style="margin-left:4px;">(${escHtml(r.name)})</span>` : '';
-      return `
-      <div class="member-search-opt" data-raver-id="${r.id}"
-        onmousedown="addExistingMember(this.dataset.raverId)">
-        ${raverAvatarHTML(r.avatarUrl, r.gradient, r.name, 'avatar', 'margin:0;width:26px;height:26px;font-size:0.62rem;flex-shrink:0;')}
-        <span>${escHtml(dn)}${realNameNote}</span>
-        <span class="opt-handle">${escHtml(r.handle || '')}</span>
-      </div>`;
-    }).join('');
-
-    const createRow = `
-      <div class="member-search-opt member-search-create" data-create-name="${query.trim().replace(/"/g,'&quot;')}"
-        onmousedown="addNewMemberFromSearch(this.dataset.createName)">
-        ＋ Create "${escHtml(query.trim())}" as a new raver
-      </div>`;
-
-    dropdown.innerHTML = rows + createRow;
-    dropdown.style.display = 'block';
   }
 
   const CREW_LIMIT = 10;
@@ -39494,6 +39458,67 @@
     if (festDate(f) >= TODAY) loadRaveCheckStatus(festId);
   }
 
+  // ===== Rave page: mark your saved spots in bulk (Blackbook) =====
+  // Saved spots you manage, from crews you lead, who aren't on this rave yet.
+  // One tap marks them Going (or Interested) without opening each profile.
+  let _rfMarkAs = 'going';
+
+  function rfSavedSpotCandidates(f) {
+    const ids = new Set();
+    crews.filter(c => c.isLead).forEach(c => (c.squadIds || []).forEach(id => ids.add(String(id))));
+    const on = list => (list || []).some(x => String(x) === String(f.id));
+    return squad.filter(r => !r.isYou && ids.has(String(r.id)) && !raverIsClaimed(r) && raverPerms(r).editFests
+      && !on(r.festIds) && !on(r.interestedFestIds));
+  }
+
+  function rfSavedSpotPickerHTML(f) {
+    if (!f) return '';
+    const list = rfSavedSpotCandidates(f);
+    if (!list.length) return '';
+    const up = festDate(f) >= TODAY;
+    const mode = up ? _rfMarkAs : 'going';
+    const fid = escJsAttr(f.id);
+    const seg = (k, label) => `<button type="button" class="rf-seg-btn${mode === k ? ' active' : ''}" aria-pressed="${mode === k}" onclick="rfSetMarkAs('${k}','${fid}')">${label}</button>`;
+    return `<div id="rf-saved-picker">
+      <div class="rf-section-label">Your saved spots</div>
+      <div class="rf-card" style="display:flex;flex-direction:column;gap:10px;">
+        ${up ? `<div class="rf-seg" role="group" aria-label="Mark saved spots as">${seg('going', 'Going')}${seg('interested', 'Interested')}</div>` : ''}
+        <div class="add-ravers-fam">${list.map(r => `<button type="button" class="add-ravers-chip" data-raver-id="${r.id}" onclick="rfMarkSavedSpot('${fid}', this.dataset.raverId)">${raverAvatarHTML(r.avatarUrl, r.gradient, r.name, 'avatar avatar-unclaimed', 'margin:0;width:22px;height:22px;font-size:0.55rem;flex-shrink:0;')}<span>${escHtml(displayName(r).split(' ')[0])}</span></button>`).join('')}</div>
+        <div class="field-help" style="margin:0;">Tap someone to mark them ${up ? (mode === 'going' ? 'Going' : 'Interested') : 'as sent it'}.</div>
+      </div>
+    </div>`;
+  }
+
+  function rfSetMarkAs(mode, festId) {
+    _rfMarkAs = mode === 'interested' ? 'interested' : 'going';
+    const el = document.getElementById('rf-saved-picker');
+    if (el) el.outerHTML = rfSavedSpotPickerHTML(getFestival(festId));
+  }
+
+  function rfMarkSavedSpot(festId, raverId) {
+    const f = getFestival(festId);
+    const r = getRaver(raverId);
+    if (!f || !r || raverIsClaimed(r) || !raverPerms(r).editFests) return;
+    const first = displayName(r).split(' ')[0];
+    const interested = _rfMarkAs === 'interested' && festDate(f) >= TODAY;
+    if (interested) {
+      r.interestedFestIds = [...(r.interestedFestIds || []), f.id];
+      if (currentUser) dbAddRaverFestivalInterest(r.id, f.id);
+      renderSquad(); renderEvents(); renderCrews();
+      refreshProfileAfterRaveChange(r.id);
+    } else {
+      addBeenTo(r.id, f.id);
+    }
+    showToast(`${first} marked ${interested ? 'Interested' : festDate(f) >= TODAY ? 'Going' : 'as sent it'}`);
+    // Redraw the rave so the Going / Interested lists pick them up; keep the scroll spot.
+    const modal = document.getElementById('rave-focus-modal');
+    const top = modal ? modal.scrollTop : 0;
+    if (document.getElementById('rave-focus-overlay')?.classList.contains('open')) {
+      openRaveFocus(f.id);
+      if (modal) modal.scrollTop = top;
+    }
+  }
+
   function closeRaveFocus() {
     document.getElementById('rave-focus-overlay').classList.remove('open');
     editingFestivalId = null;
@@ -39662,6 +39687,7 @@
       ${interestedPeople.length ? `<div class="rf-section-label">Interested · ${interestedPeople.length}</div><div class="rf-card rf-list">${interestedRows}</div>` : ''}
       ${isUpcoming ? `<div id="rc-crew-wrap">${raveCheckCrewHTML(f, goers, interestedPeople, miniAvatar)}</div>` : ''}
       ${!crewPeople.length ? `<div class="rf-card rf-empty">Nobody from the fam yet</div>` : ''}
+      ${rfSavedSpotPickerHTML(f)}
       <div class="rf-section-label">Add crew</div>
       <div class="fest-search-wrap" style="margin-bottom:4px;">
         <input class="form-input" id="re-raver-search" aria-label="Search ravers to add" placeholder="🔍 Search the fam to add…" autocomplete="off"
@@ -40319,7 +40345,7 @@
     const picked = raverIds ? open.filter(r => raverIds.some(id => String(id) === String(r.id))) : open;
     if (!picked.length) { showToast('Everyone here has been rave-checked'); return; }
     const skipped = raverIds ? [] : pending.filter(r => raveCheckState(f.id, r.id) === 'cooldown');
-    _raveCheckSheet = { festId: f.id, raverIds: picked.map(r => r.id) };
+    _raveCheckSheet = { festId: f.id, raverIds: picked.map(r => r.id), crewId };
     const first = r => escHtml(displayName(r).split(' ')[0]);
     const pills = picked.map(r => `<span class="rc-pill">${raveFocusMiniAvatar()(r, '')}${first(r)}</span>`).join('');
     document.getElementById('rave-check-sheet-content').innerHTML = `
@@ -40356,7 +40382,7 @@
 
   async function sendRaveCheck() {
     if (!_raveCheckSheet) return;
-    const { festId, raverIds } = _raveCheckSheet;
+    const { festId, raverIds, crewId } = _raveCheckSheet;
     const btn = document.getElementById('rave-check-send');
     const note = (document.getElementById('rave-check-note')?.value || '').trim();
     if (btn) btn.disabled = true;
@@ -40388,6 +40414,7 @@
       const who = sentNames.length > 2 ? `${sentNames.length} crewmates` : sentNames.join(' & ');
       showToast(`🎧 Rave check sent to ${who}${skipped ? ` · ${skipped} skipped` : ''}`);
       logAnalyticsEvent('rave_check_sent', { festival_id: festId, count: sentNames.length, with_note: !!note });
+      if (crewId) markCrewQuest('check', crewId);
     } else {
       showToast('Nobody to rave-check right now. They were checked recently or already answered');
     }
@@ -43066,16 +43093,6 @@
   let _openDetailAfterCreate = false;
   let _pendingAddToCrew = null;
   let _pendingAddToFest = null;
-
-  function addNewMemberFromSearch(name) {
-    _pendingAddToCrew = activeDetailId;
-    closeDetail();
-    openProfileEditor();
-    setTimeout(() => {
-      const el = document.getElementById('pf-name');
-      if (el) el.value = name;
-    }, 50);
-  }
 
   function maybeAdvanceOnboarding(profileName) {
     if (!isOnboarding) return;
