@@ -33837,8 +33837,7 @@
   const _secretBannerCollapsed = new Set();
   function crewSecretBannerHTML(crew) {
     if (!crew || !crew.isLead || crew.status !== 'secret') return '';
-    const id = escJsAttr(crew.id);
-    const addBtn = cls => `<button type="button" class="btn crew-secret-add${cls}" onclick="openAddRaversSheet('${id}')">＋ Add ravers</button>`;
+    const addBtn = cls => `<button type="button" class="btn crew-secret-add${cls}" onclick="openAddRaversSheet('${escJsAttr(crew.id)}')">＋ Add ravers</button>`;
     if (_guidance?.quests?.[`bbbanner:${crew.id}`] || _secretBannerCollapsed.has(String(crew.id))) {
       return `<div class="crew-secret-banner is-slim" id="crew-secret-banner">
         <p>🤫 <strong>Your private Blackbook.</strong> Only you can see this crew.</p>
@@ -33854,9 +33853,9 @@
       </div></div>
       <div class="crew-secret-banner-actions">
         ${addBtn('')}
-        <button type="button" class="btn btn-ghost" onclick="collapseSecretBanner('${id}')">Got it</button>
+        <button type="button" class="btn btn-ghost" onclick="collapseSecretBanner('${escJsAttr(crew.id)}')">Got it</button>
       </div>
-      <div class="crew-secret-banner-more">Want the crew in on it? <button type="button" onclick="setStatus('${id}','recruiting')">Open the doors</button> for the Huddle, Rave Plan, Polls and Jams.</div>
+      <div class="crew-secret-banner-more">Want the crew in on it? <button type="button" onclick="setStatus('${escJsAttr(crew.id)}','recruiting')">Open the doors</button> for the Huddle, Rave Plan, Polls and Jams.</div>
     </div>`;
   }
 
@@ -33873,7 +33872,6 @@
   function showCrewModesSheet(crewId) {
     const crew = getCrew(crewId);
     if (!crew) return;
-    const id = escJsAttr(crew.id);
     const modes = [
       ['secret', 'Your private Blackbook. Track the ravers you know and which raves they’re hitting. Invisible to everyone else. Stay here as long as you like.'],
       ['recruiting', 'Invites are live. People claim their spots, chat in the Huddle, plan raves together, see who’s going and which sets they’re hitting. Polls and Jams are on.'],
@@ -33894,7 +33892,7 @@
         </div>
         <div class="modal-actions">
           <button class="btn btn-ghost btn-fill" onclick="closeStatusWarn()">Close</button>
-          <button class="btn btn-primary btn-fill" onclick="showStatusWarn('${id}','${next[0]}')">${next[1]}</button>
+          <button class="btn btn-primary btn-fill" onclick="showStatusWarn('${escJsAttr(crew.id)}','${escJsAttr(next[0])}')">${next[1]}</button>
         </div>
       </div>`;
     document.getElementById('status-warn-overlay').classList.add('open');
@@ -34020,7 +34018,6 @@
   function showCrewInviteHandoff(crewId) {
     const crew = getCrew(crewId);
     if (!crew) return;
-    const id = escJsAttr(crew.id);
     const saved = crewSavedSpots(crew);
     const rows = saved.map(p => {
       const first = escHtml(displayName(p).split(' ')[0]);
@@ -34041,8 +34038,8 @@
       </div>
       ${rows}
       <div class="form-label" style="margin:16px 0 8px;">${saved.length ? 'Anyone else' : 'Invite anyone'}</div>
-      <button class="btn btn-ghost btn-wide" style="padding:11px;" onclick="generateAndShareCrewInvite('${id}')">🔗 Share crew invite link</button>
-      ${saved.length ? '' : `<button class="btn btn-wide crew-secret-add" style="padding:11px;margin-top:8px;" onclick="openAddRaversSheet('${id}')">＋ Add ravers</button>`}
+      <button class="btn btn-ghost btn-wide" style="padding:11px;" onclick="generateAndShareCrewInvite('${escJsAttr(crew.id)}')">🔗 Share crew invite link</button>
+      ${saved.length ? '' : `<button class="btn btn-wide crew-secret-add" style="padding:11px;margin-top:8px;" onclick="openAddRaversSheet('${escJsAttr(crew.id)}')">＋ Add ravers</button>`}
       <button class="btn btn-primary btn-wide" style="margin-top:14px;padding:12px;" onclick="closeCrewSetupSheet()">Done for now</button>
       <div class="text-hint-xs" style="text-align:center;margin-top:8px;">You can find these invites in the roster any time.</div>`;
     document.getElementById('crew-setup-overlay').classList.add('open');
@@ -39477,13 +39474,12 @@
     if (!list.length) return '';
     const up = festDate(f) >= TODAY;
     const mode = up ? _rfMarkAs : 'going';
-    const fid = escJsAttr(f.id);
-    const seg = (k, label) => `<button type="button" class="rf-seg-btn${mode === k ? ' active' : ''}" aria-pressed="${mode === k}" onclick="rfSetMarkAs('${k}','${fid}')">${label}</button>`;
+    const seg = (k, label) => `<button type="button" class="rf-seg-btn${mode === k ? ' active' : ''}" aria-pressed="${mode === k}" onclick="rfSetMarkAs('${escJsAttr(k)}','${escJsAttr(f.id)}')">${label}</button>`;
     return `<div id="rf-saved-picker">
       <div class="rf-section-label">Your saved spots</div>
       <div class="rf-card" style="display:flex;flex-direction:column;gap:10px;">
         ${up ? `<div class="rf-seg" role="group" aria-label="Mark saved spots as">${seg('going', 'Going')}${seg('interested', 'Interested')}</div>` : ''}
-        <div class="add-ravers-fam">${list.map(r => `<button type="button" class="add-ravers-chip" data-raver-id="${r.id}" onclick="rfMarkSavedSpot('${fid}', this.dataset.raverId)">${raverAvatarHTML(r.avatarUrl, r.gradient, r.name, 'avatar avatar-unclaimed', 'margin:0;width:22px;height:22px;font-size:0.55rem;flex-shrink:0;')}<span>${escHtml(displayName(r).split(' ')[0])}</span></button>`).join('')}</div>
+        <div class="add-ravers-fam">${list.map(r => `<button type="button" class="add-ravers-chip" data-raver-id="${r.id}" onclick="rfMarkSavedSpot('${escJsAttr(f.id)}', this.dataset.raverId)">${raverAvatarHTML(r.avatarUrl, r.gradient, r.name, 'avatar avatar-unclaimed', 'margin:0;width:22px;height:22px;font-size:0.55rem;flex-shrink:0;')}<span>${escHtml(displayName(r).split(' ')[0])}</span></button>`).join('')}</div>
         <div class="field-help" style="margin:0;">Tap someone to mark them ${up ? (mode === 'going' ? 'Going' : 'Interested') : 'as sent it'}.</div>
       </div>
     </div>`;
