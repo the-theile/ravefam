@@ -64,7 +64,7 @@ test.describe('stats', () => {
     await page.evaluate(() => closeRaveFocus());
 
     await page.locator('#stats-content .stats-stamp.empty').first().click();
-    await expect(page.locator('#new-rave-popup-overlay')).toHaveClass(/open/);
+    await expect(page.locator('#add-rave-overlay')).toHaveClass(/open/);
   });
 
   test('switching to the Crew Stats subtab shows the crew panel', async ({ page }) => {

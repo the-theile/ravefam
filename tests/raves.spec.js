@@ -157,61 +157,236 @@ test.describe('rave lineup tagging', () => {
   });
 });
 
-test.describe('new rave RSVP prompt', () => {
-  test('creating a new rave prompts Going/Interested/Not now, and Going RSVPs the creator', async ({ page }) => {
+// ===== Add Rave sheet (2.52.0) — search first, create only when nothing matches =====
+// Pins a place in the create form the way a location-lookup pick does.
+async function pinPlace(page, label = 'Ghent, Flanders, Belgium', lat = 51.0543, lng = 3.7174) {
+  await page.evaluate(({ label, lat, lng }) => { _locItems = [{ label, lat, lng }]; pickLoc(0); }, { label, lat, lng });
+}
+
+async function startCreate(page, name, date, ctx = {}) {
+  await page.evaluate((ctx) => openAddRaveSheet(ctx), ctx);
+  await page.fill('#ar-q', name);
+  await page.click('.ar-create');
+  await page.fill('#fe-date', date);
+}
+
+const youList = (page, key = 'festIds') => page.evaluate((k) => squad.find(r => r.isYou)[k].map(String), key);
+const festIdByName = (page, name) => page.evaluate((n) => String(festivals.find(f => f.name === n)?.id ?? ''), name);
+
+test.describe('add rave sheet', () => {
+  test('the Raves tab button and openRaveEditor() with no id open the sheet, not the wizard', async ({ page }) => {
     await bootAuthedApp(page);
     await page.evaluate(() => openRaveEditor(null));
-    await page.fill('#fe-name', 'Test New Rave');
-    await page.fill('#fe-date', '2099-05-01');
-    await page.evaluate(() => saveRave());
-
-    await expect(page.locator('#confirm-overlay')).toHaveClass(/open/);
-    await expect(page.locator('#confirm-title')).toContainText('Going to Test New Rave?');
-    await page.click('#confirm-ok-btn');
-
-    const newFestId = await page.evaluate(() => festivals.find(f => f.name === 'Test New Rave').id);
-    const going = await page.evaluate(() => squad.find(r => r.isYou).festIds.map(String));
-    expect(going).toContain(String(newFestId));
+    await expect(page.locator('#add-rave-overlay')).toHaveClass(/open/);
+    await expect(page.locator('#rave-edit-overlay')).not.toHaveClass(/open/);
+    await page.evaluate(() => closeAddRaveSheet());
+    await page.evaluate(() => switchTab('events'));
+    await page.locator('#page-events button', { hasText: '+ Add Rave' }).click();
+    await expect(page.locator('#add-rave-overlay')).toHaveClass(/open/);
   });
 
-  test('choosing Interested marks interest instead of going', async ({ page }) => {
+  test('search lists catalog matches and one tap RSVPs you', async ({ page }) => {
     await bootAuthedApp(page);
-    await page.evaluate(() => openRaveEditor(null));
-    await page.fill('#fe-name', 'Interested Rave');
-    await page.fill('#fe-date', '2099-06-01');
-    await page.evaluate(() => saveRave());
-    await page.click('#confirm-secondary-btn');
-
-    const newFestId = await page.evaluate(() => festivals.find(f => f.name === 'Interested Rave').id);
-    const interested = await page.evaluate(() => squad.find(r => r.isYou).interestedFestIds.map(String));
-    const going = await page.evaluate(() => squad.find(r => r.isYou).festIds.map(String));
-    expect(interested).toContain(String(newFestId));
-    expect(going).not.toContain(String(newFestId));
+    await page.evaluate(() => openAddRaveSheet({ source: 'raves' }));
+    await page.fill('#ar-q', 'awaken');
+    const match = page.locator('.ar-match', { hasText: 'Awakenings' });
+    await expect(match).toBeVisible();
+    await expect(page.locator('.ar-create')).toContainText('Create “awaken”');
+    await match.locator('.ar-match-btn').click();
+    await expect(page.locator('#add-rave-overlay')).not.toHaveClass(/open/);
+    expect(await youList(page)).toContain('f2');
   });
 
-  test('choosing Not now does not RSVP at all', async ({ page }) => {
+  test('an empty search box lists upcoming raves not already on your list', async ({ page }) => {
     await bootAuthedApp(page);
-    await page.evaluate(() => openRaveEditor(null));
-    await page.fill('#fe-name', 'Skip Rave');
-    await page.fill('#fe-date', '2099-07-01');
-    await page.evaluate(() => saveRave());
-    await page.click('#confirm-cancel-btn');
-
-    const newFestId = await page.evaluate(() => festivals.find(f => f.name === 'Skip Rave').id);
-    const going = await page.evaluate(() => squad.find(r => r.isYou).festIds.map(String));
-    const interested = await page.evaluate(() => squad.find(r => r.isYou).interestedFestIds.map(String));
-    expect(going).not.toContain(String(newFestId));
-    expect(interested).not.toContain(String(newFestId));
+    await page.evaluate(() => openAddRaveSheet());
+    await expect(page.locator('#ar-results')).toContainText('Coming up');
+    // f1 (Going) is left out; f2 (only Interested) is offered.
+    await expect(page.locator('#ar-results .ar-match', { hasText: 'Awakenings' })).toHaveCount(1);
+    await expect(page.locator('#ar-results .ar-match', { hasText: 'Tomorrowland' })).toHaveCount(0);
+    await page.locator('#ar-results .ar-match', { hasText: 'Awakenings' }).locator('.ar-match-btn').click();
+    expect(await youList(page)).toContain('f2');
   });
 
-  test('editing an existing rave does not show the prompt', async ({ page }) => {
+  test('the new rave card glows briefly on the Raves tab', async ({ page }) => {
+    await bootAuthedApp(page);
+    await page.evaluate(() => { setRaveView('card'); switchTab('events'); });
+    await startCreate(page, 'Glow Rave', '2099-04-01');
+    await pinPlace(page);
+    await page.click('#ar-add');
+    const id = await (async () => { await expect(page.locator('#add-rave-overlay')).not.toHaveClass(/open/); return festIdByName(page, 'Glow Rave'); })();
+    await expect(page.locator(`#events-list .event-item[data-fest-id="${id}"]`)).toHaveClass(/rave-just-added/);
+  });
+
+  test('a rave you already have shows as Going and cannot be re-added', async ({ page }) => {
+    await bootAuthedApp(page);
+    await page.evaluate(() => openAddRaveSheet());
+    await page.fill('#ar-q', 'tomorrow');
+    await expect(page.locator('.ar-match', { hasText: 'Tomorrowland' }).locator('.ar-match-btn')).toBeDisabled();
+  });
+
+  test('Add stays disabled until the place is pinned; typed text alone is not enough', async ({ page }) => {
+    await bootAuthedApp(page);
+    await startCreate(page, 'Fresh Rave', '2099-05-01');
+    await page.fill('#fe-loc', 'Somewhere');
+    await expect(page.locator('#ar-add')).toBeDisabled();
+    await expect(page.locator('#ar-err')).toContainText('Pick a place');
+    await pinPlace(page);
+    await expect(page.locator('#ar-add')).toBeEnabled();
+    await page.click('#ar-add');
+    await expect(page.locator('#add-rave-overlay')).not.toHaveClass(/open/);
+
+    const id = await festIdByName(page, 'Fresh Rave');
+    expect(id).not.toBe('');
+    const row = await page.evaluate((n) => (window.__store.festivals || []).find(f => f.name === n), 'Fresh Rave');
+    expect(row.lat).toBeCloseTo(51.0543);
+    expect(row.date).toBe('2099-05-01');
+    // Default RSVP is Going — no follow-up popup any more.
+    await expect(page.locator('#confirm-overlay')).not.toHaveClass(/open/);
+    expect(await youList(page)).toContain(id);
+  });
+
+  test('Interested and Just adding RSVP accordingly', async ({ page }) => {
+    await bootAuthedApp(page);
+    await startCreate(page, 'Maybe Rave', '2099-06-01');
+    await pinPlace(page);
+    await page.locator('#ar-rsvp .ar-chip', { hasText: 'Interested' }).click();
+    await page.click('#ar-add');
+    await expect(page.locator('#add-rave-overlay')).not.toHaveClass(/open/);
+    const maybe = await festIdByName(page, 'Maybe Rave');
+    expect(await youList(page, 'interestedFestIds')).toContain(maybe);
+    expect(await youList(page)).not.toContain(maybe);
+
+    await startCreate(page, 'Skip Rave', '2099-07-01');
+    await pinPlace(page);
+    await page.locator('#ar-rsvp .ar-chip', { hasText: 'Just adding' }).click();
+    await page.click('#ar-add');
+    await expect(page.locator('#add-rave-overlay')).not.toHaveClass(/open/);
+    const skip = await festIdByName(page, 'Skip Rave');
+    expect(skip).not.toBe('');
+    expect(await youList(page)).not.toContain(skip);
+    expect(await youList(page, 'interestedFestIds')).not.toContain(skip);
+  });
+
+  test('a past date offers Was there instead of Going / Interested', async ({ page }) => {
+    await bootAuthedApp(page);
+    await startCreate(page, 'Old Rave', '2020-03-01');
+    await expect(page.locator('#ar-rsvp')).toContainText('Was there');
+    await expect(page.locator('#ar-rsvp')).not.toContainText('Interested');
+  });
+
+  test('a likely duplicate (similar name, ±1 day) asks first, and "Use this one" RSVPs to it', async ({ page }) => {
+    await bootAuthedApp(page);
+    const before = await page.evaluate(() => festivals.length);
+    await startCreate(page, 'Awakenings Festival', '2099-10-13');
+    await pinPlace(page, 'Amsterdam, North Holland, Netherlands', 52.37, 4.9);
+    await page.click('#ar-add');
+    await expect(page.locator('#add-rave-content')).toContainText('Is it this one?');
+    await page.locator('#add-rave-content button', { hasText: 'Use this one' }).click();
+    await expect(page.locator('#add-rave-overlay')).not.toHaveClass(/open/);
+    expect(await page.evaluate(() => festivals.length)).toBe(before);
+    expect(await youList(page)).toContain('f2');
+  });
+
+  test('"It\'s different" creates the rave anyway', async ({ page }) => {
+    await bootAuthedApp(page);
+    await startCreate(page, 'Awakenings Festival', '2099-10-12');
+    await pinPlace(page);
+    await page.click('#ar-add');
+    await page.locator('#add-rave-content button', { hasText: "It's different" }).click();
+    await expect(page.locator('#add-rave-overlay')).not.toHaveClass(/open/);
+    expect(await festIdByName(page, 'Awakenings Festival')).not.toBe('');
+  });
+
+  test('only crews picked in "Tell a crew?" get notified', async ({ page }) => {
+    await bootAuthedApp(page);
+    const kaiNotes = () => page.evaluate(() => (window.__store.notifications || []).filter(n => n.user_id === 'kai-uid').length);
+
+    await startCreate(page, 'Quiet Rave', '2099-08-01');
+    await pinPlace(page);
+    await page.click('#ar-add');
+    await expect(page.locator('#add-rave-overlay')).not.toHaveClass(/open/);
+    await page.waitForTimeout(150);
+    expect(await kaiNotes()).toBe(0);
+
+    await startCreate(page, 'Loud Rave', '2099-08-02', { crewId: 'c1' });
+    await pinPlace(page);
+    await expect(page.locator('#ar-crews .ar-chip', { hasText: 'Bass Syndicate' })).toHaveAttribute('aria-pressed', 'true');
+    await page.click('#ar-add');
+    await expect(page.locator('#add-rave-overlay')).not.toHaveClass(/open/);
+    await page.waitForTimeout(150);
+    expect(await kaiNotes()).toBe(1);
+  });
+
+  test('from another raver\'s profile, the RSVP is for them', async ({ page }) => {
+    await bootAuthedApp(page);
+    await startCreate(page, 'Sam Rave', '2099-09-01', { raverId: 'r-sam', source: 'profile' });
+    await expect(page.locator('#add-rave-content')).toContainText('Adding for');
+    await expect(page.locator('#ar-crews')).toHaveCount(0);
+    await pinPlace(page);
+    await page.click('#ar-add');
+    await expect(page.locator('#add-rave-overlay')).not.toHaveClass(/open/);
+    const id = await festIdByName(page, 'Sam Rave');
+    expect(await page.evaluate(() => getRaver('r-sam').festIds.map(String))).toContain(id);
+    expect(await youList(page)).not.toContain(id);
+  });
+
+  test('pasting a ticket link fills the form from the page\'s event data', async ({ page }) => {
+    await bootAuthedApp(page);
+    const url = 'https://dice.fm/event/abc-basement-fabric-tickets';
+    await page.evaluate((url) => {
+      window.__invokes = [];
+      sb.functions = { invoke: async (name, { body }) => {
+        window.__invokes.push({ name, body });
+        return { data: { url, site: 'DICE', title: 'Basement Tickets | 4 Dec | Fabric | DICE', description: null, image: null,
+          event: { name: 'Basement', start: '2099-12-04', days: 1, venue: 'Fabric London', locality: 'London', country: 'GB', lat: 51.5196, lng: -0.1025 } }, error: null };
+      } };
+      openAddRaveSheet();
+    }, url);
+    await page.fill('#ar-q', url);
+    await expect(page.locator('#fe-name')).toHaveValue('Basement');
+    await expect(page.locator('#fe-date')).toHaveValue('2099-12-04');
+    await expect(page.locator('#ar-link')).toHaveValue(url);
+    await expect(page.locator('.ar-note')).toContainText('dice.fm');
+    await expect(page.locator('#ar-add')).toBeEnabled();
+    expect(await page.evaluate(() => window.__invokes[0].body.wantEvent)).toBe(true);
+    await page.click('#ar-add');
+    await expect(page.locator('#add-rave-overlay')).not.toHaveClass(/open/);
+    const row = await page.evaluate(() => (window.__store.festivals || []).find(f => f.name === 'Basement'));
+    expect(row.ticket_url).toBe(url);
+    expect(row.days).toBe(1);
+  });
+
+  test('an RA link skips the lookup and keeps the URL as the ticket link', async ({ page }) => {
+    await bootAuthedApp(page);
+    await page.evaluate(() => { window.__invokes = []; sb.functions = { invoke: async (n, o) => { window.__invokes.push(o); return { data: null, error: null }; } }; openAddRaveSheet(); });
+    await page.fill('#ar-q', 'https://ra.co/events/2087441');
+    await expect(page.locator('.ar-note.warn')).toContainText("Couldn't read ra.co");
+    await expect(page.locator('#ar-link')).toHaveValue('https://ra.co/events/2087441');
+    expect(await page.evaluate(() => window.__invokes.length)).toBe(0);
+  });
+
+  test('a rave you added with no map pin shows a Fix bar to you only', async ({ page }) => {
+    const d = seedData();
+    d.festivals = d.festivals.map(f => f.id === 'f1' ? { ...f, created_by: TEST_UID } : f.id === 'f2' ? { ...f, created_by: 'someone-else' } : f);
+    await bootAuthedApp(page, { data: d });
+    await page.evaluate(() => { _raveFilters.time = 'upcoming'; setRaveView('card'); switchTab('events'); renderEvents(); });
+    await expect(page.locator('.event-item[data-fest-id="f1"] .rave-fix-bar')).toContainText('Not on the map yet');
+    await expect(page.locator('.event-item[data-fest-id="f2"] .rave-fix-bar')).toHaveCount(0);
+    await page.locator('.event-item[data-fest-id="f1"] .rave-fix-bar').click();
+    await expect(page.locator('#rave-edit-overlay')).toHaveClass(/open/);
+    await expect(page.locator('#rave-edit-modal .rw-panel[data-rw-panel="place"]')).toBeVisible();
+  });
+
+  test('editing an existing rave still uses the wizard and saves', async ({ page }) => {
     const d = seedData();
     d.festivals = d.festivals.map(f => f.id === 'f1' ? { ...f, created_by: TEST_UID } : f);
     await bootAuthedApp(page, { data: d });
     await page.evaluate(() => openRaveEditor('f1'));
     await page.fill('#fe-name', 'Tomorrowland Updated');
     await page.evaluate(() => saveRave());
-    await expect(page.locator('#confirm-overlay')).not.toHaveClass(/open/);
+    await expect(page.locator('#add-rave-overlay')).not.toHaveClass(/open/);
+    expect(await page.evaluate(() => getFestival('f1').name)).toBe('Tomorrowland Updated');
   });
 });
 

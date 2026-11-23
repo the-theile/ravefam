@@ -224,7 +224,7 @@ test.describe('Venue Directory · location live-mirror', () => {
   test('picking a venue with a saved location shows it as a read-only line, not an editable field', async ({ page }) => {
     await bootAuthedApp(page);
     const venueId = await page.evaluate(async () => (await dbAddVenue({ name: 'Auto Fill Venue', location: 'Miami, Florida, United States' })).id);
-    await page.evaluate(() => openRaveEditor(null)); // new rave — Location starts empty
+    await page.evaluate(() => { openAddRaveSheet(); addRaveStartCreate('New Rave'); }); // new rave (Add Rave sheet) — Location starts empty
     await page.evaluate((id) => pickFestVenue(id), venueId);
     await expect(page.locator('.fe-loc-from-venue')).toContainText('Miami, Florida, United States');
     const locInput = page.locator('#fe-loc');
@@ -235,7 +235,7 @@ test.describe('Venue Directory · location live-mirror', () => {
   test('picking a venue with no location of its own falls back to an editable field', async ({ page }) => {
     await bootAuthedApp(page);
     const venueId = await page.evaluate(async () => (await dbAddVenue({ name: 'No Location Venue', location: '' })).id);
-    await page.evaluate(() => openRaveEditor(null));
+    await page.evaluate(() => { openAddRaveSheet(); addRaveStartCreate('New Rave'); });
     await page.evaluate((id) => pickFestVenue(id), venueId);
     await expect(page.locator('.fe-loc-from-venue')).toHaveCount(0);
     await expect(page.locator('#fe-loc')).not.toHaveAttribute('type', 'hidden');
@@ -244,8 +244,7 @@ test.describe('Venue Directory · location live-mirror', () => {
   test('unlinking a venue restores whatever location was last showing — typed or from the venue', async ({ page }) => {
     await bootAuthedApp(page);
     const venueId = await page.evaluate(async () => (await dbAddVenue({ name: 'No Overwrite Venue', location: 'Miami, Florida, United States' })).id);
-    await page.evaluate(() => openRaveEditor(null));
-    await page.evaluate(() => raveEditGoStep('place')); // Location lives on the wizard's Place step
+    await page.evaluate(() => { openAddRaveSheet(); addRaveStartCreate('New Rave'); });
     await page.fill('#fe-loc', 'Custom Typed Location');
     await page.evaluate((id) => pickFestVenue(id), venueId);
     await expect(page.locator('.fe-loc-from-venue')).toContainText('Miami, Florida, United States');
@@ -261,7 +260,7 @@ test.describe('Venue Directory · location live-mirror', () => {
 
   test('adding a new venue inline also mirrors its location as a read-only line', async ({ page }) => {
     await bootAuthedApp(page);
-    await page.evaluate(() => openRaveEditor(null));
+    await page.evaluate(() => { openAddRaveSheet(); addRaveStartCreate('New Rave'); });
     await page.evaluate(async () => {
       const v = await dbAddVenue({ name: 'Inline Fill Venue', location: 'Denver, Colorado, United States' });
       // Simulate the inline "+ Add new venue" flow picking up the freshly

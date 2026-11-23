@@ -693,7 +693,7 @@ Added in 2.46.0, just above `// ===== MOD DASHBOARD: Missing Genres tab =====`.
 #### Festivals catalog — single source of truth  
 `L34053–34389` (337 lines, 21 functions)
 
-- **Functions:** `getFestival`, `findFestivalByName`, `getRaver`, `escHtml`, `escJsAttr`, `safeColor`, `safeGradient`, `extractFirstColor`, `raverAvatarHTML`, `initials`, `raverFestivals`, `raverUpcoming`, `raverPast`, `ravesTogetherData`, `cityOf`, `ourPhotoCardHTML`, … +5 more
+- **Functions:** `getFestival`, `getRaver`, `escHtml`, `escJsAttr`, `safeColor`, `safeGradient`, `extractFirstColor`, `raverAvatarHTML`, `initials`, `raverFestivals`, `raverUpcoming`, `raverPast`, `ravesTogetherData`, `cityOf`, `ourPhotoCardHTML`, … +5 more
 - **Module-level state/consts declared here:** `festSeq`, `festivals`, `DEMO_ARTISTS`, `squadSeq`, `squad`, `_seeAsCrew`
 
 #### Dedicated profile page  
@@ -770,7 +770,7 @@ Added in 2.46.0, just above `// ===== MOD DASHBOARD: Missing Genres tab =====`.
 #### Favourite artist picker (search-as-you-type combobox)  
 `L36282–36591` (310 lines, 23 functions)
 
-- **Functions:** `renderArtistPicker`, `renderArtistSelected`, `artistRemoveSel`, `removeLastFavArtist`, `artistSearchInput`, `artistPickFromSearch`, `addNewArtistFromSearch`, `renderFestSelected`, `festToggleQuick`, `festRemoveSel`, `festSearchInput`, `festPickFromSearch`, `openNewRavePopup`, `closeNewRavePopup`, `nrpNameSuggest`, `nrpPickExisting`, … +7 more
+- **Functions:** `renderArtistPicker`, `renderArtistSelected`, `artistRemoveSel`, `removeLastFavArtist`, `artistSearchInput`, `artistPickFromSearch`, `addNewArtistFromSearch`, `renderFestSelected`, `festToggleQuick`, `festRemoveSel`, `festSearchInput`, `festPickFromSearch`, `openAddRaveSheet`, `closeAddRaveSheet`, `renderAddRaveSearch`, `addRavePickExisting`, `renderAddRaveCreate`, `addRaveValidate`, `likelyDuplicate`, `addRavePasteLink`, `createRave`, `raveMissingDetailsHTML`, … +more (ADD RAVE SHEET, 2.52.0: the one way to add a rave)
 - **Module-level state/consts declared here:** `_newRaveCtx`
 
 #### Inline profile edit mode  
@@ -843,7 +843,7 @@ Added in 2.46.0, just above `// ===== MOD DASHBOARD: Missing Genres tab =====`.
 #### Going Options bottom sheet  
 `L38998–39657` (660 lines, 36 functions)
 
-- **Functions:** `openGoingOptionsSheet`, `closeGoingOptionsSheet`, `goingOptionsShowOtherInput`, `goingOptionsPickTicketType`, `goingOptionsConfirmOther`, `goingOptionsJustGoing`, `goingOptionsInterested`, `goingOptionsNotGoing`, `releaseOverlayFocus`, `unpan`, `closeRaveEditor`, `reSearch`, `reAdd`, `reAddNew`, `saveRave`, `promptGoingToNewRave`, … +20 more
+- **Functions:** `openGoingOptionsSheet`, `closeGoingOptionsSheet`, `goingOptionsShowOtherInput`, `goingOptionsPickTicketType`, `goingOptionsConfirmOther`, `goingOptionsJustGoing`, `goingOptionsInterested`, `goingOptionsNotGoing`, `releaseOverlayFocus`, `unpan`, `closeRaveEditor`, `reSearch`, `reAdd`, `reAddNew`, `saveRave` (edit only since 2.52.0), … +20 more
 - **Module-level state/consts declared here:** `_goingOptionsFestId`, `_reSearchQuery`, `checked`, `_suggestVibeRaverId`
 - **Tables / buckets (`.from`)**: `festivals`
 
