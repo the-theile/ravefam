@@ -120,15 +120,26 @@ test.describe('new crew page · filters', () => {
 
 test.describe('new crew page · quests', () => {
   test('the quest stamps sit under the header, and a stamp opens what it asks for', async ({ page }) => {
-    // A Secret crew leaves the lead's "Open the doors" quest unstamped.
+    // A Secret crew's lead gets the Blackbook banner, then Blackbook quests.
+    // The seed has no Dream Board pins, so "Pin a dream rave" is unstamped.
     const data = seedData();
     data.crews = data.crews.map(c => c.id === 'c1' ? { ...c, status: 'secret' } : c);
     await bootWithCrewFeed(page, { data });
     await openC1(page);
-    const row = page.locator('#page-crew-detail .crew-feed-head + #crew-quest-row');
-    await expect(row).toContainText('LEAD QUESTS');
-    await row.locator('.crew-quest-stamp', { hasText: 'Open the doors' }).click();
-    await expect(page.locator('#crew-manifest-overlay')).toHaveClass(/open/);
+    await expect(page.locator('#page-crew-detail .crew-feed-head + #crew-secret-banner')).toContainText('Your private Blackbook');
+    const row = page.locator('#page-crew-detail #crew-secret-banner + #crew-quest-row');
+    await expect(row).toContainText('BLACKBOOK QUESTS');
+    await expect(row).not.toContainText('Open the doors');
+    await row.locator('.crew-quest-stamp', { hasText: 'Pin a dream rave' }).click();
+    await expect(page.locator('.crew-feed-filter[data-filter="dreamboard"]')).toHaveClass(/active/);
+  });
+
+  test('a recruiting crew shows Lead quests right under the header, with no Secret banner', async ({ page }) => {
+    await bootWithCrewFeed(page);
+    await openC1(page);
+    await expect(page.locator('#crew-secret-banner')).toHaveCount(0);
+    // Every Lead quest is already stamped in the seed, so the row shows the finish card.
+    await expect(page.locator('#page-crew-detail .crew-feed-head + #crew-quest-row')).toContainText('Lead quests complete');
   });
 
   test('replaying a zone from the guide opens its chip and its intro', async ({ page }) => {
@@ -194,7 +205,7 @@ test.describe('new crew page · roster sheet', () => {
     await expect(sheet).toHaveClass(/open/);
     await expect(sheet).toContainText('Crew Manifest');
     await expect(sheet).toContainText('Sam');
-    await expect(sheet.locator('#add-member-input')).toBeVisible();
+    await expect(sheet.locator('button', { hasText: 'Add ravers' })).toBeVisible();
     await page.waitForTimeout(150);
     expect(await page.evaluate(() => document.getElementById('main-app').inert)).toBe(true);
 
@@ -205,7 +216,7 @@ test.describe('new crew page · roster sheet', () => {
   test('only one copy of the roster exists, so its ids stay unique', async ({ page }) => {
     await bootWithCrewFeed(page);
     await openC1(page);
-    expect(await page.locator('#add-member-input').count()).toBe(1);
+    expect(await page.locator('.crew-manifest').count()).toBe(1);
     await expect(page.locator('#page-crew-detail .crew-manifest')).toHaveCount(0);
   });
 
