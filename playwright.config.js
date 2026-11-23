@@ -31,7 +31,7 @@ const MOBILE_SPECS = [
   '**/auth.spec.js',                     // login/signup is mostly a phone screen
   '**/onboarding.spec.js',
   '**/claim_preview_status.spec.js',     // the claim flow is overwhelmingly mobile
-  '**/invite_prompt_crew_status.spec.js',
+  '**/add_ravers_sheet.spec.js',         // the Add ravers sheet is a phone bottom sheet
   '**/escape_closes_overlays.spec.js',
   '**/focus_containment.spec.js',
 ];

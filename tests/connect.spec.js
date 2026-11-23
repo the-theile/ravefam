@@ -38,10 +38,12 @@ function connectData({ connected = false } = {}) {
 const rpcCalls = (page, fn) => page.evaluate(f => (window.__store.__rpcCalls || []).filter(c => c.fn === f).map(c => c.args), fn);
 
 test.describe('📡 Connect', () => {
-  test('the green button opens the scanner on 🧿 My Code; Join a Crew still opens in claim mode', async ({ page }) => {
+  test('Scan in the Add ravers sheet opens the scanner on 🧿 My Code; Join a Crew still opens in claim mode', async ({ page }) => {
     const errors = await bootAuthedApp(page, { data: connectData() });
     await page.evaluate(() => switchTab('members'));
-    await page.getByRole('button', { name: '📡 Connect' }).click();
+    await page.getByRole('button', { name: '+ Add Raver' }).click();
+    await page.locator('#crew-setup-content').getByRole('button', { name: 'Scan' }).click();
+    await expect(page.locator('#crew-setup-overlay')).not.toHaveClass(/open/);
 
     await expect(page.locator('#scanner-overlay')).toHaveClass(/open/);
     await expect(page.locator('#scanner-title')).toHaveText('📡 Connect');
