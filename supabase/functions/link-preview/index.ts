@@ -3,6 +3,8 @@
 // Called from the Huddle via sb.functions.invoke('link-preview', { body: { url } })
 // to draw a preview card under a message with a link (title, image, site).
 // Returns { url, title, description, image, site } — any field may be null.
+// Generic HTML pages also get `event` (name/date/venue/pin from schema.org
+// JSON-LD, or null) for the Add Rave sheet, which sends { url, wantEvent: true }.
 //
 // - TikTok and YouTube: their public oEmbed endpoints.
 // - Instagram and Facebook: Meta's oEmbed API when the META_OEMBED_TOKEN secret
@@ -14,6 +16,7 @@
 // - Signed-in users only. Private/loopback hosts are refused at every
 //   redirect hop, and only the first MAX_BYTES of a page are read.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { jsonLdEvent, type RaveEvent } from "./event.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -32,7 +35,7 @@ const CORS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-type Preview = { url: string; title: string | null; description: string | null; image: string | null; site: string | null };
+type Preview = { url: string; title: string | null; description: string | null; image: string | null; site: string | null; event?: RaveEvent | null };
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
@@ -178,9 +181,13 @@ async function buildPreview(url: string): Promise<Preview> {
       await res.body?.cancel();
       return { url, site, title: null, description: null, image: type.startsWith("image/") && u.protocol === "https:" ? url : null };
     }
-    const m = metaTags(await readCapped(res));
+    const html = await readCapped(res);
+    const m = metaTags(html);
     const finalUrl = new URL(res.url || url);
+    let event: RaveEvent | null = null;
+    try { event = jsonLdEvent(html); } catch { /* malformed JSON-LD: no event */ }
     return {
+      event,
       url,
       site: clip(m["og:site_name"], 60) || site,
       title: clip(m["og:title"] || m["twitter:title"] || m["title"], 200),
@@ -201,7 +208,8 @@ Deno.serve(async (req) => {
   if (!user) return json({ error: "auth" }, 401);
 
   let raw = "";
-  try { raw = String((await req.json())?.url || "").trim(); } catch { /* fallthrough */ }
+  let wantEvent = false;
+  try { const b = await req.json(); raw = String(b?.url || "").trim(); wantEvent = b?.wantEvent === true; } catch { /* fallthrough */ }
   let url: string;
   try {
     const u = new URL(raw);
@@ -213,9 +221,13 @@ Deno.serve(async (req) => {
 
   const admin = createClient(SUPABASE_URL, SERVICE_KEY);
   const { data: cached } = await admin.from("link_previews").select("data, fetched_at").eq("url", url).maybeSingle();
-  if (cached && Date.now() - new Date(cached.fetched_at).getTime() < CACHE_HOURS * 3600_000) return json(cached.data);
+  // Rows cached before event parsing existed have no `event` key — refetch
+  // those for the Add Rave sheet so a pasted link still fills the form.
+  const fresh = cached && Date.now() - new Date(cached.fetched_at).getTime() < CACHE_HOURS * 3600_000;
+  if (fresh && !(wantEvent && !("event" in (cached.data || {})))) return json(cached.data);
 
   const preview = await buildPreview(url);
+  if (!("event" in preview)) preview.event = null; // oEmbed / blocked paths: cached as "no event"
   await admin.from("link_previews").upsert({ url, data: preview, fetched_at: new Date().toISOString() });
   return json(preview);
 });

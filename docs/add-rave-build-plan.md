@@ -1,6 +1,6 @@
 # Add Rave rebuild: build plan
 
-Status: **plan only, nothing in `app.html` has changed.** Mockups: `mockups/add-rave-flow.html` (chosen flow), `mockups/add-rave-variations.html` (the A/B/C comparison).
+Status: **built in 2.52.0** on `claude/laughing-newton-h7lm48` (edge function + migration not yet deployed/applied, see §7). Mockups: `mockups/add-rave-flow.html` (chosen flow), `mockups/add-rave-variations.html` (the A/B/C comparison).
 
 Decisions so far (Nov 23 2026):
 - One search-first sheet (variant A) with paste-a-link from variant B.
@@ -107,6 +107,12 @@ type Preview = { url; title; description; image; site;
 - Manual: iOS app sheet height and keyboard on a small phone (the create form scrolls inside the sheet).
 
 ## 6. Open questions
-1. **Crew pre-select needs an entry point.** No crew page has an "Add rave" button today. Add one to the crew detail page (e.g. next to the crew's upcoming raves), or only pre-select when there's a single crew?
-2. **Optional database guard** for new rows: `check (date is not null and (venue_id is not null or (lat is not null and lng is not null))) not valid`. It's non-destructive, so it can go through `apply_migration`. Do it now, or wait until the UI has been live for a week?
-3. **RA links:** save the pasted RA URL as `ticket_url` even though nothing else can be read from it?
+All answered (Nov 23 2026):
+1. Crew page gets "＋ Add a rave for the crew" under the ticket stack, and the blank "Where are we raving next?" stub opens the sheet too. Both pre-select that crew.
+2. Database guard: yes, in this release. Built as a **BEFORE INSERT trigger** (`festivals_require_date_and_pin`), not a check constraint. Postgres checks a `not valid` constraint on every UPDATE too, which would block soft-deleting, archiving or recolouring older raves without a pin. It only checks rows with `created_by` set, because the lineup scout's approve RPC inserts with `created_by = null` and no pin.
+3. RA links: the URL is saved as the ticket link.
+
+## 7. Rollout order
+1. Deploy `link-preview` (backwards compatible: Huddle cards ignore `event`).
+2. Ship app 2.52.0.
+3. **Then** apply `20261123000000_festivals_require_date_and_pin.sql` through `apply_migration` (non-destructive: `create or replace`, no drop). Applying it before 2.52.0 is live would make older clients' "Add new rave" popup fail for raves with no date or pin.
