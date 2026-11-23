@@ -215,8 +215,8 @@ test.describe('guidance · setup rave step', () => {
 });
 
 test.describe('inline captions', () => {
-  test('crew status zone shows the "no going back" warning inline', async ({ page }) => {
-    // seedData()'s c1 defaults to 'recruiting' — the "no going back" caption
+  test('crew status zone shows what opening the doors does, inline', async ({ page }) => {
+    // seedData()'s c1 defaults to 'recruiting' — the "Open the doors" caption
     // only applies while Secret, so flip it for this test.
     const data = seedData();
     data.crews = data.crews.map(c => c.id === 'c1' ? { ...c, status: 'secret' } : c);
@@ -224,7 +224,7 @@ test.describe('inline captions', () => {
     await openC1(page, { tab: 'roster' });
     await page.waitForTimeout(400);
     // tab:roster opens the roster sheet, where the status zone lives.
-    await expect(page.locator('#crew-manifest-content .crew-status-zone')).toContainText('No going back to Secret');
+    await expect(page.locator('#crew-manifest-content .crew-status-zone')).toContainText('Invites go live');
   });
 
   test('unclaimed member badge carries the explanation as a title attribute', async ({ page }) => {
@@ -232,7 +232,7 @@ test.describe('inline captions', () => {
     await page.evaluate(() => switchTab('members'));
     await page.waitForTimeout(400);
     const badge = page.locator('#members-grid .claim-badge-unclaimed').first();
-    await expect(badge).toHaveAttribute('title', /placeholder until they scan their QR/i);
+    await expect(badge).toHaveAttribute('title', /saved spot until they scan their QR/i);
   });
 
   test('Roles/Rides/Stay sections show the "claim a slot" hint inline', async ({ page }) => {

@@ -95,6 +95,9 @@
     --surface2-rgb: 22,22,31;
     --white-rgb: 255,255,255;
     --black-rgb: 0,0,0;
+    /* Secret crews: calm violet, so private never reads as an error */
+    --secret-violet: #B98CFF;
+    --secret-violet-rgb: 185,140,255;
     /* danger is the brand pink; -strong fills destructive buttons */
     --danger: var(--neon-pink);
     --danger-rgb: var(--neon-pink-rgb);
@@ -634,7 +637,7 @@
     cursor: pointer;
   }
   .crew-row-eye { display: inline-flex; color: rgba(var(--white-rgb),0.45); }
-  .crew-row-eye.eye-secret { color: var(--neon-pink); }
+  .crew-row-eye.eye-secret { color: var(--secret-violet); }
 
   .crew-members { display: flex; align-items: center; gap: -6px; }
   .avatar {
@@ -671,7 +674,55 @@
   .crew-status.tappable:hover { filter: brightness(1.25); border-color: currentColor; }
   .status-recruiting { background: rgba(var(--neon-green-rgb),0.12); color: var(--neon-green); }
   .status-locked-in { background: rgba(var(--neon-yellow-rgb),0.15); color: var(--neon-yellow); }
-  .status-secret { background: rgba(var(--neon-pink-rgb),0.12); color: var(--neon-pink); }
+  .status-secret { background: rgba(var(--secret-violet-rgb),0.14); color: var(--secret-violet); }
+  /* "Open the doors" review list (Secret → Recruiting confirm) */
+  .open-doors-what { display: flex; flex-direction: column; gap: 10px; text-align: left; margin: 0; }
+  .open-doors-what > div { display: grid; grid-template-columns: 24px 1fr; gap: 8px; align-items: start; font-size: 0.86rem; line-height: 1.45; }
+  .open-doors-what em { display: block; font-style: normal; color: var(--muted); font-size: 0.78rem; }
+  /* Create Crew step 2: how the crew starts */
+  #modal-overlay [hidden] { display: none !important; }
+  .crew-mode-choices { display: flex; flex-direction: column; gap: 10px; }
+  .crew-mode-choice { display: block; text-align: left; border: 1.5px solid rgba(var(--white-rgb),0.12); border-radius: 14px; padding: 12px 14px; background: rgba(var(--white-rgb),0.03); cursor: pointer; transition: border-color .15s, background .15s; }
+  .crew-mode-choice input { accent-color: var(--secret-violet); margin: 0; }
+  .crew-mode-choice input[value="recruiting"] { accent-color: var(--neon-green); }
+  .crew-mode-choice-head { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 0.95rem; }
+  .crew-mode-rec { margin-left: auto; font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--secret-violet); }
+  .crew-mode-choice ul { margin: 6px 0 0; padding-left: 30px; color: var(--muted); font-size: 0.8rem; line-height: 1.5; }
+  .crew-mode-choice:has(input[value="secret"]:checked) { border-color: var(--secret-violet); background: rgba(var(--secret-violet-rgb),0.08); }
+  .crew-mode-choice:has(input[value="recruiting"]:checked) { border-color: var(--neon-green); background: rgba(var(--neon-green-rgb),0.06); }
+  .crew-mode-choice:focus-within { outline: 2px solid rgba(var(--white-rgb),0.5); outline-offset: 2px; }
+  /* Secret banner on the crew page (lead only) */
+  .crew-secret-banner { margin: 0 0 14px; padding: 14px; border-radius: 18px; background: linear-gradient(135deg, rgba(var(--secret-violet-rgb),0.16), rgba(var(--secret-violet-rgb),0.04)); border: 1px solid rgba(var(--secret-violet-rgb),0.3); display: flex; flex-direction: column; gap: 12px; }
+  .crew-secret-banner-head { display: flex; gap: 10px; align-items: flex-start; }
+  .crew-secret-banner-head > span { font-size: 1.4rem; line-height: 1; }
+  .crew-secret-banner-head strong { display: block; font-size: 0.95rem; }
+  .crew-secret-banner-head p { margin: 2px 0 0; font-size: 0.8rem; color: var(--muted); line-height: 1.5; }
+  .crew-secret-banner-actions { display: flex; gap: 8px; }
+  .crew-secret-banner-actions .btn { flex: 1; padding: 10px; font-size: 0.82rem; }
+  .btn.crew-secret-add { background: rgba(var(--secret-violet-rgb),0.16); color: var(--secret-violet); border: 1px solid rgba(var(--secret-violet-rgb),0.4); }
+  .crew-secret-banner-more { font-size: 0.76rem; color: var(--muted); line-height: 1.5; }
+  .crew-secret-banner-more button { background: none; border: none; padding: 0; font: inherit; color: var(--secret-violet); text-decoration: underline; cursor: pointer; }
+  .crew-secret-banner.is-slim { flex-direction: row; align-items: center; gap: 10px; padding: 8px 8px 8px 14px; border-radius: 14px; }
+  .crew-secret-banner.is-slim p { margin: 0; flex: 1; min-width: 0; font-size: 0.8rem; color: var(--muted); }
+  .crew-secret-banner.is-slim p strong { color: var(--text); }
+  .btn.crew-secret-add-sm { flex-shrink: 0; padding: 7px 11px; font-size: 0.76rem; }
+  /* Crew modes sheet (status pill) */
+  .crew-modes-list { display: flex; flex-direction: column; gap: 8px; }
+  .crew-mode-row { padding: 10px 12px; border-radius: 12px; background: rgba(var(--white-rgb),0.03); border: 1px solid rgba(var(--white-rgb),0.08); display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+  .crew-mode-row.is-current { border-color: rgba(var(--white-rgb),0.3); }
+  .crew-mode-row p { margin: 0; font-size: 0.8rem; color: var(--muted); line-height: 1.45; }
+  /* Add ravers sheet + invite handoff */
+  .add-ravers-create { display: block; width: 100%; margin-top: 8px; padding: 10px 12px; border-radius: 12px; text-align: left; cursor: pointer; font: inherit; font-size: 0.85rem; color: var(--secret-violet); background: rgba(var(--secret-violet-rgb),0.1); border: 1px dashed rgba(var(--secret-violet-rgb),0.45); }
+  .add-ravers-fam { display: flex; flex-wrap: wrap; gap: 6px; }
+  .add-ravers-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 3px; border-radius: 99px; cursor: pointer; font: inherit; font-size: 0.8rem; color: var(--text); background: rgba(var(--white-rgb),0.04); border: 1px solid rgba(var(--white-rgb),0.12); }
+  .add-ravers-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(var(--white-rgb),0.07); }
+  .add-ravers-row-name { flex: 1; min-width: 0; font-weight: 600; font-size: 0.88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .crew-handoff-btn { padding: 5px 10px; border-radius: 9px; cursor: pointer; font: inherit; font-size: 0.75rem; color: var(--text); background: none; border: 1px solid rgba(var(--white-rgb),0.15); white-space: nowrap; }
+  .crew-handoff-btn.is-hot { color: var(--neon-green); border-color: rgba(var(--neon-green-rgb),0.45); }
+  /* Rave page: saved-spot picker's Going / Interested toggle */
+  #rf-saved-picker .rf-seg { padding: 4px; }
+  #rf-saved-picker .rf-seg-btn { padding: 8px; }
+  #rf-saved-picker .rf-seg-btn.active { background: rgba(var(--secret-violet-rgb),0.18); color: var(--secret-violet); border-radius: 10px; }
 
 
   /* Crew Next Festival block (crew detail page) — styled as a taped
@@ -3531,23 +3582,6 @@
     font-weight: 700;
   }
   .detail-member-link:hover .detail-member-arrow { color: var(--neon-green); }
-  .member-search-wrap { position: relative; }
-  .member-search-dropdown {
-    position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
-    background: var(--surface2); border: 1px solid rgba(var(--white-rgb),0.12);
-    border-radius: 12px; overflow: hidden;
-    max-height: 220px; overflow-y: auto;
-    box-shadow: 0 8px 32px rgba(var(--black-rgb),0.4);
-  }
-  .member-search-opt {
-    display: flex; align-items: center; gap: 10px;
-    padding: 10px 14px; cursor: pointer; font-size: 0.86rem;
-    transition: background 0.12s; border-bottom: 1px solid rgba(var(--white-rgb),0.05);
-  }
-  .member-search-opt:last-child { border-bottom: none; }
-  .member-search-opt:hover { background: rgba(var(--white-rgb),0.06); }
-  .member-search-opt .opt-handle { color: var(--muted); font-size: 0.76rem; margin-left: auto; }
-  .member-search-create { color: var(--neon-pink); font-weight: 700; font-family: 'Outfit', sans-serif; }
   .remove-member-btn {
     margin-left: auto; background: none; border: none; cursor: pointer;
     color: var(--muted); font-size: 1.1rem; line-height: 1; padding: 2px 6px;
@@ -10211,6 +10245,8 @@
 <div class="modal-overlay" id="modal-overlay" onclick="closeModalOutside(event)">
   <div class="modal">
     <div class="modal-title">🎉 Create New Crew</div>
+    <div class="text-hint" id="create-crew-step-label" style="margin:-8px 0 14px;">Step 1 of 2 · Make it yours</div>
+    <div id="create-crew-step-1">
     <div class="form-group">
       <label for="crew-name-input" class="form-label">Crew Name</label>
       <input class="form-input" type="text" placeholder="e.g. The Underground" id="crew-name-input">
@@ -10237,11 +10273,32 @@
       </div>
     </div>
     <div class="form-group">
-      <label class="form-label">Crew Totem <span class="text-hint" style="font-weight:400;">optional</span></label>
-      <div class="totem-icon-grid" id="create-totem-icon-grid"></div>
+      <button type="button" class="btn btn-ghost" id="create-totem-toggle" style="padding:8px 14px;font-size:0.8rem;" onclick="this.hidden = true; document.getElementById('create-totem-wrap').hidden = false;">＋ Totem <span class="text-hint" style="font-weight:400;">optional</span></button>
+      <div id="create-totem-wrap" hidden>
+        <label class="form-label">Crew Totem <span class="text-hint" style="font-weight:400;">optional</span></label>
+        <div class="totem-icon-grid" id="create-totem-icon-grid"></div>
+      </div>
     </div>
-    <div class="modal-actions">
+    </div>
+    <div id="create-crew-step-2" hidden>
+      <div class="text-hint" style="margin-bottom:12px;">Stay Secret as long as you like, or open the doors any time.</div>
+      <div class="crew-mode-choices" role="radiogroup" aria-label="How your crew starts">
+        <label class="crew-mode-choice">
+          <span class="crew-mode-choice-head"><input type="radio" name="create-crew-mode" value="secret" checked> 🤫 Secret <span class="crew-mode-rec">Private Blackbook</span></span>
+          <ul><li>Only you can see it</li><li>Save spots for the ravers you know, no account needed</li><li>Track which raves they're hitting, no group chat needed</li><li>Nobody gets notified</li></ul>
+        </label>
+        <label class="crew-mode-choice">
+          <span class="crew-mode-choice-head"><input type="radio" name="create-crew-mode" value="recruiting"> 🟢 Recruiting now</span>
+          <ul><li>Invite link and QR codes go live</li><li>People join and claim their spot</li><li>Huddle chat, Rave Plan, Polls and Jams from day one</li></ul>
+        </label>
+      </div>
+    </div>
+    <div class="modal-actions" id="create-crew-actions-1">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="crewCreateStep(2)">Next →</button>
+    </div>
+    <div class="modal-actions" id="create-crew-actions-2" hidden>
+      <button class="btn btn-ghost" onclick="crewCreateStep(1)">← Back</button>
       <button class="btn btn-primary" onclick="createCrew()">Create Crew 🔥</button>
     </div>
   </div>
@@ -10288,6 +10345,15 @@
 <div class="modal-overlay crew-manifest-overlay" id="crew-manifest-overlay" onclick="if(event.target===this)closeCrewManifestSheet()">
   <div class="modal crew-manifest-sheet" id="crew-manifest-content" role="dialog" aria-modal="true" aria-label="Crew roster">
     <!-- filled by renderCrewFeedPage -->
+  </div>
+</div>
+
+<!-- Crew setup sheet: Add ravers + invite handoff. After the manifest sheet
+     (so it opens on top of the roster) and before the QR modal (so QR opens
+     on top of it). -->
+<div class="modal-overlay crew-manifest-overlay" id="crew-setup-overlay" onclick="if(event.target===this)closeCrewSetupSheet()">
+  <div class="modal crew-manifest-sheet" id="crew-setup-content" role="dialog" aria-modal="true" aria-label="Crew setup">
+    <!-- filled by openAddRaversSheet / showCrewInviteHandoff -->
   </div>
 </div>
 
@@ -10762,8 +10828,8 @@
       <div class="gk-eyebrow" style="--gk-color:var(--muted);margin:18px 0 10px;">THE BASICS</div>
       <div class="onboard-features">
         <div class="onboard-feat"><span class="onboard-feat-icon">🎪</span><span><strong>Crews</strong>: your fam's home base. Lead your own or join one someone shares with you.</span></div>
-        <div class="onboard-feat"><span class="onboard-feat-icon">🤫</span><span><strong>Start solo, in Secret</strong>: a new crew begins private. Add ravers you already know as unclaimed profiles from "Add Member" (no account needed for them yet) to track your whole fam before anyone's even signed up. Nothing is sent or notified while you're Secret.</span></div>
-        <div class="onboard-feat"><span class="onboard-feat-icon">🟢</span><span><strong>Level up to Recruiting</strong>: when you're ready, flip your crew from Secret to Recruiting from its detail page. Your crew gets notified, QR codes and invite links go live so people can claim the spot you saved for them, and crew Polls and Jams (shared playlists) unlock. Your Dream Board wish-list works anytime, even while Secret.</span></div>
+        <div class="onboard-feat"><span class="onboard-feat-icon">🤫</span><span><strong>Your private Blackbook</strong>: a Secret crew is just for you. Save spots for the ravers you know from "Add ravers" (no account needed) and keep track of which raves they're hitting, no group chat needed. Nothing is sent or notified while you're Secret, and you can stay that way.</span></div>
+        <div class="onboard-feat"><span class="onboard-feat-icon">🟢</span><span><strong>Open the doors (optional)</strong>: when you want the crew in on it, flip your crew from Secret to Recruiting from its detail page. Your crew gets notified, QR codes and invite links go live so people can claim the spot you saved for them, and the crew comes alive: Huddle chat, Rave Plan (rides, tasks and seats), who's going and which sets they're hitting, crew Polls and Jams (shared playlists). Your Dream Board wish-list works anytime, even while Secret.</span></div>
         <div class="onboard-feat"><span class="onboard-feat-icon">🗺️</span><span><strong>Rave Plan</strong>: every rave you share with a crew gets its own board: Huddle, Tasks, Roles, Rides, Stay, and Outfit, so logistics live in one place.</span></div>
         <div class="onboard-feat"><span class="onboard-feat-icon">✨</span><span><strong>PLUR Points</strong>: real activity across Peace, Love, Unity, and Respect earns you points, verified by RaveFAM. Tap your points bar on your profile anytime to see how.</span></div>
         <div class="onboard-feat"><span class="onboard-feat-icon">🗓️</span><span><strong>Raves</strong>: browse events and mark yourself Going or Interested so your crew knows the plan.</span></div>
@@ -11360,7 +11426,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.50.2';
+  const APP_VERSION = '2.51.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -18292,7 +18358,7 @@
     if (!r) return;
     showConfirm(
       '🔗 Disconnect account?',
-      `This will unlink ${r.name}'s registered account. Their profile stays in the crew as unclaimed. They can re-link using their original invite code — but you can't undo this yourself.`,
+      `This will unlink ${r.name}'s registered account. Their profile stays in the crew as a saved spot. They can re-link using their original invite code — but you can't undo this yourself.`,
       'Disconnect',
       () => disconnectRaver(raverId)
     );
@@ -18311,7 +18377,7 @@
       delete metStoriesCache[String(raverId)];
       renderSquad();
       openProfile(raverId);
-      showToast('Account disconnected. Profile is now unclaimed');
+      showToast('Account disconnected. Profile is now a saved spot');
     } catch(e) {
       console.error('disconnectRaver error', e);
       toastError('Could not disconnect: ' + (e.message || 'try again'));
@@ -18883,7 +18949,21 @@
         <button type="button" class="totem-icon-swatch" data-icon-key="${key}" style="background:${CREW_GRADIENTS['#FF2D78']}" title="${label}" aria-label="${label}" aria-pressed="false" onclick="selectCreateTotemIcon(this)">${glyph}</button>
       `).join('');
     }
+    const totemToggle = document.getElementById('create-totem-toggle');
+    if (totemToggle) totemToggle.hidden = false;
+    const totemWrap = document.getElementById('create-totem-wrap');
+    if (totemWrap) totemWrap.hidden = true;
+    const secretOpt = document.querySelector('input[name="create-crew-mode"][value="secret"]');
+    if (secretOpt) secretOpt.checked = true;
+    crewCreateStep(1);
     document.getElementById('modal-overlay').classList.add('open');
+  }
+  // Create Crew is two steps: 1 = name & look, 2 = how it starts (Secret / Recruiting).
+  function crewCreateStep(n) {
+    ['create-crew-step-1', 'create-crew-actions-1'].forEach(id => { const el = document.getElementById(id); if (el) el.hidden = n !== 1; });
+    ['create-crew-step-2', 'create-crew-actions-2'].forEach(id => { const el = document.getElementById(id); if (el) el.hidden = n !== 2; });
+    const label = document.getElementById('create-crew-step-label');
+    if (label) label.textContent = n === 1 ? 'Step 1 of 2 · Make it yours' : 'Step 2 of 2 · How should it start?';
   }
   function selectCreateTotemIcon(el) {
     const wasSelected = el.classList.contains('selected');
@@ -18923,7 +19003,7 @@
   //   'locked-in'  — roster closed; no new members; QR disabled
   // Transition: secret → recruiting (one-way); recruiting ↔ locked-in freely
   const STATUS = {
-    'secret':    { cls: 'status-secret',    label: '🔴 Secret' },
+    'secret':    { cls: 'status-secret',    label: '🤫 Secret' },
     'recruiting': { cls: 'status-recruiting', label: '🟢 Recruiting' },
     'locked-in':  { cls: 'status-locked-in',  label: '🔒 Locked In' }
   };
@@ -20777,7 +20857,8 @@
     loadHuddleDrawerEntries().then(renderNotifList);
   }
 
-  // Quick tap: change status (Lead only) — shows confirmation first
+  // Quick tap on the status pill (Lead only): explain the modes first, then
+  // the sheet's button leads to the confirm (showStatusWarn).
   // Secret → Recruiting (one-way); Recruiting ↔ Locked-in freely
   function toggleStatus(id) {
     const crew = getCrew(id);
@@ -20786,11 +20867,7 @@
       toastError('Only the Crew Lead can change the status');
       return;
     }
-    let newStatus;
-    if (crew.status === 'secret') newStatus = 'recruiting';
-    else if (crew.status === 'recruiting') newStatus = 'locked-in';
-    else newStatus = 'recruiting'; // locked-in → recruiting
-    showStatusWarn(id, newStatus);
+    showCrewModesSheet(id);
   }
 
   // ===== Crew detail view =====
@@ -21814,7 +21891,7 @@
     ` },
     { id: 'profiles', icon: '👤', title: 'Profile & Privacy', body: `
       <div class="v-stack">
-        ${modGuideBullet(`Profiles can be <b>unclaimed</b> (a stub someone else created, e.g. a crew leader adding a friend who hasn't signed up) or <b>claimed</b> (the real person linked their account via a QR-based claim flow). A claimed profile can also be disconnected back to unclaimed.`)}
+        ${modGuideBullet(`Profiles can be <b>unclaimed</b>, shown to users as a <b>Saved spot</b> (a stub someone else created, e.g. a crew leader adding a friend who hasn't signed up) or <b>claimed</b> (the real person linked their account via a QR-based claim flow). A claimed profile can also be disconnected back to unclaimed.`)}
         ${modGuideBullet(`<b>While unclaimed:</b> the crew leader (or, for some fields, any crew member) can edit name, location, Instagram, phone, etc. — there's no owner yet, so someone has to be able to manage it.`)}
         ${modGuideBullet(`<b>Once claimed:</b> the crew leader loses edit rights on location, Instagram, phone, and radiate — those become the owner's own privacy call. Leaders keep some editing (name/tags/genres/artists/fests-adjacent fields) based on crew membership, separate from claim status.`)}
         ${modGuideBullet(`<b>Deleting a profile:</b> only possible for unclaimed profiles, by the leader or a moderator. Once claimed, that delete path is closed entirely — there's no leader/mod way to delete a claimed person's profile.`)}
@@ -22591,7 +22668,7 @@
     const isSecret = crew.status === 'secret';
     const isRecruiting = crew.status === 'recruiting';
     const meaning = isSecret
-      ? '🔴 <strong>Secret mode.</strong> Only you can see this crew. Use it as a private workspace — plan your lineup, add unclaimed profiles, and get everything ready before you open up to your fam.'
+      ? '🤫 <strong>Secret mode.</strong> Your private Blackbook. Only you can see this crew: save spots for the ravers you know and track which raves they\'re hitting. Stay Secret as long as you like, or open the doors when you want the crew in on it.'
       : isRecruiting
       ? '🌐 <strong>Recruiting.</strong> Claimed members can see each other and access shared features. Personal QR codes and invite links are active — share them to grow your crew.'
       : '🔒 <strong>Locked In.</strong> The roster is final. No new ravers can join and QR invites are disabled. Your crew is official — it\'s happening!';
@@ -22629,7 +22706,7 @@
           const isClaimed = isLeader || raverIsClaimed(p);
           const statusDot = isLeader ? '' : isClaimed
             ? `<span class="verified-badge" title="Claimed">✓</span>`
-            : `<span class="claim-badge claim-badge-unclaimed" title="Placeholder until they scan their QR and claim it — open their profile to grab it and share">◌ Unclaimed</span>`;
+            : `<span class="claim-badge claim-badge-unclaimed" title="${isSecret ? 'Saved spot. Their invite unlocks when you open the doors' : 'Saved spot until they scan their QR and claim it — open their profile to grab it and share'}">◌ Saved spot</span>`;
           const canRemove = canManageMembers && !p.isYou && !isLeader;
           let right;
           if (isLeader) {
@@ -22640,7 +22717,9 @@
             const qrBtn = !isSecret && p.qrToken
               ? `<button class="remove-member-btn" style="background:none;border:1.5px solid rgba(var(--white-rgb),0.15);border-radius:8px;padding:2px 7px;font-size:0.8rem;" data-raver-id="${p.id}" onclick="event.stopPropagation(); showQRModal(this.dataset.raverId)" title="Show QR to invite" aria-label="Show QR to invite">📲</button>`
               : '';
+            const ravesBtn = `<button class="remove-member-btn" style="background:none;border:1.5px solid rgba(var(--white-rgb),0.15);border-radius:8px;padding:2px 7px;font-size:0.8rem;" data-raver-id="${p.id}" onclick="event.stopPropagation(); openProfileListSheet('manage', this.dataset.raverId)" title="Mark their raves" aria-label="Mark ${escHtml(displayName(p).split(' ')[0])}'s raves">🎟️</button>`;
             right = `<span style="display:flex;align-items:center;gap:5px;">
+              ${ravesBtn}
               ${qrBtn}
               <button class="remove-member-btn" data-crew="${crew.id}" data-raver="${p.id}" onclick="event.stopPropagation(); confirmRemoveMember(this.dataset.crew, this.dataset.raver)" title="Remove from crew" aria-label="Remove from crew">×</button>
             </span>`;
@@ -22656,7 +22735,7 @@
           const pDisplayFirst = escHtml(displayName(p).split(' ')[0]);
           const nameDisplay = isLeader
             ? `<span style="display:flex;align-items:center;gap:5px;">${pDisplayFirst}${p.isYou ? ' (You)' : ''} <span title="Crew Leader" style="font-size:1rem;">👑</span> ${statusDot}</span>`
-            : `<span>${pDisplayFirst}${p.isYou ? ' (You)' : ''} ${statusDot}</span>`;
+            : `<span>${pDisplayFirst}${p.isYou ? ' (You)' : ''} ${statusDot}${isSecret && !isClaimed && canManageMembers ? '<small class="text-hint-xs" style="display:block;margin-top:1px;">Invite unlocks when you open the doors</small>' : ''}</span>`;
           return `
             <div class="detail-member detail-member-link" data-raver-id="${p.id}" role="button" tabindex="0" aria-label="View ${escHtml(p.name)}'s profile" onclick="goToProfileFromDetail(this.dataset.raverId)" title="View ${escHtml(p.name)}'s profile">
               ${raverAvatarHTML(p.avatarUrl, p.gradient, p.name, isClaimed ? 'avatar' : 'avatar avatar-unclaimed', 'margin:0;')}
@@ -22672,19 +22751,13 @@
     if (crew.isLead) {
       if (!isLockedIn) addMemberControl = `
         <div class="form-group">
-          <label class="form-label">Add Member</label>
-          ${isSecret ? `<div style="font-size:0.74rem;color:#e05555;margin-bottom:8px;">Added members won't be notified until you go Recruiting.</div>` : ''}
-          <div class="member-search-wrap">
-            <input class="form-input" id="add-member-input" aria-label="Search ravers by name or tag" placeholder="Search by name or @handle…"
-              oninput="searchMembersDropdown(this.value)"
-              onblur="setTimeout(()=>{ const d=document.getElementById('member-search-dropdown'); if(d) d.style.display='none'; }, 180)">
-            <div id="member-search-dropdown" class="member-search-dropdown" style="display:none;"></div>
-          </div>
+          <button type="button" class="btn btn-wide crew-secret-add" style="padding:11px;" onclick="openAddRaversSheet('${escJsAttr(crew.id)}')">＋ Add ravers</button>
+          ${isSecret ? `<div class="text-hint-xs" style="margin-top:7px;text-align:center;">🔕 Nobody is notified while your crew is Secret.</div>` : ''}
         </div>`;
       if (isSecret) {
         statusControl = `
-          <button class="btn-status-cta" onclick="setStatus('${escJsAttr(crew.id)}','recruiting')">🟢 Open the Crew to Recruiting</button>
-          <div class="text-hint-xs" style="margin-top:7px;line-height:1.5;text-align:center;">Your crew gets notified · QR invites go live · No going back to Secret</div>`;
+          <button class="btn-status-cta" onclick="setStatus('${escJsAttr(crew.id)}','recruiting')">🟢 Open the doors</button>
+          <div class="text-hint-xs" style="margin-top:7px;line-height:1.5;text-align:center;">Invites go live · Huddle, Rave Plan, Polls &amp; Jams open up</div>`;
       } else {
         statusControl = `
           <div class="status-toggle">
@@ -22809,6 +22882,7 @@
     page.innerHTML = `
       <div class="crew-feed-wrap">
         ${crewFeedHeaderHTML(crew, s, people)}
+        ${crewSecretBannerHTML(crew)}
         ${crewQuestRowHTML(crew)}
         <div id="huddle-tile-preview-root" class="crew-feed-huddle"></div>
         ${crewTicketStackHTML(crew)}
@@ -22835,7 +22909,7 @@
     const totem = crewTotemMarkHTML(crew, 'crew-feed-totem')
       || `<div class="crew-feed-totem crew-feed-totem-blank" style="background:${safeGradient(crew.gradient)}" aria-hidden="true"></div>`;
     const status = crew.isLead
-      ? `<button type="button" class="crew-status ${s.cls} tappable-lead" onclick="toggleStatus('${escJsAttr(crew.id)}')" title="Tap to change status">${s.label}</button>`
+      ? `<button type="button" class="crew-status ${s.cls} tappable-lead" onclick="toggleStatus('${escJsAttr(crew.id)}')" title="Tap to see crew modes">${s.label}</button>`
       : `<span class="crew-status ${s.cls}">${s.label}</span>`;
     return `
       <div class="crew-feed-head">
@@ -23198,7 +23272,7 @@
         <div class="es-block crew-feed-empty">
           <div class="es-icon">🌀</div>
           <div class="es-headline">Nothing here yet</div>
-          <div class="es-sub">Polls, jams, dreams, photos and pins all land here. Tap + to start something.</div>
+          <div class="es-sub">${getCrew(crewId)?.status === 'secret' ? 'Dreams, photos and pins' : 'Polls, jams, dreams, photos and pins'} all land here. Tap + to start something.</div>
         </div>${historyCard}`;
       return;
     }
@@ -29465,6 +29539,7 @@
       .select().single();
     if (error) { toastError('Could not save pin. Try again', error); return null; }
     dreamPins.push(data);
+    markCrewQuest('dream', crewId);
     postCrewActivity(crewId, `📌 ${activityWho()} pinned ${data.label} to the Dream Board`, { k: 'tile', feature: 'dreamboard', id: data.id });
     return data;
   }
@@ -33427,16 +33502,27 @@
   // stamps on the ticket. Stamps are worked out from crew data where it
   // exists; the rest are flags other steps set with markCrewQuest(). All
   // stamped → a light moment and the Crew Captain / Settled In badge, then
-  // the row retires for that crew.
+  // the row retires for that crew. A Secret crew's lead gets Blackbook quests
+  // instead (Blackbook Keeper badge): staying Secret is a complete path.
   function crewQuestDefs(crew) {
     const id = crew.id;
     const q = _guidance?.quests || {};
     const hasGamePlan = deriveCrewFestivalPlans(crew).live.length > 0;
+    if (crew.isLead && crew.status === 'secret') {
+      const others = crewSquad(crew).filter(p => !p.isYou && String(p.id) !== String(crew.leader_id));
+      const dreamDone = !!q[`dream:${id}`] || (String(activeDetailId) === String(id) && dreamPins.length > 0);
+      return { label: 'BLACKBOOK QUESTS', title: 'Blackbook quests', badge: 'Blackbook Keeper', items: [
+        { key: 'add', label: 'Add your people', done: others.length >= 1, go: `openAddRaversSheet('${escJsAttr(id)}')` },
+        { key: 'rave', label: 'Mark someone’s rave', done: others.some(p => (p.festIds || []).length || (p.interestedFestIds || []).length), go: `openCrewManifestSheet()` },
+        { key: 'dream', label: 'Pin a dream rave', done: dreamDone, go: `openCrewFeature('dreamboard')` },
+        ...(others.some(p => p.claimedBy) ? [{ key: 'check', label: 'Send a Rave Check', done: !!q[`check:${id}`], go: `switchTab('events')` }] : [])
+      ] };
+    }
     if (crew.isLead) {
       const people = crewSquad(crew);
       return { label: 'LEAD QUESTS', title: 'Lead quests', badge: 'Crew Captain', items: [
-        { key: 'add', label: 'Add your people', done: people.length >= 2, go: `openCrewManifestSheet()` },
-        { key: 'doors', label: 'Open the doors', done: crew.status !== 'secret', go: `openCrewManifestSheet()` },
+        { key: 'add', label: 'Add your people', done: people.length >= 2, go: `openAddRaversSheet('${escJsAttr(id)}')` },
+        { key: 'doors', label: 'Open the doors', done: crew.status !== 'secret', go: `setStatus('${escJsAttr(id)}','recruiting')` },
         { key: 'claim', label: 'Get a spot claimed', done: people.some(p => !p.isYou && p.claimedBy), go: `openCrewShareCard('${escJsAttr(id)}')` },
         { key: 'plan', label: 'Get a crewmate going', done: hasGamePlan, go: `switchTab('events')` }
       ] };
@@ -33449,8 +33535,14 @@
     ] };
   }
 
+  // Blackbook quests retire under their own key, so finishing them doesn't
+  // hide the Lead quests that start if the crew later opens its doors.
+  function crewQuestDoneKey(crew) {
+    return (crew.isLead && crew.status === 'secret' ? 'done_bb:' : 'done:') + crew.id;
+  }
+
   function crewQuestRowHTML(crew) {
-    if (!_guidance || !crew || _guidance.quests[`done:${crew.id}`]) return '';
+    if (!_guidance || !crew || _guidance.quests[crewQuestDoneKey(crew)]) return '';
     const me = squad.find(r => r.isYou);
     const isMember = crew.isLead || (me && crew.squadIds.some(sid => String(sid) === String(me.id)));
     if (!isMember) return '';
@@ -33485,8 +33577,8 @@
   function retireCrewQuests(crewId) {
     const crew = getCrew(crewId);
     if (!_guidance || !crew) return;
-    _guidance.quests[`done:${crewId}`] = true;
-    _guidance.quests[crew.isLead ? 'badge_crew_captain' : 'badge_settled_in'] = true;
+    _guidance.quests[crewQuestDoneKey(crew)] = true;
+    _guidance.quests[crew.isLead ? (crew.status === 'secret' ? 'badge_blackbook' : 'badge_crew_captain') : 'badge_settled_in'] = true;
     saveGuidance();
     rerenderCrewQuestRow(crewId);
     showToast('🏅 Badge added to your Stats');
@@ -33643,31 +33735,48 @@
     let icon, title, body, confirmLabel;
     if (newStatus === 'recruiting' && crew.status === 'secret') {
       icon = '🟢';
-      title = `Ready to Open ${escHtml(crew.name)} to Recruiting?`;
-      body = `Claimed members will be able to see each other and access shared features. Personal QR codes and invite links become active. <strong>This can't be undone</strong> — you won't be able to go back to Secret.`;
-      confirmLabel = `🟢 Open to Recruiting`;
+      title = `Open the doors to ${escHtml(crew.name)}?`;
+      const others = crewSquad(crew).filter(p => !p.isYou && String(p.id) !== String(crew.leader_id));
+      const saved = others.filter(p => !raverIsClaimed(p));
+      const onApp = others.filter(p => raverIsClaimed(p));
+      const names = list => {
+        const first = list.slice(0, 3).map(p => escHtml(displayName(p).split(' ')[0]));
+        return list.length > 3 ? `${first.join(', ')} +${list.length - 3} more` : first.join(list.length === 2 ? ' and ' : ', ');
+      };
+      const row = (ico, head, sub) => `<div><span aria-hidden="true">${ico}</span><span><strong>${head}</strong><em>${sub}</em></span></div>`;
+      body = `<div class="text-hint" style="margin-bottom:10px;">Here's what happens:</div><div class="open-doors-what">
+        ${saved.length
+          ? row('📲', `${saved.length} saved spot${saved.length !== 1 ? 's' : ''} get${saved.length === 1 ? 's' : ''} an invite`, `${names(saved)} can claim ${saved.length === 1 ? 'their spot' : 'their spots'} with a personal link or QR`)
+          : row('🔗', 'Your crew invite link goes live', 'Share it with anyone you want in the crew')}
+        ${onApp.length ? row('🔔', `${names(onApp)} ${onApp.length === 1 ? 'is' : 'are'} notified`, 'Ravers already on RaveFAM see the crew right away') : ''}
+        ${row('💬', 'The Huddle goes live', 'Chat with the whole crew, and RSVPs show up in the crew feed')}
+        ${row('🎟️', 'Plan raves together', 'Rave Plan rides, tasks and seats, plus who’s going and which sets they’re hitting')}
+        ${row('🗳️', 'Polls and Jams unlock', 'Vote on plans and build shared playlists. Your Dream Board comes along')}
+        ${row('↩︎', 'Secret can’t be turned back on', 'Your saved spots and plans stay. Once open, you can switch between Recruiting and Locked In')}
+      </div>`;
+      confirmLabel = `🟢 Open the doors`;
     } else if (newStatus === 'locked-in') {
       icon = '🔒';
       title = `Lock ${escHtml(crew.name)} In? 🔒`;
       const unclaimedCount = crewSquad(crew).filter(p => !raverIsClaimed(p)).length;
       const unclaimedWarn = unclaimedCount > 0
-        ? `<div style="margin-top:10px;padding:10px 12px;background:rgba(var(--neon-yellow-rgb),0.08);border:1px solid rgba(var(--neon-yellow-rgb),0.25);border-radius:10px;color:var(--neon-yellow);font-size:0.8rem;line-height:1.5;">⚠️ <strong>${unclaimedCount} unclaimed profile${unclaimedCount > 1 ? 's' : ''}</strong> won't be able to join without an invite — but their QR codes stay active so they can still claim a spot later.</div>`
+        ? `<div style="margin-top:10px;padding:10px 12px;background:rgba(var(--neon-yellow-rgb),0.08);border:1px solid rgba(var(--neon-yellow-rgb),0.25);border-radius:10px;color:var(--neon-yellow);font-size:0.8rem;line-height:1.5;">⚠️ <strong>${unclaimedCount} saved spot${unclaimedCount > 1 ? 's' : ''}</strong> won't be able to join without an invite — but their QR codes stay active so they can still claim a spot later.</div>`
         : '';
-      body = `No new members can be added once locked. QR codes stay active so unclaimed members can still join. <strong>Make sure everyone's in before you lock it.</strong>${unclaimedWarn}`;
+      body = `No new members can be added once locked. QR codes stay active so saved spots can still be claimed. <strong>Make sure everyone's in before you lock it.</strong>${unclaimedWarn}`;
       confirmLabel = `🔒 Lock It In`;
     } else {
       icon = '🌟';
       title = `Re-open ${escHtml(crew.name)} to Recruiting? 🌟`;
-      body = `More ravers might be joining the squad — keep an eye out! QR invite links will be re-enabled for unclaimed members.`;
+      body = `More ravers might be joining the squad — keep an eye out! QR invite links will be re-enabled for saved spots.`;
       confirmLabel = `🌟 Re-open Recruiting`;
     }
 
     document.getElementById('status-warn-modal').innerHTML = `
       <div style="font-size:2.4rem;margin-bottom:14px;">${icon}</div>
       <div class="modal-title" style="margin-bottom:12px;">${title}</div>
-      <p class="text-hint-lg" style="line-height:1.65;margin-bottom:22px;">${body}</p>
+      <div class="text-hint-lg" style="line-height:1.65;margin-bottom:22px;">${body}</div>
       <div class="modal-actions" style="margin-top:0;">
-        <button class="btn btn-ghost btn-fill" onclick="closeStatusWarn()">Cancel</button>
+        <button class="btn btn-ghost btn-fill" onclick="closeStatusWarn()">${newStatus === 'recruiting' && crew.status === 'secret' ? 'Not yet' : 'Cancel'}</button>
         <button class="btn btn-primary btn-fill" onclick="confirmStatusChange()">${confirmLabel}</button>
       </div>`;
     document.getElementById('status-warn-overlay').classList.add('open');
@@ -33693,12 +33802,13 @@
     } else if (status === 'recruiting') {
       const wasSecret = prevStatus === 'secret';
       const msg = wasSecret
-        ? `🎉 ${crew.name} is now Recruiting! Share the QR codes and invite your family.`
+        ? `🎉 ${crew.name} is open! Send your saved spots their invites so they can claim them.`
         : `🌟 ${crew.name} is back in Recruiting mode! More ravers might be joining the squad.`;
       showToast(msg);
       notifyCrewMembers(crew, msg, [nlCrew(crew)]);
       if (wasSecret) {
-        addNotification(`🟢 ${crew.name} just went public! QR codes are hot, invite links are live — it's time to rally the fam!`, [nlCrew(crew)]);
+        addNotification(`🟢 ${crew.name} just opened its doors! QR codes are hot, invite links are live — it's time to rally the fam!`, [nlCrew(crew)]);
+        showCrewInviteHandoff(crew.id);
       } else {
         addNotification(`🌟 ${crew.name} is back in Recruiting mode! The gates are open again — keep an eye on who slides through the portal.`, [nlCrew(crew)]);
       }
@@ -33712,38 +33822,227 @@
     if (currentUser) dbSaveCrew({ name: crew.name, color: crew.color, gradient: crew.gradient, status }, crew.id);
   }
 
-  function searchMembersDropdown(query) {
-    const dropdown = document.getElementById('member-search-dropdown');
-    if (!dropdown) return;
-    const crew = crews.find(c => String(c.id) === String(activeDetailId));
-    const q = query.trim().toLowerCase();
-    if (!q) { dropdown.style.display = 'none'; return; }
+  // ===== CREW SETUP FLOW (Secret banner, modes sheet, Add ravers, invite handoff) =====
+  // A new crew starts as the lead's private Secret workspace. These pieces make
+  // that visible and keep the next step one tap away: the banner on the crew
+  // page, the modes sheet behind the status pill, the Add ravers sheet (saved
+  // spots by name, no profile editor), and the invite list after opening up.
 
-    const matches = squad.filter(r =>
-      !crew.squadIds.some(id => String(id) === String(r.id)) &&
-      (r.name.toLowerCase().includes(q) || (r.handle || '').toLowerCase().includes(q) || (nicknameCache[String(r.id)] || '').toLowerCase().includes(q))
-    );
+  function crewSavedSpots(crew) {
+    return crewSquad(crew).filter(p => !p.isYou && String(p.id) !== String(crew.leader_id) && !raverIsClaimed(p));
+  }
 
-    const rows = matches.map(r => {
-      const dn = displayName(r);
-      const realNameNote = (nicknameCache[String(r.id)] && dn !== r.name) ? `<span class="text-hint-xs" style="margin-left:4px;">(${escHtml(r.name)})</span>` : '';
-      return `
-      <div class="member-search-opt" data-raver-id="${r.id}"
-        onmousedown="addExistingMember(this.dataset.raverId)">
-        ${raverAvatarHTML(r.avatarUrl, r.gradient, r.name, 'avatar', 'margin:0;width:26px;height:26px;font-size:0.62rem;flex-shrink:0;')}
-        <span>${escHtml(dn)}${realNameNote}</span>
-        <span class="opt-handle">${escHtml(r.handle || '')}</span>
+  // Lead-only, Secret crews. Full banner until "Got it", then a slim line
+  // (the flag lives in guidance; the Set covers guests with no guidance yet).
+  const _secretBannerCollapsed = new Set();
+  function crewSecretBannerHTML(crew) {
+    if (!crew || !crew.isLead || crew.status !== 'secret') return '';
+    const addBtn = cls => `<button type="button" class="btn crew-secret-add${cls}" onclick="openAddRaversSheet('${escJsAttr(crew.id)}')">＋ Add ravers</button>`;
+    if (_guidance?.quests?.[`bbbanner:${crew.id}`] || _secretBannerCollapsed.has(String(crew.id))) {
+      return `<div class="crew-secret-banner is-slim" id="crew-secret-banner">
+        <p>🤫 <strong>Your private Blackbook.</strong> Only you can see this crew.</p>
+        ${addBtn(' crew-secret-add-sm')}
+      </div>`;
+    }
+    const n = crewSavedSpots(crew).length;
+    const onApp = crewSquad(crew).some(p => !p.isYou && p.claimedBy);
+    return `<div class="crew-secret-banner" id="crew-secret-banner">
+      <div class="crew-secret-banner-head"><span aria-hidden="true">🤫</span><div>
+        <strong>Your private Blackbook</strong>
+        <p>Only you can see this crew. Save spots for the ravers you know and keep track of which raves they’re hitting, no group chat needed. Nobody is notified.${onApp ? ' For anyone on RaveFAM, send a 🎧 Rave Check from a rave to ask them directly. It comes from you, not the crew.' : ''}${n ? ` ${n} saved spot${n !== 1 ? 's' : ''} so far.` : ''}</p>
+      </div></div>
+      <div class="crew-secret-banner-actions">
+        ${addBtn('')}
+        <button type="button" class="btn btn-ghost" onclick="collapseSecretBanner('${escJsAttr(crew.id)}')">Got it</button>
+      </div>
+      <div class="crew-secret-banner-more">Want the crew in on it? <button type="button" onclick="setStatus('${escJsAttr(crew.id)}','recruiting')">Open the doors</button> for the Huddle, Rave Plan, Polls and Jams.</div>
+    </div>`;
+  }
+
+  function collapseSecretBanner(crewId) {
+    _secretBannerCollapsed.add(String(crewId));
+    if (_guidance) { _guidance.quests[`bbbanner:${crewId}`] = true; saveGuidance(); }
+    const el = document.getElementById('crew-secret-banner');
+    const crew = getCrew(crewId);
+    if (el && crew) el.outerHTML = crewSecretBannerHTML(crew);
+  }
+
+  // Status pill → what each mode means, with the one next step for this crew.
+  // Reuses the status-warn modal so its button can swap straight to the confirm.
+  function showCrewModesSheet(crewId) {
+    const crew = getCrew(crewId);
+    if (!crew) return;
+    const modes = [
+      ['secret', 'Your private Blackbook. Track the ravers you know and which raves they’re hitting. Invisible to everyone else. Stay here as long as you like.'],
+      ['recruiting', 'Invites are live. People claim their spots, chat in the Huddle, plan raves together, see who’s going and which sets they’re hitting. Polls and Jams are on.'],
+      ['locked-in', 'The roster is final. No new joins. Switch back to Recruiting any time.']
+    ];
+    const next = crew.status === 'secret' ? ['recruiting', '🟢 Open the doors →']
+      : crew.status === 'recruiting' ? ['locked-in', '🔒 Lock it in']
+      : ['recruiting', '🌟 Re-open Recruiting'];
+    document.getElementById('status-warn-modal').innerHTML = `
+      <div style="text-align:left;">
+        <div class="modal-title" style="margin-bottom:4px;">Crew modes</div>
+        <div class="text-hint" style="margin-bottom:14px;">Only you, the Crew Lead, can change this.</div>
+        <div class="crew-modes-list">
+          ${modes.map(([key, desc]) => `<div class="crew-mode-row${crew.status === key ? ' is-current' : ''}">
+            <span class="crew-status ${STATUS[key].cls}">${STATUS[key].label}${crew.status === key ? ' · you’re here' : ''}</span>
+            <p>${desc}</p>
+          </div>`).join('')}
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost btn-fill" onclick="closeStatusWarn()">Close</button>
+          <button class="btn btn-primary btn-fill" onclick="showStatusWarn('${escJsAttr(crew.id)}','${escJsAttr(next[0])}')">${next[1]}</button>
+        </div>
+      </div>`;
+    document.getElementById('status-warn-overlay').classList.add('open');
+  }
+
+  let _addRaversCrewId = null;
+  let _addRaversAdded = []; // raver objects (ids swap temp → real while the sheet is open)
+
+  function openAddRaversSheet(crewId) {
+    const crew = getCrew(crewId);
+    if (!crew || !crewPerms(crew).canManageMembers) return;
+    if (crew.status === 'locked-in') { toastError('This crew is Locked In. Re-open Recruiting to add ravers'); return; }
+    _addRaversCrewId = crew.id;
+    _addRaversAdded = [];
+    const secret = crew.status === 'secret';
+    document.getElementById('crew-setup-content').innerHTML = `
+      <div class="crew-manifest-sheet-head">
+        <div>
+          <div class="modal-title">Add ravers</div>
+          <div class="text-hint">Type a name and press return. Add as many as you like.</div>
+        </div>
+        <button type="button" class="crew-manifest-sheet-x" onclick="closeCrewSetupSheet()" aria-label="Close">✕</button>
+      </div>
+      <input class="form-input" id="add-ravers-input" type="text" maxlength="60" autocomplete="off" enterkeyhint="done"
+        aria-label="Raver name, or search your fam" placeholder="Name, or search your fam…"
+        oninput="renderAddRaversLists()" onkeydown="if(event.key==='Enter'){event.preventDefault();quickAddSavedSpot(this.value);}">
+      <div id="add-ravers-lists"></div>
+      <div class="text-hint-xs" style="margin-top:12px;line-height:1.5;">${secret
+        ? '🔕 Nobody is notified while your crew is Secret. You’ll send invites when you open the doors.'
+        : '📲 Each saved spot gets a personal invite link and QR you can share from the roster.'}</div>
+      <button class="btn btn-primary btn-wide" style="margin-top:14px;padding:12px;" onclick="closeCrewSetupSheet()">Done</button>`;
+    renderAddRaversLists();
+    document.getElementById('crew-setup-overlay').classList.add('open');
+    setTimeout(() => document.getElementById('add-ravers-input')?.focus(), 280);
+  }
+
+  function renderAddRaversLists() {
+    const crew = getCrew(_addRaversCrewId);
+    const box = document.getElementById('add-ravers-lists');
+    if (!crew || !box) return;
+    const raw = (document.getElementById('add-ravers-input')?.value || '').trim();
+    const q = raw.toLowerCase();
+    const inCrew = rid => crew.squadIds.some(sid => String(sid) === String(rid));
+    const av = (r, size) => raverAvatarHTML(r.avatarUrl, r.gradient, r.name, raverIsClaimed(r) ? 'avatar' : 'avatar avatar-unclaimed', `margin:0;width:${size}px;height:${size}px;font-size:${size < 26 ? '0.55rem' : '0.6rem'};flex-shrink:0;`);
+    const fam = squad.filter(r => !r.isYou && !inCrew(r.id) && (!q ||
+      r.name.toLowerCase().includes(q) || (r.handle || '').toLowerCase().includes(q) || (nicknameCache[String(r.id)] || '').toLowerCase().includes(q))).slice(0, 8);
+    const createBtn = raw
+      ? `<button type="button" class="add-ravers-create" data-name="${escHtml(raw)}" onclick="quickAddSavedSpot(this.dataset.name)">＋ Save a spot for “${escHtml(raw)}”</button>`
+      : '';
+    const famHTML = fam.length ? `
+      <div class="form-label" style="margin:14px 0 8px;">From your fam</div>
+      <div class="add-ravers-fam">${fam.map(r => `<button type="button" class="add-ravers-chip" data-raver-id="${r.id}" onclick="addRaverFromFam(this.dataset.raverId)">${av(r, 22)}<span>${escHtml(displayName(r).split(' ')[0])}</span></button>`).join('')}</div>` : '';
+    const addedHTML = _addRaversAdded.length ? `
+      <div class="form-label" style="margin:14px 0 4px;">Added · ${_addRaversAdded.length}</div>
+      ${_addRaversAdded.map(r => `<div class="add-ravers-row">${av(r, 28)}<span class="add-ravers-row-name">${escHtml(displayName(r))}</span>${raverIsClaimed(r)
+        ? '<span class="verified-badge" title="On RaveFAM">✓</span>'
+        : '<span class="claim-badge claim-badge-unclaimed">◌ Saved spot</span>'}</div>`).join('')}` : '';
+    box.innerHTML = createBtn + famHTML + addedHTML;
+  }
+
+  function addRaverFromFam(raverId) {
+    const crew = getCrew(_addRaversCrewId);
+    const r = getRaver(raverId);
+    if (!crew || !r || String(activeDetailId) !== String(crew.id)) return;
+    addExistingMember(raverId);
+    if (crew.squadIds.some(sid => String(sid) === String(r.id)) && !_addRaversAdded.includes(r)) _addRaversAdded.push(r);
+    renderAddRaversLists();
+  }
+
+  // A saved spot from just a name: same raver row the profile editor makes
+  // (dbSaveRaver mints the qr_token), minus the editor round trip.
+  function quickAddSavedSpot(rawName) {
+    const crew = getCrew(_addRaversCrewId);
+    const name = (rawName || '').trim().slice(0, 60);
+    if (!crew || !name) return;
+    const r = {
+      id: 'temp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), isYou: false,
+      gradient: gradientPool[squad.length % gradientPool.length],
+      name, handle: '', base: '', genres: [], favArtistIds: [], festIds: [], instagram: '', radiate: '',
+      phone: '', phoneVisible: false, notes: '', vibeTags: [], customVibeTags: [], blockedTags: [],
+      createdBy: currentUser?.id || null
+    };
+    squad.push(r);
+    crew.squadIds.push(r.id);
+    crew.members = crew.squadIds
+      .map(sid => squad.find(x => String(x.id) === String(sid)))
+      .filter(Boolean)
+      .map(x => ({ i: initials(x.name), c: x.gradient || 'linear-gradient(135deg,#FF2D78,#BF00FF)', t: '#fff', url: x.avatarUrl || null }));
+    _addRaversAdded.push(r);
+    renderSquad(); renderCrews();
+    if (String(activeDetailId) === String(crew.id)) renderDetail(crew.id);
+    const input = document.getElementById('add-ravers-input');
+    if (input) { input.value = ''; input.focus(); }
+    renderAddRaversLists();
+    if (currentUser) {
+      dbSaveRaver({ ...r, isYou: false }, null).then(inserted => {
+        if (!inserted?.id) return;
+        const oldId = r.id;
+        r.id = inserted.id;
+        if (inserted.qr_token) r.qrToken = inserted.qr_token;
+        // Patch crews still holding the temp id; persist once the crew has a real id
+        // (a crew still temp_ saves its members when createCrew's insert resolves).
+        crews.forEach(c => {
+          const idx = c.squadIds.findIndex(sid => String(sid) === String(oldId));
+          if (idx < 0) return;
+          c.squadIds[idx] = inserted.id;
+          if (!String(c.id).startsWith('temp_')) dbAddCrewMember(c.id, inserted.id);
+        });
+        renderCrews();
+        if (String(activeDetailId) === String(crew.id)) renderDetail(crew.id);
+      }).catch(console.warn);
+    }
+  }
+
+  function closeCrewSetupSheet() {
+    document.getElementById('crew-setup-overlay')?.classList.remove('open');
+    _addRaversCrewId = null;
+    _addRaversAdded = [];
+  }
+
+  // Right after Secret → Recruiting: one row per saved spot so the lead can
+  // send every invite from one place, plus the crew link for anyone else.
+  function showCrewInviteHandoff(crewId) {
+    const crew = getCrew(crewId);
+    if (!crew) return;
+    const saved = crewSavedSpots(crew);
+    const rows = saved.map(p => {
+      const first = escHtml(displayName(p).split(' ')[0]);
+      return `<div class="add-ravers-row">
+        ${raverAvatarHTML(p.avatarUrl, p.gradient, p.name, 'avatar avatar-unclaimed', 'margin:0;width:28px;height:28px;font-size:0.6rem;flex-shrink:0;')}
+        <span class="add-ravers-row-name">${first}</span>
+        <button type="button" class="crew-handoff-btn is-hot" data-raver-id="${p.id}" onclick="shareInviteLink(this.dataset.raverId); this.classList.remove('is-hot'); this.textContent='Share again';">Share link</button>
+        <button type="button" class="crew-handoff-btn" data-raver-id="${p.id}" onclick="showQRModal(this.dataset.raverId)" aria-label="Show ${first}'s QR code">QR</button>
       </div>`;
     }).join('');
-
-    const createRow = `
-      <div class="member-search-opt member-search-create" data-create-name="${query.trim().replace(/"/g,'&quot;')}"
-        onmousedown="addNewMemberFromSearch(this.dataset.createName)">
-        ＋ Create "${escHtml(query.trim())}" as a new raver
-      </div>`;
-
-    dropdown.innerHTML = rows + createRow;
-    dropdown.style.display = 'block';
+    document.getElementById('crew-setup-content').innerHTML = `
+      <div class="crew-manifest-sheet-head">
+        <div>
+          <div class="modal-title">🎉 ${escHtml(crew.name)} is open!</div>
+          <div class="text-hint">${saved.length ? 'Send each saved spot their invite so they can claim it.' : 'Share the crew link, or add the ravers you want in.'}</div>
+        </div>
+        <button type="button" class="crew-manifest-sheet-x" onclick="closeCrewSetupSheet()" aria-label="Close">✕</button>
+      </div>
+      ${rows}
+      <div class="form-label" style="margin:16px 0 8px;">${saved.length ? 'Anyone else' : 'Invite anyone'}</div>
+      <button class="btn btn-ghost btn-wide" style="padding:11px;" onclick="generateAndShareCrewInvite('${escJsAttr(crew.id)}')">🔗 Share crew invite link</button>
+      ${saved.length ? '' : `<button class="btn btn-wide crew-secret-add" style="padding:11px;margin-top:8px;" onclick="openAddRaversSheet('${escJsAttr(crew.id)}')">＋ Add ravers</button>`}
+      <button class="btn btn-primary btn-wide" style="margin-top:14px;padding:12px;" onclick="closeCrewSetupSheet()">Done for now</button>
+      <div class="text-hint-xs" style="text-align:center;margin-top:8px;">You can find these invites in the roster any time.</div>`;
+    document.getElementById('crew-setup-overlay').classList.add('open');
   }
 
   const CREW_LIMIT = 10;
@@ -33781,7 +34080,7 @@
     renderCrews();
     renderDetail(crew.id);
     if (crew.status === 'secret') {
-      showToast(`${raver.name.split(' ')[0]} added. They won't be notified until you go Recruiting`);
+      showToast(`🤫 ${raver.name.split(' ')[0]} added. Nobody is notified while you're Secret`);
     } else {
       const addMsg = `🎉 ${raver.name.split(' ')[0]} has been added to ${crew.name}! Share their QR code or invite link so they can claim their spot.`;
       showToast(`${raver.name.split(' ')[0]} added to ${crew.name}`);
@@ -33821,7 +34120,7 @@
     const firstName = raver.name.split(' ')[0];
     showConfirm(
       `Remove ${firstName} from ${crew.name}?`,
-      `They'll lose access to all shared features. You can re-add them later as long as the crew is in Recruiting mode.`,
+      `They'll lose access to all shared features. You can re-add them later while the crew isn't Locked In.`,
       `🔒 Remove from Crew`,
       () => removeMemberFromCrew(crewId, raverId)
     );
@@ -33926,7 +34225,7 @@
       : '';
     showConfirmWithReason(
       `Delete ${firstName}'s profile?`,
-      `${crewNote}This removes the unclaimed profile, their invite code, and their crew/rave links for good.`,
+      `${crewNote}This removes the saved spot, their invite code, and their crew/rave links for good.`,
       `🗑️ Delete Profile`,
       (reason) => {
         // Snapshot crew memberships before the optimistic mutation below
@@ -34055,13 +34354,14 @@
     const color = selected ? rgbToHex(selected.style.background) : '#FF2D78';
     const selectedIcon = document.querySelector('#create-totem-icon-grid .totem-icon-swatch.selected');
     const totemIcon = selectedIcon ? selectedIcon.dataset.iconKey : null;
+    const startMode = document.querySelector('input[name="create-crew-mode"]:checked')?.value === 'recruiting' ? 'recruiting' : 'secret';
     const you = squad.find(r => r.isYou);
 
     const gradient = CREW_GRADIENTS[color] || `linear-gradient(135deg,${color},${color})`;
     const newCrew = {
       id: 'temp_' + Date.now(), name, color, description,
       gradient,
-      status: 'secret', isLead: true,
+      status: startMode, isLead: true,
       totemIcon,
       leader_id: you?.id ?? null,
       squadIds: you ? [you.id] : [],
@@ -34073,10 +34373,14 @@
     document.getElementById('crew-name-input').value = '';
     const descEl = document.getElementById('crew-desc-input');
     if (descEl) descEl.value = '';
-    showToast(`🔥 ${name} created. You're the Crew Lead`);
+    showToast(startMode === 'secret'
+      ? `🤫 ${name} is live in Secret. Only you can see it`
+      : `🟢 ${name} is live and Recruiting. Share the invite link from the roster`);
     // No inline crew link here: newCrew.id is still a temp_ id until dbSaveCrew
     // resolves below, and openDetail() already lands the leader on this crew.
-    addNotification(`🔥 You sparked a new crew — ${name} is live in Secret mode. Time to build your lineup before the drop!`);
+    addNotification(startMode === 'secret'
+      ? `🔥 You sparked a new crew — ${name} is live in Secret mode. Time to build your lineup before the drop!`
+      : `🔥 You sparked a new crew — ${name} is open and Recruiting. Time to rally the fam!`);
 
     // Always open the crew detail so the leader can immediately add members
     _openDetailAfterCreate = false;
@@ -34085,10 +34389,10 @@
     // Persist async
     if (currentUser) {
       const tempId = newCrew.id;
-      dbSaveCrew({ name, color, gradient, status: 'secret', description, totemIcon }, null).then(dbId => {
+      dbSaveCrew({ name, color, gradient, status: startMode, description, totemIcon }, null).then(dbId => {
         if (dbId) {
           newCrew.id = dbId;
-          logAnalyticsEvent('crew_created', { crew_id: dbId });
+          logAnalyticsEvent('crew_created', { crew_id: dbId, start_mode: startMode });
           maybeAskMicroFeedback('crew_created', dbId);
           // Keep activeDetailId (and any pending-add reference) in sync so that
           // member lookups on this crew still work after the temp→real ID swap.
@@ -34259,7 +34563,7 @@
   function inviteHeldBackReason(raverId, firstName) {
     const inCrews = crews.filter(c => (c.squadIds || []).some(id => String(id) === String(raverId)));
     return inCrews.some(c => c.status === 'secret')
-      ? `🤫 ${firstName} is on the roster. Invites go live when you open the crew to Recruiting.`
+      ? `🤫 ${firstName} is on the roster. Invites go live when you open the doors.`
       : `🔒 ${firstName} is on the roster. That crew's locked in, so invites are closed.`;
   }
 
@@ -35123,7 +35427,7 @@
       const isClaimed = raverPerms(r).isClaimed;
       const claimBadge = r.isYou ? '' : isClaimed
         ? `<span class="verified-badge" title="Claimed">✓</span>`
-        : `<span class="claim-badge claim-badge-unclaimed" title="Placeholder until they scan their QR and claim it — open their profile to grab it and share">◌ Unclaimed</span>`;
+        : `<span class="claim-badge claim-badge-unclaimed" title="Saved spot until they scan their QR and claim it — open their profile to grab it and share">◌ Saved spot</span>`;
 
       card.innerHTML = `
         <div class="member-avatar-ring${isClaimed ? '' : ' member-avatar-ring-unclaimed'}" style="background:${r.avatarUrl ? 'var(--amber)' : extractFirstColor(r.gradient)}">${raverAvatarHTML(r.avatarUrl, r.gradient, r.name, 'member-avatar', '')}</div>
@@ -37418,7 +37722,7 @@
     // Allow own profile or crew leader editing an unclaimed profile
     const p = raverPerms(r);
     if (!r.isYou && !(p.isLeaderOfRaver && !p.isClaimed)) {
-      toastError('You can only edit your own profile or unclaimed crew members');
+      toastError('You can only edit your own profile or saved spots you manage');
       return;
     }
     editingId = id;
@@ -39151,6 +39455,66 @@
     if (festDate(f) >= TODAY) loadRaveCheckStatus(festId);
   }
 
+  // ===== Rave page: mark your saved spots in bulk (Blackbook) =====
+  // Saved spots you manage, from crews you lead, who aren't on this rave yet.
+  // One tap marks them Going (or Interested) without opening each profile.
+  let _rfMarkAs = 'going';
+
+  function rfSavedSpotCandidates(f) {
+    const ids = new Set();
+    crews.filter(c => c.isLead).forEach(c => (c.squadIds || []).forEach(id => ids.add(String(id))));
+    const on = list => (list || []).some(x => String(x) === String(f.id));
+    return squad.filter(r => !r.isYou && ids.has(String(r.id)) && !raverIsClaimed(r) && raverPerms(r).editFests
+      && !on(r.festIds) && !on(r.interestedFestIds));
+  }
+
+  function rfSavedSpotPickerHTML(f) {
+    if (!f) return '';
+    const list = rfSavedSpotCandidates(f);
+    if (!list.length) return '';
+    const up = festDate(f) >= TODAY;
+    const mode = up ? _rfMarkAs : 'going';
+    const seg = (k, label) => `<button type="button" class="rf-seg-btn${mode === k ? ' active' : ''}" aria-pressed="${mode === k}" onclick="rfSetMarkAs('${escJsAttr(k)}','${escJsAttr(f.id)}')">${label}</button>`;
+    return `<div id="rf-saved-picker">
+      <div class="rf-section-label">Your saved spots</div>
+      <div class="rf-card" style="display:flex;flex-direction:column;gap:10px;">
+        ${up ? `<div class="rf-seg" role="group" aria-label="Mark saved spots as">${seg('going', 'Going')}${seg('interested', 'Interested')}</div>` : ''}
+        <div class="add-ravers-fam">${list.map(r => `<button type="button" class="add-ravers-chip" data-raver-id="${r.id}" onclick="rfMarkSavedSpot('${escJsAttr(f.id)}', this.dataset.raverId)">${raverAvatarHTML(r.avatarUrl, r.gradient, r.name, 'avatar avatar-unclaimed', 'margin:0;width:22px;height:22px;font-size:0.55rem;flex-shrink:0;')}<span>${escHtml(displayName(r).split(' ')[0])}</span></button>`).join('')}</div>
+        <div class="field-help" style="margin:0;">Tap someone to mark them ${up ? (mode === 'going' ? 'Going' : 'Interested') : 'as sent it'}.</div>
+      </div>
+    </div>`;
+  }
+
+  function rfSetMarkAs(mode, festId) {
+    _rfMarkAs = mode === 'interested' ? 'interested' : 'going';
+    const el = document.getElementById('rf-saved-picker');
+    if (el) el.outerHTML = rfSavedSpotPickerHTML(getFestival(festId));
+  }
+
+  function rfMarkSavedSpot(festId, raverId) {
+    const f = getFestival(festId);
+    const r = getRaver(raverId);
+    if (!f || !r || raverIsClaimed(r) || !raverPerms(r).editFests) return;
+    const first = displayName(r).split(' ')[0];
+    const interested = _rfMarkAs === 'interested' && festDate(f) >= TODAY;
+    if (interested) {
+      r.interestedFestIds = [...(r.interestedFestIds || []), f.id];
+      if (currentUser) dbAddRaverFestivalInterest(r.id, f.id);
+      renderSquad(); renderEvents(); renderCrews();
+      refreshProfileAfterRaveChange(r.id);
+    } else {
+      addBeenTo(r.id, f.id);
+    }
+    showToast(`${first} marked ${interested ? 'Interested' : festDate(f) >= TODAY ? 'Going' : 'as sent it'}`);
+    // Redraw the rave so the Going / Interested lists pick them up; keep the scroll spot.
+    const modal = document.getElementById('rave-focus-modal');
+    const top = modal ? modal.scrollTop : 0;
+    if (document.getElementById('rave-focus-overlay')?.classList.contains('open')) {
+      openRaveFocus(f.id);
+      if (modal) modal.scrollTop = top;
+    }
+  }
+
   function closeRaveFocus() {
     document.getElementById('rave-focus-overlay').classList.remove('open');
     editingFestivalId = null;
@@ -39319,6 +39683,7 @@
       ${interestedPeople.length ? `<div class="rf-section-label">Interested · ${interestedPeople.length}</div><div class="rf-card rf-list">${interestedRows}</div>` : ''}
       ${isUpcoming ? `<div id="rc-crew-wrap">${raveCheckCrewHTML(f, goers, interestedPeople, miniAvatar)}</div>` : ''}
       ${!crewPeople.length ? `<div class="rf-card rf-empty">Nobody from the fam yet</div>` : ''}
+      ${rfSavedSpotPickerHTML(f)}
       <div class="rf-section-label">Add crew</div>
       <div class="fest-search-wrap" style="margin-bottom:4px;">
         <input class="form-input" id="re-raver-search" aria-label="Search ravers to add" placeholder="🔍 Search the fam to add…" autocomplete="off"
@@ -39976,7 +40341,7 @@
     const picked = raverIds ? open.filter(r => raverIds.some(id => String(id) === String(r.id))) : open;
     if (!picked.length) { showToast('Everyone here has been rave-checked'); return; }
     const skipped = raverIds ? [] : pending.filter(r => raveCheckState(f.id, r.id) === 'cooldown');
-    _raveCheckSheet = { festId: f.id, raverIds: picked.map(r => r.id) };
+    _raveCheckSheet = { festId: f.id, raverIds: picked.map(r => r.id), crewId };
     const first = r => escHtml(displayName(r).split(' ')[0]);
     const pills = picked.map(r => `<span class="rc-pill">${raveFocusMiniAvatar()(r, '')}${first(r)}</span>`).join('');
     document.getElementById('rave-check-sheet-content').innerHTML = `
@@ -40013,7 +40378,7 @@
 
   async function sendRaveCheck() {
     if (!_raveCheckSheet) return;
-    const { festId, raverIds } = _raveCheckSheet;
+    const { festId, raverIds, crewId } = _raveCheckSheet;
     const btn = document.getElementById('rave-check-send');
     const note = (document.getElementById('rave-check-note')?.value || '').trim();
     if (btn) btn.disabled = true;
@@ -40045,6 +40410,7 @@
       const who = sentNames.length > 2 ? `${sentNames.length} crewmates` : sentNames.join(' & ');
       showToast(`🎧 Rave check sent to ${who}${skipped ? ` · ${skipped} skipped` : ''}`);
       logAnalyticsEvent('rave_check_sent', { festival_id: festId, count: sentNames.length, with_note: !!note });
+      if (crewId) markCrewQuest('check', crewId);
     } else {
       showToast('Nobody to rave-check right now. They were checked recently or already answered');
     }
@@ -41046,7 +41412,7 @@
     const rows = [
       { key:'phoneVisible',       group:'see', label:'Phone number',         hint:'Share your phone with crewmates' },
       { key:'privacyBaseVisible', group:'see', label:'Base location',        hint:"Show where you're based on your profile" },
-      { key:'privacyShowRsvps',   group:'see', label:'Rave RSVPs',           hint:'Show your Going To / Been To on your profile' },
+      { key:'privacyShowRsvps',   group:'see', label:'Rave RSVPs',           hint:'Show your Going To / Been To to your crews, including Crew Leads of Secret crews' },
       { key:'allowFestivalAdds',  group:'do',  label:'Rave adds',            hint:'Let crewmates add you to a rave lineup' },
       { key:'allowVibeTags',      group:'do',  label:'Vibe tag suggestions', hint:'Let crewmates suggest a vibe tag on your profile' },
     ];
@@ -41559,10 +41925,13 @@
     { id: 'multiple-crews', category: 'getting-started', q: 'Can I be in multiple crews?',
       a: 'Yes — no limit. Join or lead as many crews as you like.' },
     { id: 'crew-modes-explained', category: 'crew-modes', q: "What's the difference between Secret, Recruiting, and Locked In?",
-      a: "<strong>Secret</strong> is the default — invisible to everyone but you, so you can quietly build your crew list first. <strong>Recruiting</strong> opens things up: your crew gets notified and QR/invite links go live so people can claim their spot. <strong>Locked In</strong> seals the roster — no new members, and your crew gets a heads-up that it's official. You can flip back to Recruiting anytime you need to add someone (no going back to Secret once you leave it).",
+      a: "<strong>Secret</strong> is the default — invisible to everyone but you. Use it as your private Blackbook: save spots for the ravers you know and track which raves they're hitting, for as long as you like. <strong>Recruiting</strong> opens the doors: your crew gets notified, QR/invite links go live so people can claim their saved spot, and the Huddle, Rave Plan, crew lineup picks, Polls and Jams open up for everyone. <strong>Locked In</strong> seals the roster — no new members, and your crew gets a heads-up that it's official. You can flip back to Recruiting anytime you need to add someone (no going back to Secret once you leave it).",
       keywords: ['status', 'visibility'] },
     { id: 'crew-visibility', category: 'crew-modes', q: 'Who can see my crew?',
       a: "While Secret, only you. Once Recruiting or Locked In, your crew's existing members can see it — outsiders still need an invite link or QR code to join." },
+    { id: 'lead-sees-rsvps', category: 'account', q: 'Can a Crew Lead see my raves without me knowing?',
+      a: "Yes, if they've added you to their crew. A Crew Lead can see your Going To and Been To raves, even while their crew is Secret and you haven't been told you're in it. That's what lets a Secret crew work as a private Blackbook. To hide your raves from everyone but you, turn off <strong>Rave RSVPs</strong> in Settings → Privacy.",
+      keywords: ['privacy', 'secret', 'rsvp', 'blackbook'] },
     { id: 'leave-crew', category: 'crew-modes', q: 'How do I leave or remove a crew?',
       a: 'Open the crew, tap the settings icon, and choose Leave Crew. Crew Leads: leadership transfer is on the way — for now email <a href="mailto:bump@myravefam.com" style="color:var(--neon-cyan);">bump@myravefam.com</a> and we\'ll sort it.' },
     { id: 'game-plan-intro', category: 'game-plan', q: 'What is the Rave Plan tab?',
@@ -42721,16 +43090,6 @@
   let _pendingAddToCrew = null;
   let _pendingAddToFest = null;
 
-  function addNewMemberFromSearch(name) {
-    _pendingAddToCrew = activeDetailId;
-    closeDetail();
-    openProfileEditor();
-    setTimeout(() => {
-      const el = document.getElementById('pf-name');
-      if (el) el.value = name;
-    }, 50);
-  }
-
   function maybeAdvanceOnboarding(profileName) {
     if (!isOnboarding) return;
     obGoToStep(3);
@@ -43811,7 +44170,8 @@
         tile('Trailblazer', found >= 3, `Find 3 of the 5 on Rave World · ${Math.min(found, 3)} of 3`),
         tile('Cartographer', found >= 5, `Find all 5 on Rave World · ${found} of 5`),
         tile('Crew Captain', !!q.badge_crew_captain, 'Stamp every Lead quest on your crew ticket.'),
-        tile('Settled In', !!q.badge_settled_in, 'Stamp every Get settled quest on your crew ticket.')
+        tile('Settled In', !!q.badge_settled_in, 'Stamp every Get settled quest on your crew ticket.'),
+        tile('Blackbook Keeper', !!q.badge_blackbook, 'Stamp every Blackbook quest on a Secret crew.')
       ] }
     ];
   }

@@ -38,7 +38,7 @@ test.describe('crews', () => {
     // Regression test: createCrew() renders the detail page immediately with a
     // client-side temp id, then swaps in the real DB id once the insert
     // resolves. If the detail page isn't re-rendered on that swap, the "Open
-    // the Crew to Recruiting" button keeps calling setStatus() with the
+    // the doors" button keeps calling setStatus() with the
     // stale temp id — getCrew() then finds nothing, and the (sole, actual)
     // Crew Lead gets a misleading "Only the Crew Lead can change the status"
     // toast.
@@ -56,7 +56,7 @@ test.describe('crews', () => {
 
     // The status control lives in the roster sheet.
     await page.locator('#page-crew-detail .crew-feed-faces').click();
-    await page.locator('#crew-manifest-content .btn-status-cta', { hasText: 'Open the Crew to Recruiting' }).click();
+    await page.locator('#crew-manifest-content .btn-status-cta', { hasText: 'Open the doors' }).click();
     await page.locator('#status-warn-modal .btn-primary').click();
 
     await expect(page.locator('#toast')).not.toContainText('Only the Crew Lead');

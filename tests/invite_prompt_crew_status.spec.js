@@ -35,7 +35,7 @@ test.describe('invite prompt · crew status gating', () => {
     await addRaverToCrew(page, 'Secret Sally', 'c1');
 
     await expect(page.locator('#invite-prompt-overlay')).not.toHaveClass(/open/);
-    await expect(page.locator('#toast')).toContainText('open the crew to Recruiting');
+    await expect(page.locator('#toast')).toContainText('open the doors');
     expect(errors).toEqual([]);
   });
 

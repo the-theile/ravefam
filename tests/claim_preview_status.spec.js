@@ -24,7 +24,7 @@ test.describe('claim preview · crew status', () => {
     const errors = await bootAuthedApp(page);
     const body = await previewForCrewStatus(page, 'secret');
 
-    await expect(body.locator('.claim-crew-badge')).toHaveText('🔴 Secret');
+    await expect(body.locator('.claim-crew-badge')).toHaveText('🤫 Secret');
     await expect(body.locator('.claim-crew-badge')).not.toContainText('Recruiting');
     expect(errors).toEqual([]);
   });
