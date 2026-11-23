@@ -197,6 +197,27 @@ test.describe('add rave sheet', () => {
     expect(await youList(page)).toContain('f2');
   });
 
+  test('an empty search box lists upcoming raves not already on your list', async ({ page }) => {
+    await bootAuthedApp(page);
+    await page.evaluate(() => openAddRaveSheet());
+    await expect(page.locator('#ar-results')).toContainText('Coming up');
+    // f1 (Going) is left out; f2 (only Interested) is offered.
+    await expect(page.locator('#ar-results .ar-match', { hasText: 'Awakenings' })).toHaveCount(1);
+    await expect(page.locator('#ar-results .ar-match', { hasText: 'Tomorrowland' })).toHaveCount(0);
+    await page.locator('#ar-results .ar-match', { hasText: 'Awakenings' }).locator('.ar-match-btn').click();
+    expect(await youList(page)).toContain('f2');
+  });
+
+  test('the new rave card glows briefly on the Raves tab', async ({ page }) => {
+    await bootAuthedApp(page);
+    await page.evaluate(() => { setRaveView('card'); switchTab('events'); });
+    await startCreate(page, 'Glow Rave', '2099-04-01');
+    await pinPlace(page);
+    await page.click('#ar-add');
+    const id = await (async () => { await expect(page.locator('#add-rave-overlay')).not.toHaveClass(/open/); return festIdByName(page, 'Glow Rave'); })();
+    await expect(page.locator(`#events-list .event-item[data-fest-id="${id}"]`)).toHaveClass(/rave-just-added/);
+  });
+
   test('a rave you already have shows as Going and cannot be re-added', async ({ page }) => {
     await bootAuthedApp(page);
     await page.evaluate(() => openAddRaveSheet());

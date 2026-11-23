@@ -3088,6 +3088,12 @@
   .ar-split .btn { flex: 1; }
   .rave-fix-bar { display: flex; align-items: center; gap: 8px; width: calc(100% - 24px); margin: 8px 12px 0; padding: 8px 10px; border-radius: 10px; cursor: pointer; font: inherit; font-size: 0.76rem; text-align: left; color: var(--amber); background: rgba(var(--amber-rgb),0.08); border: 1px dashed rgba(var(--amber-rgb),0.55); position: relative; z-index: 2; }
   .rave-fix-bar span { margin-left: auto; padding: 4px 9px; border-radius: 8px; font-weight: 800; font-size: 0.7rem; color: #2a1d00; background: var(--amber); }
+  .rave-just-added { animation: rave-just-added 2.6s ease-out; }
+  @keyframes rave-just-added {
+    0%, 35% { box-shadow: 0 0 0 2px var(--neon-cyan), 0 0 28px -4px var(--neon-cyan); }
+    100% { box-shadow: 0 0 0 0 transparent; }
+  }
+  @media (prefers-reduced-motion: reduce) { .rave-just-added { animation: none; outline: 2px solid var(--neon-cyan); } }
   .crew-add-rave-link { display: block; margin: 6px auto 0; padding: 6px 12px; cursor: pointer; font: inherit; font-size: 0.78rem; font-weight: 700; color: var(--muted); background: none; border: none; }
 
   /* ===== FAM Jams ===== */
@@ -37747,7 +37753,7 @@
     const box = document.getElementById('ar-results');
     if (!box || !_addRave) return;
     const raw = _addRave.query.trim();
-    if (addRaveNorm(raw).length < 2) { box.innerHTML = ''; return; }
+    if (addRaveNorm(raw).length < 2) { box.innerHTML = addRaveUpcomingHTML(); return; }
     const matches = addRaveSearchMatches(raw);
     const list = matches.map((m, i) => addRaveMatchHTML(m.f, m.d, m.going, i === 0, true)).join('');
     box.innerHTML = `
@@ -37756,6 +37762,22 @@
         ＋ Create “${escHtml(raw.slice(0, 100))}” as a new rave
         <small>${matches.length ? 'Only if none of these is it' : 'Nothing matches yet. Add it for everyone'}</small>
       </button>`;
+  }
+
+  // Empty search box: the next few upcoming raves not already on the
+  // target's list, as one-tap picks (what the old pickers' quick chips did).
+  function addRaveUpcomingHTML() {
+    const t = addRaveTarget();
+    const has = new Set((t.kind === 'editor' ? [...editingFestIds] : (t.raver?.festIds || [])).map(String));
+    const next = festivals
+      .filter(f => !f.archived && !String(f.id).startsWith('temp_') && !has.has(String(f.id)))
+      .map(f => ({ f, d: festDate(f) }))
+      .filter(x => x.d && x.d >= TODAY)
+      .sort((a, b) => a.d - b.d)
+      .slice(0, 5);
+    if (!next.length) return '';
+    return `<div class="ar-label"><span>🔜 Coming up</span><span>tap to add</span></div>`
+      + next.map(x => addRaveMatchHTML(x.f, x.d, festivalGoers(x.f.id).length, false, true)).join('');
   }
 
   // One tap on a catalog match: RSVP / add, then close.
@@ -38152,6 +38174,7 @@
     closeAddRaveSheet();
     renderEvents(); renderCrews();
     addRaveApplyToTarget(fest, t, rsvp, null);
+    flashNewRaveCard(festId);
     if (pickedCrews.length) {
       const names = pickedCrews.map(c => c.name);
       showToast(`Added ${d.name} 🔥 ${names.length === 1 ? names[0] : `${names.length} crews`} got pinged`);
@@ -38159,6 +38182,19 @@
       showToast(`Added ${d.name} 🔥`);
     }
     return true;
+  }
+
+  // Brief glow on the just-added rave when the Raves tab is on screen.
+  function flashNewRaveCard(festId) {
+    setTimeout(() => {
+      if (!document.getElementById('page-events')?.classList.contains('active')) return;
+      const sel = `[data-fest-id="${CSS.escape(String(festId))}"]`;
+      const el = document.querySelector(`#events-list .event-item${sel}, #events-list .rave-row${sel}`);
+      if (!el) return;
+      el.classList.add('rave-just-added');
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      setTimeout(() => el.classList.remove('rave-just-added'), 2600);
+    }, 150);
   }
 
   // Amber "Fix" bar on rave cards a raver added before the date + pin rule
