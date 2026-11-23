@@ -1,6 +1,6 @@
 # Add Rave rebuild: build plan
 
-Status: **built in 2.52.0** on `claude/laughing-newton-h7lm48` (edge function + migration not yet deployed/applied, see §7). Mockups: `mockups/add-rave-flow.html` (chosen flow), `mockups/add-rave-variations.html` (the A/B/C comparison).
+Status: **shipped Nov 23 2026**: app 2.52.0 (#514), `link-preview` v2 deployed, `festivals_require_date_and_pin` trigger applied (12 older user-added raves still lack a date or pin; they show the Fix bar). Mockups: `mockups/add-rave-flow.html` (chosen flow), `mockups/add-rave-variations.html` (the A/B/C comparison).
 
 Decisions so far (Nov 23 2026):
 - One search-first sheet (variant A) with paste-a-link from variant B.
