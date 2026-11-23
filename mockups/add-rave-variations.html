@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Add Rave — Search-first Variations</title>
+<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@800;900&family=Outfit:wght@400;500;600;700;800;900&family=DM+Sans:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --neon-pink: #FF2D78; --neon-cyan: #00F5FF; --neon-yellow: #FFE600;
+    --neon-purple: #BF00FF; --neon-green: #39FF14; --neon-indigo: #5B6EFF; --neon-orange: #FF6B35;
+    --bg: #050509; --surface: #0E0E16; --surface2: #16161F;
+    --text: #F0EEFF; --muted: #8585A5; --amber: #FFB800;
+    --paper: #F4F1E8; --paper-ink: #D6284B; --ink: #1a1420;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #08080D; color: var(--text); font-family: 'DM Sans', system-ui, sans-serif; padding: 32px 24px 64px; }
+  button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+
+  .page-head { max-width: 1280px; margin: 0 auto 28px; }
+  .page-head h1 { font-family: 'Urbanist', sans-serif; font-weight: 900; font-size: 1.9rem; margin: 0 0 8px; letter-spacing: -0.5px; }
+  .page-head p { color: var(--muted); margin: 0 0 6px; font-size: 0.94rem; line-height: 1.5; max-width: 860px; }
+  .contract { max-width: 1280px; margin: 0 auto 30px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 0.8rem; color: var(--muted); }
+  .contract b { font-family: 'Outfit', sans-serif; color: var(--text); margin-right: 4px; }
+  .contract span { padding: 4px 10px; border-radius: 99px; border: 1px solid rgba(57,255,20,0.35); color: var(--neon-green); background: rgba(57,255,20,0.06); font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.72rem; }
+  .contract span.opt { border-color: rgba(255,255,255,0.14); color: var(--muted); background: none; }
+
+  .variant { max-width: 1280px; margin: 0 auto 56px; }
+  .v-head { display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap; margin-bottom: 6px; }
+  .tag { display: inline-block; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.64rem; letter-spacing: 1.2px; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; }
+  .v-head h2 { font-family: 'Urbanist', sans-serif; font-weight: 800; font-size: 1.3rem; margin: 0; }
+  .v-sub { color: var(--muted); font-size: 0.86rem; line-height: 1.55; margin: 0 0 16px; max-width: 900px; }
+  .rail { display: flex; gap: 24px; overflow-x: auto; padding-bottom: 12px; align-items: flex-start; }
+  .shot { flex: 0 0 auto; width: 340px; }
+  .shot-cap { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.78rem; color: var(--muted); margin: 0 0 8px; }
+  .shot-cap b { color: var(--text); }
+  .notes { flex: 1 1 240px; min-width: 240px; max-width: 320px; font-size: 0.82rem; color: var(--muted); line-height: 1.6; padding-top: 26px; }
+  .notes h3 { font-family: 'Outfit', sans-serif; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text); margin: 0 0 6px; }
+  .notes ul { margin: 0 0 14px; padding-left: 18px; }
+  .notes li { margin-bottom: 4px; }
+  .pro { color: var(--neon-green); } .con { color: var(--neon-pink); }
+
+  /* ── Phone ── */
+  .phone { position: relative; height: 700px; border-radius: 30px; overflow: hidden; border: 1px solid rgba(255,255,255,0.13); box-shadow: 0 18px 50px rgba(0,0,0,0.6); background: var(--bg); display: flex; flex-direction: column; }
+  .sbar { flex: 0 0 auto; height: 30px; display: flex; justify-content: space-between; align-items: center; padding: 0 22px; font-family: 'Outfit', sans-serif; font-size: 0.72rem; font-weight: 700; background: #1a1a22; }
+  .behind { flex: 1; padding: 14px; opacity: 0.35; filter: blur(1px); }
+  .behind .ttl { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.3rem; margin-bottom: 12px; }
+  .behind .card { height: 74px; border-radius: 14px; background: var(--surface2); margin-bottom: 10px; border-left: 4px solid var(--neon-pink); }
+  .behind .card:nth-child(3) { border-color: var(--neon-cyan); } .behind .card:nth-child(4) { border-color: var(--neon-yellow); }
+  .scrim { position: absolute; inset: 30px 0 0; background: rgba(0,0,0,0.55); }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(180deg, #15151f, #0e0e16); border-top: 1px solid rgba(255,255,255,0.12); border-radius: 22px 22px 0 0; padding: 8px 16px 18px; display: flex; flex-direction: column; box-shadow: 0 -12px 40px rgba(0,0,0,0.6); }
+  .grab { width: 38px; height: 4px; border-radius: 4px; background: rgba(255,255,255,0.22); margin: 0 auto 10px; }
+  .sh-top { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .sh-title { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.08rem; flex: 1; }
+  .sh-x { width: 30px; height: 30px; border-radius: 50%; background: rgba(255,255,255,0.06); display: grid; place-items: center; color: var(--muted); font-size: 0.9rem; }
+  .sh-back { color: var(--muted); font-size: 1.1rem; }
+
+  .search { display: flex; align-items: center; gap: 8px; padding: 0 12px; height: 46px; border-radius: 14px; background: rgba(255,255,255,0.05); border: 1.5px solid var(--neon-pink); box-shadow: 0 0 0 4px rgba(255,45,120,0.12); }
+  .search .q { flex: 1; font-size: 0.95rem; }
+  .search .q .caret { display: inline-block; width: 2px; height: 18px; background: var(--neon-pink); vertical-align: -3px; margin-left: 1px; }
+  .search .ph { color: var(--muted); }
+  .search .ic { color: var(--muted); }
+  .paste-pill { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.68rem; padding: 4px 9px; border-radius: 99px; color: var(--neon-cyan); border: 1px solid rgba(0,245,255,0.4); background: rgba(0,245,255,0.07); white-space: nowrap; }
+  .hint { font-size: 0.72rem; color: var(--muted); margin: 7px 2px 12px; }
+
+  .lbl { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.64rem; letter-spacing: 1.1px; text-transform: uppercase; color: var(--muted); margin: 12px 2px 7px; display: flex; justify-content: space-between; }
+  .match { display: flex; align-items: center; gap: 11px; padding: 10px; border-radius: 14px; background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.08); margin-bottom: 8px; }
+  .match.best { border-color: rgba(57,255,20,0.45); background: rgba(57,255,20,0.05); }
+  .m-date { width: 44px; flex: 0 0 44px; text-align: center; border-radius: 10px; padding: 5px 0; background: rgba(255,255,255,0.05); font-family: 'Outfit', sans-serif; }
+  .m-date .d { font-weight: 900; font-size: 1.05rem; line-height: 1; }
+  .m-date .mo { font-size: 0.58rem; font-weight: 700; letter-spacing: 1px; color: var(--muted); text-transform: uppercase; }
+  .m-body { flex: 1; min-width: 0; }
+  .m-name { font-weight: 700; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .m-name em { font-style: normal; color: var(--neon-pink); }
+  .m-meta { font-size: 0.72rem; color: var(--muted); margin-top: 2px; display: flex; align-items: center; gap: 6px; }
+  .faces { display: inline-flex; }
+  .faces i { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid #15151f; margin-left: -5px; display: inline-block; }
+  .faces i:first-child { margin-left: 0; }
+  .m-btn { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.72rem; padding: 7px 11px; border-radius: 10px; background: var(--neon-green); color: #06200a; white-space: nowrap; }
+  .m-btn.ghost { background: rgba(255,255,255,0.07); color: var(--text); }
+  .alias { font-size: 0.64rem; color: var(--amber); font-family: 'Outfit', sans-serif; font-weight: 700; }
+  .create-row { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 14px; border: 1.5px dashed rgba(255,45,120,0.5); color: var(--neon-pink); font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.86rem; margin-top: 4px; }
+  .create-row small { display: block; color: var(--muted); font-family: 'DM Sans', sans-serif; font-weight: 400; font-size: 0.7rem; margin-top: 2px; }
+
+  .field { margin-bottom: 11px; }
+  .f-lbl { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.74rem; color: var(--muted); margin: 0 2px 5px; display: flex; justify-content: space-between; }
+  .f-lbl .req { color: var(--neon-pink); }
+  .f-lbl .src { color: var(--neon-cyan); font-weight: 600; font-size: 0.66rem; }
+  .inp { height: 42px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 0.88rem; }
+  .inp.filled-src { border-color: rgba(0,245,255,0.4); background: rgba(0,245,255,0.05); }
+  .inp.missing { border-color: rgba(255,184,0,0.6); background: rgba(255,184,0,0.06); color: var(--amber); }
+  .inp .ok { margin-left: auto; color: var(--neon-green); font-size: 0.75rem; font-family: 'Outfit', sans-serif; font-weight: 700; }
+  .row2 { display: flex; gap: 8px; }
+  .row2 > * { flex: 1; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.76rem; padding: 7px 11px; border-radius: 99px; border: 1px solid rgba(255,255,255,0.14); color: var(--text); background: rgba(255,255,255,0.03); display: inline-flex; align-items: center; gap: 6px; }
+  .chip.on-green { border-color: var(--neon-green); color: var(--neon-green); background: rgba(57,255,20,0.1); box-shadow: 0 0 12px -4px var(--neon-green); }
+  .chip.on-pink { border-color: var(--neon-pink); color: var(--neon-pink); background: rgba(255,45,120,0.1); }
+  .chip.on-cyan { border-color: var(--neon-cyan); color: var(--neon-cyan); background: rgba(0,245,255,0.08); }
+  .chip .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .chip.sm { font-size: 0.7rem; padding: 5px 9px; }
+  .cta { margin-top: 12px; height: 48px; border-radius: 14px; background: linear-gradient(90deg, var(--neon-pink), #ff5c95); color: #fff; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.95rem; display: grid; place-items: center; box-shadow: 0 6px 22px -6px rgba(255,45,120,0.7); }
+  .cta.dis { background: rgba(255,255,255,0.08); color: var(--muted); box-shadow: none; }
+  .cta-sub { text-align: center; font-size: 0.68rem; color: var(--muted); margin-top: 7px; }
+  .more { font-size: 0.74rem; color: var(--muted); text-align: center; margin-top: 8px; }
+  .more u { color: var(--text); text-decoration: none; border-bottom: 1px dotted var(--muted); }
+
+  /* Variant B — ticket preview */
+  .ticket { border-radius: 16px; overflow: hidden; background: var(--paper); color: var(--ink); margin-bottom: 12px; position: relative; }
+  .t-img { height: 92px; background: radial-gradient(circle at 30% 40%, #ff2d78 0, transparent 45%), radial-gradient(circle at 75% 60%, #5b6eff 0, transparent 50%), #140b1e; position: relative; }
+  .t-src { position: absolute; top: 8px; left: 8px; font-family: var(--mono); font-size: 0.62rem; padding: 3px 7px; border-radius: 6px; background: rgba(0,0,0,0.55); color: var(--neon-cyan); }
+  .t-body { padding: 10px 12px 12px; }
+  .t-name { font-family: 'Urbanist', sans-serif; font-weight: 900; font-size: 1.15rem; letter-spacing: -0.3px; }
+  .t-meta { font-family: var(--mono); font-size: 0.7rem; margin-top: 4px; color: #4a3f55; }
+  .t-meta b { color: var(--paper-ink); }
+  .t-perf { border-top: 2px dashed rgba(26,20,32,0.2); margin: 0 12px; }
+  .t-foot { padding: 8px 12px; display: flex; justify-content: space-between; font-family: var(--mono); font-size: 0.64rem; color: #6d6178; }
+  .warn { border-radius: 14px; padding: 11px 12px; background: rgba(255,184,0,0.08); border: 1px solid rgba(255,184,0,0.45); font-size: 0.8rem; line-height: 1.45; margin-bottom: 10px; }
+  .warn b { color: var(--amber); font-family: 'Outfit', sans-serif; }
+  .dupe-card { margin-top: 10px; }
+  .split { display: flex; gap: 8px; margin-top: 10px; }
+  .split > div { flex: 1; height: 44px; border-radius: 12px; display: grid; place-items: center; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.82rem; }
+  .split .yes { background: var(--neon-green); color: #06200a; }
+  .split .no { background: rgba(255,255,255,0.07); }
+
+  /* Variant C — full screen, one question at a time */
+  .full { flex: 1; display: flex; flex-direction: column; padding: 14px 18px 18px; background: radial-gradient(120% 60% at 50% 0%, rgba(255,45,120,0.12), transparent 60%), var(--bg); }
+  .prog { display: flex; gap: 5px; margin: 4px 0 18px; }
+  .prog i { flex: 1; height: 4px; border-radius: 4px; background: rgba(255,255,255,0.1); }
+  .prog i.on { background: var(--neon-pink); box-shadow: 0 0 8px var(--neon-pink); }
+  .big-q { font-family: 'Urbanist', sans-serif; font-weight: 900; font-size: 1.75rem; letter-spacing: -0.6px; line-height: 1.1; margin: 0 0 14px; }
+  .big-in { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 1.35rem; border-bottom: 2px solid var(--neon-pink); padding: 6px 0 8px; margin-bottom: 14px; }
+  .big-in .caret { display: inline-block; width: 2px; height: 22px; background: var(--neon-pink); vertical-align: -3px; }
+  .summary { border-radius: 18px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.035); padding: 4px 14px; margin-bottom: 14px; }
+  .s-row { display: flex; align-items: center; gap: 10px; padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.07); font-size: 0.88rem; }
+  .s-row:last-child { border-bottom: 0; }
+  .s-row .k { width: 58px; color: var(--muted); font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.8px; }
+  .s-row .v { flex: 1; font-weight: 600; }
+  .s-row .e { color: var(--muted); font-size: 0.72rem; }
+  .spacer { flex: 1; }
+</style>
+</head>
+<body>
+
+<header class="page-head">
+  <h1>Add Rave: one search-first sheet</h1>
+  <p>Replaces both <code>openRaveEditor()</code> (Raves tab "+ Add Rave") and <code>openNewRavePopup()</code> (Profile → Manage raves). Every entry point opens the same sheet, searches the catalog first, and only creates a new rave when nothing matches. The 4-step wizard stays, but only for <b>editing</b>.</p>
+  <p>Three ways to lay it out. All three include paste-a-link autofill, inline RSVP and choosing which crew to tell. Example query: <b>"awakenings"</b>.</p>
+</header>
+
+<div class="contract">
+  <b>Required on every new rave (fixes inconsistent data):</b>
+  <span>Name</span><span>Start date</span><span>Place with coordinates (venue or map lookup)</span>
+  <span class="opt">Days</span><span class="opt">Ticket / official link</span><span class="opt">Colour (auto)</span>
+</div>
+
+<!-- ================= VARIANT A ================= -->
+<section class="variant">
+  <div class="v-head"><span class="tag" style="background:rgba(57,255,20,0.12);color:var(--neon-green);">A</span><h2>Search sheet that expands into a form</h2></div>
+  <p class="v-sub">A bottom sheet with one field: "Rave name or paste a link". Matches appear as you type. Tapping "Create" opens the form in the same sheet with the name already filled. Takes the fewest taps, and works the same from the Raves tab and from a profile.</p>
+  <div class="rail">
+    <div class="shot">
+      <div class="shot-cap"><b>1 · Typing</b>: catalog matches, aliases, crew already going</div>
+      <div class="phone">
+        <div class="sbar"><span>9:41</span><span>●●● 5G ▮</span></div>
+        <div class="behind"><div class="ttl">Raves</div><div class="card"></div><div class="card"></div><div class="card"></div></div>
+        <div class="scrim"></div>
+        <div class="sheet" style="top:96px;">
+          <div class="grab"></div>
+          <div class="sh-top"><div class="sh-title">Add a rave</div><div class="sh-x">✕</div></div>
+          <div class="search"><span class="ic">🔍</span><span class="q">awakenings<span class="caret"></span></span><span class="paste-pill">📋 Paste link</span></div>
+          <div class="hint">Search all raves, or paste an RA, Dice, ticket or Insta link.</div>
+          <div class="lbl"><span>Already on RaveFAM</span><span>3</span></div>
+          <div class="match best">
+            <div class="m-date"><div class="d">11</div><div class="mo">Jul</div></div>
+            <div class="m-body"><div class="m-name"><em>Awakenings</em> Festival 2027</div>
+              <div class="m-meta"><span class="faces"><i style="background:#FF2D78"></i><i style="background:#00F5FF"></i><i style="background:#FFE600"></i></span>3 FAM going · Hilvarenbeek</div></div>
+            <div class="m-btn">I'm in</div>
+          </div>
+          <div class="match">
+            <div class="m-date"><div class="d">14</div><div class="mo">Feb</div></div>
+            <div class="m-body"><div class="m-name"><em>Awakenings</em> Winter Edition</div>
+              <div class="m-meta">Gashouder, Amsterdam · <span class="alias">aka "AWK Winter"</span></div></div>
+            <div class="m-btn ghost">Add</div>
+          </div>
+          <div class="match">
+            <div class="m-date" style="opacity:.6"><div class="d">12</div><div class="mo">Jul '26</div></div>
+            <div class="m-body"><div class="m-name"><em>Awakenings</em> Festival 2026</div>
+              <div class="m-meta">Past · 5 FAM were there</div></div>
+            <div class="m-btn ghost">Was there</div>
+          </div>
+          <div class="create-row">＋ <div>Create "awakenings" as a new rave<small>Only if none of these is it</small></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="shot">
+      <div class="shot-cap"><b>2 · Create</b>: the same sheet, one screen, required fields marked</div>
+      <div class="phone">
+        <div class="sbar"><span>9:41</span><span>●●● 5G ▮</span></div>
+        <div class="behind"><div class="ttl">Raves</div><div class="card"></div><div class="card"></div><div class="card"></div></div>
+        <div class="scrim"></div>
+        <div class="sheet" style="top:56px;">
+          <div class="grab"></div>
+          <div class="sh-top"><span class="sh-back">‹</span><div class="sh-title">New rave</div><div class="sh-x">✕</div></div>
+          <div class="field"><div class="f-lbl"><span>Name <span class="req">*</span></span></div><div class="inp">Awakenings Upclose</div></div>
+          <div class="row2">
+            <div class="field"><div class="f-lbl"><span>Start date <span class="req">*</span></span></div><div class="inp">Sat 6 Mar 2027</div></div>
+            <div class="field" style="flex:0 0 120px"><div class="f-lbl"><span>Days</span></div><div class="chips"><span class="chip sm on-pink">1</span><span class="chip sm">2</span><span class="chip sm">3+</span></div></div>
+          </div>
+          <div class="field"><div class="f-lbl"><span>Venue or place <span class="req">*</span></span></div><div class="inp">📍 Gashouder, Amsterdam <span class="ok">✓ on map</span></div></div>
+          <div class="field"><div class="f-lbl"><span>Ticket or official link</span><span class="src">optional</span></div><div class="inp" style="color:var(--muted)">Paste a link</div></div>
+          <div class="lbl" style="margin-top:6px;"><span>You?</span></div>
+          <div class="chips"><span class="chip on-green">🎟️ Going</span><span class="chip">👀 Interested</span><span class="chip">Just adding</span></div>
+          <div class="lbl"><span>Tell a crew?</span><span style="text-transform:none;letter-spacing:0;font-weight:600;">only who you pick gets pinged</span></div>
+          <div class="chips"><span class="chip on-cyan"><span class="dot" style="background:#FF2D78"></span>Techno Fam</span><span class="chip"><span class="dot" style="background:#FFE600"></span>Uni Crew</span><span class="chip"><span class="dot" style="background:#5B6EFF"></span>Berlin Trip</span></div>
+          <div class="cta">Add rave 🔥</div>
+          <div class="more">Colour, map &amp; more → <u>edit later</u></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <h3>Why</h3>
+      <ul>
+        <li class="pro">One component replaces both today's forms, so the data is always the same shape.</li>
+        <li class="pro">Duplicates are caught before you've filled in a form, not after.</li>
+        <li class="pro">RSVP and crew choice replace the popup that appears after saving, and the ping to every crew.</li>
+      </ul>
+      <h3>Watch</h3>
+      <ul>
+        <li class="con">The create form is long for a bottom sheet on small phones, so it needs to scroll.</li>
+        <li>Entering from a raver's profile: "You?" becomes "<i>Alex</i> is…" (going / was there).</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ================= VARIANT B ================= -->
+<section class="variant">
+  <div class="v-head"><span class="tag" style="background:rgba(0,245,255,0.12);color:var(--neon-cyan);">B</span><h2>Link first, with a ticket preview</h2></div>
+  <p class="v-sub">Same sheet, but the main action is pasting a link. The link fills in a gig-poster style ticket (reusing the Rave Share Card look) as a live preview. Fields that came from the link are cyan, and anything missing is amber. The duplicate check runs on the filled-in name, date and coordinates.</p>
+  <div class="rail">
+    <div class="shot">
+      <div class="shot-cap"><b>1 · Link pasted</b>: autofilled ticket, missing field flagged</div>
+      <div class="phone">
+        <div class="sbar"><span>9:41</span><span>●●● 5G ▮</span></div>
+        <div class="behind"><div class="ttl">Raves</div><div class="card"></div><div class="card"></div></div>
+        <div class="scrim"></div>
+        <div class="sheet" style="top:56px;">
+          <div class="grab"></div>
+          <div class="sh-top"><div class="sh-title">Add a rave</div><div class="sh-x">✕</div></div>
+          <div class="search" style="border-color:var(--neon-cyan);box-shadow:0 0 0 4px rgba(0,245,255,0.1);"><span class="ic">🔗</span><span class="q" style="font-family:var(--mono);font-size:0.78rem;">ra.co/events/2087441</span><span class="sh-x" style="width:22px;height:22px;font-size:0.7rem;">✕</span></div>
+          <div style="height:12px"></div>
+          <div class="ticket">
+            <div class="t-img"><span class="t-src">from ra.co</span></div>
+            <div class="t-body"><div class="t-name">Dekmantel Selectors</div><div class="t-meta"><b>THU 19 AUG 2027</b> · 4 DAYS · KRK, CROATIA</div></div>
+            <div class="t-perf"></div>
+            <div class="t-foot"><span>🎟️ tickets link saved</span><span>techno · house</span></div>
+          </div>
+          <div class="field"><div class="f-lbl"><span>Venue or place <span class="req">*</span></span><span class="src" style="color:var(--amber)">couldn't pin it</span></div><div class="inp missing">📍 "Tisno" → pick from the map lookup</div></div>
+          <div class="lbl"><span>You?</span></div>
+          <div class="chips"><span class="chip">🎟️ Going</span><span class="chip on-green">👀 Interested</span><span class="chip">Just adding</span></div>
+          <div class="lbl"><span>Tell a crew?</span></div>
+          <div class="chips"><span class="chip"><span class="dot" style="background:#FF2D78"></span>Techno Fam</span><span class="chip"><span class="dot" style="background:#FFE600"></span>Uni Crew</span></div>
+          <div class="cta dis">Pick a place to add</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="shot">
+      <div class="shot-cap"><b>2 · Duplicate caught</b>: the link matched a rave already on RaveFAM</div>
+      <div class="phone">
+        <div class="sbar"><span>9:41</span><span>●●● 5G ▮</span></div>
+        <div class="behind"><div class="ttl">Raves</div><div class="card"></div><div class="card"></div></div>
+        <div class="scrim"></div>
+        <div class="sheet" style="top:150px;">
+          <div class="grab"></div>
+          <div class="sh-top"><div class="sh-title">Add a rave</div><div class="sh-x">✕</div></div>
+          <div class="search" style="border-color:rgba(255,255,255,0.14);box-shadow:none;"><span class="ic">🔗</span><span class="q" style="font-family:var(--mono);font-size:0.78rem;">dice.fm/event/awakenings-fest…</span></div>
+          <div style="height:12px"></div>
+          <div class="warn"><b>Already on RaveFAM.</b> This looks like a rave someone added: same dates, 0.2 km apart.</div>
+          <div class="match best dupe-card">
+            <div class="m-date"><div class="d">11</div><div class="mo">Jul</div></div>
+            <div class="m-body"><div class="m-name">Awakenings Festival 2027</div>
+              <div class="m-meta"><span class="faces"><i style="background:#FF2D78"></i><i style="background:#00F5FF"></i><i style="background:#FFE600"></i></span>3 FAM going · Hilvarenbeek</div></div>
+          </div>
+          <div class="chips" style="margin-top:4px;"><span class="chip on-green">🎟️ Going</span><span class="chip">👀 Interested</span></div>
+          <div class="split"><div class="yes">Use this one</div><div class="no">It's a different event</div></div>
+          <div class="cta-sub">Your link's ticket URL gets offered to the rave's creator as a suggestion.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <h3>Why</h3>
+      <ul>
+        <li class="pro">Fills the empty <code>ticket_url</code>, <code>official_url</code> and <code>genres</code> fields without extra work from the user.</li>
+        <li class="pro">Duplicates are matched on date and distance, not just name, so it catches far more.</li>
+        <li class="pro">The ticket preview makes adding a rave feel like collecting it.</li>
+      </ul>
+      <h3>Watch</h3>
+      <ul>
+        <li class="con">Depends on how much <code>link-preview</code> can pull out of RA, Dice and Instagram pages. Many pages only expose a title and image, not a date.</li>
+        <li>Typing a name still works and falls back to Variant A's list.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ================= VARIANT C ================= -->
+<section class="variant">
+  <div class="v-head"><span class="tag" style="background:rgba(255,45,120,0.12);color:var(--neon-pink);">C</span><h2>Full screen, one question at a time</h2></div>
+  <p class="v-sub">A full-screen flow with one question per screen: What rave? → When? → Where? → You + crew. Each screen has big tap targets and quick picks ("This Sat", "Next weekend"). Matches show on the first screen. It ends on a summary screen with Edit buttons.</p>
+  <div class="rail">
+    <div class="shot">
+      <div class="shot-cap"><b>1 · What rave?</b>: big input, matches as cards</div>
+      <div class="phone">
+        <div class="sbar"><span>9:41</span><span>●●● 5G ▮</span></div>
+        <div class="full">
+          <div class="sh-top" style="margin-bottom:0"><span class="sh-back">✕</span><div class="sh-title"></div><span class="paste-pill">📋 Paste link</span></div>
+          <div class="prog"><i class="on"></i><i></i><i></i><i></i></div>
+          <div class="big-q">What rave?</div>
+          <div class="big-in">awakenings<span class="caret"></span></div>
+          <div class="lbl"><span>Is it one of these?</span></div>
+          <div class="match best">
+            <div class="m-date"><div class="d">11</div><div class="mo">Jul</div></div>
+            <div class="m-body"><div class="m-name">Awakenings Festival 2027</div><div class="m-meta">3 FAM going · Hilvarenbeek</div></div>
+            <div class="m-btn">That's it</div>
+          </div>
+          <div class="match">
+            <div class="m-date"><div class="d">14</div><div class="mo">Feb</div></div>
+            <div class="m-body"><div class="m-name">Awakenings Winter Edition</div><div class="m-meta">Gashouder, Amsterdam</div></div>
+            <div class="m-btn ghost">That's it</div>
+          </div>
+          <div class="spacer"></div>
+          <div class="cta" style="background:rgba(255,255,255,0.08);color:var(--text);box-shadow:none;">None of these. Next: When? ›</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="shot">
+      <div class="shot-cap"><b>4 · Summary</b>: check, RSVP, pick crew, add</div>
+      <div class="phone">
+        <div class="sbar"><span>9:41</span><span>●●● 5G ▮</span></div>
+        <div class="full">
+          <div class="sh-top" style="margin-bottom:0"><span class="sh-back">‹</span><div class="sh-title"></div></div>
+          <div class="prog"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div>
+          <div class="big-q">Looks right?</div>
+          <div class="summary">
+            <div class="s-row"><span class="k">Rave</span><span class="v">Awakenings Upclose</span><span class="e">Edit</span></div>
+            <div class="s-row"><span class="k">When</span><span class="v">Sat 6 Mar · 1 day</span><span class="e">Edit</span></div>
+            <div class="s-row"><span class="k">Where</span><span class="v">📍 Gashouder, Amsterdam</span><span class="e">Edit</span></div>
+          </div>
+          <div class="lbl"><span>You?</span></div>
+          <div class="chips"><span class="chip on-green">🎟️ Going</span><span class="chip">👀 Interested</span><span class="chip">Just adding</span></div>
+          <div class="lbl"><span>Tell a crew?</span></div>
+          <div class="chips"><span class="chip on-cyan"><span class="dot" style="background:#FF2D78"></span>Techno Fam</span><span class="chip"><span class="dot" style="background:#FFE600"></span>Uni Crew</span></div>
+          <div class="spacer"></div>
+          <div class="cta">Add rave 🔥</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <h3>Why</h3>
+      <ul>
+        <li class="pro">Each screen is very easy to get through, which suits first-time users and onboarding.</li>
+        <li class="pro">Quick date picks fit club nights ("Basement this Friday").</li>
+      </ul>
+      <h3>Watch</h3>
+      <ul>
+        <li class="con">4 screens is the problem we're trying to fix. It's more taps than A for regulars.</li>
+        <li class="con">A full-screen takeover feels heavy when you open it from inside a profile.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>
