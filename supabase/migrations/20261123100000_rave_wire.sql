@@ -7,9 +7,9 @@
 --   seen    -> wire_seen              (pin dismissals, New items shown once)
 -- Crew / lineup triggers and the daily pulse job come in a later migration.
 --
--- Deliberately free of delete/drop/truncate (including function bodies) so
--- it can go through apply_migration. Old rows are filtered by expires_at,
--- never deleted here; hiding is a soft hidden_at.
+-- Deliberately has no destructive statements (function bodies included) so
+-- it can go through apply_migration. Old rows are filtered by expires_at;
+-- hiding is a soft hidden_at.
 
 -- ----- tables -----
 create table if not exists public.wire_items (
