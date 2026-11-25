@@ -109,7 +109,8 @@ test.describe('Add ravers sheet · Ravers tab', () => {
 
     await expect(addedRow(page, 'Fiona Full')).toBeVisible();
     await expect(page.locator('#ar-name')).toHaveValue('');
-    expect(await page.evaluate(() => squad.find(r => r.name === 'Fiona Full')?.instagram)).toBe('@fifull');
+    // The row renders before the save settles, so wait for the stored value instead of reading it once.
+    await expect.poll(() => page.evaluate(() => squad.find(r => r.name === 'Fiona Full')?.instagram)).toBe('@fifull');
     expect(errors).toEqual([]);
   });
 });
