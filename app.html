@@ -432,6 +432,32 @@
   .wire-live { display: flex; flex-direction: column; gap: 6px; }
   .wire-live-row { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; }
   .wire-live-row span:nth-child(2) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Daily Drop card, Crews tab under the pin (renderDailyDrop) */
+  .drop-card { max-width: 680px; margin-bottom: 14px; padding: 14px; border-radius: 18px; border: 1.5px solid transparent; background: linear-gradient(var(--surface), var(--surface)) padding-box, linear-gradient(120deg, var(--neon-pink), var(--neon-yellow), var(--neon-cyan)) border-box; }
+  .drop-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .drop-title { font-family: 'Orbitron', 'Outfit', sans-serif; font-weight: 800; font-size: 0.74rem; letter-spacing: 0.08em; }
+  .drop-streak { font-size: 0.72rem; font-weight: 700; color: var(--neon-orange); background: rgba(var(--neon-orange-rgb),0.12); padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+  .drop-kind { font-size: 0.72rem; color: var(--muted); margin: 2px 0 8px; }
+  .drop-q { margin: 0 0 10px; font-size: 1rem; font-weight: 700; line-height: 1.35; text-wrap: balance; }
+  .drop-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .drop-opt { position: relative; min-height: 44px; padding: 8px 10px; border-radius: 12px; border: 1px solid rgba(var(--white-rgb),0.12); background: var(--surface2); color: var(--text); font-family: inherit; font-size: 0.86rem; font-weight: 600; line-height: 1.25; text-align: center; cursor: pointer; overflow: hidden; }
+  .drop-opt:disabled { cursor: default; }
+  .drop-opt.removed { opacity: 0.35; text-decoration: line-through; }
+  .drop-opt.right { border-color: var(--neon-green); background: rgba(var(--neon-green-rgb),0.14); }
+  .drop-opt.wrong { border-color: var(--neon-pink); background: rgba(var(--neon-pink-rgb),0.12); }
+  .drop-opt.mine:not(.right):not(.wrong) { border-color: var(--neon-cyan); }
+  .drop-opt .drop-bar { position: absolute; inset: 0 auto 0 0; background: rgba(var(--neon-cyan-rgb),0.16); pointer-events: none; }
+  .drop-opt span { position: relative; }
+  .drop-opt small { position: relative; display: block; font-size: 0.7rem; font-weight: 500; color: var(--muted); margin-top: 2px; }
+  .drop-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 10px; font-size: 0.74rem; color: var(--muted); }
+  .drop-hint { min-height: 36px; padding: 0 2px; border: 0; background: none; color: var(--neon-cyan); font-family: inherit; font-size: 0.78rem; cursor: pointer; }
+  .drop-result { margin-top: 10px; padding: 10px 12px; border-radius: 12px; font-size: 0.84rem; line-height: 1.45; background: rgba(var(--neon-green-rgb),0.07); border: 1px solid rgba(var(--neon-green-rgb),0.3); }
+  .drop-result.miss { background: rgba(var(--neon-pink-rgb),0.06); border-color: rgba(var(--neon-pink-rgb),0.3); }
+  .drop-result b { color: var(--text); }
+  /* composer: Daily Drop fields */
+  .wire-drop-opt { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .wire-drop-opt input[type="radio"] { width: 20px; height: 20px; flex: none; accent-color: var(--neon-green); }
+  .wire-drop-opt .form-input { flex: 1; min-width: 0; }
   @media (max-width: 640px) {
     .wire-item { min-height: 36px; font-size: 0.76rem; }
   }
@@ -10196,6 +10222,8 @@
     <div class="page active" id="page-crews">
       <!-- Fam HQ pin (renderWirePin): one live pin, hidden while setup is unfinished -->
       <div class="wire-pin" id="wire-pin" style="display:none;"></div>
+      <!-- Daily Drop (renderDailyDrop): one small game a day -->
+      <div class="drop-card" id="daily-drop" style="display:none;"></div>
       <div class="section-header" style="margin-bottom:12px; gap:12px;">
         <div class="section-title">Your Crews <span id="crews-count" style="color:var(--muted);font-size:1rem;font-weight:400"></span></div>
         <button class="qr-fab" id="qr-fab" onclick="openScanner()" aria-label="Scan QR to join a crew" title="Scan to Join Crew">
@@ -16336,6 +16364,7 @@
     // Rave Wire (non-blocking, at most every WIRE_TTL_MS); runs after the swap
     // above so the countdown item sees fresh RSVPs.
     loadWire().catch(reportBackgroundFailure('loadWire'));
+    loadDailyDrop().catch(reportBackgroundFailure('loadDailyDrop'));
     return true;
   }
 
@@ -23189,7 +23218,10 @@
   }
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && currentUser) loadWire().catch(reportBackgroundFailure('loadWire'));
+    if (document.visibilityState === 'visible' && currentUser) {
+      loadWire().catch(reportBackgroundFailure('loadWire'));
+      loadDailyDrop().catch(reportBackgroundFailure('loadDailyDrop'));
+    }
   });
 
   // Tapped Fam HQ push: open that item's sheet as soon as the feed has it.
@@ -23234,7 +23266,7 @@
   // wire_post() re-checks super admin, the one-pin rule and the weekly push
   // limit; send-wire-push re-checks all of it before sending.
   let _wireCompose = null;
-  const WIRE_COMPOSE_TYPES = [['hq', '📣 Announcement'], ['link', '🔗 Highlight a link'], ['new', '🆕 Feature update'], ['meme', '🗿 House meme']];
+  const WIRE_COMPOSE_TYPES = [['hq', '📣 Announcement'], ['link', '🔗 Highlight a link'], ['new', '🆕 Feature update'], ['meme', '🗿 House meme'], ['drop', '🎯 Daily Drop']];
   const WIRE_COMPOSE_TABS = [['', 'No button'], ['crews', 'Crews'], ['events', 'Raves'], ['members', 'Ravers'], ['stats', 'Stats'], ['checklist', 'Village']];
 
   async function openWireComposer() {
@@ -23247,6 +23279,7 @@
         <div class="wire-chips" id="wc-types">${WIRE_COMPOSE_TYPES.map(([t, label]) =>
           `<button type="button" class="wire-chip" data-type="${t}" aria-pressed="${t === 'hq'}" onclick="setWireComposeType('${escJsAttr(t)}')">${label}</button>`).join('')}</div>
       </div>
+      <div id="wc-post-fields">
       <div class="form-group">
         <label class="form-label" for="wc-title">Message</label>
         <input id="wc-title" class="form-input" maxlength="90" placeholder="Shows on the ticker" oninput="wireComposeUpdate()">
@@ -23298,6 +23331,8 @@
         <span class="form-label">Preview on the Wire</span>
         <div class="wire-compose-preview" id="wc-preview"></div>
       </div>
+      </div>
+      ${wireDropFieldsHTML()}
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" onclick="closeWireComposer()">Cancel</button>
         <button type="button" class="btn btn-primary" id="wc-post" disabled onclick="submitWireComposer()">Post to the Wire</button>
@@ -23328,6 +23363,11 @@
     document.getElementById('wc-link-wrap').style.display = type === 'link' ? '' : 'none';
     document.getElementById('wc-meme-wrap').style.display = type === 'meme' ? '' : 'none';
     document.getElementById('wc-cta-wrap').style.display = type === 'link' ? 'none' : '';
+    const isDrop = type === 'drop';
+    document.getElementById('wc-post-fields').style.display = isDrop ? 'none' : '';
+    document.getElementById('wc-drop-fields').style.display = isDrop ? '' : 'none';
+    document.getElementById('wc-post').textContent = isDrop ? 'Schedule drop' : 'Post to the Wire';
+    if (isDrop) renderWireDropUpcoming();
     wireComposeUpdate();
   }
 
@@ -23335,6 +23375,11 @@
 
   function wireComposeUpdate() {
     if (!_wireCompose) return;
+    if (_wireCompose.type === 'drop') {
+      const v = wireDropValues();
+      document.getElementById('wc-post').disabled = !v.date || !v.question || v.labels.length < 2 || v.answer === -1;
+      return;
+    }
     const title = document.getElementById('wc-title').value;
     document.getElementById('wc-title-count').textContent = `${title.length}/90`;
     const tab = document.getElementById('wc-tab').value;
@@ -23402,6 +23447,7 @@
   async function submitWireComposer() {
     const wc = _wireCompose;
     if (!wc) return;
+    if (wc.type === 'drop') { await submitWireDrop(); return; }
     const val = id => document.getElementById(id).value.trim();
     const kind = wireComposeKind();
     const tab = wc.type === 'link' ? '' : val('wc-tab');
@@ -23468,6 +23514,220 @@
     renderWireStrip(undefined, true);
     renderWireComposerLive();
     showToast('Hidden from the Wire');
+  }
+
+  // ===== DAILY DROP =====
+  // One small game a day on the Crews tab, under the Fam HQ pin. The server
+  // owns everything (daily_drop_today / _hint / _answer): the puzzle, which
+  // options a hint removed, the answer (only sent back after you play), the
+  // anonymous split and your streak. Points go through award_points there.
+  let _drop = null;
+  let _dropLoadedAt = 0;
+  let _dropUid = null;
+  let _dropBusy = false;
+  let _dropTimer = null;
+  const DROP_KINDS = { lineup_guess: 'Lineup guess', odd_one_out: 'Odd one out', this_or_that: 'This or that', custom: 'Fam HQ pick' };
+
+  async function loadDailyDrop(force) {
+    if (!currentUser) return;
+    if (_dropUid !== currentUser.id) { _drop = null; _dropLoadedAt = 0; _dropUid = currentUser.id; }
+    // Reload when it's a new day, or at most every WIRE_TTL_MS otherwise.
+    const stale = !_drop || Date.parse(_drop.next_at) <= Date.now();
+    if (!force && !stale && Date.now() - _dropLoadedAt < WIRE_TTL_MS) { renderDailyDrop(); return; }
+    _dropLoadedAt = Date.now();
+    const uid = currentUser.id;
+    const { data, error } = await sb.rpc('daily_drop_today');
+    if (error) { _dropLoadedAt = 0; throw error; }
+    if (currentUser?.id !== uid) return;
+    _drop = data && typeof data === 'object' && !Array.isArray(data) ? data : null;
+    renderDailyDrop();
+  }
+
+  function dailyDropPoints(d) {
+    if (!d?.played) return d?.has_answer ? (d.hints_used ? 7 : 10) : 5;
+    return 5 + (d.correct ? (d.hints_used ? 2 : 5) : 0);
+  }
+
+  function dailyDropCountdown(d) {
+    const ms = Date.parse(d?.next_at) - Date.now();
+    if (!(ms > 0)) return 'New drop any minute';
+    const h = Math.floor(ms / 3600000), m = Math.floor(ms % 3600000 / 60000);
+    return `Next drop in ${h ? h + 'h ' : ''}${m}m`;
+  }
+
+  function renderDailyDrop() {
+    const el = document.getElementById('daily-drop');
+    if (!el) return;
+    const d = currentUser ? _drop : null;
+    clearInterval(_dropTimer);
+    if (!d || !Array.isArray(d.options)) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    const removed = new Set((d.removed || []).map(Number));
+    const total = (d.split || []).reduce((a, b) => a + b, 0);
+    const opts = d.options.map((label, i) => {
+      let cls = 'drop-opt', extra = '';
+      if (d.played) {
+        if (d.has_answer && i === d.answer_index) cls += ' right';
+        else if (d.has_answer && i === d.choice) cls += ' wrong';
+        if (i === d.choice) cls += ' mine';
+        if (!d.has_answer && total) {
+          const pct = Math.round(100 * (d.split[i] || 0) / total);
+          extra = `<span class="drop-bar" style="width:${pct}%"></span>`;
+          label = String(label);
+          return `<button type="button" class="${cls}" disabled>${extra}<span>${escHtml(label)}</span><small>${pct}%${i === d.choice ? ' · you' : ''}</small></button>`;
+        }
+      } else if (removed.has(i)) cls += ' removed';
+      const off = d.played || removed.has(i) || _dropBusy;
+      return `<button type="button" class="${cls}"${off ? ' disabled' : ''} onclick="answerDailyDrop(${i})">${extra}<span>${escHtml(String(label))}</span></button>`;
+    }).join('');
+
+    let foot, result = '';
+    if (!d.played) {
+      const hint = d.has_answer && d.hints_left > 0
+        ? `<button type="button" class="drop-hint" onclick="dailyDropHint()"${_dropBusy ? ' disabled' : ''}>Hint: remove a wrong answer</button>` : '';
+      foot = `<span>Worth +${dailyDropPoints(d)} PLUR points</span>${hint}`;
+    } else {
+      const fam = d.total > 1 ? (d.has_answer ? `${d.pct_right}% of the fam got it.` : `${d.total} ravers played.`) : "You're one of the first to play today.";
+      const lead = !d.has_answer ? 'Locked in.' : d.correct ? 'Nailed it.' : 'Not this time.';
+      result = `<div class="drop-result${d.has_answer && !d.correct ? ' miss' : ''}"><b>${lead}</b> ${d.reveal ? escHtml(d.reveal) + ' ' : ''}${fam}</div>`;
+      foot = `<span>+${dailyDropPoints(d)} PLUR points</span><span id="drop-next">${dailyDropCountdown(d)}</span>`;
+    }
+    el.innerHTML = `
+      <div class="drop-head"><span class="drop-title">TODAY'S DROP</span>${d.streak ? `<span class="drop-streak">🔥 ${d.streak}-day streak</span>` : ''}</div>
+      <div class="drop-kind">${escHtml(DROP_KINDS[d.kind] || 'Daily Drop')}</div>
+      <p class="drop-q">${escHtml(d.question)}</p>
+      <div class="drop-opts" style="${d.options.length === 3 ? 'grid-template-columns:1fr;' : ''}">${opts}</div>
+      ${result}
+      <div class="drop-foot">${foot}</div>`;
+    el.style.display = '';
+    if (d.played) {
+      _dropTimer = setInterval(() => {
+        const n = document.getElementById('drop-next');
+        if (!n) { clearInterval(_dropTimer); return; }
+        n.textContent = dailyDropCountdown(_drop);
+        if (Date.parse(_drop?.next_at) <= Date.now()) { clearInterval(_dropTimer); loadDailyDrop(true).catch(reportBackgroundFailure('loadDailyDrop')); }
+      }, 30000);
+    }
+  }
+
+  async function dailyDropHint() {
+    if (!_drop || _dropBusy || !currentUser) return;
+    _dropBusy = true; renderDailyDrop();
+    const { data, error } = await sb.rpc('daily_drop_hint');
+    _dropBusy = false;
+    if (error) { renderDailyDrop(); toastError("Couldn't use a hint. Try again.", error); return; }
+    if (data) _drop = data;
+    renderDailyDrop();
+  }
+
+  async function answerDailyDrop(i) {
+    if (!_drop || _drop.played || _dropBusy || !currentUser) return;
+    _dropBusy = true; renderDailyDrop();
+    const { data, error } = await sb.rpc('daily_drop_answer', { p_choice: i });
+    _dropBusy = false;
+    if (error) {
+      renderDailyDrop();
+      // A new day started while the card was open: show the new drop.
+      if (/no drop today|removed by a hint/.test(error.message || '')) loadDailyDrop(true).catch(reportBackgroundFailure('loadDailyDrop'));
+      else toastError("Couldn't save your answer. Try again.", error);
+      return;
+    }
+    if (data) _drop = data;
+    renderDailyDrop();
+    if (_drop?.played) hapticSuccess();
+  }
+
+  // --- composer: schedule a Daily Drop (super admins) ---
+  function wireDropDayISO(offsetDays) {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+    const d = new Date(today + 'T12:00:00Z');
+    d.setUTCDate(d.getUTCDate() + (offsetDays || 0));
+    return d.toISOString().slice(0, 10);
+  }
+
+  function wireDropFieldsHTML() {
+    const rows = [0, 1, 2, 3].map(i => `
+        <div class="wire-drop-opt">
+          <input type="radio" name="wc-drop-right" id="wc-drop-r${i}" value="${i}" aria-label="Option ${i + 1} is the right answer" onchange="wireComposeUpdate()">
+          <input id="wc-drop-o${i}" class="form-input" maxlength="60" placeholder="Option ${i + 1}${i >= 2 ? ' (optional)' : ''}" aria-label="Option ${i + 1}" oninput="wireComposeUpdate()">
+        </div>`).join('');
+    return `
+      <div id="wc-drop-fields" style="display:none;">
+        <div class="form-group">
+          <label class="form-label" for="wc-drop-date">Day</label>
+          <input id="wc-drop-date" class="form-input" type="date" min="${wireDropDayISO(0)}" value="${wireDropDayISO(1)}" oninput="wireComposeUpdate()">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="wc-drop-q">Question</label>
+          <input id="wc-drop-q" class="form-input" maxlength="140" placeholder="Who closes the main stage at Countdown?" oninput="wireComposeUpdate()">
+        </div>
+        <div class="form-group">
+          <span class="form-label">Options · tick the right one</span>
+          ${rows}
+          <div class="wire-drop-opt">
+            <input type="radio" name="wc-drop-right" id="wc-drop-rnone" value="" checked onchange="wireComposeUpdate()">
+            <label for="wc-drop-rnone" class="poll-setting-hint">No right answer (this or that: everyone sees the split)</label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="wc-drop-reveal">Shown after answering (optional)</label>
+          <input id="wc-drop-reveal" class="form-input" maxlength="200" placeholder="It's Excision, closing Saturday night.">
+        </div>
+        <div class="form-group">
+          <span class="form-label">Next two weeks</span>
+          <div class="wire-live" id="wc-drop-upcoming"><span class="text-hint-xs">Loading…</span></div>
+        </div>
+      </div>`;
+  }
+
+  // Filled options in order, and the right answer's index among them.
+  function wireDropValues() {
+    const labels = [], map = {};
+    [0, 1, 2, 3].forEach(i => {
+      const v = document.getElementById('wc-drop-o' + i)?.value.trim();
+      if (v) { map[i] = labels.length; labels.push(v); }
+    });
+    const picked = document.querySelector('input[name="wc-drop-right"]:checked')?.value;
+    const answer = picked === '' || picked == null ? null : (map[Number(picked)] ?? -1);
+    return {
+      date: document.getElementById('wc-drop-date')?.value || '',
+      question: document.getElementById('wc-drop-q')?.value.trim() || '',
+      labels, answer,
+      reveal: document.getElementById('wc-drop-reveal')?.value.trim() || null,
+    };
+  }
+
+  async function renderWireDropUpcoming() {
+    const box = document.getElementById('wc-drop-upcoming');
+    if (!box) return;
+    const { data, error } = await sb.rpc('daily_drop_upcoming');
+    if (error) { box.innerHTML = '<span class="text-hint-xs">Couldn\'t load upcoming drops.</span>'; return; }
+    const rows = Array.isArray(data) ? data : [];
+    box.innerHTML = rows.length ? rows.map(r => {
+      const day = new Date(r.drop_date + 'T12:00:00Z').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+      return `<div class="wire-live-row"><span class="wire-tag" style="--wt:${r.source === 'admin' ? 'var(--neon-yellow)' : 'var(--muted)'}">${r.source === 'admin' ? 'Yours' : 'Auto'}</span>`
+        + `<span>${escHtml(day)} · ${escHtml(r.question)}</span><span class="text-hint-xs">${Number(r.plays) || 0} played</span></div>`;
+    }).join('') : '<span class="text-hint-xs">Auto drops are made the night before. Schedule yours for any day.</span>';
+  }
+
+  async function submitWireDrop() {
+    const v = wireDropValues();
+    const postBtn = document.getElementById('wc-post');
+    postBtn.disabled = true;
+    postBtn.textContent = 'Scheduling…';
+    const { error } = await sb.rpc('daily_drop_schedule', {
+      p_date: v.date, p_question: v.question, p_labels: v.labels, p_answer: v.answer, p_reveal: v.reveal,
+    });
+    postBtn.textContent = 'Schedule drop';
+    if (error) {
+      postBtn.disabled = false;
+      const msg = (error.message || '').replace(/^daily_drop_schedule:\s*/, '');
+      toastError(/already played|today or a future|options|question|right answer/.test(msg) ? msg.charAt(0).toUpperCase() + msg.slice(1) + '.' : "Couldn't schedule that. Try again.", /already played|today or a future|options|question|right answer/.test(msg) ? null : error);
+      return;
+    }
+    const day = new Date(v.date + 'T12:00:00Z').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+    showToast(`Daily Drop scheduled for ${day}`);
+    closeWireComposer();
+    if (v.date === wireDropDayISO(0)) loadDailyDrop(true).catch(reportBackgroundFailure('loadDailyDrop'));
   }
 
   // ===== CREW FEED (crew page) =====
