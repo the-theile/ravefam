@@ -436,6 +436,9 @@
   .drop-card { max-width: 680px; margin-bottom: 14px; padding: 14px; border-radius: 18px; border: 1.5px solid transparent; background: linear-gradient(var(--surface), var(--surface)) padding-box, linear-gradient(120deg, var(--neon-pink), var(--neon-yellow), var(--neon-cyan)) border-box; }
   .drop-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .drop-title { font-family: 'Orbitron', 'Outfit', sans-serif; font-weight: 800; font-size: 0.74rem; letter-spacing: 0.08em; }
+  .drop-head-right { display: flex; align-items: center; gap: 4px; }
+  .drop-x { width: 32px; height: 32px; margin: -6px -6px -6px 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); font-size: 1.1rem; cursor: pointer; }
+  .drop-x:hover, .drop-x:focus-visible { color: var(--text); background: rgba(var(--white-rgb),0.06); outline: none; }
   .drop-streak { font-size: 0.72rem; font-weight: 700; color: var(--neon-orange); background: rgba(var(--neon-orange-rgb),0.12); padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
   .drop-kind { font-size: 0.72rem; color: var(--muted); margin: 2px 0 8px; }
   .drop-q { margin: 0 0 10px; font-size: 1rem; font-weight: 700; line-height: 1.35; text-wrap: balance; }
@@ -11591,7 +11594,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.55.0';
+  const APP_VERSION = '2.55.1';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -23641,7 +23644,7 @@
     if (!el) return;
     const d = currentUser ? _drop : null;
     clearInterval(_dropTimer);
-    if (!d || !Array.isArray(d.options)) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    if (!d || !Array.isArray(d.options) || (d.played && (d._hidden || dailyDropHiddenDate() === d.date))) { el.style.display = 'none'; el.innerHTML = ''; return; }
     const removed = new Set((d.removed || []).map(Number));
     const total = (d.split || []).reduce((a, b) => a + b, 0);
     const opts = d.options.map((label, i) => {
@@ -23673,7 +23676,7 @@
       foot = `<span>+${dailyDropPoints(d)} PLUR points</span><span id="drop-next">${dailyDropCountdown(d)}</span>`;
     }
     el.innerHTML = `
-      <div class="drop-head"><span class="drop-title">TODAY'S DROP</span>${d.streak ? `<span class="drop-streak">🔥 ${d.streak}-day streak</span>` : ''}</div>
+      <div class="drop-head"><span class="drop-title">TODAY'S DROP</span><span class="drop-head-right">${d.streak ? `<span class="drop-streak">🔥 ${d.streak}-day streak</span>` : ''}${d.played ? `<button type="button" class="drop-x" aria-label="Hide until tomorrow's drop" onclick="dismissDailyDrop()">×</button>` : ''}</span></div>
       <div class="drop-kind">${escHtml(DROP_KINDS[d.kind] || 'Daily Drop')}</div>
       <p class="drop-q">${escHtml(d.question)}</p>
       <div class="drop-opts" style="${d.options.length === 3 ? 'grid-template-columns:1fr;' : ''}">${opts}</div>
@@ -23688,6 +23691,21 @@
         if (Date.parse(_drop?.next_at) <= Date.now()) { clearInterval(_dropTimer); loadDailyDrop(true).catch(reportBackgroundFailure('loadDailyDrop')); }
       }, 30000);
     }
+  }
+
+  // Hide today's card once played; it comes back on its own with the next
+  // drop (a new date). Per viewer and device: a view preference, not data.
+  function dailyDropHiddenKey() { return 'rf_drop_hidden_' + (currentUser?.id || ''); }
+  function dailyDropHiddenDate() {
+    try { return localStorage.getItem(dailyDropHiddenKey()); } catch { return null; }
+  }
+  function dismissDailyDrop() {
+    if (!_drop?.played) return;
+    try { localStorage.setItem(dailyDropHiddenKey(), String(_drop.date)); } catch { /* private mode: hide for this visit only */ _drop = { ..._drop, _hidden: true }; }
+    clearInterval(_dropTimer);
+    const el = document.getElementById('daily-drop');
+    if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+    showToast("Hidden until tomorrow's drop");
   }
 
   async function dailyDropHint() {
