@@ -414,6 +414,24 @@
   .wire-reacts { display: flex; gap: 6px; flex-wrap: wrap; }
   .wire-react { min-height: 36px; padding: 0 11px; border-radius: 999px; border: 1px solid rgba(var(--white-rgb),0.12); background: var(--surface); color: var(--text); font-family: inherit; font-size: 0.85rem; font-variant-numeric: tabular-nums; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
   .wire-react[aria-pressed="true"] { border-color: var(--neon-pink); background: rgba(var(--neon-pink-rgb),0.14); box-shadow: 0 0 10px rgba(var(--neon-pink-rgb),0.3); }
+  /* Fam HQ pin, top of the Crews tab (renderWirePin) */
+  .wire-pin { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px; padding: 12px 12px 12px 14px; border-radius: 14px; border: 1px solid rgba(var(--neon-yellow-rgb),0.45); background: rgba(var(--neon-yellow-rgb),0.07); max-width: 680px; }
+  .wire-pin-ico { font-size: 1.15rem; line-height: 1.3; }
+  .wire-pin-main { flex: 1; min-width: 0; padding: 0; border: 0; background: none; color: var(--text); font-family: inherit; font-size: 0.86rem; line-height: 1.4; text-align: left; cursor: pointer; }
+  .wire-pin-main b { display: block; color: var(--neon-yellow); font-size: 0.8rem; font-weight: 700; margin-bottom: 2px; }
+  .wire-pin-main .wire-tag { margin-right: 5px; vertical-align: 1px; }
+  .wire-pin-x { flex: none; width: 32px; height: 32px; border-radius: 50%; border: 0; background: transparent; color: var(--muted); font-size: 1rem; cursor: pointer; }
+  /* Fam HQ composer (openWireComposer) */
+  .wire-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .wire-chip { min-height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(var(--white-rgb),0.12); background: var(--surface); color: var(--text); font-family: inherit; font-size: 0.8rem; cursor: pointer; }
+  .wire-chip[aria-pressed="true"] { border-color: var(--neon-yellow); color: var(--neon-yellow); background: rgba(var(--neon-yellow-rgb),0.1); }
+  .wire-chip:disabled { opacity: 0.45; cursor: not-allowed; }
+  .wire-count { font-size: 0.7rem; color: var(--muted); text-align: right; margin-top: 3px; font-variant-numeric: tabular-nums; }
+  .wire-compose-preview { border: 1px dashed rgba(var(--white-rgb),0.18); border-radius: 10px; overflow: hidden; }
+  .wire-compose-preview .wire-item { width: 100%; cursor: default; overflow: hidden; text-overflow: ellipsis; }
+  .wire-live { display: flex; flex-direction: column; gap: 6px; }
+  .wire-live-row { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; }
+  .wire-live-row span:nth-child(2) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   @media (max-width: 640px) {
     .wire-item { min-height: 36px; font-size: 0.76rem; }
   }
@@ -10148,6 +10166,9 @@
           <button type="button" class="admin-menu-row" id="pm-dash-btn" onclick="closeAdminMenu(); openPMDashboard()" style="display:none;">
             📊 Product Metrics
           </button>
+          <button type="button" class="admin-menu-row" id="wire-compose-btn" onclick="closeAdminMenu(); openWireComposer()" style="display:none;">
+            📣 Post to the Wire
+          </button>
         </div>
       </div>
 <button class="btn btn-ghost" id="logout-btn" onclick="confirmLogout()" title="Log out" aria-label="Log out" style="font-size:0.75rem;padding:9px 14px;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18.36 6.64A9 9 0 1 1 5.64 6.64"/><line x1="12" y1="2" x2="12" y2="12"/></svg></button>
@@ -10173,6 +10194,8 @@
          after the welcome-back popup, until explicitly dismissed. -->
     <!-- CREWS PAGE -->
     <div class="page active" id="page-crews">
+      <!-- Fam HQ pin (renderWirePin): one live pin, hidden while setup is unfinished -->
+      <div class="wire-pin" id="wire-pin" style="display:none;"></div>
       <div class="section-header" style="margin-bottom:12px; gap:12px;">
         <div class="section-title">Your Crews <span id="crews-count" style="color:var(--muted);font-size:1rem;font-weight:400"></span></div>
         <button class="qr-fab" id="qr-fab" onclick="openScanner()" aria-label="Scan QR to join a crew" title="Scan to Join Crew">
@@ -10621,6 +10644,13 @@
   </div>
 </div>
 
+<!-- Fam HQ composer (openWireComposer, super admins only) -->
+<div class="modal-overlay" id="wire-compose-overlay" onclick="if(event.target===this)closeWireComposer()">
+  <div class="modal" id="wire-compose-modal" role="dialog" aria-modal="true" aria-labelledby="wire-compose-title" style="max-height:85vh;overflow-y:auto;">
+    <!-- filled by JS -->
+  </div>
+</div>
+
 <!-- FAM Jams — Add Playlist Modal -->
 <div class="modal-overlay" id="add-jam-overlay" onclick="if(event.target===this)closeAddJamModal()">
   <div class="modal" id="add-jam-modal" style="max-height:85vh;overflow-y:auto;">
@@ -10791,6 +10821,16 @@
             <div class="poll-setting-hint">When a crewmate asks if you're coming to a rave</div>
           </div>
           <button class="poll-anon-toggle" id="rave-check-push-settings-toggle" onclick="toggleRaveCheckPush(this)"></button>
+        </div>
+      </div>
+      <div class="settings-sec">From RaveFAM</div>
+      <div class="poll-modal-settings">
+        <div class="poll-setting-row">
+          <div>
+            <div class="poll-setting-label">📣 Fam HQ announcements</div>
+            <div class="poll-setting-hint">Big news and new features. At most one a week</div>
+          </div>
+          <button class="poll-anon-toggle" id="wire-push-settings-toggle" onclick="toggleWirePush(this)"></button>
         </div>
       </div>
       <div class="settings-sec">Lineups</div>
@@ -11516,7 +11556,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.53.0';
+  const APP_VERSION = '2.54.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -11664,6 +11704,8 @@
   function updatePMDashBadge() {
     const btn = document.getElementById('pm-dash-btn');
     if (btn) btn.style.display = isSuperAdminUser ? '' : 'none';
+    const wireBtn = document.getElementById('wire-compose-btn');  // Fam HQ composer: super admins only
+    if (wireBtn) wireBtn.style.display = isSuperAdminUser ? '' : 'none';
     updateAdminMenuVisibility();
   }
 
@@ -12555,6 +12597,7 @@
   async function openFromNativePush(data, actionId) {
     if (!data) return;
     if (data.crewId) { openHuddleDeepLink({ crewId: data.crewId, roomId: data.roomId, messageId: data.messageId, briefing: data.briefing }); return; }
+    if (data.wireItemId) { openWireFromPush(data.wireItemId); return; }  // Fam HQ push (send-wire-push)
     // A Rave Check answered from the notification: save it first (the same
     // path as the in-app card), then open the rave in place. openNativeAppUrl
     // reloads the page, which would cut the save off, so it's only the fallback.
@@ -22944,6 +22987,7 @@
   let _wirePage = 'crews';
   let _wireSig = '';
   let _wireOpenId = null;
+  let _wirePendingOpen = null;  // item id from a Fam HQ push tap, opened once the feed loads
   const WIRE_TTL_MS = 5 * 60 * 1000;
   const WIRE_KINDS = {
     crew:      { label: 'Crew',      c: 'var(--neon-pink)' },
@@ -22964,7 +23008,7 @@
   async function loadWire(force) {
     if (!currentUser) return;
     if (_wireUid !== currentUser.id) { wireItems = []; _wireLoadedAt = 0; _wireUid = currentUser.id; }
-    if (!force && Date.now() - _wireLoadedAt < WIRE_TTL_MS) { renderWireStrip(); return; }
+    if (!force && !_wirePendingOpen && Date.now() - _wireLoadedAt < WIRE_TTL_MS) { renderWireStrip(); return; }
     _wireLoadedAt = Date.now();
     const uid = currentUser.id;
     const { data, error } = await sb.rpc('wire_feed', { p_limit: 60 });
@@ -22972,6 +23016,11 @@
     if (currentUser?.id !== uid) return;
     wireItems = data || [];
     renderWireStrip();
+    if (_wirePendingOpen && wireItems.some(it => String(it.id) === _wirePendingOpen)) {
+      const id = _wirePendingOpen;
+      _wirePendingOpen = null;
+      openWireItem(id);
+    }
   }
 
   // Your next RSVP'd rave within 120 days, as a local-only Wire item.
@@ -23011,6 +23060,7 @@
 
   function renderWireStrip(page, forceRebuild) {
     if (page) _wirePage = page;
+    renderWirePin();
     const el = document.getElementById('wire-strip');
     if (!el) return;
     const items = currentUser ? wireOrderedItems(_wirePage) : [];
@@ -23078,7 +23128,7 @@
         ? `<div class="wire-meme">${meta.top ? `<div class="wire-meme-top">${escHtml(meta.top)}</div>` : ''}<div class="wire-meme-art">${escHtml(meta.art)}</div>${title}</div>`
         : title}
       ${it.body ? `<p class="wire-sheet-body">${escHtml(it.body)}</p>` : ''}
-      ${it.link_url ? `<a class="wire-link" href="${escHtml(it.link_url)}" target="_blank" rel="noopener noreferrer">${escHtml(preview.title || it.link_url)}<small>${escHtml(preview.site_name || wireHost(it.link_url))}</small></a>` : ''}
+      ${it.link_url ? `<a class="wire-link" href="${escHtml(it.link_url)}" target="_blank" rel="noopener noreferrer">${escHtml(preview.title || it.link_url)}<small>${escHtml(preview.site || wireHost(it.link_url))}</small></a>` : ''}
       <div class="wire-sheet-foot">
         ${it.local ? '<span></span>' : `<div class="wire-reacts" id="wire-reacts">${wireReactsHTML(it)}</div>`}
         ${cta ? `<button type="button" class="btn btn-primary" onclick="wireGo()">${escHtml(cta)}</button>` : ''}
@@ -23140,6 +23190,284 @@
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && currentUser) loadWire().catch(reportBackgroundFailure('loadWire'));
   });
+
+  // Tapped Fam HQ push: open that item's sheet as soon as the feed has it.
+  function openWireFromPush(id) {
+    _wirePendingOpen = String(id);
+    if (currentUser) loadWire(true).catch(reportBackgroundFailure('loadWire'));
+    // Signed-out cold start: loadAllDataOnce's loadWire() picks it up after login.
+  }
+
+  // --- Fam HQ pin (top of the Crews tab) ---
+  // One live pin at a time (wire_post ends the old one). Hidden while the
+  // Setup pill is showing so a new raver's first visit isn't banner-stacked.
+  function wirePinnedItem() {
+    const now = Date.now();
+    return wireItems.find(it => it.pinned_until && !it.dismissed && Date.parse(it.pinned_until) > now) || null;
+  }
+
+  function renderWirePin() {
+    const el = document.getElementById('wire-pin');
+    if (!el) return;
+    const it = currentUser ? wirePinnedItem() : null;
+    if (!it || (typeof setupPillVisible === 'function' && setupPillVisible())) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    const k = WIRE_KINDS[it.kind] || WIRE_KINDS.hq;
+    el.innerHTML = `<span class="wire-pin-ico" aria-hidden="true">📣</span>`
+      + `<button type="button" class="wire-pin-main" data-id="${escHtml(it.id)}" onclick="openWireItem(this.dataset.id)">`
+      + `<b>Fam HQ</b>${it.kind !== 'hq' ? `<span class="wire-tag" style="--wt:${k.c}">${k.label}</span>` : ''}${escHtml(it.title)}</button>`
+      + `<button type="button" class="wire-pin-x" aria-label="Dismiss this announcement" data-id="${escHtml(it.id)}" onclick="dismissWirePin(this.dataset.id)">×</button>`;
+    el.style.display = '';
+  }
+
+  function dismissWirePin(id) {
+    const it = wireItems.find(x => String(x.id) === String(id));
+    if (!it || !currentUser) return;
+    it.dismissed = true;
+    it.seen = true;
+    renderWirePin();
+    sb.from('wire_seen').upsert({ item_id: it.id, user_id: currentUser.id, dismissed_at: new Date().toISOString() }, { onConflict: 'item_id,user_id' })
+      .then(({ error }) => { if (error) reportBackgroundFailure('wire_seen dismiss')(error); });
+  }
+
+  // --- Fam HQ composer (❔ menu > Post to the Wire, super admins only) ---
+  // wire_post() re-checks super admin, the one-pin rule and the weekly push
+  // limit; send-wire-push re-checks all of it before sending.
+  let _wireCompose = null;
+  const WIRE_COMPOSE_TYPES = [['hq', '📣 Announcement'], ['link', '🔗 Highlight a link'], ['new', '🆕 Feature update'], ['meme', '🗿 House meme']];
+  const WIRE_COMPOSE_TABS = [['', 'No button'], ['crews', 'Crews'], ['events', 'Raves'], ['members', 'Ravers'], ['stats', 'Stats'], ['checklist', 'Village']];
+
+  async function openWireComposer() {
+    if (!isSuperAdminUser) return;
+    _wireCompose = { type: 'hq', pinDays: 0, push: false, preview: null, pushAt: null };
+    document.getElementById('wire-compose-modal').innerHTML = `
+      <div class="modal-title" id="wire-compose-title">📣 Post to the Wire</div>
+      <div class="form-group">
+        <span class="form-label">Type</span>
+        <div class="wire-chips" id="wc-types">${WIRE_COMPOSE_TYPES.map(([t, label]) =>
+          `<button type="button" class="wire-chip" data-type="${t}" aria-pressed="${t === 'hq'}" onclick="setWireComposeType('${t}')">${label}</button>`).join('')}</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="wc-title">Message</label>
+        <input id="wc-title" class="form-input" maxlength="90" placeholder="Shows on the ticker" oninput="wireComposeUpdate()">
+        <div class="wire-count" id="wc-title-count">0/90</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="wc-body">Details (optional)</label>
+        <textarea id="wc-body" class="form-input" rows="3" maxlength="600" placeholder="Shows when someone taps it"></textarea>
+      </div>
+      <div class="form-group" id="wc-link-wrap" style="display:none;">
+        <label class="form-label" for="wc-link">Link</label>
+        <input id="wc-link" class="form-input" type="url" inputmode="url" placeholder="https://" oninput="wireComposeUpdate()" onchange="wireComposeFetchPreview()">
+        <div class="wire-count" id="wc-link-preview" style="text-align:left;"></div>
+      </div>
+      <div id="wc-meme-wrap" style="display:none;">
+        <div class="form-group">
+          <label class="form-label" for="wc-meme-top">Top line (optional)</label>
+          <input id="wc-meme-top" class="form-input" maxlength="40" placeholder="Nobody:">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="wc-meme-art">Emoji art</label>
+          <input id="wc-meme-art" class="form-input" maxlength="16" placeholder="🗿🎏">
+        </div>
+      </div>
+      <div class="form-group" id="wc-cta-wrap">
+        <label class="form-label" for="wc-tab">Button goes to</label>
+        <select id="wc-tab" class="form-input" onchange="wireComposeUpdate()">${WIRE_COMPOSE_TABS.map(([v, label]) => `<option value="${v}">${label}</option>`).join('')}</select>
+        <input id="wc-cta" class="form-input" maxlength="30" placeholder="Button label, e.g. Show me" style="margin-top:6px;display:none;" aria-label="Button label">
+      </div>
+      <div class="poll-modal-settings">
+        <div class="poll-setting-row">
+          <div>
+            <div class="poll-setting-label">Pin to top of Crews</div>
+            <div class="poll-setting-hint">Replaces any pin that's live now</div>
+          </div>
+          <button type="button" class="poll-anon-toggle" id="wc-pin" aria-label="Pin to top of Crews" aria-pressed="false" onclick="wireComposeTogglePin(this)"></button>
+        </div>
+        <div class="wire-chips" id="wc-pin-days" style="display:none;padding:0 0 12px;">${[[1, '1 day'], [3, '3 days'], [7, '1 week']].map(([d, label]) =>
+          `<button type="button" class="wire-chip" data-days="${d}" aria-pressed="false" onclick="setWireComposePinDays(${d})">${label}</button>`).join('')}</div>
+        <div class="poll-setting-row">
+          <div>
+            <div class="poll-setting-label">Also send a push</div>
+            <div class="poll-setting-hint" id="wc-push-hint">Checking this week's push…</div>
+          </div>
+          <button type="button" class="poll-anon-toggle" id="wc-push" aria-label="Also send a push" aria-pressed="false" disabled onclick="wireComposeTogglePush(this)"></button>
+        </div>
+      </div>
+      <div class="form-group" style="margin-top:14px;">
+        <span class="form-label">Preview on the Wire</span>
+        <div class="wire-compose-preview" id="wc-preview"></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeWireComposer()">Cancel</button>
+        <button type="button" class="btn btn-primary" id="wc-post" disabled onclick="submitWireComposer()">Post to the Wire</button>
+      </div>
+      <div class="form-group" style="margin-top:18px;">
+        <span class="form-label">Live Fam HQ posts</span>
+        <div class="wire-live" id="wc-live"></div>
+      </div>`;
+    wireComposeUpdate();
+    renderWireComposerLive();
+    document.getElementById('wire-compose-overlay').classList.add('open');
+    setTimeout(() => document.getElementById('wc-title')?.focus(), 50);
+    const { data, error } = await sb.rpc('wire_push_available_at');
+    if (!_wireCompose) return;
+    _wireCompose.pushAt = !error && data ? new Date(data) : null;
+    updateWireComposePushRow(error);
+  }
+
+  function closeWireComposer() {
+    document.getElementById('wire-compose-overlay')?.classList.remove('open');
+    _wireCompose = null;
+  }
+
+  function setWireComposeType(type) {
+    if (!_wireCompose) return;
+    _wireCompose.type = type;
+    document.querySelectorAll('#wc-types .wire-chip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.type === type)));
+    document.getElementById('wc-link-wrap').style.display = type === 'link' ? '' : 'none';
+    document.getElementById('wc-meme-wrap').style.display = type === 'meme' ? '' : 'none';
+    document.getElementById('wc-cta-wrap').style.display = type === 'link' ? 'none' : '';
+    wireComposeUpdate();
+  }
+
+  function wireComposeKind() { return _wireCompose?.type === 'link' ? 'hq' : _wireCompose?.type; }
+
+  function wireComposeUpdate() {
+    if (!_wireCompose) return;
+    const title = document.getElementById('wc-title').value;
+    document.getElementById('wc-title-count').textContent = `${title.length}/90`;
+    const tab = document.getElementById('wc-tab').value;
+    document.getElementById('wc-cta').style.display = tab && _wireCompose.type !== 'link' ? '' : 'none';
+    const k = WIRE_KINDS[wireComposeKind()] || WIRE_KINDS.hq;
+    document.getElementById('wc-preview').innerHTML = `<div class="wire-item"><span class="wire-tag" style="--wt:${k.c}">${k.label}</span>${escHtml(title.trim() || 'Your message')}</div>`;
+    const linkOk = _wireCompose.type !== 'link' || /^https?:\/\/\S+\.\S+/i.test(document.getElementById('wc-link').value.trim());
+    document.getElementById('wc-post').disabled = !title.trim() || !linkOk;
+  }
+
+  async function wireComposeFetchPreview() {
+    if (!_wireCompose) return;
+    const url = document.getElementById('wc-link').value.trim();
+    const out = document.getElementById('wc-link-preview');
+    _wireCompose.preview = null;
+    if (!/^https?:\/\/\S+\.\S+/i.test(url)) { out.textContent = url ? 'Links start with https://' : ''; return; }
+    out.textContent = 'Getting a preview…';
+    try {
+      const { data, error } = await sb.functions.invoke('link-preview', { body: { url } });
+      if (!_wireCompose || document.getElementById('wc-link').value.trim() !== url) return;
+      if (!error && data && (data.title || data.site)) {
+        _wireCompose.preview = { title: data.title || null, site: data.site || null, description: data.description || null, image: data.image || null };
+        out.textContent = [data.title, data.site].filter(Boolean).join(' · ');
+      } else out.textContent = 'No preview for this link. It will still work.';
+    } catch (e) {
+      out.textContent = 'No preview for this link. It will still work.';
+    }
+  }
+
+  function wireComposeTogglePin(btn) {
+    if (!_wireCompose) return;
+    const on = !btn.classList.contains('on');
+    btn.classList.toggle('on', on);
+    btn.setAttribute('aria-pressed', String(on));
+    document.getElementById('wc-pin-days').style.display = on ? '' : 'none';
+    setWireComposePinDays(on ? 3 : 0);
+  }
+
+  function setWireComposePinDays(days) {
+    if (!_wireCompose) return;
+    _wireCompose.pinDays = days;
+    document.querySelectorAll('#wc-pin-days .wire-chip').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.days) === days)));
+  }
+
+  function updateWireComposePushRow(err) {
+    const btn = document.getElementById('wc-push');
+    const hint = document.getElementById('wc-push-hint');
+    if (!btn || !hint || !_wireCompose) return;
+    const at = _wireCompose.pushAt;
+    const locked = !!err || (at && at.getTime() > Date.now() + 60000);
+    btn.disabled = locked;
+    if (locked) { btn.classList.remove('on'); btn.setAttribute('aria-pressed', 'false'); _wireCompose.push = false; }
+    hint.textContent = err ? "Couldn't check this week's push. Try again later."
+      : locked ? `This week's push is used. Next one opens ${at.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}`
+      : 'Only to ravers who turned on Fam HQ announcements. One a week';
+  }
+
+  function wireComposeTogglePush(btn) {
+    if (!_wireCompose || btn.disabled) return;
+    _wireCompose.push = !btn.classList.contains('on');
+    btn.classList.toggle('on', _wireCompose.push);
+    btn.setAttribute('aria-pressed', String(_wireCompose.push));
+  }
+
+  async function submitWireComposer() {
+    const wc = _wireCompose;
+    if (!wc) return;
+    const val = id => document.getElementById(id).value.trim();
+    const kind = wireComposeKind();
+    const tab = wc.type === 'link' ? '' : val('wc-tab');
+    const tabLabel = (WIRE_COMPOSE_TABS.find(([v]) => v === tab) || [])[1];
+    const postBtn = document.getElementById('wc-post');
+    postBtn.disabled = true;
+    postBtn.textContent = 'Posting…';
+    const { data: id, error } = await sb.rpc('wire_post', {
+      p_kind: kind,
+      p_title: val('wc-title'),
+      p_body: val('wc-body') || null,
+      p_link_url: wc.type === 'link' ? val('wc-link') : null,
+      p_link_preview: wc.type === 'link' ? wc.preview : null,
+      p_deep_link: tab ? { tab } : null,
+      p_cta_label: tab ? (val('wc-cta') || `Open ${tabLabel}`) : null,
+      p_meta: kind === 'meme' ? { top: val('wc-meme-top') || null, art: val('wc-meme-art') || null } : {},
+      p_app_version: kind === 'new' ? APP_VERSION : null,
+      p_pin_days: wc.pinDays,
+      p_expires_days: 7,
+      p_push: wc.push,
+    });
+    if (error) {
+      postBtn.disabled = false;
+      postBtn.textContent = 'Post to the Wire';
+      if (/wire_push_weekly_limit/.test(error.message || '')) {
+        wc.pushAt = error.details ? new Date(error.details) : wc.pushAt;
+        updateWireComposePushRow();
+        showToast("This week's push is already used. Post without it, or wait for the next one.", 'error');
+      } else toastError("Couldn't post that. Try again.", error);
+      return;
+    }
+    closeWireComposer();
+    if (wc.push) {
+      const { data: r, error: pushErr } = await sb.functions.invoke('send-wire-push', { body: { item_id: id } });
+      if (pushErr) toastError("Posted, but the push didn't send.", pushErr);
+      else showToast(`Posted to the Wire. Push sent to ${r?.sent ?? 0} of ${r?.recipients ?? 0} opted-in ravers.`);
+    } else showToast('Posted to the Wire');
+    loadWire(true).catch(reportBackgroundFailure('loadWire'));
+  }
+
+  // Live Fam HQ / New / Meme items, each with a two-tap Hide.
+  function renderWireComposerLive() {
+    const box = document.getElementById('wc-live');
+    if (!box) return;
+    const live = wireItems.filter(it => ['hq', 'new', 'meme'].includes(it.kind));
+    box.innerHTML = live.length ? live.map(it => {
+      const k = WIRE_KINDS[it.kind] || WIRE_KINDS.hq;
+      return `<div class="wire-live-row"><span class="wire-tag" style="--wt:${k.c}">${k.label}</span><span>${it.pinned_until ? '📌 ' : ''}${escHtml(it.title)}</span>`
+        + `<button type="button" class="btn btn-ghost" style="font-size:0.72rem;padding:6px 10px;" data-id="${escHtml(it.id)}" onclick="hideWireItem(this)">Hide</button></div>`;
+    }).join('') : '<span class="text-hint-xs">Nothing from Fam HQ is live right now.</span>';
+  }
+
+  async function hideWireItem(btn) {
+    if (!btn.dataset.armed) {
+      btn.dataset.armed = '1';
+      btn.textContent = 'Tap to hide';
+      setTimeout(() => { if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = 'Hide'; } }, 3000);
+      return;
+    }
+    btn.disabled = true;
+    const { error } = await sb.rpc('wire_hide', { p_id: btn.dataset.id });
+    if (error) { btn.disabled = false; toastError("Couldn't hide that. Try again.", error); return; }
+    wireItems = wireItems.filter(it => String(it.id) !== String(btn.dataset.id));
+    renderWireStrip(undefined, true);
+    renderWireComposerLive();
+    showToast('Hidden from the Wire');
+  }
 
   // ===== CREW FEED (crew page) =====
   // The crew page. renderDetail builds the roster, and the feature panels are
@@ -42307,9 +42635,11 @@
     const pushToggle = document.getElementById('push-settings-toggle');
     const mentionToggle = document.getElementById('mention-push-settings-toggle');
     const raveCheckToggle = document.getElementById('rave-check-push-settings-toggle');
+    const wirePushToggle = document.getElementById('wire-push-settings-toggle');
     pushToggle.classList.remove('on');
     mentionToggle.classList.remove('on');
     raveCheckToggle.classList.remove('on');
+    wirePushToggle.classList.remove('on');
     document.getElementById('tips-settings-toggle').classList.toggle('on', _guidance?.help_level !== 'pro');
     // Builds without the plugin (App Store build before the haptics release) can't buzz.
     document.getElementById('haptics-settings-row').style.display = window.Capacitor?.Plugins?.Haptics ? '' : 'none';
@@ -42325,9 +42655,10 @@
         const { receive } = await nativePushPlugin().checkPermissions();
         if (receive === 'granted' && currentUser) {
           const { data: prefs } = await sb.from('email_preferences')
-            .select('beacon_push_opt_in, mention_push_opt_in, rave_check_push_opt_in').eq('user_id', currentUser.id).maybeSingle();
+            .select('beacon_push_opt_in, mention_push_opt_in, rave_check_push_opt_in, wire_push_opt_in').eq('user_id', currentUser.id).maybeSingle();
           pushToggle.classList.toggle('on', !!prefs?.beacon_push_opt_in);
           mentionToggle.classList.toggle('on', !!prefs?.mention_push_opt_in);
+          wirePushToggle.classList.toggle('on', !!prefs?.wire_push_opt_in);  // opt-in, off by default
           // Rave checks default on (no row counts as on, same as the server).
           raveCheckToggle.classList.toggle('on', prefs?.rave_check_push_opt_in !== false);
         }
@@ -42341,8 +42672,9 @@
         // the flag alone would show "on" for a device that can't be reached.
         if (sub && currentUser) {
           const { data: prefs } = await sb.from('email_preferences')
-            .select('mention_push_opt_in, rave_check_push_opt_in').eq('user_id', currentUser.id).maybeSingle();
+            .select('mention_push_opt_in, rave_check_push_opt_in, wire_push_opt_in').eq('user_id', currentUser.id).maybeSingle();
           mentionToggle.classList.toggle('on', !!prefs?.mention_push_opt_in);
+          wirePushToggle.classList.toggle('on', !!prefs?.wire_push_opt_in);
           raveCheckToggle.classList.toggle('on', prefs?.rave_check_push_opt_in !== false);
         }
       } catch (e) { console.warn('push toggle state check failed', e); }
@@ -42552,6 +42884,30 @@
       // ensurePushSubscription already toasts the specific reason it failed.
       if (!err?.message?.includes('unsupported') && !err?.message?.includes('permission_denied')) {
         console.warn('mention push toggle failed', err);
+      }
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // Fam HQ announcement pushes (send-wire-push). Opt-in only, App Store
+  // 4.5.4: never switched on by enableAllNativePushTypes.
+  async function toggleWirePush(btn) {
+    if (!currentUser) return;
+    const enabling = !btn.classList.contains('on');
+    btn.disabled = true;
+    try {
+      if (enabling) await ensurePushSubscription();
+      const { error } = await sb.from('email_preferences')
+        .update({ wire_push_opt_in: enabling }).eq('user_id', currentUser.id);
+      if (error) throw error;
+      btn.classList.toggle('on', enabling);
+      updateSettingsSummaries();
+      showToast(enabling ? 'Fam HQ announcements on' : 'Fam HQ announcements off');
+    } catch (err) {
+      if (!err?.message?.includes('unsupported') && !err?.message?.includes('permission_denied')) {
+        console.warn('wire push toggle failed', err);
+        toastError("Couldn't save that. Try again.", err);
       }
     } finally {
       btn.disabled = false;
