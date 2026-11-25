@@ -10860,6 +10860,13 @@
           </div>
           <button class="poll-anon-toggle" id="wire-push-settings-toggle" onclick="toggleWirePush(this)"></button>
         </div>
+        <div class="poll-setting-row">
+          <div>
+            <div class="poll-setting-label">📍 Home scene</div>
+            <div class="poll-setting-hint" id="home-scene-settings-hint">Shows near you on the Wire</div>
+          </div>
+          <button type="button" class="btn btn-ghost" style="font-size:0.78rem;padding:7px 12px;" onclick="openScenePicker()">Change</button>
+        </div>
       </div>
       <div class="settings-sec">Lineups</div>
       <div class="poll-modal-settings">
@@ -16365,6 +16372,7 @@
     // above so the countdown item sees fresh RSVPs.
     loadWire().catch(reportBackgroundFailure('loadWire'));
     loadDailyDrop().catch(reportBackgroundFailure('loadDailyDrop'));
+    loadHomeScene().catch(reportBackgroundFailure('loadHomeScene'));
     return true;
   }
 
@@ -23011,6 +23019,9 @@
   // Reactions write wire_reactions; opening an item records wire_seen, and a
   // "New" item leaves the ticker once you've opened it.
   let wireItems = [];
+  let _homeScene = null;      // HOME SCENE: my_home_scene() result
+  let _homeSceneUid = null;
+  let _sceneMetros = null;
   let _wireLoadedAt = 0;
   let _wireUid = null;
   let _wirePage = 'crews';
@@ -23023,6 +23034,7 @@
     lineup:    { label: 'Lineup',    c: 'var(--neon-cyan)' },
     pulse:     { label: 'Pulse',     c: 'var(--neon-green)' },
     countdown: { label: 'Countdown', c: 'var(--neon-orange)' },
+    scene:     { label: 'Your scene', c: 'var(--neon-cyan)' },
     hq:        { label: 'Fam HQ',    c: 'var(--neon-yellow)' },
     new:       { label: 'New',       c: 'var(--neon-indigo)' },
     meme:      { label: 'Meme',      c: 'var(--neon-purple)' }
@@ -23076,6 +23088,8 @@
     const list = wireItems.filter(it => !(it.kind === 'new' && it.seen && it.id !== _wireOpenId));
     const cd = wireCountdownItem();
     if (cd) list.push(cd);
+    // Never matched from your base, picked or skipped: ask once, from the Wire.
+    if (_homeScene?.needs_pick) list.push({ id: 'scene', kind: 'scene', local: true, title: '📍 Set your home scene to see shows near you', reactions: {}, my_reactions: [] });
     return list;
   }
 
@@ -23140,6 +23154,7 @@
   function openWireItem(id) {
     const it = wireFindItem(id);
     if (!it) return;
+    if (it.kind === 'scene') { openScenePicker(); return; }
     _wireOpenId = it.id;
     const k = WIRE_KINDS[it.kind] || WIRE_KINDS.hq;
     const when = it.local ? '' : relativeTime(new Date(it.updated_at || it.created_at).getTime());
@@ -23514,6 +23529,67 @@
     renderWireStrip(undefined, true);
     renderWireComposerLive();
     showToast('Hidden from the Wire');
+  }
+
+  // ===== HOME SCENE =====
+  // Your metro for "shows near you" (EDMTrain items on the Wire). Matched on
+  // the server from your free-text base (my_home_scene); if nothing matches,
+  // the Wire asks once with a picker. Changeable any time from Settings.
+  // (_homeScene, _homeSceneUid, _sceneMetros are declared with the RAVE WIRE state above.)
+
+  async function loadHomeScene() {
+    if (!currentUser) return;
+    if (_homeSceneUid === currentUser.id && _homeScene) return;
+    const uid = currentUser.id;
+    const { data, error } = await sb.rpc('my_home_scene');
+    if (error) throw error;
+    if (currentUser?.id !== uid) return;
+    _homeSceneUid = uid;
+    _homeScene = data && typeof data === 'object' && !Array.isArray(data) ? data : null;
+    renderWireStrip(undefined, true);
+    renderHomeSceneSetting();
+  }
+
+  function renderHomeSceneSetting() {
+    const el = document.getElementById('home-scene-settings-hint');
+    if (!el) return;
+    el.textContent = _homeScene?.name ? `${_homeScene.name} · shows near you on the Wire`
+      : _homeScene?.source === 'skipped' ? 'Not set · pick one to see shows near you' : 'Shows near you on the Wire';
+  }
+
+  async function openScenePicker() {
+    if (!currentUser) return;
+    const box = document.getElementById('wire-sheet-content');
+    box.innerHTML = `
+      <div class="wire-sheet-head">
+        <span class="wire-tag" style="--wt:var(--neon-cyan)">Your scene</span>
+        <button type="button" class="wire-sheet-close" aria-label="Close" onclick="closeWireSheet()">×</button>
+      </div>
+      <h3 class="wire-sheet-title" id="wire-sheet-title">Where do you rave?</h3>
+      <p class="wire-sheet-body">Pick your home scene and the Wire will show new shows near you from artists you've favorited.</p>
+      <div class="wire-chips" id="scene-chips" style="max-height:44vh;overflow-y:auto;margin-bottom:14px;"><span class="text-hint-xs">Loading scenes…</span></div>
+      <button type="button" class="btn btn-ghost" onclick="pickHomeScene(null)">Not listed · skip for now</button>`;
+    document.getElementById('wire-sheet-overlay').classList.add('open');
+    document.getElementById('wire-strip')?.classList.add('paused');
+    if (!_sceneMetros) {
+      const { data, error } = await sb.from('scene_metros').select('id, name, state').order('sort');
+      if (error) { document.getElementById('scene-chips').innerHTML = '<span class="text-hint-xs">Couldn\'t load scenes. Try again later.</span>'; return; }
+      _sceneMetros = data || [];
+    }
+    const chips = document.getElementById('scene-chips');
+    if (!chips) return;
+    chips.innerHTML = _sceneMetros.map(m =>
+      `<button type="button" class="wire-chip" aria-pressed="${_homeScene?.metro_id === m.id}" onclick="pickHomeScene('${escJsAttr(m.id)}')">${escHtml(m.name)}</button>`).join('');
+  }
+
+  async function pickHomeScene(metroId) {
+    const { data, error } = await sb.rpc('set_home_scene', { p_metro_id: metroId });
+    if (error) { toastError("Couldn't save your scene. Try again.", error); return; }
+    _homeScene = data && typeof data === 'object' ? data : _homeScene;
+    closeWireSheet();
+    renderWireStrip(undefined, true);
+    renderHomeSceneSetting();
+    showToast(metroId ? `Home scene: ${_homeScene?.name || 'saved'}` : 'Skipped. You can pick one later in Settings → Notifications.');
   }
 
   // ===== DAILY DROP =====
@@ -42901,6 +42977,7 @@
     mentionToggle.classList.remove('on');
     raveCheckToggle.classList.remove('on');
     wirePushToggle.classList.remove('on');
+    renderHomeSceneSetting();
     document.getElementById('tips-settings-toggle').classList.toggle('on', _guidance?.help_level !== 'pro');
     // Builds without the plugin (App Store build before the haptics release) can't buzz.
     document.getElementById('haptics-settings-row').style.display = window.Capacitor?.Plugins?.Haptics ? '' : 'none';
