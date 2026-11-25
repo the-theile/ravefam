@@ -11591,7 +11591,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.54.1';
+  const APP_VERSION = '2.55.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -23035,6 +23035,7 @@
     pulse:     { label: 'Pulse',     c: 'var(--neon-green)' },
     countdown: { label: 'Countdown', c: 'var(--neon-orange)' },
     scene:     { label: 'Your scene', c: 'var(--neon-cyan)' },
+    near:      { label: 'Near you',   c: 'var(--neon-cyan)' },  // EDMTrain shows (lineup items with meta.near)
     hq:        { label: 'Fam HQ',    c: 'var(--neon-yellow)' },
     new:       { label: 'New',       c: 'var(--neon-indigo)' },
     meme:      { label: 'Meme',      c: 'var(--neon-purple)' }
@@ -23093,6 +23094,10 @@
     return list;
   }
 
+  function wireKind(it) {
+    return (it.meta?.near && WIRE_KINDS.near) || WIRE_KINDS[it.kind] || WIRE_KINDS.hq;
+  }
+
   function wireOrderedItems(page) {
     const lead = WIRE_TAB_LEAD[page] || [];
     const rank = it => { const i = lead.indexOf(it.kind); return i < 0 ? lead.length : i; };
@@ -23113,7 +23118,7 @@
     if (sig === _wireSig && !forceRebuild) return;
     _wireSig = sig;
     const btn = (it, dup) => {
-      const k = WIRE_KINDS[it.kind] || WIRE_KINDS.hq;
+      const k = wireKind(it);
       return `<button type="button" class="wire-item" data-id="${escHtml(it.id)}" onclick="openWireItem(this.dataset.id)"${dup ? ' tabindex="-1" aria-hidden="true"' : ''}>`
         + `<span class="wire-tag" style="--wt:${k.c}">${k.label}</span>${escHtml(it.title)}</button>`;
     };
@@ -23156,7 +23161,7 @@
     if (!it) return;
     if (it.kind === 'scene') { openScenePicker(); return; }
     _wireOpenId = it.id;
-    const k = WIRE_KINDS[it.kind] || WIRE_KINDS.hq;
+    const k = wireKind(it);
     const when = it.local ? '' : relativeTime(new Date(it.updated_at || it.created_at).getTime());
     const meta = it.meta || {};
     const title = `<h3 class="wire-sheet-title" id="wire-sheet-title">${escHtml(it.title)}</h3>`;
