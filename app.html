@@ -381,6 +381,48 @@
     main { padding: 20px 16px calc(90px + env(safe-area-inset-bottom, 0px)); }
   }
 
+  /* ===== RAVE WIRE =====
+     Ticker between the nav and <main>: under the sticky header on phones
+     (the nav is fixed to the bottom there), under the tab row on desktop.
+     Scrolls with the page. Item kinds tint their tag via --wt. */
+  .wire-strip { display: flex; align-items: stretch; border-bottom: 1px solid rgba(var(--neon-pink-rgb),0.3); background: linear-gradient(90deg, rgba(var(--neon-pink-rgb),0.08), rgba(var(--neon-cyan-rgb),0.05)); overflow: hidden; }
+  .wire-strip.is-empty { display: none; }
+  .wire-onair { flex: none; display: flex; align-items: center; gap: 6px; padding: 0 10px; background: var(--neon-pink); color: var(--bg); font-family: 'Orbitron', 'Outfit', sans-serif; font-weight: 800; font-size: 0.62rem; letter-spacing: 0.08em; }
+  .wire-onair i { width: 6px; height: 6px; border-radius: 50%; background: var(--bg); animation: wireBlink 1.2s infinite; }
+  @keyframes wireBlink { 50% { opacity: 0.2; } }
+  .wire-track { flex: 1; min-width: 0; overflow: hidden; -webkit-mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 20px), transparent); mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 20px), transparent); }
+  .wire-belt { display: flex; width: max-content; animation: wireScroll var(--wire-dur, 40s) linear infinite; }
+  .wire-strip:hover .wire-belt, .wire-strip:focus-within .wire-belt, .wire-strip.paused .wire-belt { animation-play-state: paused; }
+  @keyframes wireScroll { to { transform: translateX(-50%); } }
+  .wire-item { display: flex; align-items: center; gap: 7px; min-height: 38px; padding: 0 16px; border: 0; background: none; color: var(--text); font-family: 'Outfit', sans-serif; font-size: 0.8rem; white-space: nowrap; cursor: pointer; }
+  .wire-item + .wire-item { border-left: 1px solid rgba(var(--white-rgb),0.08); }
+  .wire-item:hover, .wire-item:focus-visible { background: rgba(var(--white-rgb),0.05); outline: none; }
+  .wire-tag { flex: none; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; line-height: 1.6; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--wt, var(--muted)); color: var(--wt, var(--muted)); }
+  /* Item sheet (reuses .bottom-sheet) */
+  .wire-sheet-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .wire-sheet-when { font-size: 0.72rem; color: var(--muted); }
+  .wire-sheet-close { margin-left: auto; width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(var(--white-rgb),0.12); background: transparent; color: var(--muted); font-size: 1.1rem; cursor: pointer; }
+  .wire-sheet-title { margin: 0 0 8px; font-size: 1.15rem; line-height: 1.3; text-wrap: balance; }
+  .wire-sheet-body { margin: 0 0 14px; color: var(--muted); font-size: 0.9rem; line-height: 1.5; }
+  .wire-meme { text-align: center; padding: 16px; margin-bottom: 14px; border-radius: 14px; background: radial-gradient(circle at 30% 20%, rgba(var(--neon-purple-rgb),0.3), transparent 60%), var(--surface); }
+  .wire-meme-top { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .wire-meme-art { font-size: 2.2rem; line-height: 1.3; margin: 4px 0; }
+  .wire-meme .wire-sheet-title { margin: 0; font-size: 1rem; font-weight: 800; }
+  .wire-link { display: block; margin-bottom: 14px; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(var(--white-rgb),0.1); background: var(--surface); color: var(--text); text-decoration: none; font-size: 0.85rem; }
+  .wire-link small { display: block; color: var(--muted); font-size: 0.72rem; margin-top: 2px; overflow-wrap: anywhere; }
+  .wire-sheet-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .wire-reacts { display: flex; gap: 6px; flex-wrap: wrap; }
+  .wire-react { min-height: 36px; padding: 0 11px; border-radius: 999px; border: 1px solid rgba(var(--white-rgb),0.12); background: var(--surface); color: var(--text); font-family: inherit; font-size: 0.85rem; font-variant-numeric: tabular-nums; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+  .wire-react[aria-pressed="true"] { border-color: var(--neon-pink); background: rgba(var(--neon-pink-rgb),0.14); box-shadow: 0 0 10px rgba(var(--neon-pink-rgb),0.3); }
+  @media (max-width: 640px) {
+    .wire-item { min-height: 36px; font-size: 0.76rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .wire-belt { animation: none; }
+    .wire-track { overflow-x: auto; scrollbar-width: none; }
+    .wire-onair i { animation: none; }
+  }
+
   /* ===== Tablet touch (iPad) =====
      The phone rules above key on width, so an iPad (820–1366pt wide) got the
      mouse layout: a 36px tab strip pinned to the left edge, 34px header icons,
@@ -10122,6 +10164,9 @@
     <button class="nav-tab c-village" onclick="switchTab('checklist', this); renderVillage();"><span class="tab-icon">🏪</span><span class="tab-label-full">Village</span><span class="tab-label-short">Village</span></button>
   </nav>
 
+  <!-- Rave Wire ticker (see RAVE WIRE). Every tab; filled by renderWireStrip. -->
+  <div class="wire-strip is-empty" id="wire-strip" role="region" aria-label="Rave Wire"></div>
+
   <main>
 
     <!-- Persistent "what's next" guidance banner — shown post-onboarding and
@@ -10987,6 +11032,13 @@
   </div>
 </div>
 
+<!-- Rave Wire item sheet (openWireItem) -->
+<div class="bottom-sheet-overlay" id="wire-sheet-overlay" onclick="if(event.target===this)closeWireSheet()">
+  <div class="bottom-sheet" role="dialog" aria-modal="true" aria-labelledby="wire-sheet-title">
+    <div id="wire-sheet-content"></div>
+  </div>
+</div>
+
 <!-- Going Options Bottom Sheet -->
 <div class="bottom-sheet-overlay" id="going-options-sheet-overlay" onclick="if(event.target===this)closeGoingOptionsSheet()">
   <div class="bottom-sheet">
@@ -11464,7 +11516,7 @@
 
   // App version shown in Settings — bump on every meaningful change and
   // keep in sync with the "version" field in package.json.
-  const APP_VERSION = '2.52.1';
+  const APP_VERSION = '2.53.0';
 
   // ===== SUPABASE INIT =====
   const SUPA_URL  = 'https://tvpgopciioqbqmjjjigh.supabase.co';
@@ -16238,6 +16290,9 @@
     loadViewerNotes().catch(reportBackgroundFailure('loadViewerNotes'));
     // Android beta card + Founding Tester badges (non-blocking)
     loadAndroidBetaState().catch(reportBackgroundFailure('loadAndroidBetaState'));
+    // Rave Wire (non-blocking, at most every WIRE_TTL_MS); runs after the swap
+    // above so the countdown item sees fresh RSVPs.
+    loadWire().catch(reportBackgroundFailure('loadWire'));
     return true;
   }
 
@@ -18968,6 +19023,7 @@
     if (el) el.classList.add('active');
     else document.querySelector(`.nav-tab[onclick*="'${page}'"]`)?.classList.add('active');
     onPlaceEntered(page, !!el);  // 2.0 discovery: banner + intro the first time (see REALMS)
+    renderWireStrip(page);       // Rave Wire: same feed, ordered for this tab
     updateCrewPresence();
     if (!opts?.fromHistory) {
       // First switch: stamp the entry we're on with the section we came from.
@@ -22875,6 +22931,215 @@
 
     renderCrewFeedPage(crew, { s, people, isSecret, hasGamePlan, rosterPanelHTML });
   }
+
+  // ===== RAVE WIRE =====
+  // Ticker on every tab (#wire-strip) + an item sheet with reactions.
+  // Items come from the wire_feed RPC (wire_items is never read directly);
+  // the countdown item is built here from your next RSVP and never stored.
+  // Reactions write wire_reactions; opening an item records wire_seen, and a
+  // "New" item leaves the ticker once you've opened it.
+  let wireItems = [];
+  let _wireLoadedAt = 0;
+  let _wireUid = null;
+  let _wirePage = 'crews';
+  let _wireSig = '';
+  let _wireOpenId = null;
+  const WIRE_TTL_MS = 5 * 60 * 1000;
+  const WIRE_KINDS = {
+    crew:      { label: 'Crew',      c: 'var(--neon-pink)' },
+    lineup:    { label: 'Lineup',    c: 'var(--neon-cyan)' },
+    pulse:     { label: 'Pulse',     c: 'var(--neon-green)' },
+    countdown: { label: 'Countdown', c: 'var(--neon-orange)' },
+    hq:        { label: 'Fam HQ',    c: 'var(--neon-yellow)' },
+    new:       { label: 'New',       c: 'var(--neon-indigo)' },
+    meme:      { label: 'Meme',      c: 'var(--neon-purple)' }
+  };
+  const WIRE_REACTIONS = [['fire', '🔥', 'Fire'], ['heart', '💜', 'Love'], ['melt', '🫠', 'Melting'], ['hands', '🙌', 'Hands up']];
+  // Same feed on every tab; these kinds lead the loop on that tab.
+  const WIRE_TAB_LEAD = {
+    crews: ['crew', 'hq', 'new'], events: ['lineup', 'countdown'], members: ['pulse', 'crew'],
+    stats: ['pulse', 'countdown'], checklist: ['hq', 'meme']
+  };
+
+  async function loadWire(force) {
+    if (!currentUser) return;
+    if (_wireUid !== currentUser.id) { wireItems = []; _wireLoadedAt = 0; _wireUid = currentUser.id; }
+    if (!force && Date.now() - _wireLoadedAt < WIRE_TTL_MS) { renderWireStrip(); return; }
+    _wireLoadedAt = Date.now();
+    const uid = currentUser.id;
+    const { data, error } = await sb.rpc('wire_feed', { p_limit: 60 });
+    if (error) { _wireLoadedAt = 0; throw error; }
+    if (currentUser?.id !== uid) return;
+    wireItems = data || [];
+    renderWireStrip();
+  }
+
+  // Your next RSVP'd rave within 120 days, as a local-only Wire item.
+  function wireCountdownItem() {
+    const me = squad.find(r => r.isYou);
+    if (!me?.festIds?.length) return null;
+    let next = null, nextDays = Infinity;
+    me.festIds.forEach(fid => {
+      const f = getFestival(fid);
+      if (!f || f.cancelled_at) return;
+      const d = daysUntil(festDate(f));
+      if (d != null && d >= 0 && d < nextDays) { next = f; nextDays = d; }
+    });
+    if (!next || nextDays > 120) return null;
+    const when = nextDays === 0 ? 'is today 🎉' : nextDays === 1 ? 'is tomorrow' : `in ${nextDays} days`;
+    return {
+      id: 'countdown:' + next.id, kind: 'countdown', local: true, festival_id: next.id,
+      title: `${next.name} ${when}`, body: 'Your next rave. Check the game plan and get hyped.',
+      cta_label: 'Open rave', reactions: {}, my_reactions: []
+    };
+  }
+
+  function wireAllItems() {
+    const list = wireItems.filter(it => !(it.kind === 'new' && it.seen && it.id !== _wireOpenId));
+    const cd = wireCountdownItem();
+    if (cd) list.push(cd);
+    return list;
+  }
+
+  function wireOrderedItems(page) {
+    const lead = WIRE_TAB_LEAD[page] || [];
+    const rank = it => { const i = lead.indexOf(it.kind); return i < 0 ? lead.length : i; };
+    return wireAllItems().map((it, i) => ({ it, i }))
+      .sort((a, b) => rank(a.it) - rank(b.it) || a.i - b.i)
+      .map(x => x.it);
+  }
+
+  function renderWireStrip(page, forceRebuild) {
+    if (page) _wirePage = page;
+    const el = document.getElementById('wire-strip');
+    if (!el) return;
+    const items = currentUser ? wireOrderedItems(_wirePage) : [];
+    if (!items.length) { el.classList.add('is-empty'); el.innerHTML = ''; _wireSig = ''; return; }
+    // Rebuilding restarts the marquee, so skip it when nothing changed.
+    const sig = _wirePage + '|' + items.map(it => it.id + ':' + it.title).join('|');
+    if (sig === _wireSig && !forceRebuild) return;
+    _wireSig = sig;
+    const btn = (it, dup) => {
+      const k = WIRE_KINDS[it.kind] || WIRE_KINDS.hq;
+      return `<button type="button" class="wire-item" data-id="${escHtml(it.id)}" onclick="openWireItem(this.dataset.id)"${dup ? ' tabindex="-1" aria-hidden="true"' : ''}>`
+        + `<span class="wire-tag" style="--wt:${k.c}">${k.label}</span>${escHtml(it.title)}</button>`;
+    };
+    // The belt holds the items twice so the -50% scroll loops seamlessly.
+    el.innerHTML = `<div class="wire-onair" aria-hidden="true"><i></i>WIRE</div>`
+      + `<div class="wire-track"><div class="wire-belt" style="--wire-dur:${Math.max(24, items.length * 7)}s">`
+      + items.map(it => btn(it, false)).join('') + items.map(it => btn(it, true)).join('')
+      + `</div></div>`;
+    el.classList.remove('is-empty');
+  }
+
+  function wireFindItem(id) {
+    return wireAllItems().find(it => String(it.id) === String(id))
+      || wireItems.find(it => String(it.id) === String(id)) || null;
+  }
+
+  function wireReactsHTML(it) {
+    return WIRE_REACTIONS.map(([key, emoji, label]) => {
+      const n = it.reactions?.[key] || 0;
+      const on = (it.my_reactions || []).includes(key);
+      return `<button type="button" class="wire-react" aria-pressed="${on}" aria-label="${label}, ${n}" onclick="toggleWireReaction('${key}')">${emoji} <span>${n}</span></button>`;
+    }).join('');
+  }
+
+  function wireHost(url) {
+    try { return new URL(url).hostname.replace(/^www\./, ''); } catch (_) { return url; }
+  }
+
+  function wireCtaLabel(it) {
+    const dl = it.deep_link || {};
+    if (it.cta_label) return it.cta_label;
+    if (dl.festival_id || it.festival_id) return 'Open rave';
+    if (dl.crew_id || it.crew_id) return 'Open crew';
+    if (dl.tab) return 'Take me there';
+    return '';
+  }
+
+  function openWireItem(id) {
+    const it = wireFindItem(id);
+    if (!it) return;
+    _wireOpenId = it.id;
+    const k = WIRE_KINDS[it.kind] || WIRE_KINDS.hq;
+    const when = it.local ? '' : relativeTime(new Date(it.updated_at || it.created_at).getTime());
+    const meta = it.meta || {};
+    const title = `<h3 class="wire-sheet-title" id="wire-sheet-title">${escHtml(it.title)}</h3>`;
+    const preview = it.link_preview || {};
+    const cta = wireCtaLabel(it);
+    document.getElementById('wire-sheet-content').innerHTML = `
+      <div class="wire-sheet-head">
+        <span class="wire-tag" style="--wt:${k.c}">${k.label}</span>
+        <span class="wire-sheet-when">${escHtml(when)}</span>
+        <button type="button" class="wire-sheet-close" aria-label="Close" onclick="closeWireSheet()">×</button>
+      </div>
+      ${it.kind === 'meme' && meta.art
+        ? `<div class="wire-meme">${meta.top ? `<div class="wire-meme-top">${escHtml(meta.top)}</div>` : ''}<div class="wire-meme-art">${escHtml(meta.art)}</div>${title}</div>`
+        : title}
+      ${it.body ? `<p class="wire-sheet-body">${escHtml(it.body)}</p>` : ''}
+      ${it.link_url ? `<a class="wire-link" href="${escHtml(it.link_url)}" target="_blank" rel="noopener noreferrer">${escHtml(preview.title || it.link_url)}<small>${escHtml(preview.site_name || wireHost(it.link_url))}</small></a>` : ''}
+      <div class="wire-sheet-foot">
+        ${it.local ? '<span></span>' : `<div class="wire-reacts" id="wire-reacts">${wireReactsHTML(it)}</div>`}
+        ${cta ? `<button type="button" class="btn btn-primary" onclick="wireGo()">${escHtml(cta)}</button>` : ''}
+      </div>`;
+    document.getElementById('wire-sheet-overlay').classList.add('open');
+    document.getElementById('wire-strip')?.classList.add('paused');
+    if (!it.local && !it.seen && currentUser) {
+      it.seen = true;
+      sb.from('wire_seen').upsert({ item_id: it.id, user_id: currentUser.id }, { onConflict: 'item_id,user_id', ignoreDuplicates: true })
+        .then(({ error }) => { if (error) reportBackgroundFailure('wire_seen')(error); });
+    }
+  }
+
+  function closeWireSheet() {
+    document.getElementById('wire-sheet-overlay')?.classList.remove('open');
+    document.getElementById('wire-strip')?.classList.remove('paused');
+    const wasNew = wireFindItem(_wireOpenId)?.kind === 'new';
+    _wireOpenId = null;
+    if (wasNew) renderWireStrip();  // a seen "New" item drops off the ticker
+  }
+
+  async function toggleWireReaction(key) {
+    const it = wireFindItem(_wireOpenId);
+    if (!it || it.local || !currentUser) return;
+    const mine = it.my_reactions || (it.my_reactions = []);
+    const on = mine.includes(key);
+    const counts = it.reactions || (it.reactions = {});
+    const apply = add => {
+      if (add) { if (!mine.includes(key)) mine.push(key); counts[key] = (counts[key] || 0) + 1; }
+      else { mine.splice(mine.indexOf(key), 1); counts[key] = Math.max(0, (counts[key] || 1) - 1); }
+      const box = document.getElementById('wire-reacts');
+      if (box && _wireOpenId === it.id) box.innerHTML = wireReactsHTML(it);
+    };
+    apply(!on);
+    const q = on
+      ? sb.from('wire_reactions').delete().eq('item_id', it.id).eq('user_id', currentUser.id).eq('emoji', key)
+      : sb.from('wire_reactions').insert({ item_id: it.id, user_id: currentUser.id, emoji: key });
+    const { error } = await q;
+    if (error && !(error.code === '23505' && !on)) {  // a double-tap insert is already saved
+      apply(on);
+      toastError("Couldn't save your reaction. Try again.", error);
+    }
+  }
+
+  // The sheet's action button: a rave, a crew, or a tab.
+  function wireGo() {
+    const it = wireFindItem(_wireOpenId);
+    closeWireSheet();
+    if (!it) return;
+    const dl = it.deep_link || {};
+    const festId = dl.festival_id || it.festival_id;
+    const crewId = dl.crew_id || it.crew_id;
+    const tabBtn = tab => document.querySelector(`.nav-tab[onclick*="'${tab}'"]`);
+    if (festId && getFestival(festId)) { switchTab('events'); openRaveFocus(festId); }
+    else if (crewId && getCrew(crewId)) { switchTab('crews'); openDetail(crewId); }
+    else if (dl.tab && tabBtn(dl.tab)) tabBtn(dl.tab).click();  // the nav button runs any tab loader (Stats, Village)
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && currentUser) loadWire().catch(reportBackgroundFailure('loadWire'));
+  });
 
   // ===== CREW FEED (crew page) =====
   // The crew page. renderDetail builds the roster, and the feature panels are
