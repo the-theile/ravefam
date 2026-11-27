@@ -1,7 +1,8 @@
 // Builds the Tapesgiving Night 1 IG story frames (1080×1920) as HTML, then renders
 // them to ../frame-N.png with Playwright. App screens come from ./shots
 // (captured from app.html with a demo crew by capture.spec.js).
-// Frame 3 uses two crops of one real Huddle screen: the pinned Beacon banner and Kai's Beacon message.
+// Frame 3: a recreated iOS push banner using the exact title/body send-beacon-push sends (style matched to
+// a real RaveFAM push screenshot, real app icon), above the real Huddle screen it opens to.
 // Run from the repo root: node marketing/tapesgiving-2026/night1/_build/frames.mjs
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { chromium } from '@playwright/test';
@@ -14,7 +15,7 @@ mkdirSync(path.join(HERE, 'html'), { recursive: true });
 
 // IG safe zone: no text above y=250 or below y=1580 (bottom 340px).
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Urbanist:wght@900&family=JetBrains+Mono:wght@500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Urbanist:wght@900&family=JetBrains+Mono:wght@500;700&family=Inter:wght@400;600&display=swap');
 * { box-sizing: border-box; margin: 0; }
 html, body { width: 1080px; height: 1920px; }
 body { position: relative; overflow: hidden; background: #050509; color: #fff; font-family: 'Urbanist', sans-serif; }
@@ -44,6 +45,14 @@ h1 .g { color: #39FF14; text-shadow: 0 0 40px rgba(57,255,20,0.5); }
 .ph .big { font-family: 'JetBrains Mono'; font-weight: 700; font-size: 44px; color: #FF2D78; letter-spacing: 0.08em; }
 .ph .small { font-family: 'JetBrains Mono'; font-weight: 500; font-size: 26px; color: #c9c4dc; line-height: 1.5; letter-spacing: 0.04em; }
 .sticker { position: absolute; left: 50%; transform: translateX(-50%); width: 620px; height: 150px; border-radius: 40px; }
+.push { position: absolute; left: 70px; right: 70px; border-radius: 56px; padding: 34px 36px; display: flex; gap: 28px; align-items: flex-start;
+  background: rgba(36,36,38,0.94); border: 1.5px solid rgba(255,255,255,0.10); box-shadow: 0 0 90px -16px rgba(57,255,20,0.45), 0 30px 90px -20px rgba(0,0,0,0.9);
+  font-family: 'Inter', -apple-system, sans-serif; }
+.push img { flex: none; width: 104px; height: 104px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.12); }
+.push .b { flex: 1; min-width: 0; }
+.push .t { display: flex; justify-content: space-between; gap: 16px; font-size: 36px; font-weight: 600; color: #fff; line-height: 1.25; }
+.push .t i { font-style: normal; font-weight: 400; color: rgba(235,235,245,0.6); font-size: 32px; flex: none; }
+.push .m { font-size: 35px; color: #fff; line-height: 1.3; margin-top: 4px; }
 `;
 const page = (body) => `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}</style></head><body>
 <div class="bg"></div><div class="grid"></div>${body}</body></html>`;
@@ -66,8 +75,10 @@ const FRAMES = {
   'frame-3': page(`<div class="top">${tag('TAPESGIVING · NIGHT 1')}
     <h1>Lost in the<br>crowd? <span class="p">Never.</span></h1>
     <div class="chip label" style="--c:#FF2D78">🔔 PUSH ON. NO PING LOST.</div></div>
-    ${crop('../shots/huddle-beacon.png', 700, 940, 0, 470, '#FF2D78')}
-    ${crop('../shots/huddle-beacon.png', 1110, 940, 1950, 2240, '#00F5FF')}
+    <div class="push" style="top:700px"><img src="../app-icon.png" alt=""><div class="b">
+      <div class="t"><span>📣 Beacon from Bass Syndicate</span><i>now</i></div>
+      <div class="m">Lost Sam. Everyone to the Plaza, by the food trucks 📍</div></div></div>
+    ${crop('../shots/huddle-beacon.png', 990, 940, 0, 470, '#FF2D78')}
     <!-- empty: room for the myravefam.com link sticker (y≈1410–1560) -->
     <div class="sticker" style="top:1410px"></div>`),
 };
@@ -82,7 +93,7 @@ for (const [id, html] of Object.entries(FRAMES)) {
   await p.evaluate(() => document.fonts.ready);
   await p.waitForTimeout(300);
   // Guard the IG safe zone: no text above 250 or below 1580.
-  const bad = await p.evaluate(() => [...document.querySelectorAll('h1, .label, .ph .small, .ph .big')].map(e => e.getBoundingClientRect())
+  const bad = await p.evaluate(() => [...document.querySelectorAll('h1, .label, .push')].map(e => e.getBoundingClientRect())
     .filter(r => r.top < 250 || r.bottom > 1580).length);
   if (bad) throw new Error(`${id}: text outside IG safe zone`);
   await p.screenshot({ path: path.join(OUT, id + '.png') });
