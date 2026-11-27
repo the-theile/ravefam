@@ -73,8 +73,8 @@ const FRAMES = {
     <div class="chip label" style="--c:#00F5FF">📋 MARK YOUR MUST-SEES</div></div>
     ${crop('../shots/focus-lineup.png', 720, 820, 880, 2050, '#00F5FF')}`),
   'frame-3': page(`<div class="top">${tag('TAPESGIVING · NIGHT 1')}
-    <h1>Lost in the<br>crowd? <span class="p">Never.</span></h1>
-    <div class="chip label" style="--c:#FF2D78">🔔 PUSH ON. NO PING LOST.</div></div>
+    <h1>Lost your crew?<br>Send a <span class="p">Beacon.</span></h1>
+    <div class="chip label" style="--c:#FF2D78">📣 ONE TAP. WHOLE CREW.</div></div>
     <div class="push" style="top:700px"><img src="../app-icon.png" alt=""><div class="b">
       <div class="t"><span>📣 Beacon from Bass Syndicate</span><i>now</i></div>
       <div class="m">Lost Sam. Everyone to the Plaza, by the food trucks 📍</div></div></div>
