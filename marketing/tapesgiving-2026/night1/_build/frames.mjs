@@ -58,9 +58,9 @@ const crop = (file, top, w, y0, y1, c, fade = false) => {
 
 const FRAMES = {
   'frame-1': page(`<div class="top">${tag('TAPESGIVING · NIGHT 1')}
-    <h1>Tapesgiving<br><span class="p">day one.</span><br>Find your <span class="c">crew.</span></h1>
+    <h1 style="font-size:98px">Tapesgiving<br><span class="p">day one.</span><br>Find your <span class="c">crew.</span></h1>
     <div class="chip label" style="--c:#39FF14">📍 DROP YOUR MEETUP SPOT</div></div>
-    ${crop('../shots/huddle-meetup.png', 790, 580, 0, 1468, '#FF2D78')}`),
+    ${crop('../shots/huddle-meetup.png', 755, 560, 0, 1655, '#FF2D78')}`),
   'frame-2': page(`<div class="top">${tag('FRI 11/27 · CLEARWATER FL')}
     <h1>Night one.<br>Who you <span class="g">catching?</span></h1>
     <div class="chip label" style="--c:#00F5FF">📋 MARK YOUR MUST-SEES</div></div>

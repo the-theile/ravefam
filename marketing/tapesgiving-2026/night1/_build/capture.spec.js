@@ -12,6 +12,9 @@ test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, timezone
   launchOptions: { executablePath: '/opt/pw-browsers/chromium' } });
 
 const FID = '0a58fa03-0d13-43d4-8830-664b68e699dc';
+// Real venue map (festivals.map_url, uploaded Nov 27 2026); served from the local copy in map/.
+const MAP_URL = `https://tvpgopciioqbqmjjjigh.supabase.co/storage/v1/object/public/festival-maps/festivals/${FID}.jpg`;
+const MAP_FILE = require('path').join(__dirname, '../marketing/tapesgiving-2026/night1/_build/map/tapesgiving-map.jpg');
 const LINEUP = [ // [appearance id, artist id, name, night, headliner, note]
   [384, 350, 'Tape B', 'fri', true, 'Friday headliner'],
   [385, 104, 'EAZYBAKED', 'fri', false, 'b2b set'],
@@ -35,7 +38,7 @@ function tgData() {
     gradient: 'linear-gradient(135deg,#39FF14,#00F5FF)', base: 'Tampa, FL' });
   d.crew_members.push({ crew_id: 'c1', raver_id: 'r-jess', added_at: '2024-01-01T00:00:00Z', added_by: TEST_UID, deleted_at: null });
   d.festivals = [{ id: FID, slug: 'tapesgiving-2026', name: 'Tapesgiving', date: '2026-11-27', days: 2, location: 'Clearwater, Florida, United States',
-    color: '#FFE600', timezone: 'America/New_York', map_url: null, deleted_at: null }];
+    color: '#FFE600', timezone: 'America/New_York', map_url: MAP_URL, deleted_at: null }];
   d.raver_festivals = ['r-you', 'r-sam', 'r-kai', 'r-jess'].map(r => ({ raver_id: r, festival_id: FID }));
   d.raver_festival_interest = [];
   const seen = new Set();
@@ -66,9 +69,9 @@ function withHuddle(d) {
     msg('t3', TEST_UID, 'who is grabbing who', '15:10'),
     msg('t4', 'kai-uid', 'i can take 3, leaving at 6:30', '15:11'),
     msg('t5', TEST_UID, 'dropping our meetup spot so nobody gets lost', '15:20'),
-    msg('t6', TEST_UID, 'Sound booth, left side', '15:20', { kind: 'meetup', meetup_at: at('19:30'), pinned_at: at('15:21'), pinned_by: TEST_UID }),
+    msg('t6', TEST_UID, 'Plaza, by the food trucks', '15:20', { kind: 'meetup', meetup_at: at('19:30'), pin_x: 0.80, pin_y: 0.75, meetup_status: 'here', pinned_at: at('15:21'), pinned_by: TEST_UID }),
     msg('t7', 'jess-uid', 'locked in 💚', '15:23', { reactions: { '💚': ['kai-uid', TEST_UID] } }),
-    msg('t8', 'kai-uid', 'see yall at the booth 🫶', '15:24'),
+    msg('t8', 'kai-uid', 'see yall at the plaza 🫶', '15:24'),
   ];
   d.huddle_room_reads = [{ room_id: 'room-tg', user_id: TEST_UID, last_read_at: at('15:30') }, { room_id: 'room-main', user_id: TEST_UID, last_read_at: at('15:30') }];
   return d;
@@ -76,7 +79,7 @@ function withHuddle(d) {
 
 const CLEAN = '*, *::before, *::after { animation: none !important; transition: none !important; } .toast, #toast { display: none !important; }';
 async function boot(page, d) {
-  await page.route(/^https?:\/\/(?!127\.0\.0\.1|localhost)/, r => r.abort());
+  await page.route(/^https?:\/\/(?!127\.0\.0\.1|localhost)/, r => r.request().url() === MAP_URL ? r.fulfill({ path: MAP_FILE, contentType: 'image/jpeg' }) : r.abort());
   await page.clock.setFixedTime(new Date(at('15:31')));
   const errors = await bootAuthedApp(page, { data: d, sessionOver: { user_metadata: { guidance_dismissed: true, seen_tips: { beacon: true } } } });
   await page.addStyleTag({ content: CLEAN });
@@ -92,6 +95,8 @@ test('huddle with pinned meetup', async ({ page }) => {
   }
   await expect(page.locator('.hd-meetup')).toBeVisible();
   await expect(page.locator('.hd-pinned')).toBeVisible();
+  await expect(page.locator('.hd-meetup-map img')).toHaveJSProperty('complete', true);
+  await page.locator('.hd-meetup').evaluate(e => e.closest('.hd-row, .hd-grp, div').scrollIntoView({ block: 'start' }));
   await page.waitForTimeout(500);
   await page.screenshot({ path: OUT + 'huddle-meetup.png' });
 });
