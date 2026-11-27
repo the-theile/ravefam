@@ -4,7 +4,7 @@
 // Frame 3: a recreated iOS push banner using the exact title/body send-beacon-push sends (style matched to
 // a real RaveFAM push screenshot, real app icon), above the real Huddle screen it opens to.
 // Run from the repo root: node marketing/tapesgiving-2026/night1/_build/frames.mjs
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
 import { chromium } from '@playwright/test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -87,6 +87,8 @@ const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromi
 const ctx = await browser.newContext({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1 });
 const p = await ctx.newPage();
 for (const [id, html] of Object.entries(FRAMES)) {
+  // Frame 2 is the owner's supplied final (Friday chips only); reuse it instead of re-rendering.
+  if (id === 'frame-2') { copyFileSync(path.join(HERE, 'frame-2-final.jpg'), path.join(OUT, 'frame-2.jpg')); console.log('kept frame-2 (supplied final)'); continue; }
   const file = path.join(HERE, 'html', id + '.html');
   writeFileSync(file, html);
   await p.goto('file://' + file);
