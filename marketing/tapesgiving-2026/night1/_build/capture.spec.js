@@ -78,9 +78,9 @@ function withHuddle(d) {
 }
 
 const CLEAN = '*, *::before, *::after { animation: none !important; transition: none !important; } .toast, #toast { display: none !important; }';
-async function boot(page, d) {
+async function boot(page, d, now = at('15:31')) {
   await page.route(/^https?:\/\/(?!127\.0\.0\.1|localhost)/, r => r.request().url() === MAP_URL ? r.fulfill({ path: MAP_FILE, contentType: 'image/jpeg' }) : r.abort());
-  await page.clock.setFixedTime(new Date(at('15:31')));
+  await page.clock.setFixedTime(new Date(now));
   const errors = await bootAuthedApp(page, { data: d, sessionOver: { user_metadata: { guidance_dismissed: true, seen_tips: { beacon: true } } } });
   await page.addStyleTag({ content: CLEAN });
   return errors;
@@ -110,3 +110,25 @@ test('rave focus lineup', async ({ page }) => {
   await page.screenshot({ path: OUT + 'focus-lineup.png' });
 });
 
+
+test('huddle beacon', async ({ page }) => {
+  const d = withHuddle(tgData());
+  const msg = (id, sender, body, hhmm, extra = {}) => ({ id, room_id: 'room-tg', crew_id: 'c1', sender_id: sender, kind: 'text', body, reactions: {},
+    created_at: at(hhmm), deleted_at: null, mentions: [], ...extra });
+  d.huddle_messages.push(
+    msg('n1', 'jess-uid', 'TAPE B IS GOING OFF', '21:31', { reactions: { '🔥': ['kai-uid', TEST_UID] } }),
+    msg('n2', 'kai-uid', 'Lost Sam. Everyone to the Plaza, by the food trucks 📍', '21:42',
+      { kind: 'beacon', expires_at: new Date(new Date(at('21:42')).getTime() + 2 * 3600e3).toISOString() }),
+    msg('n3', TEST_UID, 'on my way 🏃', '21:43'),
+  );
+  d.huddle_room_reads = d.huddle_room_reads.map(r => ({ ...r, last_read_at: at('21:44') }));
+  await boot(page, d, at('21:44'));
+  await page.evaluate(async () => { await openHuddle('c1'); });
+  await expect(page.locator('#huddle-screen')).toHaveClass(/open/);
+  await page.evaluate(async () => { await switchHuddleRoom('room-tg'); });
+  await expect(page.locator('.huddle-beacon-banner')).toBeVisible();
+  await expect(page.locator('.hd-meetup')).toHaveCount(1);
+  await page.locator('.hd-row').last().evaluate(e => e.scrollIntoView({ block: 'end' }));
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: OUT + 'huddle-beacon.png' });
+});

@@ -1,17 +1,15 @@
 // Builds the Tapesgiving Night 1 IG story frames (1080×1920) as HTML, then renders
 // them to ../frame-N.png with Playwright. App screens come from ./shots
 // (captured from app.html with a demo crew by capture.spec.js).
-// Frame 3 uses assets/tapesgiving/lockscreen.png when present, else a labeled placeholder.
+// Frame 3 uses two crops of one real Huddle screen: the pinned Beacon banner and Kai's Beacon message.
 // Run from the repo root: node marketing/tapesgiving-2026/night1/_build/frames.mjs
-import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { writeFileSync, mkdirSync } from 'node:fs';
 import { chromium } from '@playwright/test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const OUT = path.resolve(HERE, '..');
-const ROOT = path.resolve(HERE, '../../../..');
-const LOCK = path.join(ROOT, 'assets/tapesgiving/lockscreen.png');
 mkdirSync(path.join(HERE, 'html'), { recursive: true });
 
 // IG safe zone: no text above y=250 or below y=1580 (bottom 340px).
@@ -68,10 +66,8 @@ const FRAMES = {
   'frame-3': page(`<div class="top">${tag('TAPESGIVING · NIGHT 1')}
     <h1>Lost in the<br>crowd? <span class="p">Never.</span></h1>
     <div class="chip label" style="--c:#FF2D78">🔔 PUSH ON. NO PING LOST.</div></div>
-    ${existsSync(LOCK)
-      ? `<div class="shot" style="--c:#39FF14;top:690px;width:440px;height:690px"><img src="${'file://' + LOCK}" style="height:100%;object-fit:cover;object-position:top"></div>`
-      : `<div class="ph" style="top:690px;width:720px;height:690px"><div class="big">PLACEHOLDER</div>
-         <div class="small">Real iOS lock-screen push goes here.<br>Missing file:<br><b style="color:#fff">assets/tapesgiving/lockscreen.png</b><br>Add it and re-run frames.mjs.</div></div>`}
+    ${crop('../shots/huddle-beacon.png', 700, 940, 0, 470, '#FF2D78')}
+    ${crop('../shots/huddle-beacon.png', 1110, 940, 1950, 2240, '#00F5FF')}
     <!-- empty: room for the myravefam.com link sticker (y≈1410–1560) -->
     <div class="sticker" style="top:1410px"></div>`),
 };
